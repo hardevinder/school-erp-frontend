@@ -1,0 +1,26 @@
+/* Ensure all fields look consistent */
+.form-container .form-field {
+  width: 100%;
+  padding: 10px;
+  margin: 5px 0;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+  box-sizing: border-box;
+  background-color: #fff;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.form-container .form-field:focus {
+  border-color: #80bdff;
+  outline: none;
+  box-shadow: 0 0 8px rgba(0, 123, 255, 0.3);
+}
+/* DatePicker popover should always appear on top */
+.datepicker-popper {
+  z-index: 9999 !important;
+}
+
+/* Lower z-index for sticky table headings */
+.sticky-top {
+  z-index: 2 !important;
+}

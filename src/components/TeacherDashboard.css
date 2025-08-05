@@ -1,0 +1,85 @@
+/* Hide all timetable rows except today’s (highlighted with border-primary) */
+.today-card table tbody tr {
+    display: none;
+  }
+  .today-card table tbody tr.border-primary {
+    display: table-row;
+  }
+  
+  /* Remove table footer for compactness */
+  .today-card table tfoot {
+    display: none;
+  }
+  
+  /* Light card styling */
+  .card-header {
+    background-color: #fff;
+  }
+  .card {
+    border-radius: 8px;
+  }
+  
+  /* ============================= */
+  /* Pop-Up Modal Styling */
+  /* ============================= */
+  
+  /* Notifications Modal */
+  .notifications-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+  }
+  
+  .notifications-modal {
+    background: #fff;
+    padding: 20px;
+    border-radius: 8px;
+    max-width: 500px;
+    width: 90%;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+  }
+  
+  /* Chat Modal */
+  .chat-modal {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    width: 320px;
+    height: 480px;
+    background: #fff;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+    border-radius: 8px;
+    z-index: 10000;
+    display: flex;
+    flex-direction: column;
+  }
+  
+  .chat-header {
+    padding: 10px;
+    border-bottom: 1px solid #ccc;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  
+  /* Chat Toggle Button */
+  .chat-toggle-btn {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    z-index: 10000;
+    padding: 10px 20px;
+    border: none;
+    border-radius: 4px;
+    background: #007bff;
+    color: #fff;
+    cursor: pointer;
+  }
+  

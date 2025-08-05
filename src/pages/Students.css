@@ -1,0 +1,52 @@
+/* ---------- Common inputs ---------- */
+.form-container .form-field,
+.swal2-html-container .form-field {
+  width: 100%;
+  padding: 10px;
+  margin: 5px 0;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+  box-sizing: border-box;
+}
+
+.form-container .form-field:focus,
+.swal2-html-container .form-field:focus {
+  border-color: #80bdff;
+  outline: none;
+  box-shadow: 0 0 5px rgba(0, 123, 255, 0.25);
+}
+
+/* ---------- 2-column grid ---------- */
+.form-container,
+.swal2-html-container .two-col-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem 1.2rem;
+}
+
+/* Full width row inside the grid */
+.full-row {
+  grid-column: 1 / 3;
+}
+
+/* SweetAlert padding normalization */
+.swal2-popup .form-container {
+  padding: 1rem 0;
+}
+
+/* ---------- Wider popup ---------- */
+.swal2-popup.wide-modal {
+  width: 80% !important;   /* or 900px */
+  max-width: 1000px;
+}
+
+/* ---------- Responsive: stack on small screens ---------- */
+@media (max-width: 576px) {
+  .form-container,
+  .swal2-html-container .two-col-grid {
+    grid-template-columns: 1fr;
+  }
+  .full-row {
+    grid-column: 1 / 2;
+  }
+}

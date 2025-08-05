@@ -1,0 +1,51 @@
+/* SchoolFeeSummary.css */
+
+/* 1) Scrollable area: remove default padding so sticky elements sit flush */
+.modal-body-scroll {
+  max-height: 500px;
+  overflow-y: auto;
+  position: relative;
+  padding: 0 !important;
+}
+
+/* 2) Allow sticky to escape the table-responsive wrapper */
+.modal-body-scroll .table-responsive {
+  overflow: visible !important;
+}
+
+/* 3) Sticky export bar */
+.export-container {
+  position: sticky;
+  top: 0;
+  height: 54px;            /* adjust to actual bar height */
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  background: #fff;
+  padding: 0 1rem;
+  z-index: 102;
+}
+
+/* 4) Stick the entire thead immediately under the export bar */
+.modal-table thead {
+  position: sticky;
+  top: 54px;               /* same as .export-container height */
+  z-index: 101;
+}
+
+/* 5) Solid background on header cells */
+.modal-table thead th {
+  background-color: #f8f9fa;
+}
+
+/* 6) (Optional) keep your main summary table header sticky */
+.table-sticky thead.sticky-top {
+  top: 0;
+  z-index: 100;
+}
+
+/* 7) Make click‑counts look clickable */
+.link-cell {
+  color: blue;
+  cursor: pointer;
+}

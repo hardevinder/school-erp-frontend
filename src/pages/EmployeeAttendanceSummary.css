@@ -1,0 +1,152 @@
+.top-summary-cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 15px;
+  justify-content: center;
+  margin-bottom: 25px;
+}
+
+.top-card {
+  flex: 1 1 150px;
+  background: #fff;
+  border-radius: 10px;
+  padding: 15px;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.07);
+  text-align: center;
+}
+
+.top-card h4 {
+  font-size: 16px;
+  margin-bottom: 8px;
+  color: #555;
+}
+
+.top-card p {
+  font-size: 22px;
+  font-weight: bold;
+  margin: 0;
+}
+
+.top-card.present { border-left: 5px solid #28a745; }
+.top-card.absent { border-left: 5px solid #dc3545; }
+.top-card.leave { border-left: 5px solid #fd7e14; }
+.top-card.unmarked { border-left: 5px solid #adb5bd; }
+.top-card.total { border-left: 5px solid #007bff; }
+
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 12px;
+  margin-top: 15px;
+}
+
+.calendar-header {
+  font-weight: bold;
+  text-align: center;
+  color: #555;
+  background: #e9ecef;
+  padding: 6px;
+  border-radius: 6px;
+}
+
+.calendar-cell {
+  background: #fff;
+  border: 2px solid #ccc;
+  border-radius: 8px;
+  padding: 8px;
+  text-align: center;
+  min-height: 70px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.06);
+}
+
+.calendar-cell strong {
+  font-size: 16px;
+  display: block;
+}
+
+.calendar-cell .status {
+  font-size: 13px;
+  margin-top: 3px;
+  text-transform: capitalize;
+}
+
+.calendar-cell.empty {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+
+.filters,
+.summary-cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  justify-content: center;
+  margin-bottom: 25px;
+}
+
+.filter-item {
+  display: flex;
+  flex-direction: column;
+  min-width: 200px;
+}
+
+.filter-item label {
+  font-weight: 600;
+  margin-bottom: 6px;
+  color: #495057;
+}
+
+.month-selector {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.month-selector button {
+  background: #007bff;
+  color: white;
+  padding: 5px 10px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.month-selector button:hover {
+  background: #0056b3;
+}
+
+.summary-card {
+  background: white;
+  border-radius: 10px;
+  padding: 15px 20px;
+  min-width: 180px;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.08);
+  border-left: 6px solid #ccc;
+}
+
+.summary-label {
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: #444;
+}
+
+.summary-count {
+  font-size: 18px;
+  font-weight: bold;
+}
+
+.title {
+  font-size: 26px;
+  font-weight: bold;
+  text-align: center;
+  margin-bottom: 30px;
+  color: #343a40;
+}
+
+.placeholder-text,
+.loading {
+  text-align: center;
+  font-size: 16px;
+  color: #666;
+}
