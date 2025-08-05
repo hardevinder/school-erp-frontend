@@ -88,6 +88,12 @@ import ResultReportDesigner from './pages/ResultReportDesigner'; // 📄 Add thi
 import GradeSchemeManagement from './pages/GradeSchemeManagement'; // ✅ Add this line
 import CombinedExamSchemeManagement from './pages/CombinedExamSchemeManagement'; // ✅ Add this
 import FinalResultSummary from './pages/FinalResultSummary'; // ✅ Add this
+import CoScholasticAreaManagement from './pages/CoScholasticAreaManagement'; // ✅ NEW
+import CoScholasticGradeManagement from "./pages/CoScholasticGradeManagement";
+import ClassCoScholasticMapping from './pages/ClassCoScholasticMapping'; // ✅ NEW
+
+
+
 
 
 
@@ -215,6 +221,12 @@ function App() {
           <Route path="/grade-schemes" element={<GradeSchemeManagement />} />  // ✅ New route
           <Route path="/combined-exam-schemes" element={<CombinedExamSchemeManagement />} />  // ✅ NEW
           <Route path="/reports/final-result-summary" element={<FinalResultSummary />} />  // ✅ NEW
+          <Route path="/co-scholastic-areas" element={<CoScholasticAreaManagement />} />  // ✅ NEW
+          <Route path="/co-scholastic-grades" element={<CoScholasticGradeManagement />} />
+          <Route path="/class-co-scholastic-mapping" element={<ClassCoScholasticMapping />} />  // ✅ NEW
+
+
+
 
 
           {/* Catch all for logged‑in */}

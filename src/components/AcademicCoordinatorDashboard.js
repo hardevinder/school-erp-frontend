@@ -39,6 +39,11 @@ import ExamManagement from "../pages/ExamManagement"; // ✅ Adjust path if need
 import ReportBuilder from "../pages/ReportBuilder";
 import GradeSchemeManagement from "../pages/GradeSchemeManagement";
 import CombinedExamSchemeManagement from "../pages/CombinedExamSchemeManagement"; // ✅ NEW
+import CoScholasticAreaManagement from "../pages/CoScholasticAreaManagement"; // ✅ NEW
+import CoScholasticGradeManagement from "../pages/CoScholasticGradeManagement"; // ✅ NEW
+import ClassCoScholasticMapping from "../pages/ClassCoScholasticMapping"; // ✅ NEW
+
+
 
 
 
@@ -160,6 +165,13 @@ const Dashboard = () => {
     "report-builder", 
     "grade-schemes", // ✅ Add this
     "combined-exam-schemes", // ✅ NEW
+    "co-scholastic-areas", // ✅ NEW
+    "co-scholastic-grades", // ✅ NEW
+    "class-co-scholastic-mapping", // ✅ NEW
+
+
+
+
 
   ];
 
@@ -340,6 +352,22 @@ const Dashboard = () => {
               hasRole("academic_coordinator", "admin") && (
                 <CombinedExamSchemeManagement />
             )}
+
+            {activeSection === "co-scholastic-areas" &&
+              hasRole("academic_coordinator", "superadmin") && (
+                <CoScholasticAreaManagement />
+            )}
+
+            {activeSection === "co-scholastic-grades" &&
+                hasRole("academic_coordinator", "superadmin") && (
+                  <CoScholasticGradeManagement />
+              )}
+              {activeSection === "class-co-scholastic-mapping" &&
+                hasRole("academic_coordinator", "superadmin") && (
+                  <ClassCoScholasticMapping />
+              )}
+
+
 
 
           {/* 404 */}

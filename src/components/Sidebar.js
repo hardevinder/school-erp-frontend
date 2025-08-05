@@ -200,12 +200,33 @@ export default function Sidebar({
               icon: "bi-card-checklist",
               path: "/exam-schemes",
             },
+            // {
+            //     key: "combined-exam-schemes", // ✅ NEW
+            //     label: "Combined Scheme",
+            //     icon: "bi-diagram-3-fill",
+            //     path: "/combined-exam-schemes",
+            // },
             {
-                key: "combined-exam-schemes", // ✅ NEW
-                label: "Combined Scheme",
-                icon: "bi-diagram-3-fill",
-                path: "/combined-exam-schemes",
-            },
+                key: "co-scholastic-areas", // ✅ NEW
+                label: "Co-Scholastic Areas",
+                icon: "bi-easel3", // pick any Bootstrap icon
+                path: "/co-scholastic-areas",
+              },
+              {
+                key: "co-scholastic-grades", // ✅ NEW ITEM
+                label: "Co-Scholastic Grades",
+                icon: "bi-star", // Or any Bootstrap icon you like
+                path: "/co-scholastic-grades",
+              },
+              {
+                label: "Class Co-Scholastic Mapping",
+                icon: "bi-easel3", // ✅ You can change the icon if needed
+                path: "/class-co-scholastic-mapping",
+                roles: ["academic_coordinator", "superadmin"]
+              },
+
+
+
             {
               key: "grade-schemes", // ✅ NEW ITEM
               label: "Grade Scheme",
@@ -443,6 +464,19 @@ if (isTeacher) {
             icon: "bi-bar-chart-line",
             path: "/final-result-summary",
           },
+
+             {
+              key: "coscholastic-entry",
+              label: "Co-Scholastic Entry",
+              icon: "bi-stars", // or "bi-journal-text"
+              path: "/coscholastic-entry",
+            },
+            {
+              key: "student-remarks-entry", // ✅ NEW
+              label: "Student Remarks Entry",
+              icon: "bi-chat-square-text",
+              path: "/student-remarks-entry",
+            },
 
     ],
     

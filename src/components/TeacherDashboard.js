@@ -24,6 +24,10 @@ import MarksEntry from "../pages/MarksEntry"; // ✅ Add this import
 import ClasswiseResultSummary from "../pages/ClasswiseResultSummary";
 import ResultReportDesigner from "../pages/ResultReportDesigner"; // ✅ Add this
 import FinalResultSummary from "../pages/FinalResultSummary"; // ✅ Add this
+import CoScholasticEntry from "../pages/CoScholasticEntry"; // ✅ NEW
+import StudentRemarksEntry from "../pages/StudentRemarksEntry"; // ✅ NEW
+
+
 
 
 
@@ -216,6 +220,12 @@ const TeacherDashboard = () => {
 
           {activeSection === "final-result-summary" && <FinalResultSummary />} // ✅ NEW
 
+          {activeSection === "coscholastic-entry" && <CoScholasticEntry />} // ✅ NEW
+
+          {activeSection === "student-remarks-entry" && <StudentRemarksEntry />} // ✅ NEW
+
+
+
 
 
 
@@ -243,7 +253,10 @@ const TeacherDashboard = () => {
               "marks-entry", // ✅ Add here
               "classwise-result-summary",
               "result-report-designer", // ✅ NEW
-              "final-result-summary" // ✅ add this here
+              "final-result-summary", // ✅ add this here
+              "coscholastic-entry", // ✅ add this here
+              "student-remarks-entry", // ✅ add here
+
           ].includes(activeSection) && (
             <div>
               <h1>Page Not Found</h1>
