@@ -91,6 +91,12 @@ import FinalResultSummary from './pages/FinalResultSummary'; // ✅ Add this
 import CoScholasticAreaManagement from './pages/CoScholasticAreaManagement'; // ✅ NEW
 import CoScholasticGradeManagement from "./pages/CoScholasticGradeManagement";
 import ClassCoScholasticMapping from './pages/ClassCoScholasticMapping'; // ✅ NEW
+import ReportCardFormats from './pages/ReportCardFormats'; // ✅ Add this
+import AssignReportCardFormat from './pages/AssignReportCardFormat'; // ✅ Import
+
+
+
+
 
 
 
@@ -224,10 +230,8 @@ function App() {
           <Route path="/co-scholastic-areas" element={<CoScholasticAreaManagement />} />  // ✅ NEW
           <Route path="/co-scholastic-grades" element={<CoScholasticGradeManagement />} />
           <Route path="/class-co-scholastic-mapping" element={<ClassCoScholasticMapping />} />  // ✅ NEW
-
-
-
-
+          <Route path="/report-card-formats" element={<ReportCardFormats />} />
+          <Route path="/assign-report-card-format" element={<AssignReportCardFormat />} />
 
           {/* Catch all for logged‑in */}
           <Route path="*" element={<h1>404: Page Not Found</h1>} />

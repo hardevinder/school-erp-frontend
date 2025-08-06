@@ -251,6 +251,19 @@ export default function Sidebar({
                icon: "bi-calendar2-check",
                path: "/exam-schedules",
             },
+            {
+              key: "report-card-formats", // ✅ NEW
+              label: "Report Card Format",
+              icon: "bi-file-earmark-font", // 📝 Icon
+              path: "/report-card-formats",
+            },
+            {
+              key: "assign-report-card-format",
+              label: "Assign Report Format",
+              icon: "bi-link",
+              path: "/assign-report-card-format",
+            },
+
           ],
         });
 

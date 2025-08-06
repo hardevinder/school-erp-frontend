@@ -42,16 +42,8 @@ import CombinedExamSchemeManagement from "../pages/CombinedExamSchemeManagement"
 import CoScholasticAreaManagement from "../pages/CoScholasticAreaManagement"; // ✅ NEW
 import CoScholasticGradeManagement from "../pages/CoScholasticGradeManagement"; // ✅ NEW
 import ClassCoScholasticMapping from "../pages/ClassCoScholasticMapping"; // ✅ NEW
-
-
-
-
-
-
-
-
-
-
+import ReportCardFormats from "../pages/ReportCardFormats"; // ✅ NEW
+import AssignReportCardFormat from "../pages/AssignReportCardFormat"; // ✅ NEW
 
 
 
@@ -168,6 +160,9 @@ const Dashboard = () => {
     "co-scholastic-areas", // ✅ NEW
     "co-scholastic-grades", // ✅ NEW
     "class-co-scholastic-mapping", // ✅ NEW
+    "report-card-formats",
+    "assign-report-card-format",
+
 
 
 
@@ -366,6 +361,15 @@ const Dashboard = () => {
                 hasRole("academic_coordinator", "superadmin") && (
                   <ClassCoScholasticMapping />
               )}
+              {activeSection === "report-card-formats" &&
+                hasRole("academic_coordinator", "admin", "superadmin") && (
+                  <ReportCardFormats />
+              )}
+              {activeSection === "assign-report-card-format" &&
+                  hasRole("academic_coordinator", "admin", "superadmin") && (
+                    <AssignReportCardFormat />
+                )}
+
 
 
 
