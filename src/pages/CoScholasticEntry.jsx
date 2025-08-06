@@ -50,10 +50,12 @@ const CoScholasticEntry = () => {
     try {
       const res = await api.get("/co-scholastic-grades");
       setGrades(Array.isArray(res.data) ? res.data : []);
+      console.log("✅ Grades loaded:", res.data);
     } catch (err) {
       console.error("Failed to load grades", err);
       Swal.fire("Error", "Failed to load grades", "error");
       setGrades([]);
+      
     }
   };
 
@@ -73,7 +75,9 @@ const CoScholasticEntry = () => {
       });
 
       setEvaluations(map);
+      console.log("🟡 Mapped evaluations:", map);
 
+     
       if (Object.values(map).some(e => e.locked)) {
         Swal.fire("Notice", "Evaluations for this class-section-term are locked.", "info");
       }
@@ -325,10 +329,10 @@ const CoScholasticEntry = () => {
             <div className="mb-3 d-flex gap-2">
               <button className="btn btn-success" onClick={handleSave}>💾 Save</button>
               <button className="btn btn-outline-primary" onClick={handleExport}>⬇️ Export Excel</button>
-              {/* <label className="btn btn-outline-secondary mb-0">
+              <label className="btn btn-outline-secondary mb-0">
                 ⬆️ Import Excel
                 <input type="file" accept=".xlsx" onChange={handleImport} style={{ display: "none" }} />
-              </label> */}
+              </label>
               <button className="btn btn-outline-danger ms-auto" onClick={handleLock}>🔒 Lock</button>
             </div>
 
@@ -358,15 +362,17 @@ const CoScholasticEntry = () => {
                             <select
                               ref={el => inputRefs.current[key] = el}
                               className="form-select"
-                              value={evalData.grade_id || ""}
+                              value={String(evalData.grade_id || "")}
                               onChange={(e) => handleChange(s.id, area.id, "grade_id", e.target.value)}
                               onKeyDown={(e) => handleKeyDown(e, studentIndex, areaIndex)}
                               disabled={locked}
                             >
                               <option value="">-</option>
                               {grades.map(g => (
-                                <option key={g.id} value={g.id}>{g.grade}</option>
+                                <option key={g.id} value={String(g.id)}>{g.grade}</option>
                               ))}
+                              {console.log("🟢 Grades available:", grades)}
+
                             </select>
                           </td>
                         );
