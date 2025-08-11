@@ -1,0 +1,13 @@
+.page-break {
+  page-break-after: always;
+}
+
+.report-card {
+  font-size: 14px;
+  line-height: 1.4;
+  background-color: white;
+}
+
+.table td, .table th {
+  vertical-align: middle;
+}

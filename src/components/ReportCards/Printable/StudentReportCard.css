@@ -1,0 +1,41 @@
+/* Ensure each student's report starts on a new page when printing */
+.page-break {
+  page-break-after: always;
+}
+
+/* Optional enhancements */
+.report-card {
+  font-family: "Arial", sans-serif;
+  color: #000;
+  background-color: #fff;
+}
+
+/* Prevent table from splitting across pages */
+table {
+  page-break-inside: avoid;
+}
+
+.table th,
+.table td {
+  vertical-align: middle;
+  font-size: 0.9rem;
+}
+
+/* Print-specific adjustments */
+@media print {
+  body {
+    margin: 0;
+    padding: 0;
+    -webkit-print-color-adjust: exact;
+  }
+
+  .page-break {
+    break-after: page;
+  }
+
+  .report-card {
+    margin: 0 auto;
+    width: 100%;
+    padding: 2rem;
+  }
+}

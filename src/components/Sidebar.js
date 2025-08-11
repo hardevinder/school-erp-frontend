@@ -490,6 +490,12 @@ if (isTeacher) {
               icon: "bi-chat-square-text",
               path: "/student-remarks-entry",
             },
+            {
+              key: "report-card-generator", // ✅ NEW
+              label: "Print Report Cards",
+              icon: "bi-printer", // You can use "bi-file-earmark-pdf" too
+              path: "/report-card-generator",
+            },
 
     ],
     

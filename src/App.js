@@ -93,6 +93,8 @@ import CoScholasticGradeManagement from "./pages/CoScholasticGradeManagement";
 import ClassCoScholasticMapping from './pages/ClassCoScholasticMapping'; // ✅ NEW
 import ReportCardFormats from './pages/ReportCardFormats'; // ✅ Add this
 import AssignReportCardFormat from './pages/AssignReportCardFormat'; // ✅ Import
+import ReportCardGenerator from './pages/ReportCardGenerator'; // ✅ Add this import
+
 
 
 
@@ -232,6 +234,8 @@ function App() {
           <Route path="/class-co-scholastic-mapping" element={<ClassCoScholasticMapping />} />  // ✅ NEW
           <Route path="/report-card-formats" element={<ReportCardFormats />} />
           <Route path="/assign-report-card-format" element={<AssignReportCardFormat />} />
+          <Route path="/report-card-generator" element={<ReportCardGenerator />} />  // ✅ NEW
+
 
           {/* Catch all for logged‑in */}
           <Route path="*" element={<h1>404: Page Not Found</h1>} />

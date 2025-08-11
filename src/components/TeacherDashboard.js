@@ -19,13 +19,15 @@ import EmployeeLeaveRequestForm from "../pages/EmployeeLeaveRequestForm";
 import LatestTeacherSubstitutions from "../pages/LatestTeacherSubstitutions";
 import { firestore } from "../firebase/firebaseConfig.js";
 import EmployeeAttendanceCalendar from "../pages/EmployeeAttendanceCalendar";
-import RollNumberManagement from "../pages/RollNumberManagement"; // adjust if path differs
-import MarksEntry from "../pages/MarksEntry"; // ✅ Add this import
+import RollNumberManagement from "../pages/RollNumberManagement";
+import MarksEntry from "../pages/MarksEntry"; 
 import ClasswiseResultSummary from "../pages/ClasswiseResultSummary";
-import ResultReportDesigner from "../pages/ResultReportDesigner"; // ✅ Add this
-import FinalResultSummary from "../pages/FinalResultSummary"; // ✅ Add this
-import CoScholasticEntry from "../pages/CoScholasticEntry"; // ✅ NEW
-import StudentRemarksEntry from "../pages/StudentRemarksEntry"; // ✅ NEW
+import ResultReportDesigner from "../pages/ResultReportDesigner"; 
+import FinalResultSummary from "../pages/FinalResultSummary"; 
+import CoScholasticEntry from "../pages/CoScholasticEntry";
+import StudentRemarksEntry from "../pages/StudentRemarksEntry"; 
+import ReportCardGenerator from "../pages/ReportCardGenerator"; // ✅ NEW
+
 
 
 
@@ -216,13 +218,16 @@ const TeacherDashboard = () => {
 
           {activeSection === "marks-entry" && <MarksEntry />}
           {activeSection === "classwise-result-summary" && <ClasswiseResultSummary />}
-          {activeSection === "result-report-designer" && <ResultReportDesigner />} // ✅ NEW
+          {activeSection === "result-report-designer" && <ResultReportDesigner />} 
 
-          {activeSection === "final-result-summary" && <FinalResultSummary />} // ✅ NEW
+          {activeSection === "final-result-summary" && <FinalResultSummary />} 
 
-          {activeSection === "coscholastic-entry" && <CoScholasticEntry />} // ✅ NEW
+          {activeSection === "coscholastic-entry" && <CoScholasticEntry />} 
 
-          {activeSection === "student-remarks-entry" && <StudentRemarksEntry />} // ✅ NEW
+          {activeSection === "student-remarks-entry" && <StudentRemarksEntry />} 
+
+          {activeSection === "report-card-generator" && <ReportCardGenerator />}
+
 
 
 
@@ -256,6 +261,8 @@ const TeacherDashboard = () => {
               "final-result-summary", // ✅ add this here
               "coscholastic-entry", // ✅ add this here
               "student-remarks-entry", // ✅ add here
+              "report-card-generator",
+
 
           ].includes(activeSection) && (
             <div>
