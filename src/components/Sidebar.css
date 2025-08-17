@@ -1,0 +1,165 @@
+/* authoritative width via body class */
+:root { --sidebar-gap: 12px; }
+
+body.sb-expanded { --sidebar-w: 280px; }
+/* widened collapsed width */
+body.sb-collapsed { --sidebar-w: 120px; }
+
+/* default (first paint) assume expanded; JS sets correct class on mount */
+body:not(.sb-expanded):not(.sb-collapsed) { --sidebar-w: 280px; }
+
+/* content push (hard) */
+.app-content,
+body > .app-content,
+#root > .app-content {
+  margin-left: calc(var(--sidebar-w) + var(--sidebar-gap)) !important;
+  transition: margin-left .3s ease;
+}
+
+/* sidebar shell */
+.app-sidebar{
+  position: fixed;
+  left: 0;
+  top: var(--header-h, 56px);
+  height: calc(100vh - var(--header-h, 56px));
+  width: var(--sidebar-w);
+  z-index: 2000;
+  overflow-y: auto;
+  overflow-x: hidden;
+
+  background: #ffffff;
+  color: #2b2f36;
+  border-right: 1px solid #e6ebf2;
+  box-shadow: 0 6px 24px rgba(16,24,40,.08);
+  transition: width .28s ease;
+}
+
+/* header on top of sidebar if needed */
+.app-header { position: sticky; top: 0; z-index: 2100; }
+
+/* top area */
+.sidebar-top{
+  position: sticky;
+  top: 0;
+  padding: 10px 10px 8px 12px;
+  background: #fff;
+  border-bottom: 1px solid #e6ebf2;
+  z-index: 2;
+}
+.brand-badge{
+  width: 34px; height: 34px;
+  border-radius: 10px;
+  display: grid; place-items: center;
+  background: linear-gradient(135deg, #0d6efd 0%, #5bc0de 100%);
+  color: #fff;
+  box-shadow: 0 6px 14px rgba(13,110,253,.25);
+}
+.brand-name{ font-weight: 600; letter-spacing: .2px; color: #2b2f36; }
+.toggle-btn{ color: #2b2f36; background: transparent; border: 0; font-size: 1.25rem; }
+
+/* headings */
+.group-heading{
+  font-size: .72rem;
+  color: #6c757d;
+  letter-spacing: .06em;
+}
+
+/* items */
+.sidebar-item{
+  position: relative;
+  cursor: pointer;
+  padding: 10px 12px 10px 14px;
+  border-radius: 10px;
+  margin: 2px 8px;
+  transition: background .15s ease, color .15s ease;
+  color: #2b2f36;
+  /* removed the old border-left completely */
+}
+
+/* content container for icon + label */
+.sidebar-item .item-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 36px;
+}
+
+/* icon */
+.sidebar-item .item-icon{
+  font-size: 1.15rem;
+  width: 22px; text-align: center;
+  color: #41526b;
+  transition: transform .15s ease, color .15s ease;
+}
+
+/* label (expanded) */
+.sidebar-item .item-label{
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 0.92rem;
+}
+
+/* hover/active */
+.sidebar-item:hover{ background: rgba(13,110,253,.08); }
+.sidebar-item:hover .item-icon{ transform: translateX(2px); }
+.sidebar-item.active{
+  background: #e7f1ff;
+  color: #2b2f36;
+}
+.sidebar-item.active .item-icon{ color: #0d6efd; }
+
+/* active indicator bar (removed) */
+.sidebar-item .active-indicator {
+  display: none;
+}
+
+/* ——— Collapsed adjustments (stack icon above, wrap between words only) ——— */
+.sb-collapsed .sidebar-item{
+  justify-content: center;
+  padding-left: 8px;
+  padding-right: 8px;
+}
+.sb-collapsed .sidebar-item .item-content{
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  text-align: center;
+}
+.sb-collapsed .sidebar-item .item-icon{
+  width: 32px;           /* larger hit area */
+  font-size: 1.25rem;    /* slightly larger icon */
+}
+/* wrap to multiple lines BUT never split inside words */
+.sb-collapsed .sidebar-item .item-label{
+  display: block;
+  white-space: normal;        /* allow wrapping */
+  word-break: keep-all;       /* prevent breaking inside words */
+  overflow-wrap: break-word;  /* wrap only at allowed break points (spaces, hyphens) */
+  max-width: 100px;           /* fits within 120px collapsed width minus padding */
+  font-size: 0.78rem;         /* a touch larger for legibility */
+  line-height: 1.2;
+  color: #2b2f36;
+  text-align: center;
+}
+
+/* scrollbar */
+.app-sidebar::-webkit-scrollbar{ width: 10px; }
+.app-sidebar::-webkit-scrollbar-thumb{ background: #d9e1ef; border-radius: 10px; }
+
+/* phones: overlay; content doesn't push */
+.sidebar-scrim{ display: none; }
+@media (max-width: 767.98px){
+  .app-content,
+  body > .app-content,
+  #root > .app-content { margin-left: 0 !important; }
+  .app-sidebar{
+    top: 0; height: 100vh;
+    box-shadow: 8px 0 24px rgba(0,0,0,.18);
+  }
+  .sidebar-scrim.show{
+    display: block; position: fixed; inset: 0;
+    background: rgba(15,23,42,.35); z-index: 1900;
+  }
+}

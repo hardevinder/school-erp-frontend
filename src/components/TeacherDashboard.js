@@ -1,59 +1,22 @@
 // src/components/TeacherDashboard.jsx
-import React, { useState, useEffect, useMemo } from "react";
-import { useLocation } from "react-router-dom";
-import Navbar from "../components/Navbar";
-import Sidebar from "./Sidebar";
-import Classes from "../pages/Classes";
-import Subjects from "../pages/Subjects";
-import Students from "../pages/Students";
-import MarkAttendance from "../pages/MarkAttendance";
-import AttendanceCalendar from "../pages/AttendanceCalendar";
-import TeacherLeaveRequests from "../pages/TeacherLeaveRequests";
-import Assignments from "../pages/Assignments";
-import AssignmentMarking from "../pages/AssignmentMarking";
-import TeacherTimeTableDisplay from "../pages/TeacherTimetableDisplay";
-import TeacherCombinedSubstitutionPage from "../pages/TeacherCombinedSubstitutionPage";
-import LessonPlan from "../pages/LessonPlan";
-import LatestTeacherCirculars from "../pages/LatestTeacherCirculars";
-import EmployeeLeaveRequestForm from "../pages/EmployeeLeaveRequestForm";
-import LatestTeacherSubstitutions from "../pages/LatestTeacherSubstitutions";
+import React, { useEffect, useMemo, useState } from "react";
 import { firestore } from "../firebase/firebaseConfig.js";
-import EmployeeAttendanceCalendar from "../pages/EmployeeAttendanceCalendar";
-import RollNumberManagement from "../pages/RollNumberManagement";
-import MarksEntry from "../pages/MarksEntry"; 
-import ClasswiseResultSummary from "../pages/ClasswiseResultSummary";
-import ResultReportDesigner from "../pages/ResultReportDesigner"; 
-import FinalResultSummary from "../pages/FinalResultSummary"; 
-import CoScholasticEntry from "../pages/CoScholasticEntry";
-import StudentRemarksEntry from "../pages/StudentRemarksEntry"; 
-import ReportCardGenerator from "../pages/ReportCardGenerator"; // ✅ NEW
-
-
-
-
-
-
-
-
-
-
-import {
-  collection,
-  query,
-  where,
-  onSnapshot,
-  getDocs,
-  doc,
-  getDoc,
-} from "firebase/firestore";
+import { collection, query, where, onSnapshot } from "firebase/firestore";
 import socket from "../socket";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
-const TeacherDashboard = () => {
-  const location = useLocation();
-  const [activeSection, setActiveSection] = useState("dashboard");
-  const [isSidebarExpanded, setIsSidebarExpanded] = useState(false);
+// Teacher overview widgets
+import LatestTeacherCirculars from "../pages/LatestTeacherCirculars";
+import LatestTeacherSubstitutions from "../pages/LatestTeacherSubstitutions";
+
+// Chat component (same one you use in App.js)
+import Chat from "../components/Chat";
+
+// NEW: inline Student Remarks Entry in the dashboard
+import StudentRemarksEntry from "../pages/StudentRemarksEntry";
+
+export default function TeacherDashboard() {
   const [showChat, setShowChat] = useState(false);
   const [activeChatName, setActiveChatName] = useState("");
   const [globalUnreadCount, setGlobalUnreadCount] = useState(0);
@@ -62,13 +25,10 @@ const TeacherDashboard = () => {
   const [groupedContacts, setGroupedContacts] = useState({});
   const [contacts, setContacts] = useState([]);
 
-  // Sync activeSection with URL slug (dash‑case)
-  useEffect(() => {
-    const slug = location.pathname.replace(/^\//, "");
-    setActiveSection(slug || "dashboard");
-  }, [location.pathname]);
+  // NEW: toggle for Remarks section
+  const [showRemarks, setShowRemarks] = useState(true);
 
-  // Multi-role array from localStorage
+  // roles (kept if you need conditional UI later)
   const userRoles = useMemo(() => {
     try {
       return JSON.parse(localStorage.getItem("roles")) || [];
@@ -80,7 +40,7 @@ const TeacherDashboard = () => {
 
   const currentUserId = localStorage.getItem("userId") || "teacher_123";
 
-  // Load saved notifications
+  // Load saved notifications on mount
   useEffect(() => {
     const stored = localStorage.getItem("notifications");
     if (stored) setNotifications(JSON.parse(stored));
@@ -97,15 +57,15 @@ const TeacherDashboard = () => {
     localStorage.removeItem("notifications");
   };
 
-  // Fetch contacts for teacher or others...
+  // (Placeholder) fetch contacts depending on role
   useEffect(() => {
     const API_URL = process.env.REACT_APP_API_URL;
     if (!userRoles.length) return;
 
     if (userRoles.includes("teacher")) {
-      // ...fetch and process student contacts...
+      // TODO: fetch and process student contacts…
     } else {
-      // ...fetch and process non-teacher contacts...
+      // TODO: fetch and process non-teacher contacts…
     }
   }, [currentUserId, userRoles]);
 
@@ -143,135 +103,73 @@ const TeacherDashboard = () => {
   }, []);
 
   return (
-    <div className="App">
-      <Navbar
-        notificationsCount={notifications.length}
-        onBellClick={() => setShowNotifications(true)}
-      />
+    <div className="container-fluid px-3">
+      {/* Page header (NOT a .navbar) */}
+      <div className="dashboard-header bg-light px-3 py-2 mb-3 rounded d-flex align-items-center">
+        <h5 className="mb-0">
+          {activeChatName ? `Chatting with ${activeChatName}` : "Teacher Dashboard"}
+        </h5>
 
-      <div className="d-flex" style={{ marginTop: "70px" }}>
-        {/* Sidebar */}
-        <div style={{ marginTop: "20px" }}>
-          <Sidebar
-            activeSection={activeSection}
-            setActiveSection={setActiveSection}
-            isExpanded={isSidebarExpanded}
-            setIsExpanded={setIsSidebarExpanded}
-            userRoles={userRoles}
-          />
-        </div>
-
-        {/* Main content */}
-        <main
-          className="content container"
-          style={{ flex: 1, marginLeft: isSidebarExpanded ? "250px" : "60px" }}
+        <button
+          type="button"
+          className="btn btn-outline-secondary ms-auto position-relative me-2"
+          onClick={() => setShowNotifications(true)}
+          title="Notifications"
         >
-          <h1>
-            {activeChatName
-              ? `Chatting with ${activeChatName}`
-              : "Teacher Dashboard"}
-          </h1>
-
-          {/* Dashboard overview */}
-          {activeSection === "dashboard" && (
-            <>
-              <section className="mb-5">
-                <h2 className="mb-3">Latest Circulars</h2>
-                <LatestTeacherCirculars />
-              </section>
-              <section>
-                <h2 className="mb-3">Latest Substitutions</h2>
-                <LatestTeacherSubstitutions />
-              </section>
-            </>
+          Notifications
+          {notifications.length > 0 && (
+            <span
+              className="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger"
+              style={{ fontSize: "0.7rem" }}
+            >
+              {notifications.length}
+            </span>
           )}
+        </button>
 
-          {/* Teacher routes */}
-          {activeSection === "view-circulars" && <LatestTeacherCirculars />}
-          {activeSection === "mark-attendance" && <MarkAttendance />}
-          {activeSection === "attendance-calendar" && (
-            <AttendanceCalendar />
-          )}
-          {activeSection === "leave-requests" && <TeacherLeaveRequests />}
-          {activeSection === "assignments" && <Assignments />}
-          {activeSection === "assignment-marking" && (
-            <AssignmentMarking />
-          )}
-          {activeSection === "teacher-timetable-display" && (
-            <TeacherTimeTableDisplay />
-          )}
-          {activeSection === "combined-teacher-substitution" && (
-            <TeacherCombinedSubstitutionPage />
-          )}
-          {activeSection === "lesson-plan" && <LessonPlan />}
-          {activeSection === "employee-leave-request" && <EmployeeLeaveRequestForm />}
-          {activeSection === "my-attendance-calendar" && <EmployeeAttendanceCalendar />}
-
-
-
-          {/* Academic support pages */}
-          {activeSection === "subjects" && <Subjects />}
-          {activeSection === "classes" && <Classes />}
-          {activeSection === "students" && <Students />}
-
-          {activeSection === "roll-numbers" && <RollNumberManagement />}
-
-          {activeSection === "marks-entry" && <MarksEntry />}
-          {activeSection === "classwise-result-summary" && <ClasswiseResultSummary />}
-          {activeSection === "result-report-designer" && <ResultReportDesigner />} 
-
-          {activeSection === "final-result-summary" && <FinalResultSummary />} 
-
-          {activeSection === "coscholastic-entry" && <CoScholasticEntry />} 
-
-          {activeSection === "student-remarks-entry" && <StudentRemarksEntry />} 
-
-          {activeSection === "report-card-generator" && <ReportCardGenerator />}
-
-
-
-
-
-
-
-
-
-          {/* 404 fallback */}
-          {![
-            "dashboard",
-            "view-circulars",
-            "mark-attendance",
-            "attendance-calendar",
-            "leave-requests",
-            "assignments",
-            "assignment-marking",
-            "teacher-timetable-display",
-            "combined-teacher-substitution",
-            "lesson-plan",
-            "subjects",
-            "classes",
-            "students",
-             "employee-leave-request", // ✅ add this
-             "leave-requests", // ✅ ADD THIS TOO
-             "my-attendance-calendar",
-             "roll-numbers",
-              "marks-entry", // ✅ Add here
-              "classwise-result-summary",
-              "result-report-designer", // ✅ NEW
-              "final-result-summary", // ✅ add this here
-              "coscholastic-entry", // ✅ add this here
-              "student-remarks-entry", // ✅ add here
-              "report-card-generator",
-
-
-          ].includes(activeSection) && (
-            <div>
-              <h1>Page Not Found</h1>
-              <p>The selected section does not exist.</p>
-            </div>
-          )}
-        </main>
+        {/* NEW: toggle remarks visibility */}
+        <button
+          type="button"
+          className="btn btn-primary"
+          onClick={() => setShowRemarks((s) => !s)}
+          title="Toggle Student Remarks"
+        >
+          {showRemarks ? "Hide" : "Show"} Remarks Entry
+        </button>
       </div>
+
+      {/* Overview sections */}
+      <section className="mb-5">
+        <h6 className="mb-3">Latest Circulars</h6>
+        <LatestTeacherCirculars />
+      </section>
+
+      <section className="mb-4">
+        <h6 className="mb-3">Latest Substitutions</h6>
+        <LatestTeacherSubstitutions />
+      </section>
+
+      {/* NEW: Inline Student Remarks Entry */}
+      {showRemarks && (
+        <section className="mb-5">
+          <div className="card shadow-sm">
+            <div className="card-header d-flex align-items-center">
+              <h6 className="mb-0">📝 Student Remarks Entry</h6>
+              <button
+                className="btn btn-sm btn-outline-secondary ms-auto"
+                onClick={() => setShowRemarks(false)}
+                title="Collapse"
+              >
+                ×
+              </button>
+            </div>
+            <div className="card-body">
+              {/* Render the full page component inline */}
+              <StudentRemarksEntry />
+            </div>
+          </div>
+        </section>
+      )}
 
       <ToastContainer />
 
@@ -290,6 +188,8 @@ const TeacherDashboard = () => {
             justifyContent: "center",
             alignItems: "center",
           }}
+          aria-modal="true"
+          role="dialog"
         >
           <div
             style={{
@@ -313,11 +213,19 @@ const TeacherDashboard = () => {
                 border: "none",
                 background: "none",
               }}
+              aria-label="Close notifications"
             >
               ×
             </button>
-            {/* Your StudentNotifications component */}
-            {/* ... */}
+
+            {/* TODO: Render your notifications list component here */}
+            {/* Example:
+            <StudentNotifications
+              notifications={notifications}
+              onRemove={removeNotification}
+            />
+            */}
+
             <button
               onClick={clearAllNotifications}
               className="btn btn-primary mt-3"
@@ -348,6 +256,8 @@ const TeacherDashboard = () => {
           }}
           onMouseOver={(e) => (e.currentTarget.style.transform = "scale(1.1)")}
           onMouseOut={(e) => (e.currentTarget.style.transform = "scale(1)")}
+          aria-label="Open chat"
+          title="Open chat"
         >
           Chat
           {globalUnreadCount > 0 && (
@@ -362,14 +272,72 @@ const TeacherDashboard = () => {
                 padding: "2px 6px",
                 fontSize: "0.7rem",
               }}
+              aria-label={`${globalUnreadCount} unread messages`}
             >
               {globalUnreadCount}
             </span>
           )}
         </button>
       )}
+
+      {/* Chat Popup Window */}
+      {showChat && (
+        <div
+          style={{
+            position: "fixed",
+            bottom: 20,
+            right: 20,
+            width: 360,
+            height: 520,
+            background: "#fff",
+            borderRadius: 10,
+            boxShadow: "0 4px 12px rgba(0,0,0,0.35)",
+            zIndex: 1300,
+            display: "flex",
+            flexDirection: "column",
+            overflow: "hidden",
+          }}
+          role="dialog"
+          aria-label="Chat window"
+        >
+          {/* Header */}
+          <div
+            style={{
+              padding: "8px 12px",
+              borderBottom: "1px solid #eee",
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+            }}
+          >
+            <strong style={{ fontSize: 14 }}>Chat</strong>
+            <div className="ms-auto d-flex align-items-center" style={{ gap: 8 }}>
+              {/* You can show activeChatName here if you wire selection */}
+              <button
+                onClick={() => setShowChat(false)}
+                style={{
+                  background: "none",
+                  border: "1px solid #ddd",
+                  borderRadius: 6,
+                  padding: "2px 8px",
+                  lineHeight: 1.2,
+                  cursor: "pointer",
+                }}
+                aria-label="Close chat"
+                title="Close"
+              >
+                ×
+              </button>
+            </div>
+          </div>
+
+          {/* Body: actual Chat */}
+          <div style={{ flex: 1, minHeight: 0 }}>
+            {/* Use same props you already use in App.js */}
+            <Chat chatId="chat_room_1" currentUserId={currentUserId} />
+          </div>
+        </div>
+      )}
     </div>
   );
-};
-
-export default TeacherDashboard;
+}

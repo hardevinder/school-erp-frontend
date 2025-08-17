@@ -30,40 +30,6 @@ const FinalResultSummary = () => {
     rounding: "none"
   });
 
-  const downloadPDF = async () => {
-  if (!reportData.length) {
-    return Swal.fire("No Data", "Please generate the report first", "info");
-  }
-
-  try {
-    const payload = {
-      students: reportData,
-      reportFormat,
-      numberFormat,
-    };
-
-    const res = await api.post("/report-card/generate-pdf/report-card", payload, {
-      responseType: "blob",
-    });
-
-    const blob = new Blob([res.data], { type: "application/pdf" });
-    const url = window.URL.createObjectURL(blob);
-
-    const link = document.createElement("a");
-    link.href = url;
-    link.setAttribute("download", "report-cards.pdf");
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-
-    window.URL.revokeObjectURL(url);
-  } catch (error) {
-    console.error(error);
-    Swal.fire("Error", "Failed to generate PDF", "error");
-  }
-};
-
-
   useEffect(() => {
     loadClasses();
     loadSections();
@@ -232,7 +198,7 @@ const FinalResultSummary = () => {
       const studentIds = reportStudents.map(s => s.id);
       const infoRes = await api.get("/report-card/students", { params: { student_ids: studentIds } });
       const studentMap = {};
-      for (const s of infoRes.data.students || []) {
+      for (const s of (infoRes.data.students || [])) {
         studentMap[s.id] = s;
       }
       setStudentInfoMap(studentMap);
@@ -246,7 +212,7 @@ const FinalResultSummary = () => {
         params: { class_id, section_id, term_id: "1" }
       });
       const remarksMap = {};
-      for (const r of remarksRes.data.remarks || []) {
+      for (const r of (remarksRes.data.remarks || [])) {
         remarksMap[r.student_id] = r.remark;
       }
       setRemarksData(remarksMap);
@@ -255,7 +221,7 @@ const FinalResultSummary = () => {
         params: { class_id, section_id, term_id: "1" }
       });
       const attendanceMap = {};
-      for (const a of attendanceRes.data.attendance || []) {
+      for (const a of (attendanceRes.data.attendance || [])) {
         attendanceMap[a.student_id] = a;
       }
       setAttendanceData(attendanceMap);
@@ -306,6 +272,316 @@ const FinalResultSummary = () => {
     });
     return Array.from(areas);
   };
+
+  /** -------- Build PDF HTML that mirrors the on-screen report-card layout -------- */
+  const buildScholasticHeaderHtml = () => {
+    let theadTop = `<tr><th rowspan="2" style="background:#dff0ff;color:#003366;text-align:left">Subject</th>`;
+    let theadBottom = `<tr>`;
+    filters.exam_ids.forEach(exId => {
+      const comps = getUniqueComponentsByExam(exId);
+      theadTop += `<th colspan="${comps.length + (showTotals ? 2 : 0)}" style="background:#dff0ff;color:#003366">${(exams.find(e=>e.id===exId)?.name) || ""}</th>`;
+      comps.forEach(c => {
+        theadBottom += `<th style="background:#e6f4ff">${c.label}</th>`;
+      });
+      if (showTotals) {
+        theadBottom += `<th style="background:#e6f4ff;font-weight:bold">Marks</th><th style="background:#e6f4ff;font-weight:bold">Grade</th>`;
+      }
+    });
+    if (showTotals) {
+      theadTop += `<th colspan="2" style="background:#dff0ff;color:#003366">Total</th>`;
+      theadBottom += `<th style="background:#e6f4ff;font-weight:bold">Marks</th><th style="background:#e6f4ff;font-weight:bold">Grade</th>`;
+    }
+    theadTop += `</tr>`;
+    theadBottom += `</tr>`;
+    return theadTop + theadBottom;
+  };
+
+  const buildScholasticBodyRowHtml = (student, subjectName) => {
+    const subjComps = student.components.filter(c => c.subject_name === subjectName);
+    let row = `<tr><td style="background:#dff0ff;font-weight:bold;text-align:left">${subjectName}</td>`;
+    filters.exam_ids.forEach(exId => {
+      const ecs = subjComps.filter(c => c.exam_id === exId);
+      const comps = getUniqueComponentsByExam(exId);
+      comps.forEach(comp => {
+        const cc = subjComps.find(c => c.exam_id === exId && c.component_id === comp.component_id);
+        row += `<td>${cc?.marks ?? "-"}</td>`;
+      });
+      if (showTotals) {
+        const totalMarks = ecs.reduce((a,x)=>a+(x.marks||0),0);
+        const grade = ecs[0]?.grade || "-";
+        row += `<td style="font-weight:bold">${totalMarks}</td><td style="font-weight:bold">${grade}</td>`;
+      }
+    });
+    if (showTotals) {
+      const total = subjComps.reduce((a,x)=>a+(x.marks||0),0);
+      const grade = student.subject_grades?.[subjComps[0]?.subject_id] || "-";
+      row += `<td style="font-weight:bold">${total}</td><td style="font-weight:bold">${grade}</td>`;
+    }
+    row += `</tr>`;
+    return row;
+  };
+
+  const buildCardsHtml = () => {
+    const styles = `
+      <style>
+        body { font-family: Arial, sans-serif; font-size: 12px; }
+        .card { margin-bottom: 28px; }
+        .border { border: 1px solid #ccc; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { border: 1px solid #333; padding: 4px; text-align: center; }
+        h4, h5 { margin: 10px 0; }
+        .header-flex { display:flex; align-items:center; justify-content:space-between; }
+        .mb-3 { margin-bottom: 12px; }
+        .mb-2 { margin-bottom: 8px; }
+        .p-8 { padding: 8px; }
+        .text-center { text-align:center; }
+        @page { margin: 40px 20px; }
+        section { page-break-after: always; }
+        section:last-child { page-break-after: auto; }
+      </style>
+    `;
+
+    const blocks = reportData.map(student => {
+      const info = studentInfoMap[student.id] || {};
+      const co = (coScholasticData.find(s => s.id === student.id) || { grades: [] }).grades;
+      const att = attendanceData[student.id] || {
+        total_days: 0, present_days: 0, absent_days: 0, leave_days: 0,
+        holiday_days: 0, late_days: 0, attendance_percentage: null
+      };
+      const remark = remarksData[student.id] || "-";
+
+      // Unique subject list for this student
+      const subjectsForStudent = Array.from(new Set(student.components.map(c => c.subject_name)));
+
+      // Scholastic table
+      let scholasticTable = `
+        <h5>Scholastic Areas</h5>
+        <table>
+          <thead>${buildScholasticHeaderHtml()}</thead>
+          <tbody>
+            ${subjectsForStudent.map(sub => buildScholasticBodyRowHtml(student, sub)).join("")}
+          </tbody>
+        </table>
+      `;
+
+      // Co-Scholastic table
+      let coScholasticTable = `
+        <h5 class="mt-4">Co-Scholastic Areas</h5>
+        <table>
+          <thead>
+            <tr>
+              <th style="background:#dff0ff;color:#003366;text-align:left">Area</th>
+              <th style="background:#dff0ff;color:#003366">Grade</th>
+              <th style="background:#dff0ff;color:#003366">Remarks</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${co.length
+              ? co.map(g => `
+                <tr>
+                  <td style="text-align:left;font-weight:bold">${g.area_name}</td>
+                  <td>${g.grade || "-"}</td>
+                  <td>${g.remarks || "-"}</td>
+                </tr>`).join("")
+              : `<tr><td colspan="3" class="text-center">No co-scholastic data available</td></tr>`
+            }
+          </tbody>
+        </table>
+      `;
+
+      // Attendance table
+      let attendanceTable = `
+        <h5 class="mt-4">Attendance Summary</h5>
+        <table>
+          <thead>
+            <tr>
+              <th style="background:#dff0ff;color:#003366">Total Days</th>
+              <th style="background:#dff0ff;color:#003366">Present Days</th>
+              <th style="background:#dff0ff;color:#003366">Absent Days</th>
+              <th style="background:#dff0ff;color:#003366">Leave Days</th>
+              <th style="background:#dff0ff;color:#003366">Holiday Days</th>
+              <th style="background:#dff0ff;color:#003366">Late Days</th>
+              <th style="background:#dff0ff;color:#003366">Attendance %</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>${att.total_days ?? "-"}</td>
+              <td>${att.present_days ?? "-"}</td>
+              <td>${att.absent_days ?? "-"}</td>
+              <td>${att.leave_days ?? "-"}</td>
+              <td>${att.holiday_days ?? "-"}</td>
+              <td>${att.late_days ?? "-"}</td>
+              <td>${att.attendance_percentage != null ? Number(att.attendance_percentage).toFixed(2) + "%" : "-"}</td>
+            </tr>
+          </tbody>
+        </table>
+      `;
+
+      // Grade schema table (optional)
+      const gradeSchemaTable = (gradeSchema.length > 0)
+        ? `
+          <div class="mt-4">
+            <h5>Grade Schema</h5>
+            <table>
+              <thead>
+                <tr>
+                  <th style="background:#dff0ff;color:#003366">Range</th>
+                  <th style="background:#dff0ff;color:#003366">Grade</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${gradeSchema.map(g => `<tr><td>${g.min_percent}-${g.max_percent}</td><td>${g.grade}</td></tr>`).join("")}
+              </tbody>
+            </table>
+          </div>
+        `
+        : "";
+
+      // Header (with logos + custom HTML)
+      const headerHtml = reportFormat?.header_html
+        ? `
+          <div class="mb-3">
+            <div class="header-flex">
+              ${reportFormat.school_logo_url ? `<img src="${reportFormat.school_logo_url}" alt="School Logo" style="height:80px;margin-right:10px" />` : `<span style="width:80px"></span>`}
+              <div class="text-center" style="flex:1">${reportFormat.header_html}</div>
+              ${reportFormat.board_logo_url ? `<img src="${reportFormat.board_logo_url}" alt="Board Logo" style="height:80px;margin-left:10px" />` : `<span style="width:80px"></span>`}
+            </div>
+          </div>
+        ` : "";
+
+      const footerHtml = reportFormat?.footer_html
+        ? `<div class="mt-3 text-center" style="font-size:12px">${reportFormat.footer_html}</div>`
+        : "";
+
+      // Student info block
+      const studentInfoBlock = `
+        <div class="row g-3 small border p-8 mb-3" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px">
+          <div><strong>Name:</strong> ${info?.name || "-"}</div>
+          <div><strong>Admission No.:</strong> ${info?.admission_number || "-"}</div>
+          <div><strong>Roll No.:</strong> ${info?.roll_number || "-"}</div>
+          <div><strong>Class & Section:</strong> ${(info?.Class?.class_name || "-")} - ${(info?.Section?.section_name || "-")}</div>
+          <div><strong>Father's Name:</strong> ${info?.father_name || "-"}</div>
+          <div><strong>Mother's Name:</strong> ${info?.mother_name || "-"}</div>
+          <div><strong>Phone:</strong> ${info?.father_phone || info?.mother_phone || "-"}</div>
+          <div><strong>Aadhaar No.:</strong> ${info?.aadhaar_number || "-"}</div>
+        </div>
+      `;
+
+      const remarksBlock = `
+        <h5 class="mt-4">Remarks</h5>
+        <div class="border p-8 small">
+          <p>${remark || "No remarks provided"}</p>
+        </div>
+      `;
+
+      return `
+        <section class="card">
+          ${headerHtml}
+          ${studentInfoBlock}
+          <h4 style="font-weight:bold">${info?.name || "-"} (Roll: ${info?.roll_number || "-"})</h4>
+          ${scholasticTable}
+          ${coScholasticTable}
+          ${attendanceTable}
+          ${remarksBlock}
+          ${footerHtml}
+          ${gradeSchemaTable}
+        </section>
+      `;
+    });
+
+    return `<!doctype html><html><head><meta charset="utf-8" />${styles}</head><body>${blocks.join("")}</body></html>`;
+  };
+
+  const downloadPDF = async () => {
+  if (!reportData.length) {
+    return Swal.fire("No Data", "Please generate the report first", "info");
+  }
+
+  // 1) Try using the user's explicit selections
+  let subject_components = (filters.subjectComponents || [])
+    .filter(sc => sc.subject_id)
+    .map(sc => {
+      const term_component_map = {};
+      Object.entries(sc.selected_components || {}).forEach(([termId, compIds]) => {
+        const arr = (compIds || []).map(Number).filter(Boolean);
+        if (arr.length) term_component_map[Number(termId)] = arr;
+      });
+      return { subject_id: Number(sc.subject_id), term_component_map };
+    })
+    .filter(item => Object.keys(item.term_component_map).length > 0);
+
+  // 2) Fallback: derive from reportData so PDF works even if UI checkboxes weren’t set
+  if (!subject_components.length) {
+    // examId -> termId map
+    const examIdToTermId = new Map(exams.map(e => [e.id, e.term_id]));
+
+    const mapBySubject = new Map(); // subject_id -> { term_component_map }
+    for (const student of reportData) {
+      for (const c of (student.components || [])) {
+        const subject_id = Number(c.subject_id);
+        const term_id = Number(examIdToTermId.get(c.exam_id)); // from exams list
+        const component_id = Number(c.component_id);
+        if (!subject_id || !term_id || !component_id) continue;
+
+        if (!mapBySubject.has(subject_id)) {
+          mapBySubject.set(subject_id, { subject_id, term_component_map: {} });
+        }
+        const entry = mapBySubject.get(subject_id);
+        if (!entry.term_component_map[term_id]) entry.term_component_map[term_id] = [];
+        if (!entry.term_component_map[term_id].includes(component_id)) {
+          entry.term_component_map[term_id].push(component_id);
+        }
+      }
+    }
+    subject_components = Array.from(mapBySubject.values())
+      .filter(item => Object.keys(item.term_component_map).length > 0);
+  }
+
+  // 3) If still empty, bail with a friendly message
+  if (!subject_components.length) {
+    return Swal.fire(
+      "Missing Components",
+      "No assessment components found. Select components or generate the report again.",
+      "warning"
+    );
+  }
+
+  const filtersPayload = {
+    class_id: Number(filters.class_id),
+    section_id: Number(filters.section_id),
+    subject_components,   // ✅ guaranteed non-empty now
+    includeGrades: true
+  };
+
+  const html = buildCardsHtml(); // your helper that mirrors the report-card layout
+
+  try {
+    const res = await api.post(
+      "/report-card/generate-pdf/report-card",
+      {
+        html,                    // full HTML for the report-card view
+        filters: filtersPayload, // backend uses this to compute weights/grades
+        fileName: "FinalWeightedReport",
+        orientation: "portrait",
+      },
+      { responseType: "blob" }
+    );
+
+    const blob = new Blob([res.data], { type: "application/pdf" });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "report-cards.pdf";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+  } catch (error) {
+    console.error(error);
+    Swal.fire("Error", "Failed to generate PDF", "error");
+  }
+};
 
   return (
     <div className="container mt-4">
@@ -373,6 +649,7 @@ const FinalResultSummary = () => {
           <button className="btn btn-primary" onClick={fetchReport} disabled={loading}>{loading? 'Loading…':'Generate Report'}</button>
         </div>
       </div>
+
       <div className="form-check form-switch my-3">
         <input
           className="form-check-input"
@@ -402,10 +679,10 @@ const FinalResultSummary = () => {
       {!loading && reportData.length > 0 && (
         <div className="mt-5">
           <div className="d-flex justify-content-end">
-  <button className="btn btn-outline-dark mb-3" onClick={downloadPDF}>
-    📄 Download Report Cards as PDF
-  </button>
-</div>
+            <button className="btn btn-outline-dark mb-3" onClick={downloadPDF}>
+              📄 Download Report Cards as PDF
+            </button>
+          </div>
 
           {reportData.map(student => {
             if (!studentInfoMap[student.id]) {
@@ -657,7 +934,7 @@ const FinalResultSummary = () => {
                       <td>{attendance.late_days || '-'}</td>
                       <td>
                         {attendance.attendance_percentage != null
-                          ? attendance.attendance_percentage.toFixed(2) + '%'
+                          ? Number(attendance.attendance_percentage).toFixed(2) + '%'
                           : '-'}
                       </td>
                     </tr>

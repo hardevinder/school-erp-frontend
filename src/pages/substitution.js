@@ -1,10 +1,29 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Swal from 'sweetalert2';
 
 const API_URL = process.env.REACT_APP_API_URL;
-const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
-// Helper function to format a Date as "YYYY-MM-DD"
+// Canonical internal day keys
+const CANON_DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+const prettyDay = (d) => d.charAt(0).toUpperCase() + d.slice(1);
+
+// Accepts "Monday", "MONDAY", "Mon" → "monday"
+const normalizeDay = (val) => {
+  if (!val) return null;
+  const s = String(val).trim().toLowerCase();
+  if (CANON_DAYS.includes(s)) return s;
+  const map = { mon: 'monday', tue: 'tuesday', wed: 'wednesday', thu: 'thursday', thur: 'thursday', fri: 'friday', sat: 'saturday' };
+  if (map[s]) return map[s];
+  const short = s.slice(0, 3);
+  if (map[short]) return map[short];
+  return null;
+};
+
+const toNum = (v) => {
+  const n = Number(String(v ?? '').trim());
+  return Number.isFinite(n) ? n : null;
+};
+
 const formatDate = (date) => {
   const yyyy = date.getFullYear();
   const mm = String(date.getMonth() + 1).padStart(2, '0');
@@ -12,113 +31,154 @@ const formatDate = (date) => {
   return `${yyyy}-${mm}-${dd}`;
 };
 
-const TeacherTimetableView = () => {
-  // State declarations
-  const [teachers, setTeachers] = useState([]);
-  const [selectedTeacher, setSelectedTeacher] = useState(null);
-  const [periods, setPeriods] = useState([]);
-  const [timetable, setTimetable] = useState([]);
-  const [globalTimetable, setGlobalTimetable] = useState([]);
-  const [grid, setGrid] = useState({});
-  const [holidays, setHolidays] = useState([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [selectedDay, setSelectedDay] = useState(null);
-  const [selectedPeriod, setSelectedPeriod] = useState(null);
-  const [availableTeachersWithWorkload, setAvailableTeachersWithWorkload] = useState([]);
-  // substitutions state holds current user selections (or deletions) for cells.
-  const [substitutions, setSubstitutions] = useState({});
-  // originalSubs holds the substitutions as loaded from the backend.
-  const [originalSubs, setOriginalSubs] = useState({});
-  const [selectedDate, setSelectedDate] = useState(formatDate(new Date()));
-
-  const token = localStorage.getItem("token");
-
-  // Calculate week dates mapping.
-  const today = new Date();
-  const weekDates = {};
-  const dayIndex = (today.getDay() + 6) % 7; // Adjust so Monday is index 0.
-  const monday = new Date(today);
-  monday.setDate(today.getDate() - dayIndex);
-  days.forEach((day, index) => {
-    const d = new Date(monday);
-    d.setDate(monday.getDate() + index);
-    weekDates[day] = formatDate(d);
+// map: canonicalDay -> YYYY-MM-DD for Mon–Sat week containing pivotDateStr
+const weekDatesFor = (pivotDateStr) => {
+  const d = new Date(pivotDateStr);
+  const dow = (d.getDay() + 6) % 7; // Monday=0
+  const monday = new Date(d);
+  monday.setDate(d.getDate() - dow);
+  const map = {};
+  CANON_DAYS.forEach((day, i) => {
+    const di = new Date(monday);
+    di.setDate(monday.getDate() + i);
+    map[day] = formatDate(di);
   });
-  const currentDateStr = formatDate(today);
+  return map;
+};
 
-  // Fetch teachers for dropdown.
-  useEffect(() => {
-    fetch(`${API_URL}/teachers`, {
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      }
-    })
-      .then(res => res.json())
-      .then(data => {
-        if (data && data.teachers) {
-          setTeachers(data.teachers);
-          setSelectedTeacher(data.teachers[0]?.id);
-        }
-      })
-      .catch(err => console.error("Error fetching teachers:", err));
-  }, [token]);
+const canonicalWeekdayFromDate = (dateStr) =>
+  normalizeDay(new Date(dateStr).toLocaleDateString('en-US', { weekday: 'long' }));
 
-  // Fetch periods for table columns.
-  useEffect(() => {
-    fetch(`${API_URL}/periods`, {
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      }
-    })
-      .then(res => res.json())
-      .then(data => setPeriods(data || []))
-      .catch(err => console.error("Error fetching periods:", err));
-  }, [token]);
+const safeGetClassName = (rec) =>
+  rec?.Class?.class_name ?? rec?.Class?.name ?? rec?.className ?? rec?.class_name ?? '';
 
-  // Fetch holidays.
-  useEffect(() => {
-    fetch(`${API_URL}/holidays`, {
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      }
-    })
-      .then(res => res.json())
-      .then(data => setHolidays(data || []))
-      .catch(err => console.error("Error fetching holidays:", err));
-  }, [token]);
+const safeGetSubjectName = (rec) =>
+  rec?.Subject?.name ?? rec?.subjectName ?? rec?.subject ?? 'No Subject';
 
-  // Fetch the selected teacher's timetable.
+const TeacherTimetableView = () => {
+  // Teachers stored as { userId, employeeId?, name }
+  const [teachers, setTeachers] = useState([]);
+  const [selectedTeacher, setSelectedTeacher] = useState(null); // { userId, employeeId?, name }
+
+  const [periods, setPeriods] = useState([]); // [{id, name}]
+  const [timetable, setTimetable] = useState([]); // records
+  const [globalTimetable, setGlobalTimetable] = useState([]); // optional
+  const [holidays, setHolidays] = useState([]); // [{date, description}]
+  const [isLoading, setIsLoading] = useState(false);
+
+  const [selectedDay, setSelectedDay] = useState(null); // canonical day
+  const [selectedPeriod, setSelectedPeriod] = useState(null); // number
+
+  const [availableTeachersWithWorkload, setAvailableTeachersWithWorkload] = useState([]);
+
+  // substitutions = current UI state per cell; originalSubs = snapshot from backend for selected date
+  const [substitutions, setSubstitutions] = useState({});
+  const [originalSubs, setOriginalSubs] = useState({});
+
+  const [selectedDate, setSelectedDate] = useState(formatDate(new Date()));
+  const token = useMemo(() => localStorage.getItem('token') || '', []);
+
+  // Derived
+  const todayStr = useMemo(() => formatDate(new Date()), []);
+  const weekDates = useMemo(() => weekDatesFor(selectedDate), [selectedDate]);
+  const weekdayOfSelectedDate = useMemo(() => canonicalWeekdayFromDate(selectedDate), [selectedDate]);
+
+  // Headers
+  const authHeaders = useMemo(
+    () => ({
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    }),
+    [token]
+  );
+
+  // Load teachers → normalize to {userId, employeeId, name}
   useEffect(() => {
-    if (!selectedTeacher) return;
-    setIsLoading(true);
-    fetch(`${API_URL}/period-class-teacher-subject/timetable-teacher/${selectedTeacher}`, {
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
+    (async () => {
+      try {
+        const res = await fetch(`${API_URL}/teachers`, { headers: authHeaders });
+        if (!res.ok) throw new Error(`GET /teachers ${res.status}`);
+        const data = await res.json();
+        const raw = data?.teachers || data || [];
+
+        // IMPORTANT: now we ALWAYS depend on userId for selection / API calls
+        const list = raw
+          .map((t) => ({
+            userId: toNum(t?.user_id ?? t?.User?.id ?? (t?.id /* often User.id in your controller */)),
+            employeeId: toNum(t?.employee_id ?? t?.Employee?.id ?? null),
+            name: t?.name ?? t?.Employee?.name ?? t?.User?.name ?? 'Unnamed',
+          }))
+          .filter((t) => t.userId != null);
+
+        setTeachers(list);
+        if (list.length) setSelectedTeacher(list[0]); // store full object
+      } catch (e) {
+        console.error('Error fetching teachers:', e);
+        setTeachers([]);
       }
-    })
-      .then(res => res.json())
-      .then(data => {
-        if (Array.isArray(data)) {
-          setTimetable(data);
-        } else if (data && Array.isArray(data.timetable)) {
-          setTimetable(data.timetable);
-        } else {
-          console.error("Unexpected timetable data format:", data);
-          setTimetable([]);
-        }
+    })();
+  }, [authHeaders]);
+
+  // Load periods
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch(`${API_URL}/periods`, { headers: authHeaders });
+        if (!res.ok) throw new Error(`GET /periods ${res.status}`);
+        const data = await res.json();
+        const arr = Array.isArray(data) ? data : (data?.periods || []);
+        const normalized = arr.map((p) => ({
+          id: toNum(p?.id ?? p?.periodId),
+          name: p?.period_name ?? p?.name ?? `P${p?.id ?? ''}`,
+        })).filter((p) => p.id != null);
+        setPeriods(normalized);
+      } catch (e) {
+        console.error('Error fetching periods:', e);
+        setPeriods([]);
+      }
+    })();
+  }, [authHeaders]);
+
+  // Load holidays
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch(`${API_URL}/holidays`, { headers: authHeaders });
+        if (!res.ok) throw new Error(`GET /holidays ${res.status}`);
+        const data = await res.json();
+        const arr = Array.isArray(data) ? data : (data?.holidays || []);
+        setHolidays(arr);
+      } catch (e) {
+        console.error('Error fetching holidays:', e);
+        setHolidays([]);
+      }
+    })();
+  }, [authHeaders]);
+
+  // Load selected teacher's timetable using USER ID
+  useEffect(() => {
+    if (!selectedTeacher?.userId) return;
+    (async () => {
+      setIsLoading(true);
+      try {
+        const res = await fetch(
+          `${API_URL}/period-class-teacher-subject/timetable-teacher/${selectedTeacher.userId}`,
+          { headers: authHeaders }
+        );
+        if (!res.ok) throw new Error(`GET /timetable-teacher/${selectedTeacher.userId} ${res.status}`);
+        const data = await res.json();
+        const t = Array.isArray(data) ? data : (Array.isArray(data?.timetable) ? data.timetable : []);
+        setTimetable(t);
+      } catch (e) {
+        console.error('Error fetching timetable:', e);
+        setTimetable([]);
+      } finally {
         setIsLoading(false);
-      })
-      .catch(err => {
-        console.error("Error fetching timetable:", err);
-        setIsLoading(false);
-      });
-  }, [selectedTeacher, token]);
+      }
+    })();
+  }, [selectedTeacher, authHeaders]);
 
-  // When teacher changes, clear current substitutions and selected cell.
+  // Reset selection & subs when teacher changes
   useEffect(() => {
     setSubstitutions({});
     setOriginalSubs({});
@@ -126,155 +186,162 @@ const TeacherTimetableView = () => {
     setSelectedPeriod(null);
   }, [selectedTeacher]);
 
-  // Fetch global timetable records.
+  // Optional: global timetable
   useEffect(() => {
-    fetch(`${API_URL}/period-class-teacher-subject`, {
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
+    (async () => {
+      try {
+        const res = await fetch(`${API_URL}/period-class-teacher-subject`, { headers: authHeaders });
+        if (!res.ok) throw new Error(`GET /period-class-teacher-subject ${res.status}`);
+        const data = await res.json();
+        setGlobalTimetable(Array.isArray(data) ? data : (data?.items || []));
+      } catch (e) {
+        console.error('Error fetching global timetable:', e);
+        setGlobalTimetable([]);
       }
-    })
-      .then(res => res.json())
-      .then(data => setGlobalTimetable(data || []))
-      .catch(err => console.error("Error fetching global timetable:", err));
-  }, [token]);
+    })();
+  }, [authHeaders]);
 
-  // Build grid: grid[day][periodId] = array of timetable records.
-  useEffect(() => {
-    const newGrid = {};
-    days.forEach(day => {
-      newGrid[day] = {};
-      periods.forEach(period => {
-        newGrid[day][period.id] = [];
-      });
+  // Build grid: canonicalDay -> periodId -> records[]
+  const grid = useMemo(() => {
+    const g = {};
+    CANON_DAYS.forEach((d) => (g[d] = {}));
+    periods.forEach((p) => CANON_DAYS.forEach((d) => (g[d][p.id] = [])));
+
+    (timetable || []).forEach((rec) => {
+      const dayNorm = normalizeDay(rec?.day ?? rec?.Day ?? rec?.weekday);
+      const pid = toNum(rec?.periodId ?? rec?.Period?.id ?? rec?.period_id);
+      if (!dayNorm || !g[dayNorm] || pid == null || g[dayNorm][pid] === undefined) return;
+      g[dayNorm][pid].push(rec);
     });
-    timetable.forEach(record => {
-      const { day, periodId } = record;
-      if (newGrid[day] && newGrid[day][periodId] !== undefined) {
-        newGrid[day][periodId].push(record);
-      }
-    });
-    setGrid(newGrid);
+
+    return g;
   }, [timetable, periods]);
 
-  // Calculate timetable workloads.
-  let rowWorkloads = {};
-  let columnWorkloads = {};
-  let overallWorkload = 0;
-  if (!isLoading && periods.length > 0) {
-    days.forEach(day => {
-      let count = 0;
-      const holidayForDay = holidays.find(holiday => holiday.date === weekDates[day]);
-      if (!holidayForDay && grid[day]) {
-        periods.forEach(period => {
-          count += (grid[day][period.id] ? grid[day][period.id].length : 0);
-        });
+  // Holidays map
+  const holidayByDate = useMemo(() => {
+    const m = {};
+    (holidays || []).forEach((h) => { if (h?.date) m[h.date] = h; });
+    return m;
+  }, [holidays]);
+
+  // Workloads (skip holidays)
+  const { rowWorkloads, columnWorkloads, overallWorkload } = useMemo(() => {
+    const rows = {};
+    const cols = {};
+    let overall = 0;
+
+    periods.forEach((p) => (cols[p.id] = 0));
+
+    CANON_DAYS.forEach((dayKey) => {
+      const dateStr = weekDates[dayKey];
+      if (holidayByDate[dateStr]) {
+        rows[dayKey] = 0;
+        return;
       }
-      rowWorkloads[day] = count;
-    });
-    periods.forEach(period => {
-      let count = 0;
-      days.forEach(day => {
-        const holidayForDay = holidays.find(holiday => holiday.date === weekDates[day]);
-        if (!holidayForDay && grid[day] && grid[day][period.id]) {
-          count += grid[day][period.id].length;
-        }
+      let rowCnt = 0;
+      periods.forEach((p) => {
+        const cnt = (grid[dayKey]?.[p.id]?.length) || 0;
+        rowCnt += cnt;
+        cols[p.id] += cnt;
       });
-      columnWorkloads[period.id] = count;
+      rows[dayKey] = rowCnt;
+      overall += rowCnt;
     });
-    overallWorkload = days.reduce((acc, day) => acc + rowWorkloads[day], 0);
-  }
 
-  // Fetch substitutions for the selected date.
-  useEffect(() => {
-    if (!selectedDate || !selectedTeacher) return;
-    fetch(`${API_URL}/substitutions/by-date?date=${selectedDate}`, {
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      }
-    })
-      .then(res => res.json())
-      .then(data => {
-        const subs = {};
-        data.forEach(sub => {
-          if (parseInt(sub.original_teacherId) === parseInt(selectedTeacher)) {
-            const key = `${sub.day.toLowerCase().trim()}_${sub.periodId}`;
-            subs[key] = sub;
-          }
-        });
-        setSubstitutions(subs);
-        setOriginalSubs(subs);
-      })
-      .catch(err => console.error('Error fetching substitutions by date:', err));
-  }, [selectedDate, selectedTeacher, token]);
+    return { rowWorkloads: rows, columnWorkloads: cols, overallWorkload: overall };
+  }, [grid, periods, weekDates, holidayByDate]);
 
-  // Fetch available teachers.
+  // Load substitutions for selected date; filter by ORIGINAL teacher = current USER id
   useEffect(() => {
-    async function fetchAvailableTeachers() {
+    if (!selectedDate || !selectedTeacher?.userId) return;
+    (async () => {
       try {
-        const response = await fetch(`${API_URL}/period-class-teacher-subject/teacher-availability-by-date?date=${selectedDate}&periodId=${selectedPeriod}`, {
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
+        const res = await fetch(`${API_URL}/substitutions/by-date?date=${encodeURIComponent(selectedDate)}`, {
+          headers: authHeaders,
+        });
+        if (!res.ok) throw new Error(`GET /substitutions/by-date ${res.status}`);
+        const data = await res.json();
+        const subsMap = {};
+        (Array.isArray(data) ? data : (data?.items || [])).forEach((sub) => {
+          const otid = toNum(sub?.original_teacherId ?? sub?.original_teacherID ?? sub?.originalTeacherId);
+          if (otid === selectedTeacher.userId) {
+            const dayKey = normalizeDay(sub?.day);
+            const pid = toNum(sub?.periodId);
+            if (dayKey && pid != null) subsMap[`${dayKey}_${pid}`] = sub;
           }
         });
-        const data = await response.json();
-        const available = data.availableTeachers || [];
-        const teacherPromises = available.map(teacher => {
-          return fetch(`${API_URL}/period-class-teacher-subject/teacher-workload/${teacher.id}`, {
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`
+        setSubstitutions(subsMap);
+        setOriginalSubs(subsMap);
+      } catch (e) {
+        console.error('Error fetching substitutions by date:', e);
+        setSubstitutions({});
+        setOriginalSubs({});
+      }
+    })();
+  }, [selectedDate, selectedTeacher, authHeaders]);
+
+  // Fetch available teachers + workload (using USER IDs now)
+  useEffect(() => {
+    if (!selectedDay || !selectedPeriod) {
+      setAvailableTeachersWithWorkload([]);
+      return;
+    }
+    (async () => {
+      try {
+        const url = `${API_URL}/period-class-teacher-subject/teacher-availability-by-date?date=${encodeURIComponent(
+          selectedDate
+        )}&periodId=${encodeURIComponent(selectedPeriod)}`;
+        const res = await fetch(url, { headers: authHeaders });
+        if (!res.ok) { setAvailableTeachersWithWorkload([]); return; }
+        const data = await res.json();
+        const available = (data?.availableTeachers || data || []).map((t) => ({
+          // normalize to USER id
+          id: toNum(t?.user_id ?? t?.User?.id ?? t?.id),
+          name: t?.name ?? t?.User?.name ?? 'Unnamed',
+        })).filter((t) => t.id != null);
+
+        const withWL = await Promise.all(
+          available.map(async (t) => {
+            try {
+              const r = await fetch(`${API_URL}/period-class-teacher-subject/teacher-workload/${t.id}`, {
+                headers: authHeaders,
+              });
+              if (!r.ok) return { ...t, weeklyWorkload: 0, dayWorkload: 0 };
+              const wl = await r.json();
+              const weeklyWorkload = wl?.weeklyWorkload ?? 0;
+              const dayWorkload = wl?.dailyWorkload?.[selectedDay] ?? 0;
+              return { ...t, weeklyWorkload, dayWorkload };
+            } catch {
+              return { ...t, weeklyWorkload: 0, dayWorkload: 0 };
             }
           })
-            .then(res => res.json())
-            .then(workloadData => ({
-              ...teacher,
-              weeklyWorkload: workloadData.weeklyWorkload,
-              dayWorkload: workloadData.dailyWorkload[selectedDay] || 0
-            }));
-        });
-        let teachersWithWorkload = await Promise.all(teacherPromises);
-        teachersWithWorkload.sort((a, b) => {
-          if (a.weeklyWorkload !== b.weeklyWorkload) {
-            return a.weeklyWorkload - b.weeklyWorkload;
-          }
-          return a.dayWorkload - b.dayWorkload;
-        });
-        setAvailableTeachersWithWorkload(teachersWithWorkload);
-      } catch (error) {
-        console.error("Error fetching available teachers:", error);
+        );
+        withWL.sort((a, b) => (a.weeklyWorkload - b.weeklyWorkload) || (a.dayWorkload - b.dayWorkload));
+        setAvailableTeachersWithWorkload(withWL);
+      } catch (e) {
+        console.error('Error fetching available teachers:', e);
         setAvailableTeachersWithWorkload([]);
       }
-    }
-    if (selectedDay && selectedPeriod) {
-      fetchAvailableTeachers();
-    } else {
-      setAvailableTeachersWithWorkload([]);
-    }
-  }, [selectedDay, selectedPeriod, token, selectedDate]);
+    })();
+  }, [selectedDay, selectedPeriod, selectedDate, authHeaders]);
 
-  // Styling definitions.
+  // Styles
   const cellStyle = {
-    minWidth: '120px',
-    height: '60px',
+    minWidth: '140px',
+    height: '68px',
     verticalAlign: 'middle',
     textAlign: 'center',
     cursor: 'pointer',
-    fontSize: '0.8rem',
-    position: 'relative'
+    fontSize: '0.85rem',
+    position: 'relative',
   };
+  const selectedCellStyle = { backgroundColor: '#ffedcc', border: '2px solid #ffa500' };
   const workloadStyle = {
-    padding: "2px 4px",
-    borderRadius: "4px",
-    display: "inline-block",
-    fontSize: "0.8rem",
-    fontWeight: 'bold'
-  };
-  const selectedCellStyle = {
-    backgroundColor: "#ffedcc",
-    border: "2px solid #ffa500"
+    padding: '2px 4px',
+    borderRadius: '4px',
+    display: 'inline-block',
+    fontSize: '0.8rem',
+    fontWeight: 'bold',
   };
   const teacherButtonStyle = {
     backgroundColor: '#007bff',
@@ -284,17 +351,10 @@ const TeacherTimetableView = () => {
     padding: '10px 15px',
     boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
     width: '100%',
-    cursor: 'pointer'
+    cursor: 'pointer',
   };
-  const teacherButtonHoverStyle = {
-    transform: 'scale(1.02)',
-    boxShadow: '0 6px 8px rgba(0,0,0,0.15)'
-  };
-  const teacherButtonDisabledStyle = {
-    backgroundColor: '#cccccc',
-    color: '#666666',
-    cursor: 'not-allowed'
-  };
+  const teacherButtonHoverStyle = { transform: 'scale(1.02)', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' };
+  const teacherButtonDisabledStyle = { backgroundColor: '#cccccc', color: '#666666', cursor: 'not-allowed' };
   const teacherItemStyle = {
     backgroundColor: '#007bff',
     color: 'white',
@@ -304,7 +364,7 @@ const TeacherTimetableView = () => {
     cursor: 'pointer',
     display: 'flex',
     justifyContent: 'space-between',
-    alignItems: 'center'
+    alignItems: 'center',
   };
   const substitutionBadgeStyle = {
     position: 'absolute',
@@ -318,271 +378,265 @@ const TeacherTimetableView = () => {
     display: 'flex',
     alignItems: 'center',
     gap: '4px',
-    cursor: 'pointer'
+    cursor: 'pointer',
   };
 
-  // Handler: when selecting a teacher for a cell.
+  // Handlers
   const handleTeacherSubstitution = (teacher) => {
-    if (selectedDay && selectedPeriod) {
-      const key = `${selectedDay.toLowerCase().trim()}_${selectedPeriod}`;
-      const teacherToStore = { ...teacher, teacherId: teacher.id, teacherName: teacher.name };
-      setSubstitutions(prev => ({ ...prev, [key]: teacherToStore }));
-    } else {
+    if (!selectedDay || !selectedPeriod) {
       Swal.fire('No cell selected', 'Please click on a cell first.', 'warning');
+      return;
     }
+    const key = `${selectedDay}_${selectedPeriod}`;
+    const teacherToStore = {
+      ...teacher,
+      // Store the USER id as teacherId now
+      teacherId: teacher.id,
+      teacherName: teacher.name,
+    };
+    setSubstitutions((prev) => ({ ...prev, [key]: teacherToStore }));
   };
 
-  // Handler: Remove a substitution.
   const removeSubstitution = async (cellKey) => {
-    const subToRemove = substitutions[cellKey];
-    if (subToRemove && subToRemove.id) {
+    const subInUI = substitutions[cellKey];
+    if (subInUI?.id) {
       try {
-        const response = await fetch(`${API_URL}/substitutions/${subToRemove.id}`, {
+        const resp = await fetch(`${API_URL}/substitutions/${subInUI.id}`, {
           method: 'DELETE',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          }
+          headers: authHeaders,
         });
-        if (!response.ok) {
+        if (!resp.ok) {
           Swal.fire('Error', 'Failed to delete substitution from backend.', 'error');
           return;
         }
-      } catch (error) {
-        console.error('Error deleting substitution:', error);
+      } catch (e) {
+        console.error('Error deleting substitution:', e);
         Swal.fire('Error', 'Failed to delete substitution from backend.', 'error');
         return;
       }
     }
-    setSubstitutions(prev => {
-      const newSubs = { ...prev };
-      delete newSubs[cellKey];
-      return newSubs;
+    setSubstitutions((prev) => {
+      const copy = { ...prev };
+      delete copy[cellKey];
+      return copy;
     });
   };
 
-  // Single-cell submission handler.
   const handleSubmitSubstitutions = async () => {
     if (!selectedDay || !selectedPeriod) {
       Swal.fire('No cell selected', 'Please click on a cell to select day and period.', 'warning');
       return;
     }
-    const cellKey = `${selectedDay.toLowerCase().trim()}_${selectedPeriod}`;
+    const cellKey = `${selectedDay}_${selectedPeriod}`;
     const teacherSub = substitutions[cellKey];
     if (!teacherSub) {
       Swal.fire('No substitution selected', 'Please select a teacher for substitution.', 'warning');
       return;
     }
-    // Get cell's timetable records.
-    const cellRecords = grid[selectedDay] && grid[selectedDay][selectedPeriod] ? grid[selectedDay][selectedPeriod] : [];
-    if (cellRecords.length === 0) {
+    const cellRecords = grid[selectedDay]?.[selectedPeriod] || [];
+    if (!cellRecords.length) {
       Swal.fire('No Class Found', 'No class record found in this cell.', 'error');
       return;
     }
-    let previousClassId = null;
-    let previousSubjectId = null;
-    for (let record of cellRecords) {
-      if (!previousClassId) {
-        if (record.Class && record.Class.id) {
-          previousClassId = record.Class.id;
-        } else if (record.classId) {
-          previousClassId = record.classId;
-        }
-      }
-      if (!previousSubjectId) {
-        if (record.Subject && record.Subject.id) {
-          previousSubjectId = record.Subject.id;
-        } else if (record.subjectId) {
-          previousSubjectId = record.subjectId;
-        }
-      }
-      if (previousClassId && previousSubjectId) break;
+
+    // IMPORTANT: the timetable records' teacherId/Teacher.id should also be USER ids now
+    const originalTeacherId = toNum(cellRecords[0]?.teacherId ?? cellRecords[0]?.Teacher?.id);
+    const selectedTeacherId  = toNum(teacherSub.teacherId ?? teacherSub.id);
+
+    let classId = null;
+    let subjectId = null;
+    for (const rec of cellRecords) {
+      classId = classId ?? toNum(rec?.Class?.id ?? rec?.classId);
+      subjectId = subjectId ?? toNum(rec?.Subject?.id ?? rec?.subjectId);
+      if (classId && subjectId) break;
     }
-    if (!previousClassId) {
-      Swal.fire('No Class Info', 'Class record lacks a valid class ID.', 'error');
-      return;
-    }
-    if (!previousSubjectId) {
-      Swal.fire('No Subject Info', 'Class record lacks a valid subject ID.', 'error');
-      return;
-    }
-    const originalTeacherId = cellRecords[0].teacherId;
-    const selectedTeacherId = teacherSub.teacherId || teacherSub.id;
+    if (!classId) return Swal.fire('No Class Info', 'Class record lacks a valid class ID.', 'error');
+    if (!subjectId) return Swal.fire('No Subject Info', 'Class record lacks a valid subject ID.', 'error');
+
     const payload = {
       date: selectedDate,
       periodId: selectedPeriod,
-      classId: previousClassId,
-      teacherId: selectedTeacherId,
-      original_teacherId: originalTeacherId,
-      subjectId: previousSubjectId,
-      day: selectedDay,
-      published: true
+      classId,
+      teacherId: selectedTeacherId,          // USER id
+      original_teacherId: originalTeacherId, // USER id
+      subjectId,
+      day: prettyDay(selectedDay),
+      published: true,
     };
+
     try {
-      const response = await fetch(`${API_URL}/substitutions`, {
+      const resp = await fetch(`${API_URL}/substitutions`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(payload)
+        headers: authHeaders,
+        body: JSON.stringify(payload),
       });
-      if (response.ok) {
-        const returnedSubstitution = await response.json();
-        returnedSubstitution.Teacher = { id: selectedTeacherId, name: teacherSub.teacherName };
-        setSubstitutions(prev => ({ ...prev, [cellKey]: returnedSubstitution }));
-        Swal.fire('Success', 'Substitution processed successfully!', 'success');
-      } else {
-        Swal.fire('Error', 'Failed to process substitution.', 'error');
-      }
-    } catch (error) {
-      console.error('Error submitting substitution:', error);
+      if (!resp.ok) return Swal.fire('Error', 'Failed to process substitution.', 'error');
+      const returned = await resp.json();
+      returned.Teacher = { id: selectedTeacherId, name: teacherSub.teacherName };
+      setSubstitutions((prev) => ({ ...prev, [cellKey]: returned }));
+      Swal.fire('Success', 'Substitution processed successfully!', 'success');
+    } catch (e) {
+      console.error('Error submitting substitution:', e);
       Swal.fire('Error', 'Failed to submit substitution.', 'error');
     }
   };
 
-  // Submit all cells.
+  // Diff-based bulk submit
   const handleSubmitAllSubstitutions = async () => {
-    for (const day of days) {
-      for (const period of periods) {
-        const cellKey = `${day.toLowerCase().trim()}_${period.id}`;
-        const teacherSub = substitutions[cellKey];
-        const cellRecords = grid[day] && grid[day][period.id] ? grid[day][period.id] : [];
-        if (cellRecords.length === 0) continue;
-        let previousClassId = null;
-        let previousSubjectId = null;
-        for (let record of cellRecords) {
-          if (!previousClassId) {
-            if (record.Class && record.Class.id) {
-              previousClassId = record.Class.id;
-            } else if (record.classId) {
-              previousClassId = record.classId;
-            }
-          }
-          if (!previousSubjectId) {
-            if (record.Subject && record.Subject.id) {
-              previousSubjectId = record.Subject.id;
-            } else if (record.subjectId) {
-              previousSubjectId = record.subjectId;
-            }
-          }
-          if (previousClassId && previousSubjectId) break;
-        }
-        if (!previousClassId || !previousSubjectId) continue;
-        const originalTeacherId = cellRecords[0].teacherId;
-        if (teacherSub) {
-          const selectedTeacherId = teacherSub.teacherId || teacherSub.id;
-          const payload = {
-            date: selectedDate,
-            periodId: period.id,
-            classId: previousClassId,
-            teacherId: selectedTeacherId,
-            original_teacherId: originalTeacherId,
-            subjectId: previousSubjectId,
-            day: day,
-            published: true
-          };
-          try {
-            const response = await fetch(`${API_URL}/substitutions`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-              },
-              body: JSON.stringify(payload)
-            });
-            if (response.ok) {
-              const returnedSubstitution = await response.json();
-              returnedSubstitution.Teacher = { id: selectedTeacherId, name: teacherSub.teacherName };
-              setSubstitutions(prev => ({ ...prev, [cellKey]: returnedSubstitution }));
-            } else {
-              Swal.fire('Error', `Failed to upsert substitution for ${day} period ${period.period_name}.`, 'error');
-            }
-          } catch (error) {
-            console.error('Error submitting substitution:', error);
-            Swal.fire('Error', `Failed to submit substitution for ${day} period ${period.period_name}.`, 'error');
-          }
+    const upsertKeys = Object.keys(substitutions);
+    const deleteKeys = Object.keys(originalSubs).filter((k) => !(k in substitutions));
+    const parseCellKey = (key) => {
+      const [dayKey, pidStr] = key.split('_');
+      return { dayKey, periodId: toNum(pidStr) };
+    };
+
+    // Upserts
+    for (const key of upsertKeys) {
+      const teacherSub = substitutions[key];
+      const { dayKey, periodId } = parseCellKey(key);
+      if (!dayKey || !periodId) continue;
+
+      const cellRecords = grid[dayKey]?.[periodId] || [];
+      if (!cellRecords.length) continue;
+
+      let classId = null;
+      let subjectId = null;
+      for (const rec of cellRecords) {
+        classId = classId ?? toNum(rec?.Class?.id ?? rec?.classId);
+        subjectId = subjectId ?? toNum(rec?.Subject?.id ?? rec?.subjectId);
+        if (classId && subjectId) break;
+      }
+      if (!classId || !subjectId) continue;
+
+      const originalTeacherId = toNum(cellRecords[0]?.teacherId ?? cellRecords[0]?.Teacher?.id);
+      const selectedTeacherId = toNum(teacherSub.teacherId ?? teacherSub.id);
+
+      const payload = {
+        date: selectedDate,
+        periodId,
+        classId,
+        teacherId: selectedTeacherId,          // USER id
+        original_teacherId: originalTeacherId, // USER id
+        subjectId,
+        day: prettyDay(dayKey),
+        published: true,
+      };
+
+      try {
+        const resp = await fetch(`${API_URL}/substitutions`, {
+          method: 'POST',
+          headers: authHeaders,
+          body: JSON.stringify(payload),
+        });
+        if (!resp.ok) {
+          Swal.fire('Error', `Failed to upsert substitution for ${prettyDay(dayKey)} period ${periodId}.`, 'error');
         } else {
-          if (originalSubs[cellKey] && originalSubs[cellKey].id) {
-            try {
-              const response = await fetch(`${API_URL}/substitutions/${originalSubs[cellKey].id}`, {
-                method: 'DELETE',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'Authorization': `Bearer ${token}`
-                }
-              });
-              if (!response.ok) {
-                Swal.fire('Error', `Failed to delete substitution for ${day} period ${period.period_name}.`, 'error');
-              } else {
-                setSubstitutions(prev => {
-                  const newSubs = { ...prev };
-                  delete newSubs[cellKey];
-                  return newSubs;
-                });
-              }
-            } catch (error) {
-              console.error('Error deleting substitution:', error);
-              Swal.fire('Error', `Failed to delete substitution for ${day} period ${period.period_name}.`, 'error');
-            }
+          const returned = await resp.json();
+          returned.Teacher = { id: selectedTeacherId, name: teacherSub.teacherName || teacherSub.name };
+          setSubstitutions((prev) => ({ ...prev, [key]: returned }));
+        }
+      } catch (e) {
+        console.error('Error submitting substitution:', e);
+        Swal.fire('Error', `Failed to submit substitution for ${prettyDay(dayKey)} period ${periodId}.`, 'error');
+      }
+    }
+
+    // Deletions
+    for (const key of deleteKeys) {
+      const orig = originalSubs[key];
+      if (orig?.id) {
+        try {
+          const resp = await fetch(`${API_URL}/substitutions/${orig.id}`, {
+            method: 'DELETE',
+            headers: authHeaders,
+          });
+          if (!resp.ok) {
+            const { dayKey, periodId } = parseCellKey(key);
+            Swal.fire('Error', `Failed to delete substitution for ${prettyDay(dayKey)} period ${periodId}.`, 'error');
           }
+        } catch (e) {
+          console.error('Error deleting substitution:', e);
+          const { dayKey, periodId } = parseCellKey(key);
+          Swal.fire('Error', `Failed to delete substitution for ${prettyDay(dayKey)} period ${periodId}.`, 'error');
         }
       }
     }
+
     Swal.fire('Success', 'All substitutions processed successfully!', 'success');
+    setOriginalSubs({ ...substitutions });
   };
 
-  // Only allow selecting cells that match the day of the selected date.
-  const handleCellClick = (day, periodId) => {
-    const selectedDateDay = new Date(selectedDate).toLocaleDateString('en-US', { weekday: 'long' });
-    if (day !== selectedDateDay) {
-      Swal.fire('Invalid selection', `You can only select cells for ${selectedDateDay}.`, 'warning');
+  const handleCellClick = (displayDay, periodId) => {
+    const dayKey = normalizeDay(displayDay);
+    if (!dayKey) return;
+    if (dayKey !== weekdayOfSelectedDate) {
+      Swal.fire('Invalid selection', `You can only select cells for ${prettyDay(weekdayOfSelectedDate)}.`, 'warning');
       return;
     }
-    setSelectedDay(day);
-    setSelectedPeriod(periodId);
+    setSelectedDay(dayKey);
+    setSelectedPeriod(toNum(periodId));
   };
 
-  const currentCellKey = selectedDay && selectedPeriod ? `${selectedDay.toLowerCase().trim()}_${selectedPeriod}` : null;
+  const currentCellKey =
+    selectedDay && selectedPeriod != null ? `${selectedDay}_${selectedPeriod}` : null;
   const currentCellSubstitution = currentCellKey ? substitutions[currentCellKey] : null;
+
+  const nothingToShow =
+    !isLoading &&
+    periods.length > 0 &&
+    CANON_DAYS.every((d) => periods.every((p) => (grid[d]?.[p.id]?.length ?? 0) === 0));
 
   return (
     <div className="container mt-4">
-      {/* Global custom scrollbar styles */}
       <style>
         {`
-          .custom-scrollbar::-webkit-scrollbar { width: 8px; }
+          .custom-scrollbar::-webkit-scrollbar { width: 8px; height: 8px; }
           .custom-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 8px; }
           .custom-scrollbar::-webkit-scrollbar-thumb { background: #888; border-radius: 8px; }
           .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #555; }
         `}
       </style>
+
       <div className="card shadow">
-        <div className="card-header bg-white text-dark">
+        <div className="card-header bg-white text-dark d-flex align-items-center justify-content-between">
           <h3 className="mb-0">Teacher Timetable</h3>
+          <div>
+            {!API_URL && <span className="badge bg-danger me-2">REACT_APP_API_URL missing</span>}
+            {!token && <span className="badge bg-warning text-dark">No token</span>}
+          </div>
         </div>
+
         <div className="card-body">
-          {/* Top Row: Teacher Select, Date Picker, and Count Button */}
+          {/* Debug banner (remove in prod) */}
+          <div className="mb-2 small text-muted">
+            Debug → selected: {selectedTeacher?.name || '—'} |
+            userId: {selectedTeacher?.userId || '—'} |
+            timetable rows: {timetable?.length ?? 0}
+          </div>
+
+          {/* Top controls */}
           <div className="d-flex flex-wrap align-items-center mb-3" style={{ gap: '1rem' }}>
-            <div style={{ flex: '1 1 250px' }}>
+            <div style={{ flex: '1 1 280px' }}>
               <label htmlFor="teacherSelect" className="form-label">Select Teacher:</label>
               <select
                 id="teacherSelect"
                 className="form-select"
-                value={selectedTeacher || ''}
+                value={selectedTeacher?.userId ?? ''}
                 onChange={(e) => {
-                  setSelectedTeacher(e.target.value);
-                  setSubstitutions({});
-                  setOriginalSubs({});
-                  setSelectedDay(null);
-                  setSelectedPeriod(null);
+                  const uid = toNum(e.target.value);
+                  const found = teachers.find(t => t.userId === uid) || null;
+                  setSelectedTeacher(found);
                 }}
               >
-                {teachers.map(teacher => (
-                  <option key={teacher.id} value={teacher.id}>{teacher.name}</option>
+                {teachers.length === 0 && <option value="">— no teachers —</option>}
+                {teachers.map((t) => (
+                  <option key={t.userId} value={t.userId}>
+                    {t.name} (User #{t.userId})
+                  </option>
                 ))}
               </select>
             </div>
+
             <div style={{ flex: '1 1 250px' }}>
               <label htmlFor="substitutionDate" className="form-label">Select Date:</label>
               <input
@@ -590,20 +644,22 @@ const TeacherTimetableView = () => {
                 id="substitutionDate"
                 className="form-control"
                 value={selectedDate}
-                onChange={(e) => setSelectedDate(e.target.value)}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setSelectedDate(v);
+                  setSelectedDay(null);
+                  setSelectedPeriod(null);
+                }}
               />
             </div>
-            <div style={{ flex: '1 1 200px' }}>
-              <button 
-                type="button" 
-                style={{
-                  ...teacherButtonStyle,
-                  backgroundColor: '#28a745',
-                  cursor: 'default'
-                }}
+
+            <div style={{ flex: '1 1 220px' }}>
+              <button
+                type="button"
+                style={{ ...teacherButtonStyle, backgroundColor: '#28a745', cursor: 'default' }}
                 disabled
               >
-                {selectedDay && selectedPeriod
+                {selectedDay && selectedPeriod != null
                   ? `${availableTeachersWithWorkload.length} Teachers Available`
                   : 'N/A'}
               </button>
@@ -611,12 +667,12 @@ const TeacherTimetableView = () => {
           </div>
 
           <div className="d-flex flex-wrap" style={{ gap: '1rem' }}>
-            {/* Left: Timetable with horizontal scroll */}
+            {/* Timetable grid */}
             <div style={{ flex: 2, overflowX: 'auto' }} className="custom-scrollbar">
               {isLoading ? (
                 <div className="text-center my-5">
                   <div className="spinner-border text-primary" role="status">
-                    <span className="sr-only">Loading...</span>
+                    <span className="visually-hidden">Loading...</span>
                   </div>
                 </div>
               ) : (
@@ -624,71 +680,80 @@ const TeacherTimetableView = () => {
                   <thead className="thead-dark">
                     <tr>
                       <th style={cellStyle}>Day</th>
-                      {periods.map(period => (
-                        <th key={period.id} style={cellStyle}>{period.period_name}</th>
+                      {periods.map((p) => (
+                        <th key={p.id} style={cellStyle}>{p.name}</th>
                       ))}
                       <th style={cellStyle}>Workload</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {days.map(day => {
-                      const holidayForDay = holidays.find(holiday => holiday.date === weekDates[day]);
-                      const isCurrentDay = weekDates[day] === currentDateStr;
-                      const rowClasses = `${holidayForDay ? 'table-danger' : ''} ${isCurrentDay ? 'border border-primary' : ''}`;
+                    {CANON_DAYS.map((dayKey) => {
+                      const dateStr = weekDates[dayKey];
+                      const holiday = holidayByDate[dateStr];
+                      const isToday = dateStr === todayStr;
+                      const rowClasses = `${holiday ? 'table-danger' : ''} ${isToday ? 'border border-primary' : ''}`;
                       return (
-                        <tr key={day} className={rowClasses}>
-                          <td className="font-weight-bold" style={cellStyle}>
-                            {day} {holidayForDay ? `(Holiday)` : ''} {isCurrentDay ? `(Today)` : ''}
+                        <tr key={dayKey} className={rowClasses}>
+                          <td className="fw-bold" style={cellStyle}>
+                            {prettyDay(dayKey)} {holiday ? '(Holiday)' : ''} {isToday ? '(Today)' : ''}
                           </td>
-                          {holidayForDay ? (
-                            <td colSpan={periods.length} style={cellStyle}>{holidayForDay.description}</td>
+
+                          {holiday ? (
+                            <td colSpan={periods.length} style={cellStyle}>
+                              {holiday?.description || 'Holiday'}
+                            </td>
                           ) : (
-                            periods.map(period => {
-                              const cellKey = `${day.toLowerCase().trim()}_${period.id}`;
-                              const isSelected = day === selectedDay && period.id === selectedPeriod;
+                            periods.map((p) => {
+                              const cellKey = `${dayKey}_${p.id}`;
+                              const isSelected = dayKey === selectedDay && p.id === selectedPeriod;
+                              const hasSub = Boolean(substitutions[cellKey]);
+                              const records = grid[dayKey]?.[p.id] || [];
                               return (
                                 <td
-                                  key={period.id}
+                                  key={p.id}
                                   style={{
                                     ...cellStyle,
                                     ...(isSelected ? selectedCellStyle : {}),
-                                    ...(substitutions[cellKey] ? { backgroundColor: '#e0ffe0', border: '2px solid green' } : {})
+                                    ...(hasSub ? { backgroundColor: '#e0ffe0', border: '2px solid green' } : {}),
                                   }}
-                                  onClick={() => handleCellClick(day, period.id)}
+                                  onClick={() => handleCellClick(prettyDay(dayKey), p.id)}
                                 >
-                                  {grid[day] && grid[day][period.id] && grid[day][period.id].length > 0 ? (
-                                    grid[day][period.id].map((record, index) => (
-                                      <div key={index} className="mb-1 p-1 border rounded shadow-sm">
+                                  {records.length ? (
+                                    records.map((rec, idx) => (
+                                      <div key={idx} className="mb-1 p-1 border rounded shadow-sm">
                                         <div className="small">
-                                          <strong>{record.Class ? record.Class.class_name : ''}</strong>
+                                          <strong>{safeGetClassName(rec)}</strong>
                                         </div>
                                         <div className="small">
-                                          {record.Subject && record.Subject.name ? record.Subject.name : 'No Subject'}
+                                          {safeGetSubjectName(rec)}
                                         </div>
                                       </div>
                                     ))
                                   ) : (
-                                    <div>&nbsp;</div>
+                                    <div className="text-muted small">Free</div>
                                   )}
-                                  {substitutions[cellKey] && (
+
+                                  {hasSub && (
                                     <div
                                       style={substitutionBadgeStyle}
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        removeSubstitution(cellKey);
-                                      }}
+                                      onClick={(e) => { e.stopPropagation(); removeSubstitution(cellKey); }}
+                                      title="Remove substitution"
                                     >
-                                      {substitutions[cellKey].Teacher && substitutions[cellKey].Teacher.name
-                                        ? substitutions[cellKey].Teacher.name
-                                        : substitutions[cellKey].name || substitutions[cellKey].teacherId || substitutions[cellKey].id} ×
+                                      {substitutions[cellKey]?.Teacher?.name ||
+                                        substitutions[cellKey]?.teacherName ||
+                                        substitutions[cellKey]?.name ||
+                                        substitutions[cellKey]?.teacherId ||
+                                        substitutions[cellKey]?.id}{' '}
+                                      ×
                                     </div>
                                   )}
                                 </td>
                               );
                             })
                           )}
-                          <td className="text-center font-weight-bold" style={cellStyle}>
-                            <span style={workloadStyle}>{rowWorkloads[day] || 0}</span>
+
+                          <td className="text-center fw-bold" style={cellStyle}>
+                            <span style={workloadStyle}>{rowWorkloads[dayKey] || 0}</span>
                           </td>
                         </tr>
                       );
@@ -697,9 +762,9 @@ const TeacherTimetableView = () => {
                   <tfoot className="bg-light">
                     <tr>
                       <th style={cellStyle}>Total Workload</th>
-                      {periods.map(period => (
-                        <th key={period.id} style={cellStyle}>
-                          <span style={workloadStyle}>{columnWorkloads[period.id] || 0}</span>
+                      {periods.map((p) => (
+                        <th key={p.id} style={cellStyle}>
+                          <span style={workloadStyle}>{columnWorkloads[p.id] || 0}</span>
                         </th>
                       ))}
                       <th style={cellStyle}>
@@ -709,47 +774,52 @@ const TeacherTimetableView = () => {
                   </tfoot>
                 </table>
               )}
+
+              {!isLoading && periods.length > 0 && nothingToShow && (
+                <div className="alert alert-info mt-2">
+                  No classes found for this teacher this week. Check:
+                  <ul className="mb-0">
+                    <li>Teacher User ID: {selectedTeacher?.userId ?? '—'}</li>
+                    <li>Timetable endpoint returns records for this userId</li>
+                    <li>Day keys: backend day should match actual weekday</li>
+                  </ul>
+                </div>
+              )}
             </div>
 
-            {/* Right: List of Available Teachers */}
-            <div style={{ flex: 1, marginLeft: "20px", maxHeight: '500px', overflowY: 'auto' }} className="custom-scrollbar">
-              {selectedDay && selectedPeriod ? (
-                availableTeachersWithWorkload.length > 0 ? (
+            {/* Right: Available teachers */}
+            <div style={{ flex: 1, marginLeft: '20px', maxHeight: '500px', overflowY: 'auto' }} className="custom-scrollbar">
+              {selectedDay && selectedPeriod != null ? (
+                availableTeachersWithWorkload.length ? (
                   <div className="d-flex flex-column" style={{ gap: '0.5rem' }}>
-                    {availableTeachersWithWorkload.map(teacher => (
-                      <button
-                        type="button"
-                        key={teacher.id}
-                        style={{
-                          ...teacherItemStyle,
-                          ...(currentCellSubstitution && currentCellSubstitution.teacherId === teacher.id
-                            ? teacherButtonDisabledStyle
-                            : {})
-                        }}
-                        disabled={currentCellSubstitution && currentCellSubstitution.teacherId === teacher.id}
-                        onClick={() => handleTeacherSubstitution(teacher)}
-                        onMouseOver={e => {
-                          if (!(currentCellSubstitution && currentCellSubstitution.teacherId === teacher.id)) {
-                            Object.assign(e.currentTarget.style, teacherButtonHoverStyle);
-                          }
-                        }}
-                        onMouseOut={e => {
-                          if (!(currentCellSubstitution && currentCellSubstitution.teacherId === teacher.id)) {
-                            Object.assign(e.currentTarget.style, { transform: 'scale(1)', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' });
-                          }
-                        }}
-                      >
-                        <div style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span style={{ fontWeight: 'bold' }}>{teacher.name}</span>
-                          <span style={{ fontSize: '0.8rem' }}>
-                            W: {teacher.weeklyWorkload} | D: {teacher.dayWorkload}
-                          </span>
-                        </div>
-                      </button>
-                    ))}
+                    {availableTeachersWithWorkload.map((t) => {
+                      const isSelectedSame =
+                        currentCellSubstitution && toNum(currentCellSubstitution.teacherId ?? currentCellSubstitution.id) === t.id;
+                      return (
+                        <button
+                          type="button"
+                          key={t.id}
+                          style={{ ...teacherItemStyle, ...(isSelectedSame ? teacherButtonDisabledStyle : {}) }}
+                          disabled={isSelectedSame}
+                          onClick={() => handleTeacherSubstitution(t)}
+                          onMouseOver={(e) => {
+                            if (!isSelectedSame) Object.assign(e.currentTarget.style, teacherButtonHoverStyle);
+                          }}
+                          onMouseOut={(e) => {
+                            if (!isSelectedSame) Object.assign(e.currentTarget.style, { transform: 'scale(1)', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' });
+                          }}
+                          title={`Weekly: ${t.weeklyWorkload ?? 0} | ${prettyDay(selectedDay)}: ${t.dayWorkload ?? 0}`}
+                        >
+                          <div style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ fontWeight: 'bold' }}>{t.name}</span>
+                            <span style={{ fontSize: '0.8rem' }}>W: {t.weeklyWorkload ?? 0} | D: {t.dayWorkload ?? 0}</span>
+                          </div>
+                        </button>
+                      );
+                    })}
                   </div>
                 ) : (
-                  <p>No teachers available for {selectedDay}, period {selectedPeriod}.</p>
+                  <p>No teachers available for {prettyDay(selectedDay)}, period {String(selectedPeriod)}.</p>
                 )
               ) : (
                 <p>Click on a cell to see available teachers and their workload.</p>
@@ -757,9 +827,14 @@ const TeacherTimetableView = () => {
             </div>
           </div>
 
-          {/* Buttons for submission */}
+          {/* Actions */}
           <div className="mt-3 d-flex gap-3">
-            <button className="btn btn-success" onClick={handleSubmitSubstitutions}>
+            <button
+              className="btn btn-success"
+              onClick={handleSubmitSubstitutions}
+              disabled={!currentCellKey || !substitutions[currentCellKey]}
+              title={!currentCellKey ? 'Select a cell first' : (!substitutions[currentCellKey] ? 'Pick a substitute teacher' : 'Submit')}
+            >
               Submit Current Cell
             </button>
             <button className="btn btn-primary" onClick={handleSubmitAllSubstitutions}>

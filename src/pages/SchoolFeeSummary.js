@@ -1,6 +1,6 @@
 // SchoolFeeSummary.jsx
 import React, { useEffect, useMemo, useState } from 'react';
-import { Table, Container, Spinner, Alert, Button, Modal, Form, InputGroup } from 'react-bootstrap';
+import { Table, Container, Spinner, Alert, Button, Modal, Form, InputGroup, Badge } from 'react-bootstrap';
 import { pdf } from '@react-pdf/renderer';
 import PdfSchoolFeeSummary from './PdfSchoolFeeSummary';
 import api from '../api';
@@ -8,8 +8,7 @@ import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
 import './SchoolFeeSummary.css';
 
-const formatCurrency = (value) =>
-  `₹${Number(value || 0).toLocaleString('en-IN')}`;
+const formatCurrency = (value) => `₹${Number(value || 0).toLocaleString('en-IN')}`;
 
 const SchoolFeeSummary = () => {
   const [summary, setSummary] = useState([]);
@@ -26,7 +25,6 @@ const SchoolFeeSummary = () => {
   const [showModal, setShowModal] = useState(false);
   const [loadingDetails, setLoadingDetails] = useState(false);
 
-  // 🔎 search in modal
   const [search, setSearch] = useState('');
 
   const fetchFeeSummary = async () => {
@@ -46,9 +44,7 @@ const SchoolFeeSummary = () => {
   const fetchSchool = async () => {
     try {
       const res = await api.get('/schools');
-      if (res.data && res.data.length > 0) {
-        setSchool(res.data[0]);
-      }
+      if (res.data && res.data.length > 0) setSchool(res.data[0]);
     } catch (error) {
       console.error('Error fetching school:', error);
     }
@@ -66,7 +62,7 @@ const SchoolFeeSummary = () => {
     setSelectedHeadingName(headingName);
     setShowModal(true);
     setLoadingDetails(true);
-    setSearch(''); // reset search when opening
+    setSearch('');
 
     try {
       const res = await api.get('/feedue-status/fee-heading-wise-students', {
@@ -75,7 +71,6 @@ const SchoolFeeSummary = () => {
 
       const rawData = Array.isArray(res?.data?.data) ? res.data.data : [];
 
-      // Build all columns from all students' feeDetails
       const allCols = new Set();
       const finalData = rawData.map((student) => {
         const row = {
@@ -86,10 +81,13 @@ const SchoolFeeSummary = () => {
         };
 
         (student.feeDetails || []).forEach((fd) => {
-          row[`${fd.fee_heading} - Due`] = Number(fd.due || 0);
-          row[`${fd.fee_heading} - Paid`] = Number(fd.paid || 0) + Number(fd.concession || 0);
-          row[`${fd.fee_heading} - Remaining`] = Number(fd.remaining || 0);
-          allCols.add(`${fd.fee_heading} - Remaining`);
+          if (fd.fee_heading === headingName) {
+            row[`${fd.fee_heading} - Due`] = Number(fd.due || 0);
+            row[`${fd.fee_heading} - Paid`] =
+              Number(fd.paid || 0) + Number(fd.concession || 0);
+            row[`${fd.fee_heading} - Remaining`] = Number(fd.remaining || 0);
+            allCols.add(`${fd.fee_heading} - Remaining`);
+          }
         });
 
         return row;
@@ -104,17 +102,14 @@ const SchoolFeeSummary = () => {
     }
   };
 
-  // 🔎 filter rows by search (name, admission no, class)
   const filteredDetails = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return studentDetails;
-    return studentDetails.filter((s) => {
-      return (
-        (s.name || '').toLowerCase().includes(q) ||
-        (s.admissionNumber || '').toString().toLowerCase().includes(q) ||
-        (s.className || '').toLowerCase().includes(q)
-      );
-    });
+    return studentDetails.filter((s) =>
+      (s.name || '').toLowerCase().includes(q) ||
+      (s.admissionNumber || '').toString().toLowerCase().includes(q) ||
+      (s.className || '').toLowerCase().includes(q)
+    );
   }, [search, studentDetails]);
 
   const exportToExcel = () => {
@@ -151,17 +146,17 @@ const SchoolFeeSummary = () => {
 
   return (
     <Container className="mt-4">
-      <div className="d-flex justify-content-between align-items-center mb-3">
-        <h2 className="text-center flex-grow-1">School Fee Summary</h2>
+      <div className="d-flex justify-content-between align-items-center mb-3 gap-2">
+        <h2 className="m-0">School Fee Summary</h2>
         {summary.length > 0 && (
-          <Button variant="secondary" onClick={generatePDF} className="ms-3">
+          <Button variant="outline-secondary" onClick={generatePDF}>
             Print PDF
           </Button>
         )}
       </div>
 
       {loading ? (
-        <div className="text-center">
+        <div className="text-center py-4">
           <Spinner animation="border" variant="primary" />
         </div>
       ) : error ? (
@@ -169,8 +164,8 @@ const SchoolFeeSummary = () => {
           {error}
         </Alert>
       ) : (
-        <div style={{ overflowX: 'auto' }}>
-          <Table striped bordered hover responsive className="table-sticky">
+        <div className="overflow-x-auto">
+          <Table striped bordered hover className="table-sticky">
             <thead className="sticky-top bg-light">
               <tr>
                 <th>#</th>
@@ -179,9 +174,9 @@ const SchoolFeeSummary = () => {
                 <th>Total Received</th>
                 <th>Concession</th>
                 <th>Remaining Due</th>
-                <th>Fully Paid Students</th>
-                <th>Partially Paid Students</th>
-                <th>Unpaid Students</th>
+                <th>Fully Paid</th>
+                <th>Partially Paid</th>
+                <th>Unpaid</th>
                 <th>Total Students</th>
                 <th>Van Fee Received</th>
                 <th>Van Students</th>
@@ -197,40 +192,50 @@ const SchoolFeeSummary = () => {
                 return (
                   <tr key={index}>
                     <td>{index + 1}</td>
-                    <td>{item.fee_heading}</td>
+                    <td className="fw-semibold">{item.fee_heading}</td>
                     <td>{formatCurrency(item.totalDue)}</td>
                     <td>{formatCurrency(item.totalReceived)}</td>
                     <td>{formatCurrency(item.totalConcession)}</td>
-                    <td>{formatCurrency(item.totalRemainingDue)}</td>
-
-                    <td
-                      style={{ color: 'blue', cursor: 'pointer' }}
-                      onClick={() => handleCountClick(item.id, 'full', item.fee_heading)}
-                      title="View fully paid students"
-                    >
-                      {item.studentsPaidFull}
+                    <td className={Number(item.totalRemainingDue) > 0 ? 'text-danger-soft' : 'text-success-soft'}>
+                      {formatCurrency(item.totalRemainingDue)}
                     </td>
 
-                    <td
-                      style={{ color: 'blue', cursor: 'pointer' }}
-                      onClick={() => handleCountClick(item.id, 'partial', item.fee_heading)}
-                      title="View partially paid students"
-                    >
-                      {item.studentsPaidPartial}
+                    <td className="click-chip-cell">
+                      <span
+                        role="button"
+                        className="count-chip chip-success"
+                        title="View fully paid students"
+                        onClick={() => handleCountClick(item.id, 'full', item.fee_heading)}
+                      >
+                        {item.studentsPaidFull} Fully Paid
+                      </span>
                     </td>
 
-                    <td
-                      style={{ color: 'blue', cursor: 'pointer' }}
-                      onClick={() => handleCountClick(item.id, 'unpaid', item.fee_heading)}
-                      title="View unpaid students"
-                    >
-                      {item.studentsPending}
+                    <td className="click-chip-cell">
+                      <span
+                        role="button"
+                        className="count-chip chip-warning"
+                        title="View partially paid students"
+                        onClick={() => handleCountClick(item.id, 'partial', item.fee_heading)}
+                      >
+                        {item.studentsPaidPartial} Partial
+                      </span>
+                    </td>
+
+                    <td className="click-chip-cell">
+                      <span
+                        role="button"
+                        className="count-chip chip-danger"
+                        title="View unpaid students"
+                        onClick={() => handleCountClick(item.id, 'unpaid', item.fee_heading)}
+                      >
+                        {item.studentsPending} Unpaid
+                      </span>
                     </td>
 
                     <td>{totalStudents}</td>
-
-                    <td>{item.vanFeeReceived > 0 ? formatCurrency(item.vanFeeReceived) : '----'}</td>
-                    <td>{item.vanStudents > 0 ? item.vanStudents : '----'}</td>
+                    <td>{item.vanFeeReceived > 0 ? formatCurrency(item.vanFeeReceived) : '—'}</td>
+                    <td>{item.vanStudents > 0 ? item.vanStudents : '—'}</td>
                   </tr>
                 );
               })}
@@ -239,53 +244,60 @@ const SchoolFeeSummary = () => {
         </div>
       )}
 
-      {/* Wider modal via dialogClassName; full-screen on small screens */}
+      {/* Modal */}
       <Modal
         show={showModal}
         onHide={() => setShowModal(false)}
         size="xl"
-        dialogClassName="modal-xxl"
+        dialogClassName="modal-xxxl"
         fullscreen="md-down"
+        centered
       >
-        <Modal.Header
-          closeButton
-          style={{ position: 'sticky', top: 0, zIndex: 1050, backgroundColor: 'white' }}
-        >
-          <Modal.Title>
-            {selectedHeadingName} – {selectedStatus?.toUpperCase()} STUDENTS
-          </Modal.Title>
+        <Modal.Header closeButton className="modal-header-sticky">
+          <div className="d-flex flex-column">
+            <Modal.Title className="d-flex align-items-center gap-2 flex-wrap">
+              <span>Students — {selectedStatus?.toUpperCase()}</span>
+              {selectedHeadingName && (
+                <Badge bg="info" text="dark">Fee Heading: {selectedHeadingName}</Badge>
+              )}
+            </Modal.Title>
+            <small className="text-muted">Header is sticky; table header & first columns are sticky while scrolling.</small>
+          </div>
         </Modal.Header>
 
-        <Modal.Body className="modal-body-scroll">
+        <Modal.Body className="modal-body-fixed">
+          {/* Controls */}
+          <div className="modal-controls">
+            <InputGroup className="modal-search">
+              <InputGroup.Text>Search</InputGroup.Text>
+              <Form.Control
+                placeholder="Type name, admission no, or class…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </InputGroup>
+
+            <div className="d-flex align-items-center gap-2">
+              <Button variant="success" onClick={exportToExcel}>Export to Excel</Button>
+              <Button variant="outline-secondary" onClick={() => setShowModal(false)}>Close</Button>
+            </div>
+          </div>
+
           {loadingDetails ? (
-            <Spinner animation="border" />
+            <div className="py-4 text-center">
+              <Spinner animation="border" />
+            </div>
           ) : studentDetails.length === 0 ? (
-            <Alert variant="info">No students found for this status.</Alert>
+            <Alert variant="info" className="mt-3">No students found for this status.</Alert>
           ) : (
-            <>
-              {/* Search + Export */}
-              <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
-                <InputGroup className="search-input">
-                  <InputGroup.Text>Search</InputGroup.Text>
-                  <Form.Control
-                    placeholder="Type name, admission no, or class…"
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                  />
-                </InputGroup>
-
-                <Button variant="success" onClick={exportToExcel}>
-                  Export to Excel
-                </Button>
-              </div>
-
-              <Table striped bordered hover responsive className="modal-table">
+            <div className="table-container">
+              <Table striped bordered hover className="modal-table sticky-left-cols">
                 <thead>
                   <tr>
-                    <th>#</th>
-                    <th>Name</th>
-                    <th>Admission No</th>
-                    <th>Class</th>
+                    <th className="slc slc-1">#</th>
+                    <th className="slc slc-2">Name</th>
+                    <th className="slc slc-3">Admission No</th>
+                    <th className="slc slc-4">Class</th>
                     {columns.map((col, idx) => (
                       <th key={idx}>{col.replace(/ - Remaining$/, '')}</th>
                     ))}
@@ -293,25 +305,20 @@ const SchoolFeeSummary = () => {
                 </thead>
                 <tbody>
                   {filteredDetails.map((stu, idx) => (
-                    <tr key={stu.id ?? idx}>
-                      <td>{idx + 1}</td>
-                      <td>{stu.name}</td>
-                      <td>{stu.admissionNumber}</td>
-                      <td>{stu.className}</td>
+                    <tr key={stu.id ?? `${idx}-${stu.admissionNumber}`}>
+                      <td className="slc slc-1">{idx + 1}</td>
+                      <td className="slc slc-2 fw-medium">{stu.name}</td>
+                      <td className="slc slc-3">{stu.admissionNumber}</td>
+                      <td className="slc slc-4">{stu.className}</td>
                       {columns.map((key, i) => {
                         const dueKey = key.replace('Remaining', 'Due');
                         const remaining = Number(stu[key] || 0);
                         const due = Number(stu[dueKey] || 0);
-
-                        let bg = '';
-                        if (due > 0 && remaining === due) {
-                          bg = 'bg-danger text-white';
-                        } else if (remaining > 0) {
-                          bg = 'bg-warning';
-                        }
-
+                        let cls = 'due-zero';
+                        if (due > 0 && remaining === due) cls = 'due-full';
+                        else if (remaining > 0) cls = 'due-partial';
                         return (
-                          <td key={i} className={bg}>
+                          <td key={i} className={cls}>
                             {formatCurrency(remaining)}
                           </td>
                         );
@@ -320,9 +327,14 @@ const SchoolFeeSummary = () => {
                   ))}
                 </tbody>
               </Table>
-            </>
+            </div>
           )}
         </Modal.Body>
+
+        <Modal.Footer className="justify-content-between">
+          <small className="text-muted">Scroll horizontally for more headings; left columns stay pinned.</small>
+          <Button variant="secondary" onClick={() => setShowModal(false)}>Close</Button>
+        </Modal.Footer>
       </Modal>
     </Container>
   );

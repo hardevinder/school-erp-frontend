@@ -1,48 +1,74 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 
 const API_URL = process.env.REACT_APP_API_URL;
 
-const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+const normalizeDay = (val) => {
+  if (!val) return '';
+  const s = String(val).trim().toLowerCase();
+  const map = {
+    mon: 'monday', monday: 'monday',
+    tue: 'tuesday', tues: 'tuesday', tuesday: 'tuesday',
+    wed: 'wednesday', weds: 'wednesday', wednesday: 'wednesday',
+    thu: 'thursday', thur: 'thursday', thurs: 'thursday', thursday: 'thursday',
+    fri: 'friday', friday: 'friday',
+    sat: 'saturday', saturday: 'saturday',
+  };
+  const norm = map[s] || s;
+  const cap = norm.charAt(0).toUpperCase() + norm.slice(1);
+  return DAYS.includes(cap) ? cap : '';
+};
+
+const getPeriodId = (rec) =>
+  rec?.periodId ?? rec?.period_id ?? rec?.PeriodId ?? rec?.Period?.id ?? rec?.period?.id;
+
+const formatDate = (date) => {
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const dd = String(date.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+};
 
 const TeacherTimetableDisplay = () => {
   const [periods, setPeriods] = useState([]);
   const [timetable, setTimetable] = useState([]);
   const [grid, setGrid] = useState({});
   const [holidays, setHolidays] = useState([]);
+
   // Separate states for the two substitution types:
   const [originalSubs, setOriginalSubs] = useState({});
   const [substitutedSubs, setSubstitutedSubs] = useState({});
-  const [isLoading, setIsLoading] = useState(true);
 
-  // State for the current week's Monday.
+  const [isLoading, setIsLoading] = useState(true);
+  const [errors, setErrors] = useState([]);
+
+  // Current week Monday
   const [currentMonday, setCurrentMonday] = useState(() => {
     const today = new Date();
-    const dayIndex = (today.getDay() + 6) % 7; // Monday as index 0.
+    const dayIndex = (today.getDay() + 6) % 7; // Monday=0
     const monday = new Date(today);
     monday.setDate(today.getDate() - dayIndex);
     return monday;
   });
 
-  const token = localStorage.getItem("token");
-  const selectedTeacherId = 668; // Logged in teacher ID
+  const token = localStorage.getItem('token');
+  const selectedTeacherId = 668; // TODO: replace with logged-in teacher id
 
-  const formatDate = (date) => {
-    const yyyy = date.getFullYear();
-    const mm = String(date.getMonth() + 1).padStart(2, '0');
-    const dd = String(date.getDate()).padStart(2, '0');
-    return `${yyyy}-${mm}-${dd}`;
-  };
+  const todayStr = useMemo(() => formatDate(new Date()), []);
 
-  const today = new Date();
-  const currentDateStr = formatDate(today);
+  // Memoized weekDates so effects don't refire every render
+  const weekDates = useMemo(() => {
+    const obj = {};
+    DAYS.forEach((day, index) => {
+      const d = new Date(currentMonday);
+      d.setDate(currentMonday.getDate() + index);
+      obj[day] = formatDate(d);
+    });
+    return obj;
+  }, [currentMonday]);
 
-  // Calculate week dates based on currentMonday.
-  const weekDates = {};
-  days.forEach((day, index) => {
-    const d = new Date(currentMonday);
-    d.setDate(currentMonday.getDate() + index);
-    weekDates[day] = formatDate(d);
-  });
+  const pushError = (msg) => setErrors((prev) => [...prev, msg]);
 
   const handlePrevWeek = () => {
     const prevMonday = new Date(currentMonday);
@@ -56,228 +82,295 @@ const TeacherTimetableDisplay = () => {
     setCurrentMonday(nextMonday);
   };
 
+  // Guard early
   useEffect(() => {
-    fetch(`${API_URL}/periods`, {
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      }
-    })
-      .then(res => res.json())
-      .then(data => setPeriods(data || []))
-      .catch(err => console.error("Error fetching periods:", err));
+    if (!API_URL) pushError('REACT_APP_API_URL is not set.');
+    if (!token) pushError('Auth token not found. Please login again.');
   }, [token]);
 
+  // Fetch periods
   useEffect(() => {
-    fetch(`${API_URL}/period-class-teacher-subject/timetable-teacher`, {
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
+    if (!API_URL || !token) return;
+    (async () => {
+      try {
+        const res = await fetch(`${API_URL}/periods`, {
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+        });
+        const data = await res.json();
+        setPeriods(Array.isArray(data) ? data : (data?.periods || []));
+      } catch (err) {
+        console.error('Error fetching periods:', err);
+        pushError('Failed to fetch periods.');
       }
-    })
-      .then(res => res.json())
-      .then(data => {
-        if (Array.isArray(data)) {
-          setTimetable(data);
-        } else if (data && Array.isArray(data.timetable)) {
-          setTimetable(data.timetable);
-        } else {
-          console.error("Unexpected timetable data format:", data);
-          setTimetable([]);
-        }
+    })();
+  }, [token]);
+
+  // Fetch timetable for the teacher (make sure we pass teacherId)
+  useEffect(() => {
+    if (!API_URL || !token) return;
+    (async () => {
+      try {
+        const url = new URL(`${API_URL}/period-class-teacher-subject/timetable-teacher`);
+        // Many backends expect teacherId / teacher_id; we set both safely
+        url.searchParams.set('teacherId', String(selectedTeacherId));
+        url.searchParams.set('teacher_id', String(selectedTeacherId));
+
+        const res = await fetch(url.toString(), {
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+        });
+        const data = await res.json();
+
+        const list = Array.isArray(data)
+          ? data
+          : Array.isArray(data?.timetable)
+          ? data.timetable
+          : [];
+
+        // Normalize day/period so grid build is robust
+        const normalized = list
+          .map((rec) => ({
+            ...rec,
+            _dayNorm: normalizeDay(rec?.day),
+            _periodId: getPeriodId(rec),
+          }))
+          .filter((rec) => rec._dayNorm && rec._periodId);
+
+        setTimetable(normalized);
+      } catch (err) {
+        console.error('Error fetching timetable:', err);
+        pushError('Failed to fetch timetable.');
+      } finally {
         setIsLoading(false);
-      })
-      .catch(err => {
-        console.error("Error fetching timetable:", err);
-        setIsLoading(false);
-      });
-  }, [token]);
-
-  useEffect(() => {
-    fetch(`${API_URL}/holidays`, {
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
       }
-    })
-      .then(res => res.json())
-      .then(data => setHolidays(data || []))
-      .catch(err => console.error("Error fetching holidays:", err));
-  }, [token]);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, selectedTeacherId, currentMonday]); // refetch when week changes (if API is week-aware)
 
-  // Fetch substitutions from both endpoints.
+  // Fetch holidays (optionally send a range to reduce payload)
   useEffect(() => {
+    if (!API_URL || !token) return;
+    (async () => {
+      try {
+        const start = weekDates['Monday'];
+        const end = weekDates['Saturday'];
+        const url = new URL(`${API_URL}/holidays`);
+        url.searchParams.set('start', start);
+        url.searchParams.set('end', end);
+
+        const res = await fetch(url.toString(), {
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+        });
+        const data = await res.json();
+        setHolidays(Array.isArray(data) ? data : (data?.holidays || []));
+      } catch (err) {
+        console.error('Error fetching holidays:', err);
+        pushError('Failed to fetch holidays.');
+      }
+    })();
+  }, [token, weekDates]);
+
+  // Fetch substitutions for each day of current week
+  useEffect(() => {
+    if (!API_URL || !token) return;
     const fetchSubstitutions = async () => {
       const origSubsByDate = {};
       const subSubsByDate = {};
+
       await Promise.all(
         Object.values(weekDates).map(async (date) => {
-          // Fetch original substitutions (where logged in teacher is freed).
+          // Original substitutions (teacher freed)
           try {
-            const resOrig = await fetch(`${API_URL}/substitutions/by-date/original?date=${date}`, {
+            const u = new URL(`${API_URL}/substitutions/by-date/original`);
+            u.searchParams.set('date', date);
+            u.searchParams.set('teacherId', String(selectedTeacherId));
+            u.searchParams.set('teacher_id', String(selectedTeacherId));
+
+            const res = await fetch(u.toString(), {
               headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-              }
+                Authorization: `Bearer ${token}`,
+              },
             });
-            const dataOrig = await resOrig.json();
-            origSubsByDate[date] = dataOrig;
+            const data = await res.json();
+            origSubsByDate[date] = Array.isArray(data) ? data : (data?.rows || []);
           } catch (err) {
-            console.error("Error fetching original substitutions for date", date, err);
+            console.error('Error fetching original substitutions for', date, err);
             origSubsByDate[date] = [];
           }
-          // Fetch substituted substitutions (where logged in teacher is covering).
+
+          // Substituted substitutions (teacher covering)
           try {
-            const resSub = await fetch(`${API_URL}/substitutions/by-date/substituted?date=${date}`, {
+            const u2 = new URL(`${API_URL}/substitutions/by-date/substituted`);
+            u2.searchParams.set('date', date);
+            u2.searchParams.set('teacherId', String(selectedTeacherId));
+            u2.searchParams.set('teacher_id', String(selectedTeacherId));
+
+            const res2 = await fetch(u2.toString(), {
               headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-              }
+                Authorization: `Bearer ${token}`,
+              },
             });
-            const dataSub = await resSub.json();
-            subSubsByDate[date] = dataSub;
+            const data2 = await res2.json();
+            subSubsByDate[date] = Array.isArray(data2) ? data2 : (data2?.rows || []);
           } catch (err) {
-            console.error("Error fetching substituted substitutions for date", date, err);
+            console.error('Error fetching substituted substitutions for', date, err);
             subSubsByDate[date] = [];
           }
         })
       );
+
       setOriginalSubs(origSubsByDate);
       setSubstitutedSubs(subSubsByDate);
     };
 
     fetchSubstitutions();
-  }, [token, weekDates]);
+  }, [token, weekDates, selectedTeacherId]);
 
-  // Build the grid for timetable records.
+  // Build grid once periods & timetable are ready
   useEffect(() => {
-    if (!Array.isArray(timetable)) {
-      console.error("timetable is not an array:", timetable);
+    if (!Array.isArray(timetable) || periods.length === 0) {
+      setGrid({});
       return;
     }
     const newGrid = {};
-    days.forEach(day => {
+    DAYS.forEach((day) => {
       newGrid[day] = {};
-      periods.forEach(period => {
-        newGrid[day][period.id] = [];
+      periods.forEach((p) => {
+        newGrid[day][p.id] = [];
       });
     });
-    timetable.forEach(record => {
-      const { day, periodId } = record;
-      if (newGrid[day] && newGrid[day][periodId] !== undefined) {
-        newGrid[day][periodId].push(record);
+
+    timetable.forEach((rec) => {
+      const dayKey = rec._dayNorm || normalizeDay(rec?.day);
+      const pid = rec._periodId ?? getPeriodId(rec);
+      if (dayKey && newGrid[dayKey] && pid != null && newGrid[dayKey][pid] !== undefined) {
+        newGrid[dayKey][pid].push(rec);
       }
     });
+
     setGrid(newGrid);
   }, [timetable, periods]);
 
-  // Calculate workload and substitution counts per day.
+  // Workload calculations
   let rowWorkloadsRegular = {};
-  let rowWorkloadsRed = {};   // Count from originalSubs (redish)
-  let rowWorkloadsGreen = {}; // Count from substitutedSubs (greenish)
-  let rowHasSubstitution = {};
-
+  let rowWorkloadsRed = {};
+  let rowWorkloadsGreen = {};
   if (!isLoading && periods.length > 0) {
-    days.forEach(day => {
-      let regCount = 0;
-      let redCount = 0;
-      let greenCount = 0;
-      const holidayForDay = holidays.find(holiday => holiday.date === weekDates[day]);
-      // Get substitution records for the day.
-      const origSubsForDay = originalSubs[weekDates[day]] || [];
-      const subSubsForDay = substitutedSubs[weekDates[day]] || [];
-      
+    DAYS.forEach((day) => {
+      const date = weekDates[day];
+      const holidayForDay = holidays.find((h) => h.date === date);
+      let reg = 0,
+        red = 0,
+        green = 0;
+
+      const origForDay = originalSubs[date] || [];
+      const subForDay = substitutedSubs[date] || [];
+
       if (!holidayForDay && grid[day]) {
-        periods.forEach(period => {
-          regCount += grid[day][period.id] ? grid[day][period.id].length : 0;
-          const origForPeriod = origSubsForDay.filter(
-            sub =>
-              sub.periodId === period.id &&
-              sub.day === day &&
-              sub.date === weekDates[day]
+        periods.forEach((p) => {
+          reg += (grid[day][p.id]?.length || 0);
+
+          const origP = origForDay.filter(
+            (s) =>
+              (s.periodId ?? s.period_id ?? s.PeriodId) === p.id &&
+              normalizeDay(s.day) === day &&
+              s.date === date
           );
-          const subForPeriod = subSubsForDay.filter(
-            sub =>
-              sub.periodId === period.id &&
-              sub.day === day &&
-              sub.date === weekDates[day]
+          const subP = subForDay.filter(
+            (s) =>
+              (s.periodId ?? s.period_id ?? s.PeriodId) === p.id &&
+              normalizeDay(s.day) === day &&
+              s.date === date
           );
-          redCount += origForPeriod.length;
-          greenCount += subForPeriod.length;
+          red += origP.length;
+          green += subP.length;
         });
       }
-      rowWorkloadsRegular[day] = regCount;
-      rowWorkloadsRed[day] = redCount;
-      rowWorkloadsGreen[day] = greenCount;
-      rowHasSubstitution[day] = (redCount + greenCount) > 0;
+
+      rowWorkloadsRegular[day] = reg;
+      rowWorkloadsRed[day] = red;
+      rowWorkloadsGreen[day] = green;
     });
   }
 
-  // Compute net workload per day: adjusted = regular - red + green.
-  const getNetWorkload = (day) => {
-    const regular = rowWorkloadsRegular[day] || 0;
-    const red = rowWorkloadsRed[day] || 0;
-    const green = rowWorkloadsGreen[day] || 0;
-    return regular - red + green;
-  };
+  const getNetWorkload = (day) =>
+    (rowWorkloadsRegular[day] || 0) - (rowWorkloadsRed[day] || 0) + (rowWorkloadsGreen[day] || 0);
 
-  // Compute adjusted workload per period (column) by iterating over days.
   let columnAdjustedWorkloads = {};
   if (!isLoading && periods.length > 0) {
-    periods.forEach(period => {
-      let regCount = 0;
-      let redCount = 0;
-      let greenCount = 0;
-      days.forEach(day => {
-        const holidayForDay = holidays.find(holiday => holiday.date === weekDates[day]);
-        if (!holidayForDay && grid[day]) {
-          regCount += grid[day][period.id] ? grid[day][period.id].length : 0;
-        }
-        const origSubsForDay = originalSubs[weekDates[day]] || [];
-        const subSubsForDay = substitutedSubs[weekDates[day]] || [];
-        const origForPeriod = origSubsForDay.filter(
-          sub =>
-            sub.periodId === period.id &&
-            sub.day === day &&
-            sub.date === weekDates[day]
-        );
-        const subForPeriod = subSubsForDay.filter(
-          sub =>
-            sub.periodId === period.id &&
-            sub.day === day &&
-            sub.date === weekDates[day]
-        );
-        redCount += origForPeriod.length;
-        greenCount += subForPeriod.length;
+    periods.forEach((p) => {
+      let reg = 0,
+        red = 0,
+        green = 0;
+      DAYS.forEach((day) => {
+        const date = weekDates[day];
+        const holidayForDay = holidays.find((h) => h.date === date);
+        if (!holidayForDay && grid[day]) reg += grid[day][p.id]?.length || 0;
+
+        const origForDay = originalSubs[date] || [];
+        const subForDay = substitutedSubs[date] || [];
+
+        red += origForDay.filter(
+          (s) =>
+            (s.periodId ?? s.period_id ?? s.PeriodId) === p.id &&
+            normalizeDay(s.day) === day &&
+            s.date === date
+        ).length;
+
+        green += subForDay.filter(
+          (s) =>
+            (s.periodId ?? s.period_id ?? s.PeriodId) === p.id &&
+            normalizeDay(s.day) === day &&
+            s.date === date
+        ).length;
       });
-      columnAdjustedWorkloads[period.id] = regCount - redCount + greenCount;
+      columnAdjustedWorkloads[p.id] = reg - red + green;
     });
   }
 
-  // Overall adjusted workload is the sum of daily net workloads.
-  const overallAdjustedWorkload = days.reduce((acc, day) => acc + getNetWorkload(day), 0);
+  const overallAdjustedWorkload = DAYS.reduce((acc, d) => acc + getNetWorkload(d), 0);
 
   const cellStyle = {
     minWidth: '200px',
     height: '80px',
     verticalAlign: 'middle',
-    textAlign: 'center'
+    textAlign: 'center',
   };
 
   const workloadStyle = {
-    backgroundColor: "#e9ecef",
-    padding: "3px 6px",
-    borderRadius: "4px",
-    display: "inline-block",
-    margin: "2px"
+    backgroundColor: '#e9ecef',
+    padding: '3px 6px',
+    borderRadius: '4px',
+    display: 'inline-block',
+    margin: '2px',
   };
 
   return (
     <div className="container mt-4">
       <div className="card shadow">
-        <div className="card-header bg-white text-dark">
+        <div className="card-header bg-white text-dark d-flex align-items-center justify-content-between">
           <h3 className="mb-0">My Timetable</h3>
+          <small className="text-muted">Teacher ID: {selectedTeacherId}</small>
         </div>
+
+        {errors.length > 0 && (
+          <div className="alert alert-warning m-3">
+            {errors.map((e, i) => (
+              <div key={i}>• {e}</div>
+            ))}
+          </div>
+        )}
+
         <div className="card-body">
           <div className="d-flex justify-content-between align-items-center mb-3">
             <button
@@ -287,12 +380,18 @@ const TeacherTimetableDisplay = () => {
               style={{ width: '50px', height: '50px' }}
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 16 16">
-                <path fillRule="evenodd" d="M11.354 1.646a.5.5 0 0 1 0 .708L6.707 7l4.647 4.646a.5.5 0 0 1-.708.708l-5-5a.5.5 0 0 1 0-.708l5-5a.5.5 0 0 1 .708 0z"/>
+                <path
+                  fillRule="evenodd"
+                  d="M11.354 1.646a.5.5 0 0 1 0 .708L6.707 7l4.647 4.646a.5.5 0 0 1-.708.708l-5-5a.5.5 0 0 1 0-.708l5-5a.5.5 0 0 1 .708 0z"
+                />
               </svg>
             </button>
-            <div className="text-center font-weight-bold">
-              Week: {formatDate(currentMonday)} to {formatDate(new Date(currentMonday.getFullYear(), currentMonday.getMonth(), currentMonday.getDate() + 5))}
+
+            <div className="text-center fw-bold">
+              Week: {formatDate(currentMonday)} to{' '}
+              {formatDate(new Date(currentMonday.getFullYear(), currentMonday.getMonth(), currentMonday.getDate() + 5))}
             </div>
+
             <button
               onClick={handleNextWeek}
               title="Next Week"
@@ -300,109 +399,112 @@ const TeacherTimetableDisplay = () => {
               style={{ width: '50px', height: '50px' }}
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 16 16">
-                <path fillRule="evenodd" d="M4.646 1.646a.5.5 0 0 1 .708 0l5 5a.5.5 0 0 1 0 .708l-5 5a.5.5 0 1 1-.708-.708L9.293 7 4.646 2.354a.5.5 0 0 1 0-.708z"/>
+                <path
+                  fillRule="evenodd"
+                  d="M4.646 1.646a.5.5 0 0 1 .708 0l5 5a.5.5 0 0 1 0 .708l-5 5a.5.5 0 1 1-.708-.708L9.293 7 4.646 2.354a.5.5 0 0 1 0-.708z"
+                />
               </svg>
             </button>
           </div>
+
           {isLoading ? (
             <div className="text-center my-5">
               <div className="spinner-border text-primary" role="status">
-                <span className="sr-only">Loading...</span>
+                <span className="visually-hidden">Loading...</span>
               </div>
             </div>
           ) : (
-            <div>
+            <div className="table-responsive">
               <table className="table table-striped table-bordered table-hover" style={{ tableLayout: 'fixed', width: '100%' }}>
                 <thead className="thead-dark">
                   <tr>
                     <th style={cellStyle}>Day</th>
-                    {periods.map(period => (
+                    {periods.map((period) => (
                       <th key={period.id} style={cellStyle}>
-                        {period.period_name}
+                        {period.period_name ?? period.name ?? `Period ${period.id}`}
                       </th>
                     ))}
                     <th style={cellStyle}>Workload</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {days.map(day => {
-                    const holidayForDay = holidays.find(holiday => holiday.date === weekDates[day]);
-                    const isCurrentDay = weekDates[day] === currentDateStr;
-                    const rowClasses = `${holidayForDay ? 'table-danger' : ''} ${isCurrentDay ? 'border border-primary' : ''}`;
-                    
+                  {DAYS.map((day) => {
+                    const date = weekDates[day];
+                    const holidayForDay = holidays.find((h) => h.date === date);
+                    const isToday = date === todayStr;
+                    const rowClasses = `${holidayForDay ? 'table-danger' : ''} ${isToday ? 'border border-primary' : ''}`;
+
                     return (
                       <tr key={day} className={rowClasses}>
-                        <td className="font-weight-bold" style={cellStyle}>
-                          {day} {holidayForDay ? `(Holiday)` : ''} {isCurrentDay ? `(Today)` : ''}
+                        <td className="fw-bold" style={cellStyle}>
+                          {day} {holidayForDay ? '(Holiday)' : ''} {isToday ? '(Today)' : ''}
                           <br />
-                          <small>{weekDates[day]}</small>
+                          <small>{date}</small>
                         </td>
+
                         {holidayForDay ? (
                           <td colSpan={periods.length} style={cellStyle}>
-                            {holidayForDay.description}
+                            {holidayForDay.description ?? 'Holiday'}
                           </td>
                         ) : (
-                          periods.map(period => {
-                            const cellRecords = (grid[day] && grid[day][period.id]) ? grid[day][period.id] : [];
-                            const origSubsForDay = originalSubs[weekDates[day]] || [];
-                            const subSubsForDay = substitutedSubs[weekDates[day]] || [];
-                            // Find matching original substitution record.
-                            const origSubRecord = origSubsForDay.find(
-                              sub =>
-                                sub.periodId === period.id &&
-                                sub.day === day &&
-                                sub.date === weekDates[day]
+                          periods.map((p) => {
+                            const cellRecords = grid?.[day]?.[p.id] || [];
+
+                            // Match substitution records
+                            const origForDay = originalSubs[date] || [];
+                            const subForDay = substitutedSubs[date] || [];
+
+                            const hasOrig = origForDay.find(
+                              (s) =>
+                                (s.periodId ?? s.period_id ?? s.PeriodId) === p.id &&
+                                normalizeDay(s.day) === day &&
+                                s.date === date
                             );
-                            // Find matching substituted record.
-                            const subSubRecord = subSubsForDay.find(
-                              sub =>
-                                sub.periodId === period.id &&
-                                sub.day === day &&
-                                sub.date === weekDates[day]
+
+                            const hasSub = subForDay.find(
+                              (s) =>
+                                (s.periodId ?? s.period_id ?? s.PeriodId) === p.id &&
+                                normalizeDay(s.day) === day &&
+                                s.date === date
                             );
-                            
-                            if (origSubRecord) {
+
+                            if (hasOrig) {
                               return (
-                                <td key={period.id} style={cellStyle}>
-                                  <div 
-                                    className="p-2 border rounded shadow-sm" 
-                                    style={{ backgroundColor: '#f8d7da' }}  // Redish background
-                                  >
-                                    <div className="small font-weight-bold">Freed by:</div>
+                                <td key={p.id} style={cellStyle}>
+                                  <div className="p-2 border rounded shadow-sm" style={{ backgroundColor: '#f8d7da' }}>
+                                    <div className="small fw-bold">Freed by:</div>
                                     <div className="small">
-                                      {origSubRecord.Teacher ? origSubRecord.Teacher.name : ''} - <strong>{origSubRecord.Class ? origSubRecord.Class.class_name : ''}</strong> - {origSubRecord.Subject ? origSubRecord.Subject.name : ''}
-                                    </div>
-                                  </div>
-                                </td>
-                              );
-                            } else if (subSubRecord) {
-                              return (
-                                <td key={period.id} style={cellStyle}>
-                                  <div 
-                                    className="p-2 border rounded shadow-sm" 
-                                    style={{ backgroundColor: '#d4edda' }}  // Greenish background
-                                  >
-                                    <div className="small font-weight-bold">Covering:</div>
-                                    <div className="small">
-                                      {subSubRecord.OriginalTeacher ? subSubRecord.OriginalTeacher.name : ''} - <strong>{subSubRecord.Class ? subSubRecord.Class.class_name : ''}</strong> - {subSubRecord.Subject ? subSubRecord.Subject.name : ''}
+                                      {hasOrig.Teacher?.name || ''} - <strong>{hasOrig.Class?.class_name || ''}</strong> -{' '}
+                                      {hasOrig.Subject?.name || ''}
                                     </div>
                                   </div>
                                 </td>
                               );
                             }
-                            
-                            // Otherwise, render the regular timetable cell.
+
+                            if (hasSub) {
+                              return (
+                                <td key={p.id} style={cellStyle}>
+                                  <div className="p-2 border rounded shadow-sm" style={{ backgroundColor: '#d4edda' }}>
+                                    <div className="small fw-bold">Covering:</div>
+                                    <div className="small">
+                                      {hasSub.OriginalTeacher?.name || ''} - <strong>{hasSub.Class?.class_name || ''}</strong> -{' '}
+                                      {hasSub.Subject?.name || ''}
+                                    </div>
+                                  </div>
+                                </td>
+                              );
+                            }
+
                             return (
-                              <td key={period.id} style={cellStyle} className={cellRecords.length === 0 ? 'bg-light' : ''}>
+                              <td key={p.id} style={cellStyle} className={cellRecords.length === 0 ? 'bg-light' : ''}>
                                 {cellRecords.length > 0 ? (
-                                  cellRecords.map((record, index) => (
-                                    <div key={index} className="mb-2 p-2 border rounded shadow-sm">
+                                  cellRecords.map((rec, i) => (
+                                    <div key={i} className="mb-2 p-2 border rounded shadow-sm">
                                       <div className="small">
-                                        <strong>{record.Class ? record.Class.class_name : ''}</strong>
+                                        <strong>{rec.Class?.class_name || ''}</strong>
                                       </div>
-                                      <div className="small">
-                                        {record.Subject ? record.Subject.name : record.subjectId}
-                                      </div>
+                                      <div className="small">{rec.Subject?.name || rec.subjectId || ''}</div>
                                     </div>
                                   ))
                                 ) : (
@@ -412,16 +514,14 @@ const TeacherTimetableDisplay = () => {
                             );
                           })
                         )}
-                        <td className="text-center font-weight-bold" style={cellStyle}>
+
+                        <td className="text-center fw-bold" style={cellStyle}>
                           <span style={workloadStyle}>
                             {(() => {
                               const regular = rowWorkloadsRegular[day] || 0;
                               const red = rowWorkloadsRed[day] || 0;
                               const green = rowWorkloadsGreen[day] || 0;
-                              if(red > 0 || green > 0) {
-                                return `${regular} - ${red} + ${green} = ${regular - red + green}`;
-                              }
-                              return `${regular}`;
+                              return red > 0 || green > 0 ? `${regular} - ${red} + ${green} = ${regular - red + green}` : `${regular}`;
                             })()}
                           </span>
                         </td>
@@ -429,12 +529,13 @@ const TeacherTimetableDisplay = () => {
                     );
                   })}
                 </tbody>
+
                 <tfoot className="bg-light">
                   <tr>
                     <th style={cellStyle}>Total Workload</th>
-                    {periods.map(period => (
-                      <th key={period.id} style={cellStyle}>
-                        <span style={workloadStyle}>{columnAdjustedWorkloads[period.id] || 0}</span>
+                    {periods.map((p) => (
+                      <th key={p.id} style={cellStyle}>
+                        <span style={workloadStyle}>{columnAdjustedWorkloads[p.id] || 0}</span>
                       </th>
                     ))}
                     <th style={cellStyle}>

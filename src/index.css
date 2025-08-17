@@ -11,3 +11,140 @@ code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
 }
+
+/* --- Collection Modal polish --- */
+.collection-modal .modal-dialog {
+  max-width: none;           /* Same wide width for both states */
+  margin: 1.75rem auto;        /* Center horizontally */
+}
+
+/* Default = “tall” state (table/edit visible) */
+.collection-modal.collection-modal--tall .modal-content {
+  display: flex;
+  flex-direction: column;
+  max-height: 88vh;            /* Cap height when lots of content */
+  border-radius: 14px;
+  border: 0;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.15);
+}
+
+/* Compact = only Tabs/search visible (no unnecessary height) */
+.collection-modal.collection-modal--compact .modal-content {
+  border-radius: 14px;
+  border: 0;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.15);
+  /* no max-height here → height fits content */
+}
+
+.collection-modal .modal-body {
+  padding: 1.25rem 1.25rem 0.75rem;
+}
+
+/* Sticky header/footer inside the modal (optional) */
+.collection-modal .modal-header,
+.collection-modal .modal-footer {
+  position: sticky;
+  z-index: 3;
+  background: #fff;
+}
+.collection-modal .modal-header { top: 0; }
+.collection-modal .modal-footer { bottom: 0; }
+
+/* Scroll only inside the fee table area */
+.collection-modal .collection-table-wrap {
+  max-height: 60vh;            /* Table scroll zone */
+  overflow: auto;               /* Both axes if needed */
+  border-radius: 8px;
+}
+
+/* Make the table head sticky relative to the scroll wrapper */
+.collection-modal .collection-table-wrap thead th {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  background: #f8f9fa;
+  box-shadow: 0 1px 0 rgba(0,0,0,0.06);
+}
+
+/* When modal is compact, don’t force any internal scrolling */
+.collection-modal.collection-modal--compact .modal-body {
+  overflow: visible;
+}
+
+/* Optional: nicer compact spacing */
+.collection-modal.collection-modal--compact .nav-tabs { margin-bottom: .75rem; }
+
+
+/* Make only the fee table scroll; keep header & payment strip visible */
+.collection-modal .modal-body{
+  display: flex;
+  flex-direction: column;
+  /* ensures sticky children (thead/payment strip) stick within Body */
+  position: relative;
+}
+
+/* Table area scrolls */
+.collection-modal .collection-table-wrap{
+  max-height: calc(100vh - 320px); /* adjust if your header/footer height changes */
+  overflow: auto;
+  border: 1px solid #e9ecef;
+  border-radius: 10px;
+}
+
+/* Sticky table header */
+.collection-modal .collection-table-wrap thead th{
+  position: sticky;
+  top: 0;
+  background: #fff;
+  z-index: 3;
+  box-shadow: 0 2px 0 rgba(0,0,0,0.04);
+}
+
+/* Sticky “Payment Details + Summary” strip at bottom of the modal body */
+.collection-modal .payment-sticky{
+  position: sticky;
+  bottom: 0;
+  background: #fff;
+  z-index: 4;
+  padding: 12px 16px;
+  margin-top: 16px;
+  border-top: 1px solid #e9ecef;
+  box-shadow: 0 -8px 24px -12px rgba(0,0,0,0.15);
+}
+
+/* Nice layout on the sticky strip */
+.collection-modal .payment-sticky .payment-box{
+  min-width: 260px;
+}
+.collection-modal .payment-sticky .summary-box{
+  min-width: 400px;
+}
+
+/* (Optional) keep tabs bar visible if you scroll a lot */
+.collection-modal .nav-tabs{
+  position: sticky;
+  top: 0;           /* sits just under the Modal.Header */
+  z-index: 4;
+  background: #fff;
+  padding-top: 8px;
+  margin-top: -8px; /* visually tightens spacing */
+}
+
+/* Keep modal wide & centered (matches your earlier ask) */
+.collection-modal .modal-dialog{
+  max-width: 1280px;
+  margin: 1.5rem auto;
+}
+.collection-modal .modal-content{
+  border-radius: 14px;
+  border: 0;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.15);
+}
+.collection-modal .modal-header,
+.collection-modal .modal-footer{
+  position: sticky;
+  background: #fff;
+  z-index: 5;
+}
+.collection-modal .modal-header{ top: 0; }
+.collection-modal .modal-footer{ bottom: 0; }

@@ -1,40 +1,33 @@
+// src/components/RoleAwareDashboard.jsx
 import React from "react";
 import { useRoles } from "../hooks/useRoles";
-import { Outlet } from "react-router-dom";
 
-import Dashboard from "./Dashboard";                                // Admin / Superadmin layout
-import TeacherDashboard from "./TeacherDashboard";                 // Teacher layout
-import StudentDashboard from "./StudentDashboard";                 // Student layout
-import AcademicCoordinatorDashboard from "./AcademicCoordinatorDashboard"; // Coordinator layout
-import HRDashboard from "./HRDashboard";                           // ✅ HR layout (new)
+import Dashboard from "./Dashboard";                                // Admin / Superadmin
+import TeacherDashboard from "./TeacherDashboard";                 // Teacher
+import StudentDashboard from "./StudentDashboard";                 // Student
+import AcademicCoordinatorDashboard from "./AcademicCoordinatorDashboard"; // Coordinator
+import HRDashboard from "./HRDashboard";                           // HR
 
 export default function RoleAwareDashboard() {
   const { activeRole } = useRoles();
+  const role = (activeRole || "").toLowerCase();
 
-  let LayoutComponent;
-
-  switch (activeRole) {
+  switch (role) {
     case "teacher":
-      LayoutComponent = TeacherDashboard;
-      break;
+      return <TeacherDashboard />;
+
     case "student":
-      LayoutComponent = StudentDashboard;
-      break;
+      return <StudentDashboard />;
+
     case "academic_coordinator":
-      LayoutComponent = AcademicCoordinatorDashboard;
-      break;
+      return <AcademicCoordinatorDashboard />;
+
     case "hr":
-      LayoutComponent = HRDashboard; // ✅ HR-specific layout here
-      break;
+      return <HRDashboard />;
+
     case "admin":
     case "superadmin":
     default:
-      LayoutComponent = Dashboard;
+      return <Dashboard />;
   }
-
-  return (
-    <LayoutComponent>
-      <Outlet />
-    </LayoutComponent>
-  );
 }

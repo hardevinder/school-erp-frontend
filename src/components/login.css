@@ -1,0 +1,107 @@
+/* --- Page wrapper with soft gradient background --- */
+.login-wrap {
+  min-height: 100vh;
+  position: relative;
+  background: radial-gradient(1200px 800px at -10% -10%, #e8f0ff 0%, #ffffff 40%),
+              radial-gradient(900px 700px at 110% 10%, #fff1f1 0%, #ffffff 45%),
+              linear-gradient(180deg, #ffffff, #ffffff);
+  display: flex;
+  align-items: center;
+}
+
+/* Floating background blobs */
+.login-wrap .blob {
+  position: absolute;
+  z-index: 0;
+  filter: blur(60px);
+  opacity: 0.5;
+}
+.login-wrap .blob-1 {
+  width: 300px;
+  height: 300px;
+  background: #cfe2ff;
+  top: 8%;
+  left: -60px;
+  border-radius: 50%;
+}
+.login-wrap .blob-2 {
+  width: 360px;
+  height: 360px;
+  background: #ffe0e0;
+  right: -80px;
+  bottom: 6%;
+  border-radius: 50%;
+}
+
+/* Card layout */
+.login-card {
+  border-radius: 18px;
+  backdrop-filter: saturate(1.1);
+  position: relative;
+  z-index: 1;
+}
+
+/* Brand side */
+.bg-brand {
+  background: linear-gradient(135deg, #0d6efd 0%, #6ea8fe 100%);
+  color: #fff;
+}
+.brand-pane {
+  color: #f8f9fa;
+}
+.brand-logo {
+  height: 64px;
+  width: auto;
+  object-fit: contain;
+  filter: drop-shadow(0 6px 16px rgba(0,0,0,0.2));
+}
+.brand-logo--placeholder {
+  width: 64px;
+  height: 64px;
+  border-radius: 14px;
+  background: rgba(255,255,255,0.18);
+  display: grid;
+  place-items: center;
+  font-size: 28px;
+}
+.brand-title {
+  font-weight: 700;
+  letter-spacing: 0.3px;
+}
+.brand-subtitle {
+  opacity: 0.95;
+}
+
+/* Mobile logo */
+.mobile-logo {
+  height: 56px;
+  width: auto;
+  object-fit: contain;
+}
+
+/* Inputs / buttons polish */
+.form-control {
+  border-radius: 12px;
+}
+.input-group .btn {
+  border-radius: 0 12px 12px 0;
+}
+.btn-primary.btn-lg {
+  border-radius: 12px;
+  box-shadow: 0 8px 18px rgba(13,110,253,0.2);
+}
+.btn-outline-dark.btn-lg {
+  border-radius: 12px;
+}
+
+/* Hint card */
+.login-hint {
+  border-radius: 12px;
+}
+
+/* Tighten container on huge screens */
+@media (min-width: 1400px) {
+  .container {
+    max-width: 1140px;
+  }
+}
