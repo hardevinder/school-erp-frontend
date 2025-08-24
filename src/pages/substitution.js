@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import Swal from 'sweetalert2';
 
 const API_URL = process.env.REACT_APP_API_URL;
@@ -55,6 +55,14 @@ const safeGetClassName = (rec) =>
 const safeGetSubjectName = (rec) =>
   rec?.Subject?.name ?? rec?.subjectName ?? rec?.subject ?? 'No Subject';
 
+/* ==== persistence keys ==== */
+const LS_TEACHER = 'ttv:selectedTeacherUserId';
+const LS_DATE = 'ttv:selectedDate';
+const readLS = (k, d) => {
+  try { const v = localStorage.getItem(k); return v ?? d; } catch { return d; }
+};
+const writeLS = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
+
 const TeacherTimetableView = () => {
   // Teachers stored as { userId, employeeId?, name }
   const [teachers, setTeachers] = useState([]);
@@ -75,7 +83,7 @@ const TeacherTimetableView = () => {
   const [substitutions, setSubstitutions] = useState({});
   const [originalSubs, setOriginalSubs] = useState({});
 
-  const [selectedDate, setSelectedDate] = useState(formatDate(new Date()));
+  const [selectedDate, setSelectedDate] = useState(() => readLS(LS_DATE, formatDate(new Date())));
   const token = useMemo(() => localStorage.getItem('token') || '', []);
 
   // Derived
@@ -92,7 +100,9 @@ const TeacherTimetableView = () => {
     [token]
   );
 
-  // Load teachers → normalize to {userId, employeeId, name}
+  /* ===================== Loaders ===================== */
+
+  // Load teachers → normalize to {userId, employeeId, name} and restore persisted selection
   useEffect(() => {
     (async () => {
       try {
@@ -101,23 +111,33 @@ const TeacherTimetableView = () => {
         const data = await res.json();
         const raw = data?.teachers || data || [];
 
-        // IMPORTANT: now we ALWAYS depend on userId for selection / API calls
         const list = raw
           .map((t) => ({
-            userId: toNum(t?.user_id ?? t?.User?.id ?? (t?.id /* often User.id in your controller */)),
+            userId: toNum(t?.user_id ?? t?.User?.id ?? (t?.id)),
             employeeId: toNum(t?.employee_id ?? t?.Employee?.id ?? null),
             name: t?.name ?? t?.Employee?.name ?? t?.User?.name ?? 'Unnamed',
           }))
           .filter((t) => t.userId != null);
 
         setTeachers(list);
-        if (list.length) setSelectedTeacher(list[0]); // store full object
+
+        // try to restore previous teacher; fall back to first
+        const fromLS = toNum(readLS(LS_TEACHER, null));
+        const found = fromLS ? list.find((x) => x.userId === fromLS) : null;
+        setSelectedTeacher(found || list[0] || null);
       } catch (e) {
         console.error('Error fetching teachers:', e);
         setTeachers([]);
+        setSelectedTeacher(null);
       }
     })();
   }, [authHeaders]);
+
+  // Persist teacher & date whenever they change
+  useEffect(() => {
+    if (selectedTeacher?.userId != null) writeLS(LS_TEACHER, String(selectedTeacher.userId));
+  }, [selectedTeacher]);
+  useEffect(() => { if (selectedDate) writeLS(LS_DATE, selectedDate); }, [selectedDate]);
 
   // Load periods
   useEffect(() => {
@@ -280,7 +300,7 @@ const TeacherTimetableView = () => {
     })();
   }, [selectedDate, selectedTeacher, authHeaders]);
 
-  // Fetch available teachers + workload (using USER IDs now)
+  // Available teachers + workload (using USER IDs)
   useEffect(() => {
     if (!selectedDay || !selectedPeriod) {
       setAvailableTeachersWithWorkload([]);
@@ -295,7 +315,6 @@ const TeacherTimetableView = () => {
         if (!res.ok) { setAvailableTeachersWithWorkload([]); return; }
         const data = await res.json();
         const available = (data?.availableTeachers || data || []).map((t) => ({
-          // normalize to USER id
           id: toNum(t?.user_id ?? t?.User?.id ?? t?.id),
           name: t?.name ?? t?.User?.name ?? 'Unnamed',
         })).filter((t) => t.id != null);
@@ -325,7 +344,7 @@ const TeacherTimetableView = () => {
     })();
   }, [selectedDay, selectedPeriod, selectedDate, authHeaders]);
 
-  // Styles
+  /* ===================== Styles ===================== */
   const cellStyle = {
     minWidth: '140px',
     height: '68px',
@@ -337,30 +356,32 @@ const TeacherTimetableView = () => {
   };
   const selectedCellStyle = { backgroundColor: '#ffedcc', border: '2px solid #ffa500' };
   const workloadStyle = {
-    padding: '2px 4px',
-    borderRadius: '4px',
+    padding: '2px 6px',
+    borderRadius: '6px',
     display: 'inline-block',
     fontSize: '0.8rem',
     fontWeight: 'bold',
+    background: '#f3f4f6',
+    border: '1px solid #e5e7eb'
   };
   const teacherButtonStyle = {
-    backgroundColor: '#007bff',
+    backgroundColor: '#0d6efd',
     color: 'white',
     border: 'none',
-    borderRadius: '8px',
-    padding: '10px 15px',
-    boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+    borderRadius: '10px',
+    padding: '10px 14px',
+    boxShadow: '0 6px 16px rgba(13,110,253,0.18)',
     width: '100%',
     cursor: 'pointer',
   };
-  const teacherButtonHoverStyle = { transform: 'scale(1.02)', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' };
-  const teacherButtonDisabledStyle = { backgroundColor: '#cccccc', color: '#666666', cursor: 'not-allowed' };
+  const teacherButtonHoverStyle = { transform: 'translateY(-1px)' };
+  const teacherButtonDisabledStyle = { backgroundColor: '#9ca3af', color: '#f9fafb', cursor: 'not-allowed' };
   const teacherItemStyle = {
-    backgroundColor: '#007bff',
+    backgroundColor: '#0d6efd',
     color: 'white',
     border: 'none',
-    borderRadius: '8px',
-    padding: '5px 10px',
+    borderRadius: '10px',
+    padding: '8px 10px',
     cursor: 'pointer',
     display: 'flex',
     justifyContent: 'space-between',
@@ -368,20 +389,21 @@ const TeacherTimetableView = () => {
   };
   const substitutionBadgeStyle = {
     position: 'absolute',
-    bottom: '2px',
-    right: '2px',
-    backgroundColor: 'orange',
+    bottom: '4px',
+    right: '4px',
+    backgroundColor: '#f59e0b',
     color: 'white',
-    padding: '2px 4px',
+    padding: '2px 6px',
     fontSize: '0.7rem',
-    borderRadius: '4px',
+    borderRadius: '6px',
     display: 'flex',
     alignItems: 'center',
-    gap: '4px',
+    gap: '6px',
     cursor: 'pointer',
+    boxShadow: '0 2px 6px rgba(0,0,0,0.15)'
   };
 
-  // Handlers
+  /* ===================== Handlers ===================== */
   const handleTeacherSubstitution = (teacher) => {
     if (!selectedDay || !selectedPeriod) {
       Swal.fire('No cell selected', 'Please click on a cell first.', 'warning');
@@ -390,8 +412,7 @@ const TeacherTimetableView = () => {
     const key = `${selectedDay}_${selectedPeriod}`;
     const teacherToStore = {
       ...teacher,
-      // Store the USER id as teacherId now
-      teacherId: teacher.id,
+      teacherId: teacher.id,         // USER id
       teacherName: teacher.name,
     };
     setSubstitutions((prev) => ({ ...prev, [key]: teacherToStore }));
@@ -439,7 +460,6 @@ const TeacherTimetableView = () => {
       return;
     }
 
-    // IMPORTANT: the timetable records' teacherId/Teacher.id should also be USER ids now
     const originalTeacherId = toNum(cellRecords[0]?.teacherId ?? cellRecords[0]?.Teacher?.id);
     const selectedTeacherId  = toNum(teacherSub.teacherId ?? teacherSub.id);
 
@@ -481,7 +501,6 @@ const TeacherTimetableView = () => {
     }
   };
 
-  // Diff-based bulk submit
   const handleSubmitAllSubstitutions = async () => {
     const upsertKeys = Object.keys(substitutions);
     const deleteKeys = Object.keys(originalSubs).filter((k) => !(k in substitutions));
@@ -515,8 +534,8 @@ const TeacherTimetableView = () => {
         date: selectedDate,
         periodId,
         classId,
-        teacherId: selectedTeacherId,          // USER id
-        original_teacherId: originalTeacherId, // USER id
+        teacherId: selectedTeacherId,
+        original_teacherId: originalTeacherId,
         subjectId,
         day: prettyDay(dayKey),
         published: true,
@@ -586,6 +605,7 @@ const TeacherTimetableView = () => {
     periods.length > 0 &&
     CANON_DAYS.every((d) => periods.every((p) => (grid[d]?.[p.id]?.length ?? 0) === 0));
 
+  /* ===================== UI ===================== */
   return (
     <div className="container mt-4">
       <style>
@@ -594,24 +614,25 @@ const TeacherTimetableView = () => {
           .custom-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 8px; }
           .custom-scrollbar::-webkit-scrollbar-thumb { background: #888; border-radius: 8px; }
           .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #555; }
+
+          .sticky-head thead th { position: sticky; top: 0; z-index: 2; background: #fff; }
         `}
       </style>
 
       <div className="card shadow">
         <div className="card-header bg-white text-dark d-flex align-items-center justify-content-between">
           <h3 className="mb-0">Teacher Timetable</h3>
-          <div>
-            {!API_URL && <span className="badge bg-danger me-2">REACT_APP_API_URL missing</span>}
+          <div className="d-flex align-items-center gap-2">
+            {!API_URL && <span className="badge bg-danger">REACT_APP_API_URL missing</span>}
             {!token && <span className="badge bg-warning text-dark">No token</span>}
           </div>
         </div>
 
         <div className="card-body">
-          {/* Debug banner (remove in prod) */}
           <div className="mb-2 small text-muted">
-            Debug → selected: {selectedTeacher?.name || '—'} |
-            userId: {selectedTeacher?.userId || '—'} |
-            timetable rows: {timetable?.length ?? 0}
+            Selected: <strong>{selectedTeacher?.name || '—'}</strong> &nbsp;|&nbsp;
+            User ID: {selectedTeacher?.userId || '—'} &nbsp;|&nbsp;
+            Rows: {timetable?.length ?? 0}
           </div>
 
           {/* Top controls */}
@@ -656,7 +677,7 @@ const TeacherTimetableView = () => {
             <div style={{ flex: '1 1 220px' }}>
               <button
                 type="button"
-                style={{ ...teacherButtonStyle, backgroundColor: '#28a745', cursor: 'default' }}
+                style={{ ...teacherButtonStyle, backgroundColor: '#198754', cursor: 'default' }}
                 disabled
               >
                 {selectedDay && selectedPeriod != null
@@ -676,7 +697,7 @@ const TeacherTimetableView = () => {
                   </div>
                 </div>
               ) : (
-                <table className="table table-striped table-bordered table-hover" style={{ tableLayout: 'fixed', width: '100%' }}>
+                <table className="table table-striped table-bordered table-hover sticky-head" style={{ tableLayout: 'fixed', width: '100%' }}>
                   <thead className="thead-dark">
                     <tr>
                       <th style={cellStyle}>Day</th>
@@ -714,7 +735,7 @@ const TeacherTimetableView = () => {
                                   style={{
                                     ...cellStyle,
                                     ...(isSelected ? selectedCellStyle : {}),
-                                    ...(hasSub ? { backgroundColor: '#e0ffe0', border: '2px solid green' } : {}),
+                                    ...(hasSub ? { backgroundColor: '#e0ffe0', border: '2px solid #22c55e' } : {}),
                                   }}
                                   onClick={() => handleCellClick(prettyDay(dayKey), p.id)}
                                 >
@@ -806,7 +827,7 @@ const TeacherTimetableView = () => {
                             if (!isSelectedSame) Object.assign(e.currentTarget.style, teacherButtonHoverStyle);
                           }}
                           onMouseOut={(e) => {
-                            if (!isSelectedSame) Object.assign(e.currentTarget.style, { transform: 'scale(1)', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' });
+                            if (!isSelectedSame) Object.assign(e.currentTarget.style, { transform: 'none' });
                           }}
                           title={`Weekly: ${t.weeklyWorkload ?? 0} | ${prettyDay(selectedDay)}: ${t.dayWorkload ?? 0}`}
                         >

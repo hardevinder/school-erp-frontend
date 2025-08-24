@@ -13,8 +13,9 @@ import LatestTeacherSubstitutions from "../pages/LatestTeacherSubstitutions";
 // Chat component (same one you use in App.js)
 import Chat from "../components/Chat";
 
-// NEW: inline Student Remarks Entry in the dashboard
+// Inline pages
 import StudentRemarksEntry from "../pages/StudentRemarksEntry";
+import CoScholasticEntry from "../pages/CoScholasticEntry";
 
 export default function TeacherDashboard() {
   const [showChat, setShowChat] = useState(false);
@@ -25,10 +26,10 @@ export default function TeacherDashboard() {
   const [groupedContacts, setGroupedContacts] = useState({});
   const [contacts, setContacts] = useState([]);
 
-  // NEW: toggle for Remarks section
+  // Toggles
   const [showRemarks, setShowRemarks] = useState(true);
+  const [showCoScholastic, setShowCoScholastic] = useState(false);
 
-  // roles (kept if you need conditional UI later)
   const userRoles = useMemo(() => {
     try {
       return JSON.parse(localStorage.getItem("roles")) || [];
@@ -127,7 +128,17 @@ export default function TeacherDashboard() {
           )}
         </button>
 
-        {/* NEW: toggle remarks visibility */}
+        {/* Toggle Co-Scholastic Entry */}
+        <button
+          type="button"
+          className="btn btn-outline-primary me-2"
+          onClick={() => setShowCoScholastic((s) => !s)}
+          title="Toggle Co-Scholastic Entry"
+        >
+          {showCoScholastic ? "Hide" : "Show"} Co-Scholastic Entry
+        </button>
+
+        {/* Toggle Student Remarks Entry */}
         <button
           type="button"
           className="btn btn-primary"
@@ -149,7 +160,28 @@ export default function TeacherDashboard() {
         <LatestTeacherSubstitutions />
       </section>
 
-      {/* NEW: Inline Student Remarks Entry */}
+      {/* Inline Co-Scholastic Entry */}
+      {showCoScholastic && (
+        <section className="mb-5">
+          <div className="card shadow-sm">
+            <div className="card-header d-flex align-items-center">
+              <h6 className="mb-0">🧩 Co-Scholastic Entry</h6>
+              <button
+                className="btn btn-sm btn-outline-secondary ms-auto"
+                onClick={() => setShowCoScholastic(false)}
+                title="Collapse"
+              >
+                ×
+              </button>
+            </div>
+            <div className="card-body">
+              <CoScholasticEntry />
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* Inline Student Remarks Entry */}
       {showRemarks && (
         <section className="mb-5">
           <div className="card shadow-sm">
@@ -164,7 +196,6 @@ export default function TeacherDashboard() {
               </button>
             </div>
             <div className="card-body">
-              {/* Render the full page component inline */}
               <StudentRemarksEntry />
             </div>
           </div>
@@ -312,7 +343,6 @@ export default function TeacherDashboard() {
           >
             <strong style={{ fontSize: 14 }}>Chat</strong>
             <div className="ms-auto d-flex align-items-center" style={{ gap: 8 }}>
-              {/* You can show activeChatName here if you wire selection */}
               <button
                 onClick={() => setShowChat(false)}
                 style={{
@@ -333,7 +363,6 @@ export default function TeacherDashboard() {
 
           {/* Body: actual Chat */}
           <div style={{ flex: 1, minHeight: 0 }}>
-            {/* Use same props you already use in App.js */}
             <Chat chatId="chat_room_1" currentUserId={currentUserId} />
           </div>
         </div>

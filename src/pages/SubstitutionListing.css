@@ -1,16 +1,235 @@
-/* Ensure all fields look consistent */
-.form-container .form-field {
-    width: 100%;
-    padding: 10px;
-    margin: 5px 0;
-    border: 1px solid #ced4da;
-    border-radius: 4px;
-    box-sizing: border-box;
+/* Page title style */
+.page-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: .2px;
+}
+
+/* Card polish */
+.filter-card {
+  border: 1px solid rgba(0,0,0,.06);
+  border-radius: 14px;
+}
+
+.table-wrapper {
+  border: 1px solid rgba(0,0,0,.06);
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+/* Keep table header visible while scrolling */
+.sticky-thead th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+}
+
+/* Improve table contrast and spacing */
+.table thead th {
+  vertical-align: middle;
+  white-space: nowrap;
+}
+.table tbody td, .table tbody th {
+  vertical-align: middle;
+}
+.table-hover tbody tr:hover {
+  background: #f8fbff;
+}
+.table-bordered > :not(caption) > * > * {
+  border-color: rgba(0,0,0,.08);
+}
+
+/* Zebra rows */
+.table tbody tr:nth-child(odd) {
+  background-color: #fcfcfd;
+}
+
+/* Subtle index column */
+.row-index {
+  text-align: center;
+  font-weight: 600;
+  color: #51607a;
+}
+
+/* Skeleton state */
+.skeleton-row .skeleton-line {
+  height: 12px;
+  width: 100%;
+  border-radius: 6px;
+  background: linear-gradient(90deg, #eceff3, #f5f7fa, #eceff3);
+  background-size: 200% 100%;
+  animation: skel 1.2s ease-in-out infinite;
+}
+@keyframes skel {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* React-Select compact look to match Bootstrap inputs */
+.react-select__control {
+  min-height: 38px !important;
+  border-color: #ced4da !important;
+  box-shadow: none !important;
+}
+.react-select__control:hover {
+  border-color: #b6bec6 !important;
+}
+.react-select__value-container {
+  padding-block: 2px !important;
+}
+.react-select__indicator {
+  padding: 6px !important;
+}
+
+/* Highlight today's rows */
+.highlight-today {
+  background-color: #fff3cd !important; /* Bootstrap warning bg */
+  font-weight: 600;
+}
+.highlight-today td {
+  border-color: rgba(0,0,0,.08) !important;
+}
+.today-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  font-size: 11px;
+  line-height: 1;
+  border-radius: 999px;
+  border: 1px solid #f0c36d;
+  background: #ffe8a1;
+  color: #7a4d00;
+  vertical-align: middle;
+}
+.date-text {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Print header / footer ---- */
+.print-header {
+  border: 1px solid rgba(0,0,0,.06);
+  border-radius: 12px;
+  background: #fff;
+}
+.print-school-logo {
+  width: 56px;
+  height: 56px;
+  object-fit: contain;
+}
+.print-school-logo.placeholder {
+  width: 56px;
+  height: 56px;
+  display: grid;
+  place-items: center;
+  font-size: 28px;
+  border-radius: 8px;
+  background: #f1f5f9;
+  color: #475569;
+}
+.print-footer {
+  border-top: 1px dashed rgba(0,0,0,.15);
+}
+
+/* ---------- Mobile Card Layout ---------- */
+@media (max-width: 767.98px) {
+  .table-responsive { border: 0; }
+  table.table { border: 0; }
+  .table thead { display: none; }
+
+  .table tbody tr {
+    display: block;
+    margin: 0 0 12px 0;
+    border: 1px solid rgba(0,0,0,.08);
+    border-radius: 12px;
+    padding: 10px 12px;
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(16,24,40,.04);
   }
-  
-  .form-container .form-field:focus {
-    border-color: #80bdff;
-    outline: none;
-    box-shadow: 0 0 5px rgba(0, 123, 255, 0.25);
+
+  .table tbody tr.highlight-today {
+    background: #fff7d6 !important;
+    box-shadow: 0 1px 0 rgba(122,77,0,.08), 0 0 0 1px #f0c36d inset;
   }
-  
+
+  .table tbody tr td {
+    display: grid;
+    grid-template-columns: 140px 1fr;
+    gap: 8px;
+    border: 0 !important;
+    padding: 8px 0 !important;
+    background: transparent !important;
+  }
+
+  .table tbody tr td:first-child { grid-template-columns: 80px 1fr; }
+
+  .table tbody tr td::before {
+    content: attr(data-label);
+    font-weight: 600;
+    color: #475569;
+  }
+
+  .row-index::before {
+    content: "#";
+    margin-right: 6px;
+    color: #64748b;
+    font-weight: 700;
+  }
+
+  .table-hover tbody tr:hover { background: #fff; }
+}
+
+/* Fix for dark header if theme overrides .table-dark */
+.table-dark th {
+  background-color: #0f172a !important;
+  color: #fff !important;
+  border-color: rgba(255,255,255,.12) !important;
+}
+
+/* ---------- PRINT STYLES ---------- */
+@media print {
+  @page {
+    size: A4 portrait; /* change to landscape if you prefer */
+    margin: 12mm;
+  }
+
+  body {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Hide on print */
+  .no-print,
+  .no-print * {
+    display: none !important;
+  }
+
+  /* Flatten cards/borders nicely for paper */
+  .filter-card,
+  .table-wrapper,
+  .print-header {
+    box-shadow: none !important;
+    border: 1px solid #000 !important;
+  }
+
+  .print-table {
+    font-size: 12px;
+  }
+
+  .table-dark th {
+    background-color: #222 !important; /* ensure dark head prints solid */
+    color: #fff !important;
+  }
+
+  /* Ensure borders are visible on paper */
+  .table-bordered > :not(caption) > * > * {
+    border-color: #000 !important;
+  }
+
+  /* Avoid row breaks inside in card/mobile mode (if viewport narrow during print) */
+  .table tbody tr {
+    page-break-inside: avoid;
+  }
+
+  .print-footer {
+    position: running(print-footer);
+  }
+}

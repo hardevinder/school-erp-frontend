@@ -95,10 +95,12 @@ import FinalResultSummary from "./pages/FinalResultSummary";
 import CoScholasticAreaManagement from "./pages/CoScholasticAreaManagement";
 import CoScholasticGradeManagement from "./pages/CoScholasticGradeManagement";
 import ClassCoScholasticMapping from "./pages/ClassCoScholasticMapping";
+import CoScholasticEntry from "./pages/CoScholasticEntry";
 import ReportCardFormats from "./pages/ReportCardFormats";
 import AssignReportCardFormat from "./pages/AssignReportCardFormat";
 import ReportCardGenerator from "./pages/ReportCardGenerator";
 import StudentRemarksEntry from "./pages/StudentRemarksEntry";
+
 
 function App() {
   useEffect(() => {
@@ -251,6 +253,7 @@ function App() {
           {/* Co-Scholastic */}
           <Route path="/co-scholastic-areas" element={<CoScholasticAreaManagement />} /> {/* NEW */}
           <Route path="/co-scholastic-grades" element={<CoScholasticGradeManagement />} />
+          <Route path="/co-scholastic-entry" element={<CoScholasticEntry />} />
           <Route
             path="/class-co-scholastic-mapping"
             element={<ClassCoScholasticMapping />}

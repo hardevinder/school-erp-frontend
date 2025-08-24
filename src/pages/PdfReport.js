@@ -78,7 +78,9 @@ const styles = StyleSheet.create({
   },
 });
 
-// Helper function to format numbers in Indian numbering system
+// ---------- Helpers ----------
+
+// Format number in Indian numbering system
 const formatIndianNumber = (amount) => {
   if (isNaN(amount)) return amount;
   const x = Number(amount).toString();
@@ -93,7 +95,25 @@ const formatIndianNumber = (amount) => {
     : lastThree;
 };
 
-// Reusable component for table header with fixed prop to force repetition
+// Format date to dd/MM/yyyy
+const formatToDDMMYYYY = (date) => {
+  if (!date) return '';
+  const d = new Date(date);
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = d.getFullYear();
+  return `${day}/${month}/${year}`;
+};
+
+// Helper function to paginate data: 20 records per page.
+const paginateData = (data) => {
+  const pages = [];
+  for (let i = 0; i < data.length; i += 20) {
+    pages.push(data.slice(i, i + 20));
+  }
+  return pages;
+};
+
 const TableHeader = () => (
   <View style={styles.tableHeaderRow} fixed>
     <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Sr. No</Text>
@@ -111,15 +131,6 @@ const TableHeader = () => (
   </View>
 );
 
-// Helper function to paginate data: 24 records per page.
-const paginateData = (data) => {
-  const pages = [];
-  for (let i = 0; i < data.length; i += 20) {
-    pages.push(data.slice(i, i + 20));
-  }
-  return pages;
-};
-
 const PdfReport = ({ school, startDate, endDate, aggregatedData = [] }) => {
   // Paginate aggregated data
   const pagesData = paginateData(aggregatedData);
@@ -135,20 +146,23 @@ const PdfReport = ({ school, startDate, endDate, aggregatedData = [] }) => {
                 {/* <Text style={styles.schoolDesc}>{school?.description}</Text> */}
               </View>
               <Text style={styles.dateRange}>
-                Date Range: {startDate} to {endDate}
+                Date Range: {formatToDDMMYYYY(startDate)} to {formatToDDMMYYYY(endDate)}
               </Text>
               <Text style={styles.sectionTitle}>Collection Report</Text>
             </>
           )}
+
           <View style={styles.table}>
             {/* Table header repeated on every page */}
             <TableHeader />
+
             {pageData.map((item, index) => {
-              // Calculate serial number for 24 records per page
+              // Serial number (20 records per page)
               const serialNumber = pageIndex * 20 + index + 1;
               // Horizontal total: Fee Received + Van Fee
               const horizontalTotal =
                 Number(item.totalFeeReceived) + Number(item.totalVanFee);
+
               return (
                 <View style={styles.tableRow} key={serialNumber}>
                   <Text style={[styles.tableCell, { flex: 1 }]}>{serialNumber}</Text>
@@ -158,7 +172,8 @@ const PdfReport = ({ school, startDate, endDate, aggregatedData = [] }) => {
                   <Text style={[styles.tableCell, { flex: 1 }]}>{item.Student?.Class?.class_name}</Text>
                   <Text style={[styles.tableCell, { flex: 1 }]}>{item.PaymentMode}</Text>
                   <Text style={[styles.tableCell, { flex: 2 }]}>{item.feeHeadingName}</Text>
-                  <Text style={[styles.tableCell, { flex: 2 }]}>{new Date(item.createdAt).toLocaleString()}</Text>
+                  {/* Created At → dd/MM/yyyy */}
+                  <Text style={[styles.tableCell, { flex: 2 }]}>{formatToDDMMYYYY(item.createdAt)}</Text>
                   <Text style={[styles.tableCell, { flex: 1 }]}>{formatIndianNumber(item.totalFeeReceived)}</Text>
                   <Text style={[styles.tableCell, { flex: 1 }]}>{formatIndianNumber(item.totalConcession)}</Text>
                   <Text style={[styles.tableCell, { flex: 1 }]}>{formatIndianNumber(item.totalVanFee)}</Text>
@@ -167,6 +182,7 @@ const PdfReport = ({ school, startDate, endDate, aggregatedData = [] }) => {
               );
             })}
           </View>
+
           <Text
             style={styles.pageFooter}
             render={({ pageNumber, totalPages }) => `${pageNumber} / ${totalPages}`}

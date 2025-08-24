@@ -7,11 +7,25 @@ import Swal from 'sweetalert2';
 import { pdf } from '@react-pdf/renderer';
 import PdfReports from './PdfCategoryReport'; // Your PDF component saved in the same folder
 
-// Helper function to format a Date object to 'yyyy-MM-dd'
+/* -------------------------------------------------
+   Helpers
+-------------------------------------------------- */
+
+// Keep this as is for API calls (backend expects yyyy-MM-dd)
 const formatDate = (date) => {
   const d = new Date(date);
   d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
   return d.toISOString().slice(0, 10);
+};
+
+// UI-only formatter → dd/MM/yyyy
+const formatToDDMMYYYY = (date) => {
+  if (!date) return '';
+  const d = new Date(date);
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = d.getFullYear();
+  return `${day}/${month}/${year}`;
 };
 
 // Helper function for totals: if the value is nonzero, format it with commas and prefix with the Rupee symbol; otherwise, return "0"
@@ -36,10 +50,7 @@ const pivotReportData = (data) => {
         vanFeeTotal: 0,
         // fineAmount: Number(curr.totalFine || 0),
         fineAmount: 0, // initialize at 0
-
-
       };
-
     }
     const category = curr.feeCategoryName;
     if (!acc[slipId].feeCategories[category]) {
@@ -61,7 +72,6 @@ const pivotReportData = (data) => {
       // Accumulate Van Fee separately on the slip level
       acc[slipId].vanFeeTotal += Number(curr.totalVanFee) || 0;
       acc[slipId].fineAmount += Number(curr.totalFine || curr.Fine_Amount || 0);
-
     } else {
       // For other fee categories, process as before.
       acc[slipId].feeCategories[category].totalFeeReceived += Number(curr.totalFeeReceived) || 0;
@@ -166,8 +176,8 @@ const DayWiseReport = () => {
     setLoading(true);
     setError('');
     try {
-      const start = formatDate(startDate);
-      const end = formatDate(endDate);
+      const start = formatDate(startDate);  // yyyy-MM-dd for backend
+      const end = formatDate(endDate);      // yyyy-MM-dd for backend
       const response = await api.get(`/reports/day-wise?startDate=${start}&endDate=${end}`);
       setReportData(response.data);
       setCurrentPage(1); // Reset pagination to first page
@@ -248,8 +258,8 @@ const DayWiseReport = () => {
     const doc = (
       <PdfReports
         school={school}
-        startDate={formatDate(startDate)}
-        endDate={formatDate(endDate)}
+        startDate={formatDate(startDate)} // yyyy-MM-dd for PDF data generation
+        endDate={formatDate(endDate)}     // yyyy-MM-dd for PDF data generation
         aggregatedData={reportData}
         feeCategories={uniqueCategories}
         categorySummary={categorySummary}
@@ -273,7 +283,7 @@ const DayWiseReport = () => {
             <DatePicker
               selected={startDate}
               onChange={(date) => setStartDate(date)}
-              dateFormat="yyyy-MM-dd"
+              dateFormat="dd/MM/yyyy"        // 👈 UI in dd/MM/yyyy
               className="form-control"
               placeholderText="Select Start Date"
               showMonthDropdown
@@ -291,7 +301,7 @@ const DayWiseReport = () => {
             <DatePicker
               selected={endDate}
               onChange={(date) => setEndDate(date)}
-              dateFormat="yyyy-MM-dd"
+              dateFormat="dd/MM/yyyy"        // 👈 UI in dd/MM/yyyy
               className="form-control"
               placeholderText="Select End Date"
               minDate={startDate}
@@ -375,7 +385,8 @@ const DayWiseReport = () => {
                           <td>{row.Student?.name}</td>
                           <td>{row.Student?.Class?.class_name}</td>
                           <td>{row.PaymentMode}</td>
-                          <td>{new Date(row.createdAt).toLocaleString()}</td>
+                          {/* Force dd/MM/yyyy on UI */}
+                          <td>{formatToDDMMYYYY(row.createdAt)}</td>
                           {uniqueCategories.map((cat, i) => {
                             const feeData = row.feeCategories[cat];
                             return (
@@ -384,12 +395,11 @@ const DayWiseReport = () => {
                               </td>
                             );
                           })}
-                         <td>{formatTotalValue(row.vanFeeTotal)}</td>
-                        <td>
-                          {row.fineAmount > 0 ? formatTotalValue(row.fineAmount) : "-"}
-                        </td>
-                        <td>{formatTotalValue(overallTotal + (row.fineAmount || 0))}</td>
-
+                          <td>{formatTotalValue(row.vanFeeTotal)}</td>
+                          <td>
+                            {row.fineAmount > 0 ? formatTotalValue(row.fineAmount) : "-"}
+                          </td>
+                          <td>{formatTotalValue(overallTotal + (row.fineAmount || 0))}</td>
                         </tr>
                       );
                     })}
@@ -397,14 +407,13 @@ const DayWiseReport = () => {
                   {pivotedData.length > 0 && (
                     <tfoot>
                       <tr>
-                        <td colSpan={7}><strong>Overall Totals</strong></td> {/* If you added Fine column */}
+                        <td colSpan={7}><strong>Overall Totals</strong></td>
                         {uniqueCategories.map((cat, i) => (
                           <td key={i}><strong>{formatTotalValue(overallTotals[cat])}</strong></td>
                         ))}
                         <td><strong>{formatTotalValue(overallVanFeeTotal)}</strong></td>
                         <td><strong>{formatTotalValue(overallFineTotal)}</strong></td>
                         <td><strong>{formatTotalValue(grandTotal + overallVanFeeTotal + overallFineTotal)}</strong></td>
-
                       </tr>
                     </tfoot>
                   )}

@@ -1,5 +1,4 @@
-// src/pages/UserManagement.jsx
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import api from "../api";
 import Swal from "sweetalert2";
 import withReactContent from "sweetalert2-react-content";
@@ -21,18 +20,27 @@ const UserManagement = () => {
   const [rolesList, setRolesList] = useState([]); // [{id,name,slug}]
   const [search, setSearch] = useState("");
   const [selectedRole, setSelectedRole] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  // simple debounce (300ms) for search input UX
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const debounceTimer = useRef(null);
+  useEffect(() => {
+    if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    debounceTimer.current = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(debounceTimer.current);
+  }, [search]);
 
   /* ========================= Fetchers ========================= */
   const fetchUsers = async () => {
     try {
-      // NEW ROUTE
+      setLoading(true);
       const { data } = await api.get("/users/all");
       setUsers(
         (data.users || []).map((u) => ({
           ...u,
           roles: Array.isArray(u.roles)
-            ? // roles could be objects {id,name,slug} or strings
-              u.roles.map((r) => (typeof r === "string" ? r : r.slug))
+            ? u.roles.map((r) => (typeof r === "string" ? r : r.slug))
             : u.role
             ? [u.role]
             : [],
@@ -41,12 +49,14 @@ const UserManagement = () => {
     } catch (err) {
       console.error(err);
       Swal.fire("Error", "Failed to fetch users.", "error");
+    } finally {
+      setLoading(false);
     }
   };
 
   const fetchRoles = async () => {
     try {
-      const { data } = await api.get("/roles"); // keep if your /roles works
+      const { data } = await api.get("/roles");
       setRolesList(data.roles || []);
     } catch (err) {
       console.error(err);
@@ -57,6 +67,7 @@ const UserManagement = () => {
   useEffect(() => {
     fetchUsers();
     fetchRoles();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   /* ========================= Helpers ========================= */
@@ -105,7 +116,6 @@ const UserManagement = () => {
     if (!result.isConfirmed) return;
 
     try {
-      // NEW ROUTE
       await api.delete(`/users/${userId}`);
       Swal.fire("Deleted!", `${userName} has been removed.`, "success");
       fetchUsers();
@@ -120,16 +130,16 @@ const UserManagement = () => {
       title: "Add New User",
       html: `
         <div class="form-group text-start">
-          <label for="name">Full Name</label>
+          <label for="name" class="form-label">Full Name</label>
           <input type="text" id="name" class="form-control mb-2" placeholder="Enter full name" required>
-          <label for="username">Username</label>
+          <label for="username" class="form-label">Username</label>
           <input type="text" id="username" class="form-control mb-2" placeholder="Enter username/admission no." required>
-          <label for="email">Email (optional)</label>
+          <label for="email" class="form-label">Email (optional)</label>
           <input type="email" id="email" class="form-control mb-2" placeholder="Enter email">
-          <label for="password">Password</label>
+          <label for="password" class="form-label">Password</label>
           <input type="password" id="password" class="form-control mb-2" placeholder="Enter password" required>
           <label class="mt-2 d-block">Roles</label>
-          <div id="rolesWrapper" style="max-height:180px;overflow:auto;border:1px solid #ced4da;border-radius:.375rem;padding:.5rem;">
+          <div id="rolesWrapper" class="roles-wrapper">
             ${renderRoleCheckboxes(["student"])}
           </div>
         </div>
@@ -154,23 +164,32 @@ const UserManagement = () => {
         return { name, username, email, password, roles };
       },
       didOpen: () => document.getElementById("name")?.focus(),
+      customClass: { popup: "swal2-elevated" },
     });
 
     if (!formValues) return;
 
     try {
-      // NEW ROUTE
       const resp = await api.post("/users/register", formValues);
       const backendId = resp.data?.user?.id || resp.data?.id || null;
 
-      await addDoc(collection(firestore, "users"), {
+      // Prefer stable ids in Firestore when we have them
+      const payload = {
         name: formValues.name,
         username: formValues.username,
         email: formValues.email,
         roles: formValues.roles,
         backendUserId: backendId,
         createdAt: serverTimestamp(),
-      });
+      };
+
+      if (backendId) {
+        await setDoc(doc(firestore, "users", String(backendId)), payload, {
+          merge: true,
+        });
+      } else {
+        await addDoc(collection(firestore, "users"), payload);
+      }
 
       Swal.fire("Success!", "User has been added.", "success");
       fetchUsers();
@@ -189,23 +208,17 @@ const UserManagement = () => {
       title: "Edit User",
       html: `
         <div class="form-group text-start">
-          <label for="name">Full Name</label>
-          <input type="text" id="name" class="form-control mb-2" value="${
-            user.name || ""
-          }" required>
-          <label for="username">Username</label>
-          <input type="text" id="username" class="form-control mb-2" value="${
-            user.username || ""
-          }" required>
-          <label for="email">Email (optional)</label>
-          <input type="email" id="email" class="form-control mb-2" value="${
-            user.email || ""
-          }">
+          <label for="name" class="form-label">Full Name</label>
+          <input type="text" id="name" class="form-control mb-2" value="${user.name || ""}" required>
+          <label for="username" class="form-label">Username</label>
+          <input type="text" id="username" class="form-control mb-2" value="${user.username || ""}" required>
+          <label for="email" class="form-label">Email (optional)</label>
+          <input type="email" id="email" class="form-control mb-2" value="${user.email || ""}">
           <label class="mt-2 d-block">Roles</label>
-          <div id="rolesWrapper" style="max-height:180px;overflow:auto;border:1px solid #ced4da;border-radius:.375rem;padding:.5rem;">
+          <div id="rolesWrapper" class="roles-wrapper">
             ${renderRoleCheckboxes(user.roles || [])}
           </div>
-          <label for="password" class="mt-2">New Password (leave blank if unchanged)</label>
+          <label for="password" class="form-label mt-2">New Password (leave blank if unchanged)</label>
           <input type="password" id="password" class="form-control mb-2" placeholder="Enter new password">
         </div>
       `,
@@ -235,16 +248,24 @@ const UserManagement = () => {
           ...(password && { password }),
         };
       },
+      customClass: { popup: "swal2-elevated" },
     });
 
     if (!formValues) return;
 
     try {
-      // NEW ROUTE
-      await api.put("/users/update", formValues);
+      // ✅ Use RESTful update route
+      await api.put(`/users/${formValues.userId}`, {
+        name: formValues.name,
+        username: formValues.username,
+        email: formValues.email,
+        roles: formValues.roles,
+        ...(formValues.password && { password: formValues.password }),
+      });
 
+      // Mirror to Firestore keyed by backend id
       await setDoc(
-        doc(firestore, "users", formValues.userId.toString()),
+        doc(firestore, "users", String(formValues.userId)),
         {
           name: formValues.name,
           username: formValues.username,
@@ -269,105 +290,149 @@ const UserManagement = () => {
 
   /* ========================= Filter / Search ========================= */
   const filteredUsers = useMemo(() => {
+    const q = debouncedSearch.toLowerCase();
     return users.filter((u) => {
       const textMatch = [u.name || "", u.username || "", u.email || ""]
         .join(" ")
         .toLowerCase()
-        .includes(search.toLowerCase());
+        .includes(q);
       const roleMatch = selectedRole
         ? (u.roles || []).includes(selectedRole)
         : true;
       return textMatch && roleMatch;
     });
-  }, [users, search, selectedRole]);
+  }, [users, debouncedSearch, selectedRole]);
 
   /* ========================= Render ========================= */
   return (
     <div className="container mt-4">
-      <div className="d-flex justify-content-between align-items-center mb-3">
-        <h1 className="text-primary">User Management</h1>
-        <button className="btn btn-success" onClick={handleAdd}>
-          + Add User
-        </button>
-      </div>
+      <div className="card shadow-sm border-0">
+        <div className="card-body">
+          <div className="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+            <div className="d-flex align-items-center gap-2">
+              <h1 className="h4 mb-0 text-primary">User Management</h1>
+              <span className="badge bg-light text-secondary border">
+                {users.length} total
+              </span>
+            </div>
+            <button className="btn btn-success" onClick={handleAdd}>
+              <i className="bi bi-plus-lg me-1"></i> Add User
+            </button>
+          </div>
 
-      {/* Search & Filter */}
-      <div className="d-flex mb-3 align-items-center flex-wrap gap-2">
-        <input
-          type="text"
-          className="form-control me-2"
-          style={{ maxWidth: "320px" }}
-          placeholder="Search Users"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-        <select
-          className="form-select"
-          style={{ maxWidth: "220px" }}
-          value={selectedRole}
-          onChange={(e) => setSelectedRole(e.target.value)}
-        >
-          <option value="">All Roles</option>
-          {rolesList.map((r) => (
-            <option key={r.slug} value={r.slug}>
-              {r.name}
-            </option>
-          ))}
-        </select>
-      </div>
+          {/* Search & Filter */}
+          <div className="d-flex mb-3 align-items-center flex-wrap gap-2">
+            <div className="input-group" style={{ maxWidth: 360 }}>
+              <span className="input-group-text bg-white">
+                <i className="bi bi-search"></i>
+              </span>
+              <input
+                type="text"
+                className="form-control"
+                placeholder="Search name, username, email"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
 
-      {/* Users Table */}
-      <table className="table table-hover shadow-sm">
-        <thead className="table-dark">
-          <tr>
-            <th>#</th>
-            <th>Name</th>
-            <th>User Name</th>
-            <th>Email</th>
-            <th>Roles</th>
-            <th className="text-center">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {filteredUsers.length ? (
-            filteredUsers.map((user, idx) => (
-              <tr key={user.id}>
-                <td>{idx + 1}</td>
-                <td>{user.name}</td>
-                <td>{user.username}</td>
-                <td>{user.email || "N/A"}</td>
-                <td>
-                  {(user.roles || []).map((r) => (
-                    <span key={r} className={`badge me-1 ${roleBadge(r)}`}>
-                      {r}
-                    </span>
-                  ))}
-                </td>
-                <td className="text-center">
-                  <button
-                    className="btn btn-sm btn-primary me-2"
-                    onClick={() => handleEdit(user)}
-                  >
-                    <i className="bi bi-pencil-square"></i> Edit
-                  </button>
-                  <button
-                    className="btn btn-sm btn-danger"
-                    onClick={() => handleDelete(user.id, user.name)}
-                  >
-                    <i className="bi bi-trash"></i> Delete
-                  </button>
-                </td>
-              </tr>
-            ))
-          ) : (
-            <tr>
-              <td colSpan="6" className="text-center">
-                No Users Found
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
+            <select
+              className="form-select"
+              style={{ maxWidth: 240 }}
+              value={selectedRole}
+              onChange={(e) => setSelectedRole(e.target.value)}
+            >
+              <option value="">All Roles</option>
+              {rolesList.map((r) => (
+                <option key={r.slug} value={r.slug}>
+                  {r.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Users Table */}
+          <div className="table-responsive users-table-wrapper">
+            <table className="table table-hover align-middle">
+              <thead className="table-dark sticky-header">
+                <tr>
+                  <th style={{ width: 56 }}>#</th>
+                  <th>Name</th>
+                  <th>Username</th>
+                  <th>Email</th>
+                  <th>Roles</th>
+                  <th className="text-center" style={{ width: 180 }}>
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  // Loading skeleton rows (simple)
+                  Array.from({ length: 6 }).map((_, i) => (
+                    <tr key={`s-${i}`}>
+                      <td colSpan={6}>
+                        <div className="skeleton-row" />
+                      </td>
+                    </tr>
+                  ))
+                ) : filteredUsers.length ? (
+                  filteredUsers.map((user, idx) => (
+                    <tr key={user.id}>
+                      <td>{idx + 1}</td>
+                      <td className="fw-semibold">{user.name}</td>
+                      <td>
+                        <span className="text-monospace">{user.username}</span>
+                      </td>
+                      <td>{user.email || <span className="text-muted">N/A</span>}</td>
+                      <td>
+                        {(user.roles || []).map((r) => (
+                          <span key={r} className={`badge me-1 ${roleBadge(r)}`}>
+                            {r}
+                          </span>
+                        ))}
+                      </td>
+                      <td className="text-center">
+                        <div className="btn-group">
+                          <button
+                            className="btn btn-sm btn-outline-primary"
+                            onClick={() => handleEdit(user)}
+                            title="Edit"
+                          >
+                            <i className="bi bi-pencil-square"></i>
+                          </button>
+                          <button
+                            className="btn btn-sm btn-outline-danger"
+                            onClick={() => handleDelete(user.id, user.name)}
+                            title="Delete"
+                          >
+                            <i className="bi bi-trash"></i>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan="6" className="text-center py-5">
+                      <div className="text-muted">
+                        <i className="bi bi-people me-2"></i>No matching users
+                        found
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Footer hint */}
+          <div className="mt-2 small text-muted">
+            Tip: Use the search box to filter by <em>name</em>,{" "}
+            <em>username</em>, or <em>email</em>. Use the dropdown to narrow by
+            role.
+          </div>
+        </div>
+      </div>
     </div>
   );
 };

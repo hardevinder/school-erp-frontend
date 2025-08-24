@@ -3,12 +3,21 @@ import api from "../api";
 import Swal from "sweetalert2";
 import { Modal, Button } from "react-bootstrap";
 import { DndContext, closestCenter } from "@dnd-kit/core";
-import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } from "@dnd-kit/sortable";
+import {
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+  arrayMove,
+} from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 
+/** 👇 Change this if your backend differs */
+const LIST_ENDPOINT = "/class-co-scholastic-areas/list";
+
 function SortableRow({ mapping, onEdit, onDelete }) {
+  const id = String(mapping.id);
   const { attributes, listeners, setNodeRef, transform, transition } = useSortable({
-    id: mapping.id.toString(),
+    id,
   });
 
   const style = {
@@ -18,14 +27,20 @@ function SortableRow({ mapping, onEdit, onDelete }) {
 
   return (
     <tr ref={setNodeRef} style={style}>
-      <td {...attributes} {...listeners} style={{ cursor: "grab" }}>☰</td>
-      <td>{mapping.class?.class_name}</td>
-      <td>{mapping.area?.name}</td>
-      <td>{mapping.grade?.grade || "-"}</td>
-      <td>{mapping.term?.name || "-"}</td>
-      <td>
-        <button className="btn btn-sm btn-warning me-2" onClick={() => onEdit(mapping)}>Edit</button>
-        <button className="btn btn-sm btn-danger" onClick={() => onDelete(mapping.id)}>Delete</button>
+      <td {...attributes} {...listeners} style={{ cursor: "grab", width: 40, textAlign: "center" }}>
+        ☰
+      </td>
+      <td>{(mapping.class && mapping.class.class_name) || (mapping.Class && mapping.Class.class_name) || "-"}</td>
+      <td>{(mapping.area && mapping.area.name) || (mapping.Area && mapping.Area.name) || "-"}</td>
+      <td>{(mapping.grade && mapping.grade.grade) || (mapping.Grade && mapping.Grade.grade) || "-"}</td>
+      <td>{(mapping.term && mapping.term.name) || (mapping.Term && mapping.Term.name) || "-"}</td>
+      <td className="text-nowrap">
+        <button className="btn btn-sm btn-warning me-2" onClick={() => onEdit(mapping)}>
+          Edit
+        </button>
+        <button className="btn btn-sm btn-danger" onClick={() => onDelete(mapping.id)}>
+          Delete
+        </button>
       </td>
     </tr>
   );
@@ -54,7 +69,7 @@ const ClassCoScholasticMapping = () => {
     fetchMappings();
   }, []);
 
-  const loadDropdowns = async () => {
+  async function loadDropdowns() {
     try {
       const [cRes, aRes, gRes, tRes] = await Promise.all([
         api.get("/classes"),
@@ -62,32 +77,40 @@ const ClassCoScholasticMapping = () => {
         api.get("/co-scholastic-grades"),
         api.get("/terms"),
       ]);
-      setClasses(cRes.data);
-      setAreas(aRes.data);
-      setGrades(gRes.data);
-      setTerms(tRes.data);
-    } catch {
+      setClasses(cRes.data || []);
+      setAreas(aRes.data || []);
+      setGrades(gRes.data || []);
+      setTerms(tRes.data || []);
+    } catch (e) {
       Swal.fire("Error", "Failed to load dropdowns.", "error");
     }
-  };
+  }
 
-  const fetchMappings = async () => {
+  async function fetchMappings() {
     try {
-      const res = await api.get("/class-co-scholastic-areas");
-      setMappings(res.data);
-    } catch {
-      Swal.fire("Error", "Failed to fetch mappings.", "error");
+      const res = await api.get(LIST_ENDPOINT);
+      setMappings(Array.isArray(res.data) ? res.data : []);
+    } catch (e) {
+      const msg = (e && e.response && e.response.data && e.response.data.message) || e.message || "";
+      Swal.fire(
+        "Error",
+        msg.includes("class_id, section_id, and term_id are required")
+          ? `You're hitting an endpoint that expects query params.\n\nSet the correct LIST endpoint at the top (LIST_ENDPOINT) — it should return full mappings without params.`
+          : "Failed to fetch mappings.",
+        "error"
+      );
+      setMappings([]);
     }
-  };
+  }
 
-  const openModal = (mapping = null) => {
+  function openModal(mapping = null) {
     if (mapping) {
       setFormData({
         id: mapping.id,
-        class_id: mapping.class_id,
-        area_id: mapping.area_id,
-        grade_id: mapping.grade_id || "",
-        term_id: mapping.term_id || "",
+        class_id: String(mapping.class_id || (mapping.class && mapping.class.id) || (mapping.Class && mapping.Class.id) || ""),
+        area_id: String(mapping.area_id || (mapping.area && mapping.area.id) || (mapping.Area && mapping.Area.id) || ""),
+        grade_id: String(mapping.grade_id || (mapping.grade && mapping.grade.id) || (mapping.Grade && mapping.Grade.id) || ""),
+        term_id: String(mapping.term_id || (mapping.term && mapping.term.id) || (mapping.Term && mapping.Term.id) || ""),
       });
       setIsEditing(true);
     } else {
@@ -101,21 +124,21 @@ const ClassCoScholasticMapping = () => {
       setIsEditing(false);
     }
     setShowModal(true);
-  };
+  }
 
   const closeModal = () => setShowModal(false);
 
-  const handleChange = (e) => {
+  function handleChange(e) {
     setFormData({ ...formData, [e.target.name]: e.target.value });
-  };
+  }
 
-  const handleSubmit = async () => {
+  async function handleSubmit() {
     const { class_id, area_id, term_id } = formData;
     if (!class_id || !area_id || !term_id) {
       return Swal.fire("Warning", "Please select Class, Area, and Term.", "warning");
     }
     try {
-      if (isEditing) {
+      if (isEditing && formData.id != null) {
         await api.put(`/class-co-scholastic-areas/${formData.id}`, formData);
       } else {
         await api.post("/class-co-scholastic-areas", formData);
@@ -123,12 +146,12 @@ const ClassCoScholasticMapping = () => {
       Swal.fire("Success", "Saved successfully.", "success");
       closeModal();
       fetchMappings();
-    } catch {
-      Swal.fire("Error", "Failed to save.", "error");
+    } catch (e) {
+      Swal.fire("Error", (e && e.response && e.response.data && e.response.data.message) || "Failed to save.", "error");
     }
-  };
+  }
 
-  const handleDelete = async (id) => {
+  async function handleDelete(id) {
     const result = await Swal.fire({
       title: "Confirm Delete",
       text: "This will remove the mapping.",
@@ -140,53 +163,75 @@ const ClassCoScholasticMapping = () => {
     try {
       await api.delete(`/class-co-scholastic-areas/${id}`);
       fetchMappings();
-    } catch {
-      Swal.fire("Error", "Failed to delete.", "error");
+    } catch (e) {
+      Swal.fire("Error", (e && e.response && e.response.data && e.response.data.message) || "Failed to delete.", "error");
     }
-  };
+  }
 
-  const handleDragEnd = async ({ active, over }) => {
+  async function handleDragEnd({ active, over }) {
     if (!over || active.id === over.id) return;
-    const oldIndex = mappings.findIndex((m) => m.id.toString() === active.id);
-    const newIndex = mappings.findIndex((m) => m.id.toString() === over.id);
+    const oldIndex = mappings.findIndex((m) => String(m.id) === String(active.id));
+    const newIndex = mappings.findIndex((m) => String(m.id) === String(over.id));
     const reordered = arrayMove(mappings, oldIndex, newIndex);
     setMappings(reordered);
     try {
       await api.post("/class-co-scholastic-areas/reorder", {
         mappings: reordered.map((m, idx) => ({ id: m.id, serial_order: idx + 1 })),
       });
-    } catch {
-      Swal.fire("Error", "Failed to reorder.", "error");
+    } catch (e) {
+      Swal.fire("Error", (e && e.response && e.response.data && e.response.data.message) || "Failed to reorder.", "error");
     }
-  };
+  }
 
   return (
     <div className="container mt-4">
-      <h2>🎯 Class Co-Scholastic Area Mapping</h2>
-      <div className="d-flex justify-content-end mb-3">
-        <Button variant="success" onClick={() => openModal()}>➕ Add Mapping</Button>
+      <div className="d-flex align-items-center justify-content-between flex-wrap gap-2">
+        <h2 className="m-0">🎯 Class Co-Scholastic Area Mapping</h2>
+        <div className="d-flex gap-2">
+          <Button variant="outline-secondary" onClick={fetchMappings}>Refresh</Button>
+          <Button variant="success" onClick={() => openModal()}>➕ Add Mapping</Button>
+        </div>
       </div>
-      <div className="card">
-        <div className="card-body">
+
+      <div className="card mt-3">
+        <div className="card-body p-0">
           <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-            <SortableContext items={mappings.map((m) => m.id.toString())} strategy={verticalListSortingStrategy}>
-              <table className="table table-bordered table-hover">
-                <thead className="table-light">
-                  <tr>
-                    <th>#</th><th>Class</th><th>Area</th><th>Grade</th><th>Term</th><th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {mappings.map((m) => (
-                    <SortableRow
-                      key={m.id}
-                      mapping={m}
-                      onEdit={openModal}
-                      onDelete={handleDelete}
-                    />
-                  ))}
-                </tbody>
-              </table>
+            <SortableContext
+              items={mappings.map((m) => String(m.id))}
+              strategy={verticalListSortingStrategy}
+            >
+              <div className="table-responsive">
+                <table className="table table-bordered table-hover mb-0 align-middle">
+                  <thead className="table-light">
+                    <tr>
+                      <th style={{ width: 40, textAlign: "center" }}>#</th>
+                      <th>Class</th>
+                      <th>Area</th>
+                      <th>Grade</th>
+                      <th>Term</th>
+                      <th style={{ width: 160 }}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {mappings.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="text-center py-4 text-muted">
+                          No mappings found.
+                        </td>
+                      </tr>
+                    ) : (
+                      mappings.map((m) => (
+                        <SortableRow
+                          key={m.id}
+                          mapping={m}
+                          onEdit={openModal}
+                          onDelete={handleDelete}
+                        />
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </SortableContext>
           </DndContext>
         </div>
@@ -199,46 +244,79 @@ const ClassCoScholasticMapping = () => {
         </Modal.Header>
         <Modal.Body>
           <div className="row g-2">
-            <div className="col-6">
-              <label>Class</label>
-              <select name="class_id" value={formData.class_id} onChange={handleChange} className="form-control">
+            <div className="col-12 col-md-6">
+              <label className="form-label">Class</label>
+              <select
+                name="class_id"
+                value={formData.class_id}
+                onChange={handleChange}
+                className="form-select"
+              >
                 <option value="">Select Class</option>
                 {classes.map((c) => (
-                  <option key={c.id} value={c.id}>{c.class_name}</option>
+                  <option key={c.id} value={c.id}>
+                    {c.class_name}
+                  </option>
                 ))}
               </select>
             </div>
-            <div className="col-6">
-              <label>Co-Scholastic Area</label>
-              <select name="area_id" value={formData.area_id} onChange={handleChange} className="form-control">
+
+            <div className="col-12 col-md-6">
+              <label className="form-label">Co-Scholastic Area</label>
+              <select
+                name="area_id"
+                value={formData.area_id}
+                onChange={handleChange}
+                className="form-select"
+              >
                 <option value="">Select Area</option>
                 {areas.map((a) => (
-                  <option key={a.id} value={a.id}>{a.name}</option>
+                  <option key={a.id} value={a.id}>
+                    {a.name}
+                  </option>
                 ))}
               </select>
             </div>
-            <div className="col-6">
-              <label>Default Grade</label>
-              <select name="grade_id" value={formData.grade_id} onChange={handleChange} className="form-control">
+
+            <div className="col-12 col-md-6">
+              <label className="form-label">Default Grade</label>
+              <select
+                name="grade_id"
+                value={formData.grade_id}
+                onChange={handleChange}
+                className="form-select"
+              >
                 <option value="">Optional</option>
                 {grades.map((g) => (
-                  <option key={g.id} value={g.id}>{g.grade}</option>
+                  <option key={g.id} value={g.id}>
+                    {g.grade}
+                  </option>
                 ))}
               </select>
             </div>
-            <div className="col-6">
-              <label>Term</label>
-              <select name="term_id" value={formData.term_id} onChange={handleChange} className="form-control">
+
+            <div className="col-12 col-md-6">
+              <label className="form-label">Term</label>
+              <select
+                name="term_id"
+                value={formData.term_id}
+                onChange={handleChange}
+                className="form-select"
+              >
                 <option value="">Select Term</option>
                 {terms.map((t) => (
-                  <option key={t.id} value={t.id}>{t.name}</option>
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
                 ))}
               </select>
             </div>
           </div>
         </Modal.Body>
-        <Modal.Footer>
-          <Button variant="secondary" onClick={closeModal}>Cancel</Button>
+        <Modal.Footer className="d-flex justify-content-between">
+          <Button variant="secondary" onClick={closeModal}>
+            Cancel
+          </Button>
           <Button variant="primary" onClick={handleSubmit}>
             {isEditing ? "Update" : "Create"}
           </Button>

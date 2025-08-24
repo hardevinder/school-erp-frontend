@@ -66,10 +66,18 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
     };
   }, []);
 
-  const handleRoleChange = (newRole) => {
-    changeRole(newRole);
-    navigate(`/dashboard/${newRole}`);
-  };
+const handleRoleChange = (newRole) => {
+  if (!newRole || newRole === activeRole) return;
+
+  // persist + notify (useRoles.changeRole likely handles storage, this is extra safe)
+  changeRole(newRole);
+  localStorage.setItem("activeRole", newRole);
+  window.dispatchEvent(new Event("role-changed"));
+
+  // close any open dropdown and go to the single entry point
+  setDropdownOpen(false);
+  navigate("/dashboard", { replace: true });
+};
 
   // Close dropdown after selecting an item
   const closeDropdownAnd = (fn) => () => {

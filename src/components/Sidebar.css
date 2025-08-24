@@ -1,14 +1,17 @@
-/* authoritative width via body class */
+/* ================================
+   GLOBAL / DESKTOP (default)
+   ================================ */
+
+/* spacing + rail width via body class */
 :root { --sidebar-gap: 12px; }
 
 body.sb-expanded { --sidebar-w: 280px; }
-/* widened collapsed width */
 body.sb-collapsed { --sidebar-w: 120px; }
 
 /* default (first paint) assume expanded; JS sets correct class on mount */
 body:not(.sb-expanded):not(.sb-collapsed) { --sidebar-w: 280px; }
 
-/* content push (hard) */
+/* content push (desktop only; overridden on mobile) */
 .app-content,
 body > .app-content,
 #root > .app-content {
@@ -73,7 +76,6 @@ body > .app-content,
   margin: 2px 8px;
   transition: background .15s ease, color .15s ease;
   color: #2b2f36;
-  /* removed the old border-left completely */
 }
 
 /* content container for icon + label */
@@ -110,11 +112,9 @@ body > .app-content,
 .sidebar-item.active .item-icon{ color: #0d6efd; }
 
 /* active indicator bar (removed) */
-.sidebar-item .active-indicator {
-  display: none;
-}
+.sidebar-item .active-indicator { display: none; }
 
-/* ——— Collapsed adjustments (stack icon above, wrap between words only) ——— */
+/* —— Collapsed adjustments (desktop) —— */
 .sb-collapsed .sidebar-item{
   justify-content: center;
   padding-left: 8px;
@@ -128,17 +128,16 @@ body > .app-content,
   text-align: center;
 }
 .sb-collapsed .sidebar-item .item-icon{
-  width: 32px;           /* larger hit area */
-  font-size: 1.25rem;    /* slightly larger icon */
+  width: 32px;
+  font-size: 1.25rem;
 }
-/* wrap to multiple lines BUT never split inside words */
 .sb-collapsed .sidebar-item .item-label{
   display: block;
   white-space: normal;        /* allow wrapping */
   word-break: keep-all;       /* prevent breaking inside words */
-  overflow-wrap: break-word;  /* wrap only at allowed break points (spaces, hyphens) */
+  overflow-wrap: break-word;  /* wrap only at allowed break points */
   max-width: 100px;           /* fits within 120px collapsed width minus padding */
-  font-size: 0.78rem;         /* a touch larger for legibility */
+  font-size: 0.78rem;
   line-height: 1.2;
   color: #2b2f36;
   text-align: center;
@@ -148,16 +147,132 @@ body > .app-content,
 .app-sidebar::-webkit-scrollbar{ width: 10px; }
 .app-sidebar::-webkit-scrollbar-thumb{ background: #d9e1ef; border-radius: 10px; }
 
-/* phones: overlay; content doesn't push */
+/* scrim (used for mobile drawers only; hidden on desktop) */
 .sidebar-scrim{ display: none; }
-@media (max-width: 767.98px){
+
+/* ================================
+   MOBILE (bottom nav + sheet)
+   Use Bootstrap lg breakpoint
+   ================================ */
+
+@supports (padding: max(0px)) {
+  :root { --safe-bottom: env(safe-area-inset-bottom); }
+}
+
+@media (max-width: 991.98px){
+  /* Hide left rail entirely; we use bottom nav */
+  .app-sidebar { display: none; }
+
+  /* content shouldn't be pushed left; instead, reserve space for bottom bar */
   .app-content,
   body > .app-content,
-  #root > .app-content { margin-left: 0 !important; }
-  .app-sidebar{
-    top: 0; height: 100vh;
-    box-shadow: 8px 0 24px rgba(0,0,0,.18);
+  #root > .app-content {
+    margin-left: 0 !important;
+    padding-bottom: calc(64px + var(--safe-bottom, 0px));
   }
+
+  /* Bottom navigation bar */
+  .bottom-nav {
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
+    height: 64px;
+    background: #fff;
+    border-top: 1px solid #e6ebf2;
+    display: grid;
+    grid-template-columns: repeat(5, 1fr); /* adjust if you show fewer items */
+    align-items: center;
+    z-index: 2500;
+    padding-bottom: var(--safe-bottom, 0px);
+  }
+  .bottom-nav .bn-item {
+    background: transparent;
+    border: 0;
+    height: 100%;
+    width: 100%;
+    display: grid;
+    grid-auto-flow: row;
+    align-content: center;
+    justify-items: center;
+    gap: 4px;
+    color: #334155; /* slate-700 */
+    font-size: 11px;
+  }
+  .bottom-nav .bn-item i {
+    font-size: 1.25rem;
+    line-height: 1;
+  }
+  .bottom-nav .bn-item.active,
+  .bottom-nav .bn-item:active {
+    color: #0d6efd;
+    font-weight: 600;
+  }
+
+  /* "More" bottom sheet */
+  .bn-scrim {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,.35);
+    z-index: 2550;
+  }
+  .bn-sheet {
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
+    max-height: 75vh;
+    background: #fff;
+    border-top-left-radius: 16px;
+    border-top-right-radius: 16px;
+    box-shadow: 0 -10px 30px rgba(0,0,0,.2);
+    z-index: 2560;
+    display: grid;
+    grid-template-rows: auto 1fr;
+    padding-bottom: var(--safe-bottom, 0px);
+    animation: bnUp .18s ease-out;
+  }
+  @keyframes bnUp {
+    from { transform: translateY(12px); opacity: .9; }
+    to   { transform: translateY(0);     opacity: 1; }
+  }
+  .bn-sheet-handle {
+    width: 40px; height: 4px; border-radius: 2px;
+    background: #cbd5e1; margin: 8px auto 6px;
+  }
+  .bn-sheet-header {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 8px;
+    padding: 8px 12px 6px 12px;
+    border-bottom: 1px solid #e6ebf2;
+  }
+  .bn-search { font-size: 0.9rem; }
+
+  .bn-list {
+    overflow: auto;
+    padding: 6px;
+  }
+  .bn-list-item {
+    width: 100%;
+    background: transparent;
+    border: 0;
+    padding: 10px 10px;
+    display: grid;
+    grid-template-columns: 28px 1fr;
+    align-items: center;
+    gap: 10px;
+    text-align: left;
+  }
+  .bn-list-item i {
+    font-size: 1.2rem; color: #475569;
+  }
+  .bn-li-text { display: grid; }
+  .bn-li-title { font-size: .95rem; }
+  .bn-li-sub { font-size: .75rem; color: #64748b; }
+}
+
+/* ================================
+   LEGACY PHONE DRAWER (only if used)
+   If you still use sidebar drawer on very small phones (<768px),
+   these rules keep it functional. Otherwise, it’s hidden above.
+   ================================ */
+@media (max-width: 767.98px){
   .sidebar-scrim.show{
     display: block; position: fixed; inset: 0;
     background: rgba(15,23,42,.35); z-index: 1900;

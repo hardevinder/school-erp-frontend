@@ -1,16 +1,60 @@
-/* Ensure all fields look consistent */
-.form-container .form-field {
-    width: 100%;
-    padding: 10px;
-    margin: 5px 0;
-    border: 1px solid #ced4da;
-    border-radius: 4px;
-    box-sizing: border-box;
+/* Subtle elevation for SweetAlert modals */
+.swal2-elevated {
+  border-radius: 14px !important;
+  box-shadow: 0 10px 30px rgba(16, 24, 40, 0.18) !important;
+}
+
+/* Roles checkbox container used in the modal */
+.roles-wrapper {
+  max-height: 200px;
+  overflow: auto;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.5rem;
+  padding: 0.5rem;
+  background: #fafafa;
+}
+
+/* Sticky table header for long lists */
+.users-table-wrapper {
+  max-height: 60vh;
+  overflow: auto;
+  border: 1px solid #eef0f3;
+  border-radius: 0.5rem;
+}
+
+.sticky-header th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+/* Simple loading skeleton */
+.skeleton-row {
+  height: 44px;
+  width: 100%;
+  border-radius: 8px;
+  background: linear-gradient(
+    90deg,
+    #f2f4f7 25%,
+    #e9edf3 37%,
+    #f2f4f7 63%
+  );
+  background-size: 400% 100%;
+  animation: shimmer 1.4s ease infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 100% 0;
   }
-  
-  .form-container .form-field:focus {
-    border-color: #80bdff;
-    outline: none;
-    box-shadow: 0 0 5px rgba(0, 123, 255, 0.25);
+  100% {
+    background-position: -100% 0;
   }
-  
+}
+
+/* Monospace username for readability (Bootstrap 5 doesn’t have text-monospace by default) */
+.text-monospace {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+    "Courier New", monospace;
+  font-size: 0.95rem;
+}

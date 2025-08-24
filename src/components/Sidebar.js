@@ -4,17 +4,31 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { useRoles } from "../hooks/useRoles";
 import "./Sidebar.css";
 
+const DESKTOP_BP = 992; // Bootstrap lg
+
+function useIsMobile() {
+  const [mobile, setMobile] = useState(() => window.innerWidth < DESKTOP_BP);
+  useEffect(() => {
+    const mql = window.matchMedia(`(max-width: ${DESKTOP_BP - 0.02}px)`);
+    const onChange = () => setMobile(mql.matches);
+    onChange();
+    mql.addEventListener?.("change", onChange);
+    return () => mql.removeEventListener?.("change", onChange);
+  }, []);
+  return mobile;
+}
+
 export default function Sidebar({ headerHeight = 56 }) {
   const navigate = useNavigate();
   const location = useLocation();
   const { activeRole } = useRoles();
+  const isMobile = useIsMobile();
 
   // Read once from localStorage; default to collapsed (false) if no saved value
   const initialExpanded = (() => {
     const saved = localStorage.getItem("sidebarExpanded");
     return saved === null ? false : saved === "true";
   })();
-
   const [isExpanded, setIsExpanded] = useState(initialExpanded);
 
   // Apply body classes before first paint to avoid flicker
@@ -28,7 +42,10 @@ export default function Sidebar({ headerHeight = 56 }) {
     localStorage.setItem("sidebarExpanded", String(isExpanded));
   }, [isExpanded]);
 
-  const toggleSidebar = () => setIsExpanded((prev) => !prev);
+  // Close bottom sheet/drawer after navigation on mobile
+  useEffect(() => {
+    if (isMobile) setIsExpanded(false);
+  }, [location.pathname, isMobile]);
 
   // roles
   const roleLower = (activeRole || "").toLowerCase();
@@ -206,7 +223,7 @@ export default function Sidebar({ headerHeight = 56 }) {
           { key: "marks-entry", label: "Marks Entry", icon: "bi-pencil-square", path: "/marks-entry" },
           { key: "classwise-result-summary", label: "Result Summary", icon: "bi-bar-chart", path: "/reports/classwise-result-summary" },
           { key: "final-result-summary", label: "Final Result Summary", icon: "bi-bar-chart-line", path: "/reports/final-result-summary" },
-          { key: "coscholastic-entry", label: "Co-Scholastic Entry", icon: "bi-stars", path: "/co-scholastic-areas" },
+          { key: "coscholastic-entry", label: "Co-Scholastic Entry", icon: "bi-stars", path: "/co-scholastic-entry" },
           { key: "student-remarks-entry", label: "Student Remarks Entry", icon: "bi-chat-square-text", path: "/student-remarks-entry" },
           { key: "report-card-generator", label: "Print Report Cards", icon: "bi-printer", path: "/report-card-generator" },
         ],
@@ -241,25 +258,57 @@ export default function Sidebar({ headerHeight = 56 }) {
   const isPathActive = (path) =>
     location.pathname === path || location.pathname.startsWith(path + "/");
 
-  const handleMenuClick = (item) => {
-    navigate(item.path);
-  };
+  const handleMenuClick = (item) => navigate(item.path);
 
   const asideStyle = {
     top: `${headerHeight}px`,
     height: `calc(100vh - ${headerHeight}px)`,
-    // @ts-ignore
     "--header-h": `${headerHeight}px`,
   };
 
+  // --------- Mobile bottom bar helpers ----------
+  const flattenMenu = (groups) =>
+    groups.flatMap((g) => g.items.map((it) => ({ ...it, group: g.heading })));
+
+  const allItems = useMemo(() => flattenMenu(menuGroups), [menuGroups]);
+
+  // choose primary by role; else take first 4
+  const PRIMARY_BY_ROLE = {
+    admin: ["dashboard", "transactions", "studentDue", "schoolFeeSummary"],
+    academic_coordinator: ["dashboard", "combined-timetable", "students", "exam-schemes"],
+    teacher: ["dashboard", "mark-attendance", "teacher-timetable-display", "marks-entry"],
+    student: ["dashboard", "student-attendance", "student-timetable-display", "my-assignments"],
+    hr: ["dashboard", "employees", "employee-attendance", "hr-leave-requests"],
+    superadmin: ["dashboard", "users", "reports/day-wise", "transactions"],
+  };
+
+  const primaryKeys = PRIMARY_BY_ROLE[roleLower] || allItems.slice(0, 4).map((i) => i.key);
+  const primaryItems = allItems.filter((i) => primaryKeys.includes(i.key)).slice(0, 5);
+  const moreItems = allItems.filter((i) => !primaryKeys.includes(i.key));
+
+  // Render
+  if (isMobile) {
+    return (
+      <>
+        {/* Hide desktop sidebar on mobile: we rely on BottomNav */}
+        <BottomNav
+          items={primaryItems}
+          moreItems={moreItems}
+          isActive={isPathActive}
+          onClick={handleMenuClick}
+        />
+      </>
+    );
+  }
+
+  // Desktop: your existing sidebar
   return (
     <>
       <aside className="app-sidebar" style={asideStyle} aria-label="Sidebar navigation">
-        {/* Top row: ONLY the toggle (brand/logo removed) */}
         <div className="sidebar-top d-flex align-items-center">
           <button
             className="btn toggle-btn ms-auto"
-            onClick={toggleSidebar}
+            onClick={() => setIsExpanded((p) => !p)}
             aria-label={isExpanded ? "Collapse sidebar" : "Expand sidebar"}
             title={isExpanded ? "Collapse" : "Expand"}
           >
@@ -267,7 +316,6 @@ export default function Sidebar({ headerHeight = 56 }) {
           </button>
         </div>
 
-        {/* Nav */}
         <nav className="mt-2">
           {menuGroups.map((group, gi) => (
             <div key={gi}>
@@ -303,12 +351,94 @@ export default function Sidebar({ headerHeight = 56 }) {
         </nav>
       </aside>
 
-      {/* Scrim only shows on phones via CSS */}
-      <div
-        className={`sidebar-scrim ${isExpanded ? "show" : ""}`}
-        onClick={() => setIsExpanded(false)}
-        aria-hidden="true"
-      />
+      {/* Scrim was for the drawer; not used in desktop */}
+      <div className="sidebar-scrim" aria-hidden="true" />
+    </>
+  );
+}
+
+/* ------- BottomNav Component ------- */
+function BottomNav({ items, moreItems, isActive, onClick }) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const filtered = useMemo(() => {
+    const s = q.trim().toLowerCase();
+    if (!s) return moreItems;
+    return moreItems.filter(
+      (i) => i.label.toLowerCase().includes(s) || i.group?.toLowerCase().includes(s)
+    );
+  }, [q, moreItems]);
+
+  return (
+    <>
+      <nav className="bottom-nav" role="navigation" aria-label="Primary mobile navigation">
+        {items.map((it) => (
+          <button
+            key={it.key}
+            className={`bn-item ${isActive(it.path) ? "active" : ""}`}
+            onClick={() => onClick(it)}
+            aria-label={it.label}
+            title={it.label}
+          >
+            <i className={`bi ${it.icon}`} />
+            <span>{it.label}</span>
+          </button>
+        ))}
+
+        <button
+          className={`bn-item ${open ? "active" : ""}`}
+          onClick={() => setOpen(true)}
+          aria-haspopup="dialog"
+          aria-expanded={open}
+          aria-label="More"
+          title="More"
+        >
+          <i className="bi bi-three-dots" />
+          <span>More</span>
+        </button>
+      </nav>
+
+      {/* Bottom Sheet */}
+      {open && (
+        <>
+          <div className="bn-scrim" onClick={() => setOpen(false)} aria-hidden="true" />
+          <div className="bn-sheet" role="dialog" aria-modal="true" aria-label="All menu options">
+            <div className="bn-sheet-handle" />
+            <div className="bn-sheet-header">
+              <input
+                className="form-control bn-search"
+                placeholder="Search menu…"
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+              />
+              <button className="btn btn-sm btn-light" onClick={() => setOpen(false)}>
+                Close
+              </button>
+            </div>
+            <div className="bn-list">
+              {filtered.map((it) => (
+                <button
+                  key={it.key}
+                  className="bn-list-item"
+                  onClick={() => {
+                    onClick(it);
+                    setOpen(false);
+                  }}
+                >
+                  <i className={`bi ${it.icon}`} />
+                  <div className="bn-li-text">
+                    <div className="bn-li-title">{it.label}</div>
+                    {it.group && <div className="bn-li-sub">{it.group}</div>}
+                  </div>
+                </button>
+              ))}
+              {filtered.length === 0 && (
+                <div className="text-muted small px-3 py-2">No items match that search.</div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
     </>
   );
 }

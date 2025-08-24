@@ -75,12 +75,32 @@ const styles = StyleSheet.create({
   },
 });
 
-// Updated helper function to format numbers in Indian format without any currency symbol.
+// --------- Helpers ---------
+
+// Indian number format without currency symbol
 const formatValue = (val) => {
   return Number(val) === 0 ? "0" : Number(val).toLocaleString('en-IN');
 };
 
-// Helper function to chunk an array into smaller arrays of a given size.
+// dd/MM/yyyy for ISO "yyyy-MM-dd" strings (date range header)
+const formatDisplayDate = (isoYmd) => {
+  if (!isoYmd) return '';
+  const [y, m, d] = String(isoYmd).split('-');
+  if (!y || !m || !d) return '';
+  return `${d}/${m}/${y}`;
+};
+
+// dd/MM/yyyy for Date/ISO timestamps (Created At column)
+const formatToDDMMYYYY = (date) => {
+  if (!date) return '';
+  const d = new Date(date);
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = d.getFullYear();
+  return `${day}/${month}/${year}`;
+};
+
+// Chunk an array into smaller arrays of a given size.
 const chunkArray = (array, chunkSize) => {
   const results = [];
   for (let i = 0; i < array.length; i += chunkSize) {
@@ -90,14 +110,14 @@ const chunkArray = (array, chunkSize) => {
 };
 
 // Pivot the aggregated data by Slip_ID using feeCategoryName as dynamic columns.
-// Updated to separate van fee for "Tuition Fee": tuition fee goes into feeCategories, van fee is accumulated in vanFeeTotal.
+// Separate van fee for "Tuition Fee": tuition fee stays in feeCategories, van fee goes to vanFeeTotal.
 const pivotReportData = (data) => {
   const grouped = data.reduce((acc, curr) => {
     const slipId = curr.Slip_ID;
     if (!acc[slipId]) {
       acc[slipId] = {
         Slip_ID: curr.Slip_ID,
-        Transaction_ID: curr.Transaction_ID, // ✅ ADD THIS
+        Transaction_ID: curr.Transaction_ID, // ✅ keep Txn ID
         createdAt: curr.createdAt,
         Student: curr.Student,
         PaymentMode: curr.PaymentMode,
@@ -115,10 +135,11 @@ const pivotReportData = (data) => {
       acc[slipId].feeCategories[category].totalReceived += Number(curr.totalFeeReceived) || 0;
       acc[slipId].vanFeeTotal += Number(curr.totalVanFee) || 0;
     } else {
-      acc[slipId].feeCategories[category].totalReceived += (Number(curr.totalFeeReceived) || 0) + (Number(curr.totalVanFee) || 0);
+      acc[slipId].feeCategories[category].totalReceived +=
+        (Number(curr.totalFeeReceived) || 0) + (Number(curr.totalVanFee) || 0);
     }
 
-    // ✅ Accumulate fine here
+    // ✅ Accumulate fine
     acc[slipId].fineAmount += Number(curr.totalFine || curr.Fine_Amount || 0);
 
     return acc;
@@ -135,8 +156,7 @@ const getUniqueCategories = (pivotedData) => {
   return Array.from(categories);
 };
 
-// Reusable component for the Collection Report table header.
-// Updated to include "Van Fee" and "Overall Total" columns.
+// Reusable component for the Collection Report table header (with Van Fee, Fine, Overall Total).
 const CollectionTableHeader = ({ feeCategories }) => (
   <View style={styles.tableHeaderRow}>
     <Text style={[styles.tableHeaderCell, { flex: 0.8 }]}>Sr. No</Text>
@@ -153,7 +173,6 @@ const CollectionTableHeader = ({ feeCategories }) => (
     <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Van Fee</Text>
     <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Fine</Text>
     <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Overall Total</Text>
-
   </View>
 );
 
@@ -195,13 +214,9 @@ const PdfCategoryReport = ({ school, startDate, endDate, aggregatedData = [] }) 
   }, {});
   const grandTotal = Object.values(overallTotals).reduce((sum, val) => sum + val, 0);
 
-  
-  // Compute overall van fee total across all slips.
+  // Compute overall van fee and fine totals across all slips.
   const overallVanFeeTotal = pivotedData.reduce((sum, row) => sum + (row.vanFeeTotal || 0), 0);
-
-    // ✅ Add this just below
-    const overallFineTotal = pivotedData.reduce((sum, row) => sum + (row.fineAmount || 0), 0);
-
+  const overallFineTotal = pivotedData.reduce((sum, row) => sum + (row.fineAmount || 0), 0);
 
   // For the summary report, group aggregatedData by category.
   const categoryGroups = aggregatedData.reduce((acc, curr) => {
@@ -219,9 +234,7 @@ const PdfCategoryReport = ({ school, startDate, endDate, aggregatedData = [] }) 
       acc[cat].cash.totalVanFee += Number(curr.totalVanFee) || 0;
       acc[cat].cash.totalVanFeeConcession += Number(curr.totalVanFeeConcession) || 0;
       acc[cat].cash.totalReceived +=
-        (Number(curr.totalFeeReceived) || 0) +
-        (Number(curr.totalVanFee) || 0) +
-        fine;
+        (Number(curr.totalFeeReceived) || 0) + (Number(curr.totalVanFee) || 0) + fine;
     } else if (curr.PaymentMode === 'Online') {
       const fine = Number(curr.totalFine || curr.Fine_Amount || 0);
       acc[cat].online.totalFeeReceived += Number(curr.totalFeeReceived) || 0;
@@ -229,11 +242,8 @@ const PdfCategoryReport = ({ school, startDate, endDate, aggregatedData = [] }) 
       acc[cat].online.totalVanFee += Number(curr.totalVanFee) || 0;
       acc[cat].online.totalVanFeeConcession += Number(curr.totalVanFeeConcession) || 0;
       acc[cat].online.totalReceived +=
-        (Number(curr.totalFeeReceived) || 0) +
-        (Number(curr.totalVanFee) || 0) +
-        fine;
+        (Number(curr.totalFeeReceived) || 0) + (Number(curr.totalVanFee) || 0) + fine;
     }
-
     return acc;
   }, {});
   const categorySummary = Object.keys(categoryGroups).map((category) => {
@@ -252,42 +262,65 @@ const PdfCategoryReport = ({ school, startDate, endDate, aggregatedData = [] }) 
       },
     };
   });
-  // Chunk data for pagination (20 records per page)
-  const recordsPerPage = 20;
+
+  // ---- Pagination ----
+  // Collection: 15 records per page (as requested)
+  const recordsPerPage = 18;
   const paginatedCollection = chunkArray(pivotedData, recordsPerPage);
+
+  // Summary: keep same page sizing for simplicity (also 15 for consistency)
   const paginatedSummary = chunkArray(categorySummary, recordsPerPage);
 
   return (
     <Document>
       {/* Collection Report Pages */}
       {paginatedCollection.map((chunk, chunkIndex) => (
-        <Page key={`collection-page-${chunkIndex}`} size="A4" orientation="landscape" style={styles.page}>
+        <Page
+          key={`collection-page-${chunkIndex}`}
+          size="A4"
+          orientation="landscape"
+          style={styles.page}
+        >
           {chunkIndex === 0 && (
             <>
               <View style={styles.headerContainer}>
-                <Text style={styles.schoolName}>{school?.name}</Text>
-                <Text style={styles.schoolDesc}>{school?.description}</Text>
+                <Text style={styles.schoolName}>{school?.name || school?.school_name || 'School Name'}</Text>
+                <Text style={styles.schoolDesc}>{school?.description || school?.address || ''}</Text>
               </View>
-              <Text style={styles.dateRange}>Date Range: {startDate} to {endDate}</Text>
+              <Text style={styles.dateRange}>
+                Date Range: {formatDisplayDate(startDate)} to {formatDisplayDate(endDate)}
+              </Text>
               <Text style={styles.sectionTitle}>Collection Report</Text>
             </>
           )}
+
           <View style={styles.table}>
             <CollectionTableHeader feeCategories={feeCategories} />
+
             {chunk.map((row, idx) => {
-              // Compute the sum of fee categories and then add the van fee total.
-              const categoryTotal = Object.values(row.feeCategories).reduce((sum, fee) => sum + fee.totalReceived, 0);
+              // Sum the fee category totals, then add van fee and fine for overall
+              const categoryTotal = Object.values(row.feeCategories).reduce(
+                (sum, fee) => sum + (fee?.totalReceived || 0), 0
+              );
               const overallRowTotal = categoryTotal + (row.vanFeeTotal || 0) + (row.fineAmount || 0);
+
               return (
                 <View style={styles.tableRow} key={row.Slip_ID}>
-                  <Text style={[styles.tableCell, { flex: 0.8 }]}>{chunkIndex * recordsPerPage + idx + 1}</Text>
+                  <Text style={[styles.tableCell, { flex: 0.8 }]}>
+                    {chunkIndex * recordsPerPage + idx + 1}
+                  </Text>
                   <Text style={[styles.tableCell, { flex: 1 }]}>{row.Slip_ID}</Text>
                   <Text style={[styles.tableCell, { flex: 1 }]}>{row.Transaction_ID || '-'}</Text>
                   <Text style={[styles.tableCell, { flex: 1 }]}>{row.Student?.admission_number}</Text>
                   <Text style={[styles.tableCell, { flex: 2 }]}>{row.Student?.name}</Text>
                   <Text style={[styles.tableCell, { flex: 1 }]}>{row.Student?.Class?.class_name}</Text>
                   <Text style={[styles.tableCell, { flex: 1 }]}>{row.PaymentMode}</Text>
-                  <Text style={[styles.tableCell, { flex: 2 }]}>{new Date(row.createdAt).toLocaleString()}</Text>
+
+                  {/* Created At in dd/MM/yyyy */}
+                  <Text style={[styles.tableCell, { flex: 2 }]}>
+                    {formatToDDMMYYYY(row.createdAt)}
+                  </Text>
+
                   {feeCategories.map((cat, i) => {
                     const feeData = row.feeCategories[cat];
                     return (
@@ -296,13 +329,14 @@ const PdfCategoryReport = ({ school, startDate, endDate, aggregatedData = [] }) 
                       </Text>
                     );
                   })}
-                <Text style={[styles.tableCell, { flex: 1 }]}>{formatValue(row.vanFeeTotal)}</Text>
-                <Text style={[styles.tableCell, { flex: 1 }]}>{formatValue(row.fineAmount || 0)}</Text>
-                <Text style={[styles.tableCell, { flex: 1 }]}>{formatValue(overallRowTotal)}</Text>
 
+                  <Text style={[styles.tableCell, { flex: 1 }]}>{formatValue(row.vanFeeTotal)}</Text>
+                  <Text style={[styles.tableCell, { flex: 1 }]}>{formatValue(row.fineAmount || 0)}</Text>
+                  <Text style={[styles.tableCell, { flex: 1 }]}>{formatValue(overallRowTotal)}</Text>
                 </View>
               );
             })}
+
             {/* Only on the last collection page, render overall totals */}
             {chunkIndex === paginatedCollection.length - 1 && (
               <View style={styles.tableRow}>
@@ -312,23 +346,35 @@ const PdfCategoryReport = ({ school, startDate, endDate, aggregatedData = [] }) 
                     {formatValue(overallTotals[cat])}
                   </Text>
                 ))}
-                <Text style={[styles.tableCell, { flex: 1, fontWeight: 'bold' }]}>{formatValue(overallVanFeeTotal)}</Text>
-                <Text style={[styles.tableCell, { flex: 1, fontWeight: 'bold' }]}>{formatValue(overallFineTotal)}</Text>
-                <Text style={[styles.tableCell, { flex: 1, fontWeight: 'bold' }]}>{formatValue(grandTotal + overallVanFeeTotal + overallFineTotal)}</Text>
-
+                <Text style={[styles.tableCell, { flex: 1, fontWeight: 'bold' }]}>
+                  {formatValue(overallVanFeeTotal)}
+                </Text>
+                <Text style={[styles.tableCell, { flex: 1, fontWeight: 'bold' }]}>
+                  {formatValue(overallFineTotal)}
+                </Text>
+                <Text style={[styles.tableCell, { flex: 1, fontWeight: 'bold' }]}>
+                  {formatValue(grandTotal + overallVanFeeTotal + overallFineTotal)}
+                </Text>
               </View>
             )}
           </View>
+
           <Text style={styles.pageFooter} render={({ pageNumber, totalPages }) => `${pageNumber} / ${totalPages}`} fixed />
         </Page>
       ))}
 
       {/* Category Summary Report Pages */}
       {paginatedSummary.map((chunk, chunkIndex) => (
-        <Page key={`summary-page-${chunkIndex}`} size="A4" orientation="landscape" style={styles.page}>
+        <Page
+          key={`summary-page-${chunkIndex}`}
+          size="A4"
+          orientation="landscape"
+          style={styles.page}
+        >
           {chunkIndex === 0 && (
             <Text style={styles.sectionTitle}>Category Summary Report</Text>
           )}
+
           <View style={styles.table}>
             <SummaryTableHeader />
             {chunk.map((item, index) => (
@@ -351,58 +397,60 @@ const PdfCategoryReport = ({ school, startDate, endDate, aggregatedData = [] }) 
                 <Text style={[styles.tableCell, { flex: 2 }]}>{formatValue(item.cash.totalReceived + item.online.totalReceived)}</Text>
               </View>
             ))}
+
             {/* Only on the last summary page, render overall totals */}
             {chunkIndex === paginatedSummary.length - 1 && (
               <View style={styles.tableRow}>
                 <Text style={[styles.tableCell, { flex: 2, fontWeight: 'bold' }]}>Overall Totals</Text>
-                <Text style={[styles.tableCell, { flex: 2, fontWeight: 'bold' }]}>{formatValue(
-                  categorySummary.reduce((sum, s) => sum + s.cash.totalFeeReceived, 0)
-                )}</Text>
-                <Text style={[styles.tableCell, { flex: 2, fontWeight: 'bold' }]}>{formatValue(
-                  categorySummary.reduce((sum, s) => sum + s.online.totalFeeReceived, 0)
-                )}</Text>
-                <Text style={[styles.tableCell, { flex: 2, fontWeight: 'bold' }]}>{formatValue(
-                  categorySummary.reduce((sum, s) => sum + s.cash.totalFeeReceived + s.online.totalFeeReceived, 0)
-                )}</Text>
-                <Text style={[styles.tableCell, { flex: 2, fontWeight: 'bold' }]}>{formatValue(
-                  categorySummary.reduce((sum, s) => sum + s.cash.totalConcession, 0)
-                )}</Text>
-                <Text style={[styles.tableCell, { flex: 2, fontWeight: 'bold' }]}>{formatValue(
-                  categorySummary.reduce((sum, s) => sum + s.online.totalConcession, 0)
-                )}</Text>
-                <Text style={[styles.tableCell, { flex: 2, fontWeight: 'bold' }]}>{formatValue(
-                  categorySummary.reduce((sum, s) => sum + s.cash.totalConcession + s.online.totalConcession, 0)
-                )}</Text>
-                <Text style={[styles.tableCell, { flex: 2, fontWeight: 'bold' }]}>{formatValue(
-                  categorySummary.reduce((sum, s) => sum + s.cash.totalVanFee, 0)
-                )}</Text>
-                <Text style={[styles.tableCell, { flex: 2, fontWeight: 'bold' }]}>{formatValue(
-                  categorySummary.reduce((sum, s) => sum + s.online.totalVanFee, 0)
-                )}</Text>
-                <Text style={[styles.tableCell, { flex: 2, fontWeight: 'bold' }]}>{formatValue(
-                  categorySummary.reduce((sum, s) => sum + s.cash.totalVanFee + s.online.totalVanFee, 0)
-                )}</Text>
-                <Text style={[styles.tableCell, { flex: 2, fontWeight: 'bold' }]}>{formatValue(
-                  categorySummary.reduce((sum, s) => sum + s.cash.totalVanFeeConcession, 0)
-                )}</Text>
-                <Text style={[styles.tableCell, { flex: 2, fontWeight: 'bold' }]}>{formatValue(
-                  categorySummary.reduce((sum, s) => sum + s.online.totalVanFeeConcession, 0)
-                )}</Text>
-                <Text style={[styles.tableCell, { flex: 2, fontWeight: 'bold' }]}>{formatValue(
-                  categorySummary.reduce((sum, s) => sum + s.cash.totalVanFeeConcession + s.online.totalVanFeeConcession, 0)
-                )}</Text>
-                <Text style={[styles.tableCell, { flex: 2, fontWeight: 'bold' }]}>{formatValue(
-                  categorySummary.reduce((sum, s) => sum + s.cash.totalReceived, 0)
-                )}</Text>
-                <Text style={[styles.tableCell, { flex: 2, fontWeight: 'bold' }]}>{formatValue(
-                  categorySummary.reduce((sum, s) => sum + s.online.totalReceived, 0)
-                )}</Text>
-                <Text style={[styles.tableCell, { flex: 2, fontWeight: 'bold' }]}>{formatValue(
-                  categorySummary.reduce((sum, s) => sum + s.cash.totalReceived + s.online.totalReceived, 0)
-                )}</Text>
+                <Text style={[styles.tableCell, { flex: 2, fontWeight: 'bold' }]}>
+                  {formatValue(categorySummary.reduce((sum, s) => sum + s.cash.totalFeeReceived, 0))}
+                </Text>
+                <Text style={[styles.tableCell, { flex: 2, fontWeight: 'bold' }]}>
+                  {formatValue(categorySummary.reduce((sum, s) => sum + s.online.totalFeeReceived, 0))}
+                </Text>
+                <Text style={[styles.tableCell, { flex: 2, fontWeight: 'bold' }]}>
+                  {formatValue(categorySummary.reduce((sum, s) => sum + s.cash.totalFeeReceived + s.online.totalFeeReceived, 0))}
+                </Text>
+                <Text style={[styles.tableCell, { flex: 2, fontWeight: 'bold' }]}>
+                  {formatValue(categorySummary.reduce((sum, s) => sum + s.cash.totalConcession, 0))}
+                </Text>
+                <Text style={[styles.tableCell, { flex: 2, fontWeight: 'bold' }]}>
+                  {formatValue(categorySummary.reduce((sum, s) => sum + s.online.totalConcession, 0))}
+                </Text>
+                <Text style={[styles.tableCell, { flex: 2, fontWeight: 'bold' }]}>
+                  {formatValue(categorySummary.reduce((sum, s) => sum + s.cash.totalConcession + s.online.totalConcession, 0))}
+                </Text>
+                <Text style={[styles.tableCell, { flex: 2, fontWeight: 'bold' }]}>
+                  {formatValue(categorySummary.reduce((sum, s) => sum + s.cash.totalVanFee, 0))}
+                </Text>
+                <Text style={[styles.tableCell, { flex: 2, fontWeight: 'bold' }]}>
+                  {formatValue(categorySummary.reduce((sum, s) => sum + s.online.totalVanFee, 0))}
+                </Text>
+                <Text style={[styles.tableCell, { flex: 2, fontWeight: 'bold' }]}>
+                  {formatValue(categorySummary.reduce((sum, s) => sum + s.cash.totalVanFee + s.online.totalVanFee, 0))}
+                </Text>
+                <Text style={[styles.tableCell, { flex: 2, fontWeight: 'bold' }]}>
+                  {formatValue(categorySummary.reduce((sum, s) => sum + s.cash.totalVanFeeConcession, 0))}
+                </Text>
+                <Text style={[styles.tableCell, { flex: 2, fontWeight: 'bold' }]}>
+                  {formatValue(categorySummary.reduce((sum, s) => sum + s.online.totalVanFeeConcession, 0))}
+                </Text>
+                <Text style={[styles.tableCell, { flex: 2, fontWeight: 'bold' }]}>
+                  {formatValue(categorySummary.reduce((sum, s) => sum + s.cash.totalVanFeeConcession + s.online.totalVanFeeConcession, 0))}
+                </Text>
+                <Text style={[styles.tableCell, { flex: 2, fontWeight: 'bold' }]}>
+                  {formatValue(categorySummary.reduce((sum, s) => sum + s.cash.totalReceived, 0))}
+                </Text>
+                <Text style={[styles.tableCell, { flex: 2, fontWeight: 'bold' }]}>
+                  {formatValue(categorySummary.reduce((sum, s) => sum + s.online.totalReceived, 0))}
+                </Text>
+                <Text style={[styles.tableCell, { flex: 2, fontWeight: 'bold' }]}>
+                  {formatValue(categorySummary.reduce((sum, s) => sum + s.cash.totalReceived + s.online.totalReceived, 0))}
+                </Text>
               </View>
             )}
           </View>
+
           <Text style={styles.pageFooter} render={({ pageNumber, totalPages }) => `${pageNumber} / ${totalPages}`} fixed />
         </Page>
       ))}

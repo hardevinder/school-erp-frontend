@@ -23,11 +23,21 @@ import PdfReceiptDocument from './Transactions/PdfReceiptDocument'; // Component
 // Import the ReceiptModal component from the Transactions folder.
 import ReceiptModal from './Transactions/ReceiptModal';
 
-// Helper function to format a Date object to 'yyyy-MM-dd'
+// Helper function to format a Date object to 'yyyy-MM-dd' for BACKEND/API usage
 const formatDate = (date) => {
   const d = new Date(date);
   d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
   return d.toISOString().slice(0, 10);
+};
+
+// UI-only formatter: dd/MM/yyyy
+const formatToDDMMYYYY = (date) => {
+  if (!date) return '';
+  const d = new Date(date);
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = d.getFullYear();
+  return `${day}/${month}/${year}`;
 };
 
 // Helper function for totals: formats the value with commas and the Rupee symbol or returns "0" if zero.
@@ -147,6 +157,7 @@ const DayWiseReport = () => {
     setLoading(true);
     setError('');
     try {
+      // Backend expects yyyy-MM-dd
       const start = formatDate(startDate);
       const end = formatDate(endDate);
       const response = await api.get(`/reports/day-wise?startDate=${start}&endDate=${end}`);
@@ -178,6 +189,7 @@ const DayWiseReport = () => {
     const doc = (
       <PdfReports
         school={school}
+        // Keep API-friendly format for PDF props if your PDF expects yyyy-MM-dd
         startDate={formatDate(startDate)}
         endDate={formatDate(endDate)}
         aggregatedData={filteredData} // Use filtered data for PDF
@@ -316,7 +328,7 @@ const DayWiseReport = () => {
             <DatePicker
               selected={startDate}
               onChange={(date) => setStartDate(date)}
-              dateFormat="yyyy-MM-dd"
+              dateFormat="dd/MM/yyyy"   
               className="form-control"
               placeholderText="Select Start Date"
               showMonthDropdown
@@ -334,7 +346,7 @@ const DayWiseReport = () => {
             <DatePicker
               selected={endDate}
               onChange={(date) => setEndDate(date)}
-              dateFormat="yyyy-MM-dd"
+              dateFormat="dd/MM/yyyy"   
               className="form-control"
               placeholderText="Select End Date"
               minDate={startDate}
@@ -445,7 +457,8 @@ const DayWiseReport = () => {
                           <td>{item.Student?.Class?.class_name}</td>
                           <td>{item.PaymentMode}</td>
                           <td>{item.feeHeadingName}</td>
-                          <td>{new Date(item.createdAt).toLocaleString()}</td>
+                          {/* Created At → dd/MM/yyyy */}
+                          <td>{formatToDDMMYYYY(item.createdAt)}</td>
                           <td>{formatTotalValue(item.totalFeeReceived)}</td>
                           <td>{formatTotalValue(item.totalConcession)}</td>
                           <td>{formatTotalValue(item.totalVanFee)}</td>

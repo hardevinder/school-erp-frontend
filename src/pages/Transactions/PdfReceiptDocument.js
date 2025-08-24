@@ -57,6 +57,32 @@ const formatMoney = (value) => {
   });
 };
 
+// --- DATE/TIME HELPERS ---
+// "August 8, 2025"
+const formatLongDate = (date) => {
+  if (!date) return "";
+  const d = new Date(date);
+  const months = [
+    "January","February","March","April","May","June",
+    "July","August","September","October","November","December"
+  ];
+  const month = months[d.getMonth()];
+  const day = d.getDate();
+  const year = d.getFullYear();
+  return `${month} ${day}, ${year}`;
+};
+
+// "h:mm AM/PM"
+const formatTime12 = (date) => {
+  if (!date) return "";
+  const d = new Date(date);
+  let hours = d.getHours();
+  const minutes = String(d.getMinutes()).padStart(2, "0");
+  const ampm = hours >= 12 ? "PM" : "AM";
+  hours = hours % 12 || 12;
+  return `${hours}:${minutes} ${ampm}`;
+};
+
 // Example fallback logo URL (replace with your real URL if needed)
 const DEFAULT_LOGO_URL =
   "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6b/Picture_icon_BLACK.svg/240px-Picture_icon_BLACK.svg.png";
@@ -227,7 +253,7 @@ const PdfReceiptDocument = ({ school, receipt, slipId, student }) => {
     0
   );
   const totalAcademicConcession = receipt.reduce(
-    (sum, trx) => sum + trx.Concession,
+    (sum, trx) => sum + (trx.Concession || 0),
     0
   );
   const totalAcademicBalance = receipt.reduce(
@@ -256,9 +282,6 @@ const PdfReceiptDocument = ({ school, receipt, slipId, student }) => {
 
   // Condition to show Van Fee column only if any transaction has VanFee > 0
   const showVanFeeColumn = receipt.some((trx) => trx.VanFee > 0);
-  // const totalFine = receipt.reduce((sum, trx) => sum + (trx.Fine_Amount || 0), 0);
-  // const showFineColumn = totalFine > 0;
-
 
   // Payment Mode & Transaction ID from first transaction
   const paymentMode = receipt[0]?.PaymentMode || "N/A";
@@ -315,7 +338,8 @@ const PdfReceiptDocument = ({ school, receipt, slipId, student }) => {
               <Text style={styles.infoLabel}>Class:</Text> {className}
             </Text>
             <Text style={styles.infoText}>
-              <Text style={styles.infoLabel}>Date and Time:</Text> {feeCollectionDateTime.toLocaleDateString()} {feeCollectionDateTime.toLocaleTimeString()}
+              <Text style={styles.infoLabel}>Date and Time:</Text>{" "}
+              {formatLongDate(feeCollectionDateTime)} {formatTime12(feeCollectionDateTime)}
             </Text>
           </View>
         </View>
@@ -323,18 +347,15 @@ const PdfReceiptDocument = ({ school, receipt, slipId, student }) => {
         {/* Main Fee Table */}
         <View style={styles.table}>
           {/* Header Row */}
-      <View style={[styles.tableRow, styles.tableHeader]}>
-        <Text style={styles.tableCell}>Sr. No.</Text>
-        <Text style={styles.tableCell}>Particular</Text>
-        <Text style={styles.tableCell}>Concession</Text>
-        {showFineColumn && <Text style={styles.tableCell}>Fine</Text>}
-        <Text style={styles.tableCell}>Received</Text>
-        <Text style={styles.tableCell}>Balance</Text>
-        {showVanFeeColumn && (
-          <Text style={styles.tableCell}>Van Fee</Text>
-        )}
-      </View>
-
+          <View style={[styles.tableRow, styles.tableHeader]}>
+            <Text style={styles.tableCell}>Sr. No.</Text>
+            <Text style={styles.tableCell}>Particular</Text>
+            <Text style={styles.tableCell}>Concession</Text>
+            {showFineColumn && <Text style={styles.tableCell}>Fine</Text>}
+            <Text style={styles.tableCell}>Received</Text>
+            <Text style={styles.tableCell}>Balance</Text>
+            {showVanFeeColumn && <Text style={styles.tableCell}>Van Fee</Text>}
+          </View>
 
           {/* Body Rows */}
           {receipt.map((trx, idx) => (
@@ -347,8 +368,8 @@ const PdfReceiptDocument = ({ school, receipt, slipId, student }) => {
                 {formatMoney(trx.Concession || 0)}
               </Text>
               {showFineColumn && (
-                  <Text style={styles.tableCell}>{formatMoney(trx.Fine_Amount || 0)}</Text>
-                )}
+                <Text style={styles.tableCell}>{formatMoney(trx.Fine_Amount || 0)}</Text>
+              )}
               <Text style={styles.tableCell}>
                 {formatMoney(trx.Fee_Recieved || 0)}
               </Text>
@@ -370,36 +391,34 @@ const PdfReceiptDocument = ({ school, receipt, slipId, student }) => {
             <Text style={styles.tableFooterCell}></Text>
             <Text style={styles.tableFooterCell}>G. Total</Text>
             <Text style={styles.tableFooterCell}>Rs. {formatMoney(totalAcademicConcession)}</Text>
-            
+
             {showFineColumn && (
               <Text style={styles.tableFooterCell}>Rs. {formatMoney(totalFine)}</Text>
             )}
-            
+
             <Text style={styles.tableFooterCell}>Rs. {formatMoney(totalAcademicReceived)}</Text>
             <Text style={styles.tableFooterCell}>Rs. {formatMoney(totalAcademicBalance)}</Text>
-            
+
             {showVanFeeColumn && (
               <Text style={styles.tableFooterCellLast}>
                 Rs. {totalTransportFee > 0 ? formatMoney(totalTransportFee) : ""}
               </Text>
             )}
           </View>
-
         </View>
 
         {/* Overall Total */}
-       <View style={styles.totalsContainer}>
-      <Text style={styles.totalTitle}>
-        Total Received (Rs.): {formatMoney(totalAcademicReceived)} 
-        {totalFine > 0 && ` + ${formatMoney(totalFine)} Fine`} 
-        {totalTransportFee > 0 && ` + ${formatMoney(totalTransportFee)} Van Fee`} = 
-        {formatMoney(grandTotalReceived)}
-      </Text>
-      <Text style={styles.totalWords}>
-        (In words: {grandTotalInWords} Rupees Only)
-      </Text>
-    </View>
-
+        <View style={styles.totalsContainer}>
+          <Text style={styles.totalTitle}>
+            Total Received (Rs.): {formatMoney(totalAcademicReceived)}
+            {totalFine > 0 && ` + ${formatMoney(totalFine)} Fine`}
+            {totalTransportFee > 0 && ` + ${formatMoney(totalTransportFee)} Van Fee`} =
+            {formatMoney(grandTotalReceived)}
+          </Text>
+          <Text style={styles.totalWords}>
+            (In words: {grandTotalInWords} Rupees Only)
+          </Text>
+        </View>
 
         {/* Transaction Mode & Transaction ID */}
         <View style={{ marginTop: 10 }}>
