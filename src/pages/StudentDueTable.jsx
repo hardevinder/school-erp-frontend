@@ -4,6 +4,7 @@ import { Tooltip } from "react-tooltip"; // Named export from react-tooltip v5+
 import "react-tooltip/dist/react-tooltip.css"; // Tooltip styles
 import "bootstrap/dist/css/bootstrap.min.css";
 import { pdf } from "@react-pdf/renderer";
+import * as XLSX from "xlsx"; // SheetJS
 import PdfStudentDueReport from "./PdfStudentDueReport"; // Your PDF component
 
 // Helper function to format numbers using the Indian numbering system.
@@ -25,17 +26,18 @@ const StudentDueTable = () => {
 
   // Fetch school details on mount.
   useEffect(() => {
-    api.get("/schools")
+    api
+      .get("/schools")
       .then((response) => {
-        // Assuming we want the first school.
-        setSchool(response.data[0]);
+        setSchool(response.data[0]); // Assuming first school
       })
       .catch((error) => console.error("Error fetching schools:", error));
   }, []);
 
   // Fetch classes on mount.
   useEffect(() => {
-    api.get("/classes")
+    api
+      .get("/classes")
       .then((response) => {
         setClasses(response.data);
       })
@@ -45,7 +47,8 @@ const StudentDueTable = () => {
   // Fetch fee data when a class is selected.
   useEffect(() => {
     if (selectedClass) {
-      api.get(`/feedue/class/${selectedClass}/fees`)
+      api
+        .get(`/feedue/class/${selectedClass}/fees`)
         .then((response) => {
           const data = response.data;
           setStudentData(data);
@@ -64,7 +67,7 @@ const StudentDueTable = () => {
   const computeHeadwiseSummary = () => {
     const summary = {};
     studentData.forEach((student) => {
-      student.feeDetails.forEach((fee) => {
+      (student.feeDetails || []).forEach((fee) => {
         const heading = fee.fee_heading;
         if (!summary[heading]) {
           summary[heading] = {
@@ -111,17 +114,110 @@ const StudentDueTable = () => {
   const headSummary = computeHeadwiseSummary();
   const grandSummary = computeGrandSummary(headSummary);
 
-  // Function to generate PDF blob and open it in a new tab.
+  // ---------- Export to Excel (Frontend with SheetJS) ----------
+  const exportToExcel = () => {
+    if (!selectedClass || studentData.length === 0) {
+      alert("Please select a class with data first.");
+      return;
+    }
+
+    // Resolve Class Name
+    const className =
+      classes.find((c) => Number(c.id) === Number(selectedClass))?.class_name ||
+      selectedClass;
+
+    // ---------- Sheet 1: Student Dues ----------
+    const studentHeader = ["Student ID", "Student Name", ...feeHeadings];
+    const studentRows = studentData.map((stu) => {
+      const map = new Map(
+        (stu.feeDetails || []).map((f) => [f.fee_heading, Number(f.finalAmountDue) || 0])
+      );
+      const perHead = feeHeadings.map((h) => map.get(h) ?? 0);
+      return [stu.id, stu.name, ...perHead];
+    });
+    const studentSheet = XLSX.utils.aoa_to_sheet([
+      [`Class Name: ${className}`],
+      [],
+      studentHeader,
+      ...studentRows,
+    ]);
+    studentSheet["!cols"] = [
+      { wch: 12 },
+      { wch: 28 },
+      ...feeHeadings.map(() => ({ wch: 16 })),
+    ];
+
+    // ---------- Sheet 2: Headwise Summary ----------
+    const headHeader = [
+      "Fee Heading",
+      "Original Fee Due",
+      "Effective Fee Due",
+      "Final Due",
+      "Received",
+      "Van Fee Received",
+      "Concession Given",
+    ];
+    const headRows = Object.entries(headSummary).map(([heading, s]) => [
+      heading,
+      s.originalFeeDue || 0,
+      s.effectiveFeeDue || 0,
+      s.finalAmountDue || 0,
+      s.totalFeeReceived || 0,
+      s.totalVanFeeReceived || 0,
+      s.totalConcessionReceived || 0,
+    ]);
+    const headSheet = XLSX.utils.aoa_to_sheet([
+      [`Class Name: ${className}`],
+      [],
+      headHeader,
+      ...headRows,
+    ]);
+    headSheet["!cols"] = [
+      { wch: 26 },
+      { wch: 18 },
+      { wch: 18 },
+      { wch: 14 },
+      { wch: 12 },
+      { wch: 18 },
+      { wch: 18 },
+    ];
+
+    // ---------- Sheet 3: Grand Summary ----------
+    const grandRows = [
+      ["Metric", "Amount"],
+      ["Original Fee Due", grandSummary.originalFeeDue || 0],
+      ["Effective Fee Due", grandSummary.effectiveFeeDue || 0],
+      ["Final Due", grandSummary.finalAmountDue || 0],
+      ["Received", grandSummary.totalFeeReceived || 0],
+      ["Van Fee Received", grandSummary.totalVanFeeReceived || 0],
+      ["Concession Given", grandSummary.totalConcessionReceived || 0],
+    ];
+    const grandSheet = XLSX.utils.aoa_to_sheet([
+      [`Class Name: ${className}`],
+      [],
+      ...grandRows,
+    ]);
+    grandSheet["!cols"] = [{ wch: 26 }, { wch: 18 }];
+
+    // ---------- Build workbook & save ----------
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, studentSheet, "Student Dues");
+    XLSX.utils.book_append_sheet(wb, headSheet, "Headwise Summary");
+    XLSX.utils.book_append_sheet(wb, grandSheet, "Grand Summary");
+
+    XLSX.writeFile(wb, `StudentDue_${className}.xlsx`);
+  };
+
+  // Print as PDF (same as before)
   const openPdfInNewTab = async () => {
     if (!selectedClass) {
       alert("Please select a class.");
       return;
     }
-    // Convert selected class id to the corresponding class name.
     const selectedClassName =
       classes.find((cls) => Number(cls.id) === Number(selectedClass))?.class_name ||
       selectedClass;
-    // Create the PDF document using the PdfStudentDueReport component.
+
     const doc = (
       <PdfStudentDueReport
         school={school}
@@ -146,7 +242,7 @@ const StudentDueTable = () => {
         </div>
       )}
 
-      {/* Combined Select and Print Button in the same row */}
+      {/* Class Select + Buttons */}
       <div className="row mb-4 align-items-end">
         <div className="col-md-6">
           <label htmlFor="classSelect">Select Class:</label>
@@ -164,11 +260,16 @@ const StudentDueTable = () => {
             ))}
           </select>
         </div>
-        <div className="col-md-6 text-md-right mt-3 mt-md-0">
+        <div className="col-md-6 text-md-right mt-3 mt-md-0 d-flex justify-content-md-end gap-2">
           {selectedClass && studentData.length > 0 && (
-            <button className="btn btn-secondary" onClick={openPdfInNewTab}>
-              Print As PDF
-            </button>
+            <>
+              <button className="btn btn-success mr-2" onClick={exportToExcel}>
+                Export Excel
+              </button>
+              <button className="btn btn-secondary" onClick={openPdfInNewTab}>
+                Print As PDF
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -180,8 +281,12 @@ const StudentDueTable = () => {
             <table className="table table-bordered table-hover">
               <thead className="thead-dark">
                 <tr>
-                  <th className="sticky-top bg-white" style={{ top: 0 }}>Student ID</th>
-                  <th className="sticky-top bg-white" style={{ top: 0 }}>Student Name</th>
+                  <th className="sticky-top bg-white" style={{ top: 0 }}>
+                    Student ID
+                  </th>
+                  <th className="sticky-top bg-white" style={{ top: 0 }}>
+                    Student Name
+                  </th>
                   {feeHeadings.map((heading, idx) => (
                     <th key={idx} className="sticky-top bg-white" style={{ top: 0 }}>
                       {heading}
@@ -196,9 +301,25 @@ const StudentDueTable = () => {
                     <td>{student.name}</td>
                     {student.feeDetails.map((fee, idx) => (
                       <td key={idx}>
-                        <span data-tooltip-id={`tooltip-${student.id}-${idx}`} className="font-weight-bold">
+                        <span
+                          data-tooltip-id={`tooltip-${student.id}-${idx}`}
+                          className="font-weight-bold"
+                        >
                           {formatINR(fee.finalAmountDue)}
                         </span>
+                        <Tooltip
+                          id={`tooltip-${student.id}-${idx}`}
+                          place="top"
+                          content={
+                            <>
+                              <div><strong>Original:</strong> {formatINR(fee.originalFeeDue)}</div>
+                              <div><strong>Effective:</strong> {formatINR(fee.effectiveFeeDue)}</div>
+                              <div><strong>Received:</strong> {formatINR(fee.totalFeeReceived)}</div>
+                              <div><strong>Van Fee:</strong> {formatINR(fee.totalVanFeeReceived)}</div>
+                              <div><strong>Concession:</strong> {formatINR(fee.totalConcessionReceived)}</div>
+                            </>
+                          }
+                        />
                       </td>
                     ))}
                   </tr>
@@ -207,9 +328,9 @@ const StudentDueTable = () => {
             </table>
           </div>
 
-          {/* Summary Section at the Bottom */}
+          {/* Summary Section */}
           <div className="mt-4">
-            {/* Headwise Summary Card */}
+            {/* Headwise Summary */}
             <div className="card mb-4">
               <div className="card-header bg-secondary text-white">Headwise Summary</div>
               <div className="card-body table-responsive">
@@ -242,7 +363,7 @@ const StudentDueTable = () => {
               </div>
             </div>
 
-            {/* Grand Summary Card */}
+            {/* Grand Summary */}
             <div className="card">
               <div className="card-header bg-dark text-white">Grand Summary</div>
               <div className="card-body">

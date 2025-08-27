@@ -6,9 +6,51 @@ import PdfSchoolFeeSummary from './PdfSchoolFeeSummary';
 import api from '../api';
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
+import Swal from 'sweetalert2';
 import './SchoolFeeSummary.css';
 
 const formatCurrency = (value) => `₹${Number(value || 0).toLocaleString('en-IN')}`;
+// NEW: plain currency line helper for composing WA text
+const currencyPlain = (value) => `₹${Number(value || 0).toLocaleString('en-IN')}`;
+
+/* ---------------- Helpers (mirror Transactions.js behavior) ---------------- */
+
+// Per-student fine eligibility map (keyed by fee_head id as STRING)
+const fetchFineEligibility = async (studentId) => {
+  try {
+    const res = await api.get(`/transactions/fine-eligibility/${studentId}`);
+    return res.data?.data || {}; // e.g. { "12": true, "13": false }
+  } catch (e) {
+    console.error('Error fetching fine eligibility:', e);
+    return {};
+  }
+};
+
+// Per-student full fee details (to read fineAmount like Transactions.js)
+const fetchStudentFeeDetails = async (studentId) => {
+  try {
+    const res = await api.get(`/students/${studentId}/fee-details`);
+    // Expect: { feeDetails: [ { fee_heading_id, fee_heading, fineAmount, feeDue, ... } ] }
+    return res?.data?.feeDetails || [];
+  } catch (e) {
+    console.error('Error fetching student fee-details:', e);
+    return [];
+  }
+};
+
+// Simple concurrency limiter to avoid flooding the API
+const withConcurrency = async (items, limit, worker) => {
+  const results = new Array(items.length);
+  let idx = 0;
+  const runners = new Array(Math.min(limit, items.length)).fill(0).map(async () => {
+    while (idx < items.length) {
+      const cur = idx++;
+      results[cur] = await worker(items[cur], cur);
+    }
+  });
+  await Promise.all(runners);
+  return results;
+};
 
 const SchoolFeeSummary = () => {
   const [summary, setSummary] = useState([]);
@@ -65,28 +107,87 @@ const SchoolFeeSummary = () => {
     setSearch('');
 
     try {
+      // 1) Base list of students (heading + status)
       const res = await api.get('/feedue-status/fee-heading-wise-students', {
         params: { feeHeadingId, status },
       });
-
       const rawData = Array.isArray(res?.data?.data) ? res.data.data : [];
 
+      // 2) Unique students for additional lookups
+      const uniq = [];
+      const seen = new Set();
+      rawData.forEach((s) => {
+        const sid = s.id ?? s.admissionNumber;
+        if (!seen.has(sid)) {
+          seen.add(sid);
+          uniq.push({ ...s, _sid: sid });
+        }
+      });
+
+      // 3) Fetch eligibility + fee-details per student (limit concurrency)
+      const eligibilityCache = new Map();  // sid -> { [fee_head_id]: bool }
+      const feeDetailsCache = new Map();   // sid -> full feeDetails[]
+
+      await withConcurrency(uniq, 5, async (s) => {
+        const [elig, fd] = await Promise.all([
+          fetchFineEligibility(s._sid),
+          fetchStudentFeeDetails(s._sid),
+        ]);
+        eligibilityCache.set(s._sid, elig || {});
+        feeDetailsCache.set(s._sid, fd || []);
+      });
+
+      // 4) Build rows; compute Remaining + Fine + Total (like Transactions.js)
       const allCols = new Set();
       const finalData = rawData.map((student) => {
+        const sid = student.id ?? student.admissionNumber;
+        const eligMap = eligibilityCache.get(sid) || {};
+        const fullFeeDetails = feeDetailsCache.get(sid) || [];
+
         const row = {
-          id: student.id,
+          id: sid,
           name: student.name,
           admissionNumber: student.admissionNumber,
           className: student.className,
+          phone: student.phone || student.parentPhone || student.fatherPhone || '',
         };
 
         (student.feeDetails || []).forEach((fd) => {
           if (fd.fee_heading === headingName) {
-            row[`${fd.fee_heading} - Due`] = Number(fd.due || 0);
-            row[`${fd.fee_heading} - Paid`] =
-              Number(fd.paid || 0) + Number(fd.concession || 0);
-            row[`${fd.fee_heading} - Remaining`] = Number(fd.remaining || 0);
+            // Keep your Remaining coloring behavior from this endpoint:
+            const due = Number(fd.due || 0);
+            const paid = Number(fd.paid || 0);
+            const concession = Number(fd.concession || 0);
+            const remaining = Number(fd.remaining ?? (due - (paid + concession)));
+
+            // Find head in full fee-details to get original fineAmount (like Transactions)
+            const match = fullFeeDetails.find(
+              (d) =>
+                String(d.fee_heading_id) === String(feeHeadingId) ||
+                d.fee_heading === headingName
+            );
+            const originalFine = Number(match?.fineAmount || 0);
+
+            // Eligibility gate (default eligible when missing, like Transactions)
+            const headKey = String(match?.fee_heading_id ?? fd.fee_heading_id ?? feeHeadingId ?? '');
+            let eligible = true;
+            if (headKey && Object.prototype.hasOwnProperty.call(eligMap, headKey)) {
+              const val = eligMap[headKey];
+              eligible = (val === true || val === 'true' || val === 1 || val === '1');
+            }
+            const fine = eligible ? originalFine : 0;
+
+            const total = remaining + fine;
+
+            row[`${fd.fee_heading} - Due`] = due;
+            row[`${fd.fee_heading} - Paid`] = paid + concession; // your definition of "paid"
+            row[`${fd.fee_heading} - Remaining`] = remaining;
+            row[`${fd.fee_heading} - Fine`] = fine;
+            row[`${fd.fee_heading} - Total`] = total;
+
             allCols.add(`${fd.fee_heading} - Remaining`);
+            allCols.add(`${fd.fee_heading} - Fine`);
+            allCols.add(`${fd.fee_heading} - Total`);
           }
         });
 
@@ -122,22 +223,154 @@ const SchoolFeeSummary = () => {
         'Class': stu.className,
       };
       columns.forEach((key) => {
-        const label = key.replace(/ - Remaining$/, '');
-        row[label] = Number(stu[key] || 0);
+        if (key.endsWith(' - Remaining')) {
+          const label = key.replace(/ - Remaining$/, '');
+          row[label] = Number(stu[key] || 0);
+        } else if (key.endsWith(' - Fine')) {
+          row[key] = Number(stu[key] || 0);
+        } else if (key.endsWith(' - Total')) {
+          row[key] = Number(stu[key] || 0);
+        }
       });
       return row;
     });
 
+    const headerCols = [
+      ...baseCols,
+      ...columns.map((c) => {
+        if (c.endsWith(' - Remaining')) return c.replace(/ - Remaining$/, '');
+        return c; // keep " - Fine" and " - Total" visible
+      }),
+    ];
+
     const worksheet = XLSX.utils.json_to_sheet(excelRows, {
-      header: [...baseCols, ...columns.map((c) => c.replace(/ - Remaining$/, ''))],
+      header: headerCols,
     });
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Students');
 
     const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
     const blob = new Blob([excelBuffer], { type: 'application/octet-stream' });
-    saveAs(blob, `${selectedHeadingName}_${selectedStatus}_Students.xlsx`);
+    saveAs(blob, `${selectedHeadingName}_${selectedStatus}_Students.xlsx`.replace(/\s+/g, '_'));
   };
+
+  // WhatsApp sender — includes Remaining + Fine + Total (as totalDue), and a ready message
+ // WhatsApp sender — keeps your logic; adds nicer WA formatting
+const sendWhatsAppTest = async () => {
+  setShowModal(false);
+  await new Promise((r) => setTimeout(r, 200));
+
+  const count = filteredDetails.length;
+  const remainingKey = `${selectedHeadingName} - Remaining`;
+  const fineKey = `${selectedHeadingName} - Fine`;
+  const totalKey = `${selectedHeadingName} - Total`;
+
+  const confirm = await Swal.fire({
+    title: 'Send WhatsApp Messages?',
+    html: `This will send reminders to <b>${count}</b> students.`,
+    icon: 'question',
+    showCancelButton: true,
+    confirmButtonText: 'Send Now',
+    cancelButtonText: 'Cancel',
+    allowOutsideClick: () => !Swal.isLoading(),
+  });
+  if (!confirm.isConfirmed) return;
+
+  try {
+    Swal.showLoading();
+
+    const payload = {
+      students: filteredDetails.map((s) => {
+        const remaining = Number(s[remainingKey] || 0);
+        const fine = Number(s[fineKey] || 0);
+        const totalDue = Number(s[totalKey] ?? (remaining + fine));
+
+        // ✨ WhatsApp-friendly formatting
+        const lines = [
+          `*Dear ${s.name},*`,
+          `This is a gentle reminder for *${selectedHeadingName}*.`,
+          '',
+          `*Pending Amount:* ${currencyPlain(remaining)}`,
+          `*Fine:* ${currencyPlain(fine)}`,
+          `*Total Due:* *${currencyPlain(totalDue)}*`,
+          '',
+          s.className ? `Class: ${s.className}` : null,
+          s.admissionNumber ? `Adm No: ${s.admissionNumber}` : null,
+          '',
+          `_If you have already paid, please ignore this message._`,
+          `_Thank you._`,
+        ].filter(Boolean);
+
+        const message = lines.join('\n');
+
+        return {
+          id: s.id ?? s.admissionNumber,
+          name: s.name,
+          phone: '919417873297', // test number (+91 without '+')
+          admissionNumber: s.admissionNumber,
+          className: s.className,
+          feeHeading: selectedHeadingName,
+
+          // numeric fields (server can use if it composes text)
+          remaining,
+          fine,
+          totalDue,
+          dueAmount: remaining,
+          fineAmount: fine,
+          totalAmount: totalDue,
+
+          // formatted text (optional for server)
+          dueAmountText: currencyPlain(remaining),
+          fineAmountText: currencyPlain(fine),
+          totalAmountText: currencyPlain(totalDue),
+
+          // prebuilt message (server should send this as-is)
+          message,
+        };
+      }),
+    };
+
+    const resp = await api.post('/integrations/whatsapp/send-batch', payload);
+    const data = resp?.data;
+
+    Swal.hideLoading();
+
+    if (data?.ok) {
+      const sent = Array.isArray(data.sent) ? data.sent : [];
+      const failedCount = sent.filter((x) => !x.ok).length;
+      const successCount = sent.length - failedCount;
+
+      await Swal.fire({
+        title: failedCount ? 'Partial Success' : 'Success',
+        html: failedCount
+          ? `Sent: <b>${successCount}</b> &nbsp;|&nbsp; Failed: <b>${failedCount}</b>.<br/>All messages targeted to <b>9417873297</b>.`
+          : `All <b>${sent.length}</b> messages sent.`,
+        icon: failedCount ? 'warning' : 'success',
+        confirmButtonText: 'Done',
+        showCancelButton: false,
+      });
+    } else {
+      await Swal.fire({
+        title: 'Error',
+        html: 'Message sending failed from the server.',
+        icon: 'error',
+        confirmButtonText: 'OK',
+        showCancelButton: false,
+      });
+    }
+  } catch (err) {
+    console.error('WA test error:', err);
+    Swal.hideLoading();
+    await Swal.fire({
+      title: 'Error',
+      html: `Unable to send WhatsApp messages.<br/><small>${(err?.response?.data?.message || err?.message || 'Unknown error')}</small>`,
+      icon: 'error',
+      confirmButtonText: 'OK',
+      showCancelButton: false,
+    });
+  }
+};
+
 
   useEffect(() => {
     fetchFeeSummary();
@@ -279,6 +512,12 @@ const SchoolFeeSummary = () => {
 
             <div className="d-flex align-items-center gap-2">
               <Button variant="success" onClick={exportToExcel}>Export to Excel</Button>
+
+              {/* closes modal then confirm+send in one popup */}
+              <Button variant="success" onClick={sendWhatsAppTest}>
+                WhatsApp
+              </Button>
+
               <Button variant="outline-secondary" onClick={() => setShowModal(false)}>Close</Button>
             </div>
           </div>
@@ -299,7 +538,14 @@ const SchoolFeeSummary = () => {
                     <th className="slc slc-3">Admission No</th>
                     <th className="slc slc-4">Class</th>
                     {columns.map((col, idx) => (
-                      <th key={idx}>{col.replace(/ - Remaining$/, '')}</th>
+                      <th key={idx}>
+                        {
+                          col.endsWith(' - Remaining') ? col.replace(/ - Remaining$/, '')
+                          : col.endsWith(' - Fine') ? 'Fine'
+                          : col.endsWith(' - Total') ? 'Total'
+                          : col
+                        }
+                      </th>
                     ))}
                   </tr>
                 </thead>
@@ -311,15 +557,35 @@ const SchoolFeeSummary = () => {
                       <td className="slc slc-3">{stu.admissionNumber}</td>
                       <td className="slc slc-4">{stu.className}</td>
                       {columns.map((key, i) => {
-                        const dueKey = key.replace('Remaining', 'Due');
-                        const remaining = Number(stu[key] || 0);
+                        const baseLabel = key.replace(/ - (Remaining|Fine|Total)$/, '');
+                        const dueKey = `${baseLabel} - Due`;
+                        const remaining = Number(stu[`${baseLabel} - Remaining`] || 0);
                         const due = Number(stu[dueKey] || 0);
-                        let cls = 'due-zero';
-                        if (due > 0 && remaining === due) cls = 'due-full';
-                        else if (remaining > 0) cls = 'due-partial';
+                        const fine = Number(stu[`${baseLabel} - Fine`] || 0);
+                        const total = Number(stu[`${baseLabel} - Total`] ?? (remaining + fine));
+
+                        let cellValue = Number(stu[key] || 0);
+                        let cls = '';
+
+                        if (key.endsWith(' - Remaining')) {
+                          // Keep your existing remaining color logic
+                          if (due > 0 && remaining === due) cls = 'due-full';      // full pending (red-ish)
+                          else if (remaining > 0) cls = 'due-partial';             // partial pending (amber)
+                          else cls = 'due-zero';                                    // none pending (green)
+                          cellValue = remaining;
+                        } else if (key.endsWith(' - Fine')) {
+                          // Fine should be red if >0, muted if 0
+                          cls = fine > 0 ? 'text-danger fw-semibold' : 'text-secondary';
+                          cellValue = fine;
+                        } else if (key.endsWith(' - Total')) {
+                          // Total should be red if >0, green if 0
+                          cls = total > 0 ? 'text-danger fw-bold' : 'text-success fw-semibold';
+                          cellValue = total;
+                        }
+
                         return (
                           <td key={i} className={cls}>
-                            {formatCurrency(remaining)}
+                            {formatCurrency(cellValue)}
                           </td>
                         );
                       })}

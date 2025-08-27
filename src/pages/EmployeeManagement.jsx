@@ -1,7 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import api from '../api';
 import Swal from 'sweetalert2';
-import './EmployeeManagement.css';
+import { Modal, Button } from 'react-bootstrap'; // Bootstrap modal support
+
+// Helper to format dates to YYYY-MM-DD for <input type="date" />
+const toDateInput = (d) => {
+  if (!d) return '';
+  const dt = new Date(d);
+  if (isNaN(dt.getTime())) return '';
+  const yyyy = dt.getFullYear();
+  const mm = String(dt.getMonth() + 1).padStart(2, '0');
+  const dd = String(dt.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+};
 
 const EmployeeManagement = () => {
   const [employees, setEmployees] = useState([]);
@@ -47,13 +58,14 @@ const EmployeeManagement = () => {
     address: '',
     status: 'enabled',
   };
+
   const [form, setForm] = useState(initialForm);
 
-  const getBackendError = err =>
-  err.response?.data?.error ||
-  err.response?.data?.message ||
-  err.message ||
-  'Operation failed';
+  const getBackendError = (err) =>
+    err.response?.data?.error ||
+    err.response?.data?.message ||
+    err.message ||
+    'Operation failed';
 
   useEffect(() => {
     fetchEmployees();
@@ -84,7 +96,9 @@ const EmployeeManagement = () => {
       setForm({
         ...initialForm,
         ...emp,
-        department_id: emp.department_id || '',
+        department_id: emp.department_id ? String(emp.department_id) : '',
+        dob: toDateInput(emp.dob),
+        joining_date: toDateInput(emp.joining_date),
       });
       setCurrentEmployee(emp);
     } else {
@@ -103,22 +117,24 @@ const EmployeeManagement = () => {
 
   const submitForm = async (e) => {
     e.preventDefault();
-    // basic validation
+
     for (const field of ['name', 'phone', 'email']) {
-        if (!form[field]) {
-          return Swal.fire(
-            'Validation',
-            `Field "${field.replace(/_/g, ' ')}" is required`,
-            'warning'
-          );
-        }
+      if (!form[field]) {
+        return Swal.fire(
+          'Validation',
+          `Field "${field.replace(/_/g, ' ')}" is required`,
+          'warning'
+        );
       }
+    }
 
     try {
-      // Convert empty strings to null for optional fields
       const cleanedForm = {};
       for (const [key, value] of Object.entries(form)) {
         cleanedForm[key] = value === '' ? null : value;
+      }
+      if (cleanedForm.department_id) {
+        cleanedForm.department_id = Number(cleanedForm.department_id);
       }
 
       if (modalMode === 'add') {
@@ -135,8 +151,7 @@ const EmployeeManagement = () => {
       closeModal();
       fetchEmployees();
     } catch (err) {
-      const msg = getBackendError(err);
-      Swal.fire('Error', msg, 'error');
+      Swal.fire('Error', getBackendError(err), 'error');
     }
   };
 
@@ -175,21 +190,18 @@ const EmployeeManagement = () => {
     }
   };
 
-
-    // ─── EXPORT FULL DATA ─────────────────────────────────
   const handleExportData = async () => {
     try {
       const params = new URLSearchParams();
-      if (searchTerm)         params.append('search',        searchTerm);
-      if (selectedDept)       params.append('department_id', selectedDept);
-      if (statusFilter!=='all') params.append('status',       statusFilter);
-      if (dobFrom)            params.append('dob',           dobFrom);
-      if (dobTo)              params.append('dobTo',         dobTo);
-      if (joiningFrom)        params.append('joining_date',  joiningFrom);
-      if (joiningTo)          params.append('joiningDateTo', joiningTo);
+      if (searchTerm) params.append('search', searchTerm);
+      if (selectedDept) params.append('department_id', selectedDept);
+      if (statusFilter !== 'all') params.append('status', statusFilter);
+      if (dobFrom) params.append('dob', dobFrom);
+      if (dobTo) params.append('dobTo', dobTo);
+      if (joiningFrom) params.append('joining_date', joiningFrom);
+      if (joiningTo) params.append('joiningDateTo', joiningTo);
 
-      const qs = params.toString();
-      const url = `/employees/export${qs ? `?${qs}` : ''}`;
+      const url = `/employees/export${params.toString() ? `?${params}` : ''}`;
 
       const response = await api.get(url, { responseType: 'blob' });
       const blobUrl = window.URL.createObjectURL(new Blob([response.data]));
@@ -206,11 +218,7 @@ const EmployeeManagement = () => {
     }
   };
 
-
-
-  const handleFileChange = (e) => {
-    setFile(e.target.files[0]);
-  };
+  const handleFileChange = (e) => setFile(e.target.files[0]);
 
   const handleImport = async () => {
     if (!file) {
@@ -238,8 +246,7 @@ const EmployeeManagement = () => {
       setFile(null);
       fetchEmployees();
     } catch (err) {
-      const msg = getBackendError(err);
-      Swal.fire('Error', msg, 'error');
+      Swal.fire('Error', getBackendError(err), 'error');
     }
   };
 
@@ -249,13 +256,9 @@ const EmployeeManagement = () => {
 
   const displayed = employees.filter((emp) => {
     if (statusFilter !== 'all' && emp.status !== statusFilter) return false;
-    if (
-      searchTerm &&
-      !emp.name.toLowerCase().includes(searchTerm.toLowerCase())
-    )
+    if (searchTerm && !emp.name.toLowerCase().includes(searchTerm.toLowerCase()))
       return false;
-    if (selectedDept && String(emp.department_id) !== selectedDept)
-      return false;
+    if (selectedDept && String(emp.department_id) !== selectedDept) return false;
     if (selectedDesignation && emp.designation !== selectedDesignation)
       return false;
     if (dobFrom && emp.dob < dobFrom) return false;
@@ -266,29 +269,19 @@ const EmployeeManagement = () => {
   });
 
   return (
-    <div className="employee-management container-fluid px-0">
+    <div className="container-fluid px-0">
       {/* HEADER */}
       <div className="d-flex justify-content-between align-items-center my-4 flex-wrap">
         <h3>Employees</h3>
         <div className="d-flex gap-2 flex-wrap">
-          {/* EXPORT CONTROLS */}
-            <div className="btn-group me-3" role="group" aria-label="Export Options">
-              <button
-                type="button"
-                onClick={handleExportTemplate}
-                className="btn btn-outline-secondary"
-              >
-                Export Template
-              </button>
-              <button
-                type="button"
-                onClick={handleExportData}
-                className="btn btn-secondary"
-              >
-                Export All Employees
-              </button>
-            </div>
-
+          <div className="btn-group me-3" role="group">
+            <button type="button" onClick={handleExportTemplate} className="btn btn-outline-secondary">
+              Export Template
+            </button>
+            <button type="button" onClick={handleExportData} className="btn btn-secondary">
+              Export All Employees
+            </button>
+          </div>
 
           <div className="input-group" style={{ maxWidth: 240 }}>
             <input
@@ -297,21 +290,18 @@ const EmployeeManagement = () => {
               accept=".xlsx, .xls"
               onChange={handleFileChange}
             />
-            <button
-              onClick={handleImport}
-              className="btn btn-primary"
-              disabled={!file}
-            >
+            <button onClick={handleImport} className="btn btn-primary" disabled={!file}>
               Import
             </button>
           </div>
+
           <button onClick={() => openModal('add')} className="btn btn-primary">
             Add Employee
           </button>
         </div>
       </div>
 
-      {/* FILTER ROW 1 */}
+      {/* FILTERS */}
       <div className="d-flex gap-3 mb-2 flex-wrap">
         <input
           type="text"
@@ -359,7 +349,7 @@ const EmployeeManagement = () => {
         </select>
       </div>
 
-      {/* FILTER ROW 2 (DATES) */}
+      {/* DATE FILTERS */}
       <div className="d-flex gap-4 mb-4 flex-wrap">
         <div className="d-flex align-items-center gap-2">
           <label className="mb-0">Date of Birth:</label>
@@ -414,7 +404,7 @@ const EmployeeManagement = () => {
           <tbody>
             {displayed.length > 0 ? (
               displayed.map((emp) => (
-                <tr key={emp.id}>
+                <tr key={emp.id} className={emp.status === 'disabled' ? 'table-danger' : ''}>
                   <td>{emp.employee_id}</td>
                   <td>{emp.name}</td>
                   <td>{emp.gender}</td>
@@ -450,120 +440,92 @@ const EmployeeManagement = () => {
         </table>
       </div>
 
-      {/* MODAL (ADD / EDIT) */}
-      {modalOpen && (
-        <div className="modal-overlay">
-          <div className="modal-dialog modal-fullscreen-md-down modal-xl">
-            <div className="modal-content">
-              <div className="modal-header">
-                <h4 className="modal-title">
-                  {modalMode === 'add' ? 'Add Employee' : 'Edit Employee'}
-                </h4>
-                <button className="btn-close" onClick={closeModal}></button>
-              </div>
-              <div className="modal-body">
-                <form onSubmit={submitForm} className="row g-3">
-                  {Object.entries(initialForm)
-                    .filter(([k]) => k !== 'status')
-                    .map(([key]) => (
-                      <div
-                        key={key}
-                        className={`col-md-${key === 'address' ? 12 : 3}`}
-                      >
-                        <label className="form-label text-capitalize">
-                          {key.replace(/_/g, ' ')}
-                          {[
-                            'name',
-                            'gender',
-                            'dob',
-                            'aadhaar_number',
-                            'department_id',
-                            'designation',
-                            'joining_date',
-                          ].includes(key) && (
-                            <span className="text-danger"> *</span>
-                          )}
-                        </label>
+      {/* MODAL */}
+      <Modal show={modalOpen} onHide={closeModal} size="xl" centered scrollable backdrop="static">
+        <Modal.Header closeButton>
+          <Modal.Title>{modalMode === 'add' ? 'Add Employee' : 'Edit Employee'}</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <form onSubmit={submitForm} className="row g-3">
+            {Object.entries(initialForm)
+              .filter(([k]) => k !== 'status')
+              .map(([key]) => (
+                <div key={key} className={`col-md-${key === 'address' ? 12 : 3}`}>
+                  <label className="form-label text-capitalize">
+                    {key.replace(/_/g, ' ')}
+                    {['name', 'gender', 'dob', 'aadhaar_number', 'department_id', 'designation', 'joining_date'].includes(key) && (
+                      <span className="text-danger"> *</span>
+                    )}
+                  </label>
 
-                        {key === 'address' ? (
-                          <textarea
-                            name="address"
-                            value={form.address}
-                            onChange={handleFormChange}
-                            rows={3}
-                            className="form-control"
-                          />
-                        ) : ['gender', 'marital_status', 'blood_group'].includes(
-                            key
-                          ) ? (
-                          <select
-                            name={key}
-                            value={form[key]}
-                            onChange={handleFormChange}
-                            className="form-select"
-                          >
-                            <option value="">Select</option>
-                            {(key === 'gender'
-                              ? ['Male', 'Female', 'Other']
-                              : key === 'marital_status'
-                              ? ['Single', 'Married', 'Other']
-                              : ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-']
-                            ).map((opt) => (
-                              <option key={opt} value={opt}>
-                                {opt}
-                              </option>
-                            ))}
-                          </select>
-                        ) : key === 'department_id' ? (
-                          <select
-                            name="department_id"
-                            value={form.department_id}
-                            onChange={handleFormChange}
-                            className="form-select"
-                          >
-                            <option value="">Select Department</option>
-                            {departments.map((dep) => (
-                              <option key={dep.id} value={dep.id}>
-                                {dep.name}
-                              </option>
-                            ))}
-                          </select>
-                        ) : (
-                          <input
-                            type={
-                              key === 'dob' || key === 'joining_date'
-                                ? 'date'
-                                : key === 'experience_years'
-                                ? 'number'
-                                : 'text'
-                            }
-                            name={key}
-                            value={form[key]}
-                            onChange={handleFormChange}
-                            className="form-control"
-                          />
-                        )}
-                      </div>
-                    ))}
-
-                  <div className="col-12 text-end">
-                    <button
-                      type="button"
-                      onClick={closeModal}
-                      className="btn btn-secondary me-2"
+                  {key === 'address' ? (
+                    <textarea
+                      name="address"
+                      value={form.address || ''}
+                      onChange={handleFormChange}
+                      rows={3}
+                      className="form-control"
+                    />
+                  ) : ['gender', 'marital_status', 'blood_group'].includes(key) ? (
+                    <select
+                      name={key}
+                      value={form[key] || ''}
+                      onChange={handleFormChange}
+                      className="form-select"
                     >
-                      Cancel
-                    </button>
-                    <button type="submit" className="btn btn-primary">
-                      {modalMode === 'add' ? 'Add' : 'Update'}
-                    </button>
-                  </div>
-                </form>
-              </div>
+                      <option value="">Select</option>
+                      {(key === 'gender'
+                        ? ['Male', 'Female', 'Other']
+                        : key === 'marital_status'
+                        ? ['Single', 'Married', 'Other']
+                        : ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-']
+                      ).map((opt) => (
+                        <option key={opt} value={opt}>
+                          {opt}
+                        </option>
+                      ))}
+                    </select>
+                  ) : key === 'department_id' ? (
+                    <select
+                      name="department_id"
+                      value={form.department_id || ''}
+                      onChange={handleFormChange}
+                      className="form-select"
+                    >
+                      <option value="">Select Department</option>
+                      {departments.map((dep) => (
+                        <option key={dep.id} value={dep.id}>
+                          {dep.name}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type={
+                        key === 'dob' || key === 'joining_date'
+                          ? 'date'
+                          : key === 'experience_years'
+                          ? 'number'
+                          : 'text'
+                      }
+                      name={key}
+                      value={form[key] || ''}
+                      onChange={handleFormChange}
+                      className="form-control"
+                    />
+                  )}
+                </div>
+              ))}
+
+            <div className="col-12 text-end">
+              <Button variant="secondary" onClick={closeModal} className="me-2">
+                Cancel
+              </Button>
+              <Button type="submit">{modalMode === 'add' ? 'Add' : 'Update'}</Button>
             </div>
-          </div>
-        </div>
-      )}
+          </form>
+        </Modal.Body>
+      </Modal>
     </div>
   );
 };

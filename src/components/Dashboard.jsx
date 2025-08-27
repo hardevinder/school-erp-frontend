@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+// File: src/components/Dashboard.jsx
+import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import api from "../api";
 
 // Charts
@@ -30,16 +31,31 @@ ChartJS.register(
   TimeScale
 );
 
-// ----- SMALL UTILITIES -----
+// ---------- SMALL UTILITIES ----------
 const formatCurrency = (amount) =>
-  "₹" + Number(amount || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 });
+  "₹" +
+  Number(amount || 0).toLocaleString("en-IN", {
+    maximumFractionDigits: 0,
+  });
 
 const compactNumber = (n) =>
-  new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 }).format(
-    Number(n || 0)
-  );
+  new Intl.NumberFormat("en", {
+    notation: "compact",
+    maximumFractionDigits: 1,
+  }).format(Number(n || 0));
 
-const cardBg = [
+const palette = [
+  "#ef4444",
+  "#3b82f6",
+  "#10b981",
+  "#f59e0b",
+  "#8b5cf6",
+  "#06b6d4",
+  "#84cc16",
+  "#ec4899",
+];
+
+const cardGradients = [
   "linear-gradient(135deg, #4f46e5, #3b82f6)",
   "linear-gradient(135deg, #16a34a, #22c55e)",
   "linear-gradient(135deg, #f59e0b, #f97316)",
@@ -48,7 +64,16 @@ const cardBg = [
   "linear-gradient(135deg, #6b7280, #94a3b8)",
 ];
 
-// ----- COMPONENT -----
+// Download helper (PNG)
+const downloadChart = (chartRef, filename = "chart.png") => {
+  if (!chartRef?.current) return;
+  const link = document.createElement("a");
+  link.download = filename;
+  link.href = chartRef.current.toBase64Image();
+  link.click();
+};
+
+// ---------- COMPONENT ----------
 const Dashboard = () => {
   // Data states
   const [reportData, setReportData] = useState([]); // current month fee summary by category
@@ -62,11 +87,23 @@ const Dashboard = () => {
   const [lastUpdated, setLastUpdated] = useState(null);
   const timersRef = useRef({});
 
+  // Chart refs
+  const pieRef = useRef(null);
+  const lineRef = useRef(null);
+  const barRef = useRef(null);
+
+  // Legend toggle per chart
+  const [showLegends, setShowLegends] = useState({
+    pie: true,
+    line: true,
+    bar: true,
+  });
+
   // Settings
-  const POLLING_INTERVAL = 15000; // 15s feels calmer than 5s
+  const POLLING_INTERVAL = 15000; // 15s calmer than 5s
 
   // Fetchers
-  const fetchReportData = async () => {
+  const fetchReportData = useCallback(async () => {
     setLoading((s) => ({ ...s, report: true }));
     try {
       const res = await api.get("/reports/current-month");
@@ -79,9 +116,9 @@ const Dashboard = () => {
     } finally {
       setLoading((s) => ({ ...s, report: false }));
     }
-  };
+  }, []);
 
-  const fetchDayWiseSummary = async () => {
+  const fetchDayWiseSummary = useCallback(async () => {
     setLoading((s) => ({ ...s, day: true }));
     try {
       const res = await api.get("/reports/day-wise-summary");
@@ -94,9 +131,9 @@ const Dashboard = () => {
     } finally {
       setLoading((s) => ({ ...s, day: false }));
     }
-  };
+  }, []);
 
-  const fetchClassWiseCount = async () => {
+  const fetchClassWiseCount = useCallback(async () => {
     setLoading((s) => ({ ...s, class: true }));
     try {
       const res = await api.get("/reports/class-wise-student-count");
@@ -109,22 +146,22 @@ const Dashboard = () => {
     } finally {
       setLoading((s) => ({ ...s, class: false }));
     }
-  };
+  }, []);
 
-  const refreshAll = () => {
+  const refreshAll = useCallback(() => {
     fetchReportData();
     fetchDayWiseSummary();
     fetchClassWiseCount();
-  };
+  }, [fetchReportData, fetchDayWiseSummary, fetchClassWiseCount]);
 
   useEffect(() => {
     // initial fetch
     refreshAll();
-  }, []);
+  }, [refreshAll]);
 
   // Auto-refresh
   useEffect(() => {
-    // clear any existing
+    // clear existing
     Object.values(timersRef.current || {}).forEach(clearInterval);
     timersRef.current = {};
 
@@ -137,7 +174,7 @@ const Dashboard = () => {
     return () => {
       Object.values(timersRef.current || {}).forEach(clearInterval);
     };
-  }, [autoRefresh]);
+  }, [autoRefresh, fetchReportData, fetchDayWiseSummary, fetchClassWiseCount]);
 
   // ---- DERIVED AGGREGATIONS ----
   const summary = useMemo(() => {
@@ -181,8 +218,10 @@ const Dashboard = () => {
   classWiseCount.forEach((item) => {
     const cls = item.className;
     if (!classWiseEnrollments[cls]) classWiseEnrollments[cls] = { new: 0, old: 0 };
-    if (item.admissionType === "New") classWiseEnrollments[cls].new += Number(item.studentCount || 0);
-    if (item.admissionType === "Old") classWiseEnrollments[cls].old += Number(item.studentCount || 0);
+    if (item.admissionType === "New")
+      classWiseEnrollments[cls].new += Number(item.studentCount || 0);
+    if (item.admissionType === "Old")
+      classWiseEnrollments[cls].old += Number(item.studentCount || 0);
   });
   const classColumns = Object.keys(classWiseEnrollments).sort();
   const overallNew = classColumns.reduce((s, c) => s + classWiseEnrollments[c].new, 0);
@@ -190,148 +229,232 @@ const Dashboard = () => {
   const overallTotal = overallNew + overallOld;
 
   // ---- CHART DATA ----
-  const palette = [
-    "#ef4444",
-    "#3b82f6",
-    "#10b981",
-    "#f59e0b",
-    "#8b5cf6",
-    "#06b6d4",
-    "#84cc16",
-    "#ec4899",
-  ];
-
   // Pie
-  const pieData = {
-    labels: Object.keys(summary),
-    datasets: [
-      {
-        label: "Total Fee Received",
-        data: Object.values(summary).map((t) => t.totalFeeReceived),
-        backgroundColor: Object.keys(summary).map((_, i) => `${palette[i % palette.length]}33`),
-        borderColor: Object.keys(summary).map((_, i) => palette[i % palette.length]),
-        borderWidth: 1,
-      },
-    ],
-  };
-  const pieChartOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: { position: "right" },
-      tooltip: {
-        callbacks: {
-          label: (ctx) => {
-            const label = ctx.label || "";
-            const value = ctx.parsed || 0;
-            const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
-            const pct = total ? ((value / total) * 100).toFixed(2) + "%" : "0%";
-            return `${label}: ${formatCurrency(value)} (${pct})`;
+  const pieData = useMemo(() => {
+    const labels = Object.keys(summary);
+    const data = Object.values(summary).map((t) => t.totalFeeReceived);
+    return {
+      labels,
+      datasets: [
+        {
+          label: "Total Fee Received",
+          data,
+          backgroundColor: labels.map((_, i) => `${palette[i % palette.length]}33`),
+          borderColor: labels.map((_, i) => palette[i % palette.length]),
+          borderWidth: 1.5,
+        },
+      ],
+    };
+  }, [summary]);
+
+  const pieChartOptions = useMemo(
+    () => ({
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: showLegends.pie, position: "right" },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => {
+              const label = ctx.label || "";
+              const value = ctx.parsed || 0;
+              const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
+              const pct = total ? ((value / total) * 100).toFixed(2) + "%" : "0%";
+              return `${label}: ${formatCurrency(value)} (${pct})`;
+            },
           },
         },
       },
-    },
-    cutout: "55%",
-  };
+      cutout: "58%",
+    }),
+    [showLegends.pie]
+  );
 
   // Line
-  const uniqueDates = Array.from(new Set(dayWiseSummary.map((r) => r.transactionDate))).sort();
-  const uniqueCategories = Array.from(new Set(dayWiseSummary.map((r) => r.feeCategoryName)));
-  const lineDatasets = uniqueCategories.map((cat, idx) => ({
-    label: cat,
-    data: uniqueDates.map((d) => {
-      const rec = dayWiseSummary.find((r) => r.transactionDate === d && r.feeCategoryName === cat);
-      return rec ? Number(rec.totalFeeReceived || 0) : 0;
+  const uniqueDates = useMemo(
+    () => Array.from(new Set(dayWiseSummary.map((r) => r.transactionDate))).sort(),
+    [dayWiseSummary]
+  );
+  const uniqueCategories = useMemo(
+    () => Array.from(new Set(dayWiseSummary.map((r) => r.feeCategoryName))),
+    [dayWiseSummary]
+  );
+
+  const lineDatasets = useMemo(
+    () =>
+      uniqueCategories.map((cat, idx) => ({
+        label: cat,
+        data: uniqueDates.map((d) => {
+          const rec = dayWiseSummary.find(
+            (r) => r.transactionDate === d && r.feeCategoryName === cat
+          );
+          return rec ? Number(rec.totalFeeReceived || 0) : 0;
+        }),
+        borderColor: palette[idx % palette.length],
+        backgroundColor: `${palette[idx % palette.length]}22`,
+        tension: 0.35,
+        fill: true,
+        pointRadius: 2,
+      })),
+    [uniqueCategories, uniqueDates, dayWiseSummary]
+  );
+
+  const lineChartData = useMemo(
+    () => ({ labels: uniqueDates, datasets: lineDatasets }),
+    [uniqueDates, lineDatasets]
+  );
+
+  const lineChartOptions = useMemo(
+    () => ({
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        x: { title: { display: true, text: "Date" }, grid: { display: false } },
+        y: {
+          title: { display: true, text: "Fee Received" },
+          beginAtZero: true,
+          ticks: {
+            callback: (val) => compactNumber(val),
+          },
+        },
+      },
+      plugins: { legend: { display: showLegends.line } },
+      interaction: { intersect: false, mode: "index" },
     }),
-    borderColor: palette[idx % palette.length],
-    backgroundColor: `${palette[idx % palette.length]}22`,
-    tension: 0.35,
-    fill: true,
-    pointRadius: 2,
-  }));
-  const lineChartData = { labels: uniqueDates, datasets: lineDatasets };
-  const lineChartOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    scales: {
-      x: { title: { display: true, text: "Date" }, grid: { display: false } },
-      y: { title: { display: true, text: "Fee Received" }, beginAtZero: true },
-    },
-    interaction: { intersect: false, mode: "index" },
-  };
+    [showLegends.line]
+  );
 
   // Bar (enrollments)
-  const uniqueClasses = Array.from(new Set(classWiseCount.map((r) => r.className))).sort();
-  const uniqueAdmissionTypes = Array.from(new Set(classWiseCount.map((r) => r.admissionType)));
-  const barDatasets = uniqueAdmissionTypes.map((type, idx) => ({
-    label: type,
-    data: uniqueClasses.map((cls) => {
-      const rec = classWiseCount.find((r) => r.className === cls && r.admissionType === type);
-      return rec ? Number(rec.studentCount || 0) : 0;
+  const uniqueClasses = useMemo(
+    () => Array.from(new Set(classWiseCount.map((r) => r.className))).sort(),
+    [classWiseCount]
+  );
+  const uniqueAdmissionTypes = useMemo(
+    () => Array.from(new Set(classWiseCount.map((r) => r.admissionType))),
+    [classWiseCount]
+  );
+  const barDatasets = useMemo(
+    () =>
+      uniqueAdmissionTypes.map((type, idx) => ({
+        label: type,
+        data: uniqueClasses.map((cls) => {
+          const rec = classWiseCount.find((r) => r.className === cls && r.admissionType === type);
+          return rec ? Number(rec.studentCount || 0) : 0;
+        }),
+        backgroundColor: `${palette[idx % palette.length]}33`,
+        borderColor: palette[idx % palette.length],
+        borderWidth: 1,
+      })),
+    [uniqueAdmissionTypes, uniqueClasses, classWiseCount]
+  );
+  const barChartData = useMemo(
+    () => ({ labels: uniqueClasses, datasets: barDatasets }),
+    [uniqueClasses, barDatasets]
+  );
+  const barChartOptions = useMemo(
+    () => ({
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        x: { title: { display: true, text: "Class" } },
+        y: {
+          title: { display: true, text: "Student Count" },
+          beginAtZero: true,
+          ticks: { precision: 0 },
+        },
+      },
+      plugins: { legend: { display: showLegends.bar } },
     }),
-    backgroundColor: `${palette[idx % palette.length]}33`,
-    borderColor: palette[idx % palette.length],
-    borderWidth: 1,
-  }));
-  const barChartData = { labels: uniqueClasses, datasets: barDatasets };
-  const barChartOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    scales: {
-      x: { title: { display: true, text: "Class" } },
-      y: { title: { display: true, text: "Student Count" }, beginAtZero: true },
-    },
-  };
+    [showLegends.bar]
+  );
 
-  // ----- RENDER -----
+  // ---------- RENDER ----------
+  const kpis = [
+    { label: "Fee Received (MTD)", value: totalFeeReceived, icon: "bi-cash-coin" },
+    { label: "Van Fee (MTD)", value: totalVanFee, icon: "bi-truck" },
+    { label: "Fine (MTD)", value: totalFine, icon: "bi-exclamation-triangle" },
+    { label: "Enrollments (Total)", value: totalEnrollments, icon: "bi-people" },
+    { label: "New", value: newEnrollments, icon: "bi-person-plus" },
+    { label: "Old", value: oldEnrollments, icon: "bi-person-check" },
+  ];
+
+  const totalForShare = Object.values(summary).reduce(
+    (a, c) => a + (c?.totalFeeReceived || 0),
+    0
+  );
+
   return (
     <div className="container-fluid px-3">
-      {/* Header actions */}
+      {/* Header */}
       <div className="d-flex flex-wrap align-items-center justify-content-between gap-2 my-3">
         <div>
-          <h2 className="mb-0 fw-bold">Dashboard</h2>
+          <h2 className="mb-0 fw-bold d-flex align-items-center gap-2">
+            Dashboard
+            {autoRefresh && (
+              <span
+                className="badge bg-success-subtle text-success border d-inline-flex align-items-center gap-1"
+                title="Auto-refresh is ON"
+              >
+                <span className="pulse-dot" /> Live
+              </span>
+            )}
+          </h2>
           <small className="text-muted">
-            {lastUpdated ? `Last updated: ${lastUpdated.toLocaleString()}` : ""}
+            {lastUpdated ? `Last updated: ${lastUpdated.toLocaleString()}` : "Fetching…"}
           </small>
         </div>
         <div className="d-flex gap-2">
-          <button className="btn btn-outline-secondary" onClick={() => setAutoRefresh((v) => !v)}>
+          <button
+            className={`btn ${autoRefresh ? "btn-outline-secondary" : "btn-outline-success"}`}
+            onClick={() => setAutoRefresh((v) => !v)}
+          >
             {autoRefresh ? "Pause Auto-Refresh" : "Resume Auto-Refresh"}
           </button>
           <button className="btn btn-primary" onClick={refreshAll}>
-            Refresh
+            <i className="bi bi-arrow-clockwise me-1" /> Refresh
           </button>
         </div>
       </div>
 
       {error ? (
-        <div className="alert alert-danger" role="alert">{error}</div>
+        <div className="alert alert-danger d-flex align-items-start gap-2" role="alert">
+          <i className="bi bi-exclamation-octagon-fill fs-5"></i>
+          <div className="flex-grow-1">
+            <div className="fw-semibold">Something went wrong</div>
+            <div className="small">{error}</div>
+          </div>
+          <button className="btn btn-sm btn-light border" onClick={refreshAll}>
+            Try again
+          </button>
+        </div>
       ) : null}
 
       {/* KPI Cards */}
       <div className="row g-3 mb-4">
-        {[
-          { label: "Fee Received (MTD)", value: totalFeeReceived },
-          { label: "Van Fee (MTD)", value: totalVanFee },
-          { label: "Fine (MTD)", value: totalFine },
-          { label: "Enrollments (Total)", value: totalEnrollments },
-          { label: "New", value: newEnrollments },
-          { label: "Old", value: oldEnrollments },
-        ].map((kpi, i) => (
+        {kpis.map((kpi, i) => (
           <div key={kpi.label} className="col-12 col-sm-6 col-md-4 col-xl-2">
             <div
-              className="card text-white shadow-sm border-0 h-100"
-              style={{ background: cardBg[i % cardBg.length] }}
+              className="card text-white shadow-sm border-0 h-100 kpi-card hover-lift"
+              style={{ background: cardGradients[i % cardGradients.length] }}
             >
               <div className="card-body">
                 <div className="d-flex justify-content-between align-items-start">
                   <div>
                     <div className="small text-white-50">{kpi.label}</div>
-                    <div className="h4 mb-0">{formatCurrency(kpi.value)}</div>
+                    <div className="h4 mb-1">{formatCurrency(kpi.value)}</div>
+                    <span className="small text-white-50">
+                      {loading.report || loading.day || loading.class ? "Updating…" : "Up to date"}
+                    </span>
                   </div>
-                  <span className="badge bg-dark bg-opacity-25 border">{compactNumber(kpi.value)}</span>
+                  <div className="text-end d-flex flex-column align-items-end">
+                    <i className={`bi ${kpi.icon} fs-3 opacity-75`}></i>
+                    <span className="badge bg-dark bg-opacity-25 border mt-2">
+                      {compactNumber(kpi.value)}
+                    </span>
+                  </div>
                 </div>
               </div>
+              {loading.report && i < 3 ? <div className="kpi-shimmer" /> : null}
             </div>
           </div>
         ))}
@@ -339,64 +462,148 @@ const Dashboard = () => {
 
       {/* Category cards */}
       <div className="row g-3 mb-4">
-        {Object.entries(summary).map(([category, totals], index) => (
+        {Object.entries(summary).map(([category, totals], index) => {
+          const share =
+            totalForShare > 0 ? (totals.totalFeeReceived / totalForShare) * 100 : 0;
+        return (
           <div key={category} className="col-12 col-md-6 col-xl-4">
-            <div className="card h-100 shadow-sm">
-              <div className="card-header text-white" style={{ background: cardBg[index % cardBg.length] }}>
+            <div className="card h-100 shadow-sm hover-lift">
+              <div
+                className="card-header text-white"
+                style={{ background: cardGradients[index % cardGradients.length] }}
+              >
                 <div className="d-flex justify-content-between align-items-center">
                   <strong>{category}</strong>
                   {(loading.report || loading.day) && (
-                    <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                    <span
+                      className="spinner-border spinner-border-sm"
+                      role="status"
+                      aria-hidden="true"
+                    ></span>
                   )}
                 </div>
               </div>
               <div className="card-body">
-                <div className="row small g-2">
-                  <div className="col-6"><strong>Fee Received:</strong><br />{formatCurrency(totals.totalFeeReceived)}</div>
-                  <div className="col-6"><strong>Concession:</strong><br />{formatCurrency(totals.totalConcession)}</div>
-                  <div className="col-6"><strong>Van Fee:</strong><br />{formatCurrency(totals.totalVanFee)}</div>
-                  <div className="col-6"><strong>Van Fee Concession:</strong><br />{formatCurrency(totals.totalVanFeeConcession)}</div>
+                <div className="row small g-2 mb-3">
+                  <div className="col-6">
+                    <strong>Fee Received:</strong>
+                    <br />
+                    {formatCurrency(totals.totalFeeReceived)}
+                  </div>
+                  <div className="col-6">
+                    <strong>Concession:</strong>
+                    <br />
+                    {formatCurrency(totals.totalConcession)}
+                  </div>
+                  <div className="col-6">
+                    <strong>Van Fee:</strong>
+                    <br />
+                    {formatCurrency(totals.totalVanFee)}
+                  </div>
+                  <div className="col-6">
+                    <strong>Van Fee Concession:</strong>
+                    <br />
+                    {formatCurrency(totals.totalVanFeeConcession)}
+                  </div>
                   {category === "Tuition Fee" && (
-                    <div className="col-12"><strong>Fine:</strong> {formatCurrency(totals.totalFine || 0)}</div>
+                    <div className="col-12">
+                      <strong>Fine:</strong> {formatCurrency(totals.totalFine || 0)}
+                    </div>
                   )}
+                </div>
+                {/* Share bar */}
+                <div>
+                  <div className="d-flex justify-content-between small text-muted mb-1">
+                    <span>Share of total</span>
+                    <span>{share.toFixed(1)}%</span>
+                  </div>
+                  <div className="progress" role="progressbar" aria-label="Share of total">
+                    <div
+                      className="progress-bar"
+                      style={{
+                        width: `${share}%`,
+                        backgroundColor: palette[index % palette.length],
+                      }}
+                    />
+                  </div>
                 </div>
               </div>
             </div>
           </div>
-        ))}
+        )})}
       </div>
 
       {/* Charts Row */}
       <div className="row g-3 mb-4">
+        {/* PIE */}
         <div className="col-12 col-xl-6">
           <div className="card h-100 shadow-sm">
-            <div className="card-header bg-primary text-white">
+            <div className="card-header bg-primary text-white d-flex align-items-center justify-content-between">
               <h5 className="card-title mb-0">Fee Received Distribution</h5>
+              <div className="d-flex gap-2">
+                <button
+                  className="btn btn-sm btn-light"
+                  onClick={() => setShowLegends((s) => ({ ...s, pie: !s.pie }))}
+                  title="Toggle legend"
+                >
+                  <i className="bi bi-list-task" />
+                </button>
+                <button
+                  className="btn btn-sm btn-light"
+                  onClick={() => downloadChart(pieRef, "fee-distribution.png")}
+                  title="Download PNG"
+                >
+                  <i className="bi bi-download" />
+                </button>
+                <button className="btn btn-sm btn-light" onClick={fetchReportData} title="Refresh">
+                  <i className="bi bi-arrow-clockwise" />
+                </button>
+              </div>
             </div>
-            <div className="card-body" style={{ height: 320 }}>
+            <div className="card-body" style={{ height: 340 }}>
               {loading.report ? (
-                <div className="d-flex h-100 align-items-center justify-content-center">
-                  <div className="spinner-border" role="status"></div>
-                </div>
+                <div className="skeleton-chart" />
+              ) : pieData.labels.length ? (
+                <Doughnut ref={pieRef} data={pieData} options={pieChartOptions} />
               ) : (
-                <Doughnut data={pieData} options={pieChartOptions} />
+                <div className="text-center text-muted">No data</div>
               )}
             </div>
           </div>
         </div>
 
+        {/* LINE */}
         <div className="col-12 col-xl-6">
           <div className="card h-100 shadow-sm">
-            <div className="card-header bg-info text-white">
+            <div className="card-header bg-info text-white d-flex align-items-center justify-content-between">
               <h5 className="card-title mb-0">Fee Received Trend by Category</h5>
+              <div className="d-flex gap-2">
+                <button
+                  className="btn btn-sm btn-light"
+                  onClick={() => setShowLegends((s) => ({ ...s, line: !s.line }))}
+                  title="Toggle legend"
+                >
+                  <i className="bi bi-list-task" />
+                </button>
+                <button
+                  className="btn btn-sm btn-light"
+                  onClick={() => downloadChart(lineRef, "fee-trend.png")}
+                  title="Download PNG"
+                >
+                  <i className="bi bi-download" />
+                </button>
+                <button className="btn btn-sm btn-light" onClick={fetchDayWiseSummary} title="Refresh">
+                  <i className="bi bi-arrow-clockwise" />
+                </button>
+              </div>
             </div>
-            <div className="card-body" style={{ height: 360 }}>
+            <div className="card-body" style={{ height: 380 }}>
               {loading.day ? (
-                <div className="d-flex h-100 align-items-center justify-content-center">
-                  <div className="spinner-border" role="status"></div>
-                </div>
+                <div className="skeleton-chart" />
+              ) : uniqueDates.length ? (
+                <Line ref={lineRef} data={lineChartData} options={lineChartOptions} />
               ) : (
-                <Line data={lineChartData} options={lineChartOptions} />
+                <div className="text-center text-muted">No data</div>
               )}
             </div>
           </div>
@@ -409,56 +616,96 @@ const Dashboard = () => {
           <div className="card shadow-sm">
             <div className="card-header bg-dark text-white d-flex align-items-center justify-content-between">
               <h5 className="mb-0">Enrollments</h5>
-              {loading.class && <div className="spinner-border spinner-border-sm" role="status"></div>}
+              {loading.class && (
+                <div className="spinner-border spinner-border-sm" role="status"></div>
+              )}
             </div>
             <div className="card-body" style={{ overflowX: "auto" }}>
-              <table className="table table-sm align-middle mb-0">
-                <thead className="table-light" style={{ position: "sticky", top: 0, zIndex: 1 }}>
-                  <tr>
-                    {classColumns.map((cls, i) => (
-                      <th key={cls} className="text-nowrap" style={{ textAlign: "left", borderRight: i !== classColumns.length - 1 ? "1px solid #dee2e6" : "none" }}>
-                        {cls}
+              {classColumns.length === 0 ? (
+                <div className="text-center text-muted py-3">No enrollment data</div>
+              ) : (
+                <table className="table table-sm align-middle mb-0">
+                  <thead className="table-light" style={{ position: "sticky", top: 0, zIndex: 1 }}>
+                    <tr>
+                      {classColumns.map((cls, i) => (
+                        <th
+                          key={cls}
+                          className="text-nowrap"
+                          style={{
+                            textAlign: "left",
+                            borderRight:
+                              i !== classColumns.length - 1 ? "1px solid #dee2e6" : "none",
+                          }}
+                        >
+                          {cls}
+                        </th>
+                      ))}
+                      <th className="text-nowrap" style={{ textAlign: "left" }}>
+                        Total
                       </th>
-                    ))}
-                    <th className="text-nowrap" style={{ textAlign: "left" }}>Total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    {classColumns.map((cls, i) => (
-                      <td key={`new-${cls}`} style={{ textAlign: "left", borderRight: i !== classColumns.length - 1 ? "1px solid #dee2e6" : "none" }}>
-                        <span className="badge text-bg-success">N {classWiseEnrollments[cls].new}</span>
-                      </td>
-                    ))}
-                    <td style={{ textAlign: "left" }}>
-                      <span className="badge text-bg-success">N {overallNew}</span>
-                    </td>
-                  </tr>
-                  <tr>
-                    {classColumns.map((cls, i) => (
-                      <td key={`old-${cls}`} style={{ textAlign: "left", borderRight: i !== classColumns.length - 1 ? "1px solid #dee2e6" : "none" }}>
-                        <span className="badge text-bg-secondary">O {classWiseEnrollments[cls].old}</span>
-                      </td>
-                    ))}
-                    <td style={{ textAlign: "left" }}>
-                      <span className="badge text-bg-secondary">O {overallOld}</span>
-                    </td>
-                  </tr>
-                  <tr>
-                    {classColumns.map((cls, i) => {
-                      const t = classWiseEnrollments[cls].new + classWiseEnrollments[cls].old;
-                      return (
-                        <td key={`tot-${cls}`} style={{ textAlign: "left", borderRight: i !== classColumns.length - 1 ? "1px solid #dee2e6" : "none" }}>
-                          <strong>T {t}</strong>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      {classColumns.map((cls, i) => (
+                        <td
+                          key={`new-${cls}`}
+                          style={{
+                            textAlign: "left",
+                            borderRight:
+                              i !== classColumns.length - 1 ? "1px solid #dee2e6" : "none",
+                          }}
+                        >
+                          <span className="badge text-bg-success">N {classWiseEnrollments[cls].new}</span>
                         </td>
-                      );
-                    })}
-                    <td style={{ textAlign: "left" }}>
-                      <strong>T {overallTotal}</strong>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
+                      ))}
+                      <td style={{ textAlign: "left" }}>
+                        <span className="badge text-bg-success">N {overallNew}</span>
+                      </td>
+                    </tr>
+                    <tr>
+                      {classColumns.map((cls, i) => (
+                        <td
+                          key={`old-${cls}`}
+                          style={{
+                            textAlign: "left",
+                            borderRight:
+                              i !== classColumns.length - 1 ? "1px solid #dee2e6" : "none",
+                          }}
+                        >
+                          <span className="badge text-bg-secondary">
+                            O {classWiseEnrollments[cls].old}
+                          </span>
+                        </td>
+                      ))}
+                      <td style={{ textAlign: "left" }}>
+                        <span className="badge text-bg-secondary">O {overallOld}</span>
+                      </td>
+                    </tr>
+                    <tr>
+                      {classColumns.map((cls, i) => {
+                        const t =
+                          classWiseEnrollments[cls].new + classWiseEnrollments[cls].old;
+                        return (
+                          <td
+                            key={`tot-${cls}`}
+                            style={{
+                              textAlign: "left",
+                              borderRight:
+                                i !== classColumns.length - 1 ? "1px solid #dee2e6" : "none",
+                            }}
+                          >
+                            <strong>T {t}</strong>
+                          </td>
+                        );
+                      })}
+                      <td style={{ textAlign: "left" }}>
+                        <strong>T {overallTotal}</strong>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              )}
             </div>
           </div>
         </div>
@@ -468,27 +715,84 @@ const Dashboard = () => {
       <div className="row g-3 mb-5">
         <div className="col-12">
           <div className="card shadow-sm">
-            <div className="card-header bg-primary text-white">
+            <div className="card-header bg-primary text-white d-flex align-items-center justify-content-between">
               <h5 className="card-title mb-0">Student Count by Class</h5>
+              <div className="d-flex gap-2">
+                <button
+                  className="btn btn-sm btn-light"
+                  onClick={() => setShowLegends((s) => ({ ...s, bar: !s.bar }))}
+                  title="Toggle legend"
+                >
+                  <i className="bi bi-list-task" />
+                </button>
+                <button
+                  className="btn btn-sm btn-light"
+                  onClick={() => downloadChart(barRef, "student-count.png")}
+                  title="Download PNG"
+                >
+                  <i className="bi bi-download" />
+                </button>
+                <button className="btn btn-sm btn-light" onClick={fetchClassWiseCount} title="Refresh">
+                  <i className="bi bi-arrow-clockwise" />
+                </button>
+              </div>
             </div>
-            <div className="card-body" style={{ height: 360 }}>
+            <div className="card-body" style={{ height: 380 }}>
               {loading.class ? (
-                <div className="d-flex h-100 align-items-center justify-content-center">
-                  <div className="spinner-border" role="status"></div>
-                </div>
+                <div className="skeleton-chart" />
+              ) : uniqueClasses.length ? (
+                <Bar ref={barRef} data={barChartData} options={barChartOptions} />
               ) : (
-                <Bar data={barChartData} options={barChartOptions} />
+                <div className="text-center text-muted">No data</div>
               )}
             </div>
           </div>
         </div>
       </div>
 
-      {/* Subtle styles */}
+      {/* Styles */}
       <style>{`
         .card { border-radius: 1rem; }
         .card-header { border-top-left-radius: 1rem !important; border-top-right-radius: 1rem !important; }
+        .hover-lift { transition: transform .2s ease, box-shadow .2s ease; }
+        .hover-lift:hover { transform: translateY(-2px); box-shadow: 0 0.75rem 1.25rem rgba(0,0,0,.08); }
+
+        .kpi-card { position: relative; overflow: hidden; backdrop-filter: saturate(1.2) blur(2px); }
+        .kpi-shimmer {
+          position: absolute; inset: 0;
+          background: linear-gradient(110deg, rgba(255,255,255,.08), rgba(255,255,255,.18), rgba(255,255,255,.08));
+          background-size: 200% 100%;
+          animation: shimmer 1.2s infinite linear;
+          pointer-events: none;
+        }
+        @keyframes shimmer { to { background-position-x: -200%; } }
+
+        .skeleton-chart {
+          height: 100%; width: 100%; border-radius: .75rem;
+          background: linear-gradient(110deg, #f3f4f6 8%, #e5e7eb 18%, #f3f4f6 33%);
+          background-size: 200% 100%;
+          animation: shimmer 1.2s infinite linear;
+        }
+
+        .pulse-dot {
+          width: .5rem; height: .5rem; border-radius: 50%;
+          background: #22c55e; display: inline-block; position: relative;
+        }
+        .pulse-dot::after {
+          content: ""; position: absolute; inset: 0; border-radius: 50%;
+          box-shadow: 0 0 0 0 rgba(34,197,94,.6); animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse { 70% { box-shadow: 0 0 0 .45rem rgba(34,197,94,0); } 100% { box-shadow: 0 0 0 0 rgba(34,197,94,0); } }
+
+        /* Better focus outline for a11y */
+        button:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
       `}</style>
+
+      {/* Bootstrap Icons (optional if not already globally included) */}
+      <link
+        rel="stylesheet"
+        href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css"
+      />
     </div>
   );
 };
