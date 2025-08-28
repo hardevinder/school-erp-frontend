@@ -32,6 +32,7 @@
     "react-icons": "^5.5.0",
     "react-imask": "^7.6.1",
     "react-input-mask": "^2.0.4",
+    "react-multi-select-component": "^4.3.4",
     "react-router-dom": "^6.29.0",
     "react-scripts": "5.0.1",
     "react-select": "^5.10.2",

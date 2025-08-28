@@ -90,6 +90,9 @@ const Transactions = () => {
   // Transportation
   const [transportRoutes, setTransportRoutes] = useState([]);
 
+  // Quick global allocator input (shown above table now)
+  const [quickAmount, setQuickAmount] = useState("");
+
   const POLLING_INTERVAL = 5000;
 
   const viewReceipt = (slipId) => {
@@ -124,21 +127,16 @@ const Transactions = () => {
   );
 
   /* ---------------- Fetchers ---------------- */
-  // NEW: Fine eligibility per fee-head for the student
-// Replace your fetchFineEligibility with this:
-const fetchFineEligibility = async (studentId) => {
-  try {
-    const res = await api.get(`/transactions/fine-eligibility/${studentId}`);
-    // always return an object (keyed by fee_head id as STRING)
-    return res.data?.data || {};
-  } catch (e) {
-    console.error("Error fetching fine eligibility:", e);
-    // safest default: no extra fines if we can't confirm
-    return {};
-  }
-};
-
-
+  // Fine eligibility per fee-head for the student
+  const fetchFineEligibility = async (studentId) => {
+    try {
+      const res = await api.get(`/transactions/fine-eligibility/${studentId}`);
+      return res.data?.data || {};
+    } catch (e) {
+      console.error("Error fetching fine eligibility:", e);
+      return {};
+    }
+  };
 
   const fetchTransportRoutes = async () => {
     try {
@@ -199,130 +197,126 @@ const fetchFineEligibility = async (studentId) => {
 
   // Fee details + dues
   const fetchFeeHeadsForStudent = async (_classId, studentId) => {
-  try {
-    // 1) Base fee details for the student
-    const feeResponse = await api.get(`/students/${studentId}/fee-details`);
-    const feeDetailsData = feeResponse.data.feeDetails || [];
+    try {
+      // 1) Base fee details for the student
+      const feeResponse = await api.get(`/students/${studentId}/fee-details`);
+      const feeDetailsData = feeResponse.data.feeDetails || [];
 
-    // 2) Other totals you already use
-    const [receivedVanFeeResponse, lastRouteResponse, routeDetailsResponse, fineEligibilityMap] =
-      await Promise.all([
-        api.get(`/transactions/vanfee/${studentId}`),
-        api.get(`/transactions/last-route/${studentId}`),
-        api.get(`/transportations`),
-        fetchFineEligibility(studentId), // <--- NEW
-      ]);
+      // 2) Other totals used
+      const [receivedVanFeeResponse, lastRouteResponse, routeDetailsResponse, fineEligibilityMap] =
+        await Promise.all([
+          api.get(`/transactions/vanfee/${studentId}`),
+          api.get(`/transactions/last-route/${studentId}`),
+          api.get(`/transportations`),
+          fetchFineEligibility(studentId),
+        ]);
 
-    // Van fee aggregates
-    const receivedVanFeeMap = {};
-    const vanFeeConcessionMap = {};
-    (receivedVanFeeResponse.data.data || []).forEach((item) => {
-      receivedVanFeeMap[item.Fee_Head] = parseFloat(item.TotalVanFeeReceived) || 0;
-      vanFeeConcessionMap[item.Fee_Head] = parseFloat(item.TotalVanFeeConcession) || 0;
-    });
+      // Van fee aggregates
+      const receivedVanFeeMap = {};
+      const vanFeeConcessionMap = {};
+      (receivedVanFeeResponse.data.data || []).forEach((item) => {
+        receivedVanFeeMap[item.Fee_Head] = parseFloat(item.TotalVanFeeReceived) || 0;
+        vanFeeConcessionMap[item.Fee_Head] = parseFloat(item.TotalVanFeeConcession) || 0;
+      });
 
-    // Last selected route per head
-    const lastRouteMap = {};
-    (lastRouteResponse.data.data || []).forEach((item) => {
-      lastRouteMap[item.Fee_Head] = item.Route_Number || "";
-    });
+      // Last selected route per head
+      const lastRouteMap = {};
+      (lastRouteResponse.data.data || []).forEach((item) => {
+        lastRouteMap[item.Fee_Head] = item.Route_Number || "";
+      });
 
-    const transportRoutesData = routeDetailsResponse.data || [];
-    const today = new Date();
+      const transportRoutesData = routeDetailsResponse.data || [];
+      const today = new Date();
 
-    const feeDetails = feeDetailsData.map((detail) => {
-      const headId = detail.fee_heading_id;
-      const transportApplicable = detail.transportApplicable === "Yes";
+      const feeDetails = feeDetailsData.map((detail) => {
+        const headId = detail.fee_heading_id;
+        const transportApplicable = detail.transportApplicable === "Yes";
 
-      // academic due (your existing logic)
-      const baseFeeDue = detail.feeDue || 0;
-      const extraConcession = 0; // manual concession entered now (starts 0)
-      const academicDue = Math.max(0, baseFeeDue - extraConcession);
+        // academic due
+        const baseFeeDue = detail.feeDue || 0;
+        const extraConcession = 0; // manual concession entered now (starts 0)
+        const academicDue = Math.max(0, baseFeeDue - extraConcession);
 
-      // ---- FINE ELIGIBILITY (one-time per head) ----
-      // Hide fine ONLY if API explicitly says it's already paid for this head.
-const key = String(headId);
-
-let eligible;
-if (fineEligibilityMap && Object.prototype.hasOwnProperty.call(fineEligibilityMap, key)) {
-  const val = fineEligibilityMap[key];
-  // accept boolean true, string "true", number 1, string "1" as eligible
-  eligible = (val === true || val === "true" || val === 1 || val === "1");
-} else {
-  // if the API didn’t send a value for this head, allow fine by default
-  eligible = true;
-}
-                             // default to eligible if map missing
-
-      const originalFine = eligible ? (detail.fineAmount || 0) : 0;
-      const fineDue = eligible ? originalFine : 0;
-
-      // transport/vans
-      const lastRoute = lastRouteMap[headId] || "";
-      const selectedRouteObj = transportRoutesData.find((r) => r.id == lastRoute);
-      const selectedRouteFee = selectedRouteObj ? selectedRouteObj.Cost : 0;
-
-      const receivedVanFee = receivedVanFeeMap[headId] || 0;
-      const vanFeeConcession = vanFeeConcessionMap[headId] || 0;
-
-      let vanOverdueDays = 0;
-      if (selectedRouteObj && selectedRouteObj.fineStartDate) {
-        const vanFineStartDate = new Date(selectedRouteObj.fineStartDate);
-        if (today > vanFineStartDate) {
-          vanOverdueDays = Math.floor((today - vanFineStartDate) / (1000 * 60 * 60 * 24));
+        // ---- FINE ELIGIBILITY (one-time per head) ----
+        const key = String(headId);
+        let eligible;
+        if (fineEligibilityMap && Object.prototype.hasOwnProperty.call(fineEligibilityMap, key)) {
+          const val = fineEligibilityMap[key];
+          eligible = (val === true || val === "true" || val === 1 || val === "1");
+        } else {
+          eligible = true;
         }
+
+        const originalFine = eligible ? (detail.fineAmount || 0) : 0;
+
+        // transport/vans
+        const lastRoute = lastRouteMap[headId] || "";
+        const selectedRouteObj = transportRoutesData.find((r) => r.id == lastRoute);
+        const selectedRouteFee = selectedRouteObj ? selectedRouteObj.Cost : 0;
+
+        const receivedVanFee = receivedVanFeeMap[headId] || 0;
+        const vanFeeConcession = vanFeeConcessionMap[headId] || 0;
+
+        let vanOverdueDays = 0;
+        if (selectedRouteObj && selectedRouteObj.fineStartDate) {
+          const vanFineStartDate = new Date(selectedRouteObj.fineStartDate);
+          if (today > vanFineStartDate) {
+            vanOverdueDays = Math.floor((today - vanFineStartDate) / (1000 * 60 * 60 * 24));
+          }
+        }
+        const vanFinePercentage = selectedRouteObj ? selectedRouteObj.finePercentage || 0 : 0;
+        const vanFineAmount =
+          vanOverdueDays > 0 && selectedRouteFee > receivedVanFee
+            ? Math.ceil(((selectedRouteFee - receivedVanFee) * vanFinePercentage * vanOverdueDays) / 100)
+            : 0;
+
+        const finalVanDue = Math.max(
+          0,
+          selectedRouteFee - receivedVanFee - vanFeeConcession + vanFineAmount
+        );
+
+        return {
+          // ids/names
+          Fee_Head: headId,
+          Fee_Heading_Name: detail.fee_heading,
+
+          // academic fee numbers
+          Fee_Due: academicDue,
+          Original_Fee_Due: detail.original_fee_due,
+
+          // fine fields (front-end view only; charge only if eligible)
+          fineAmount: originalFine,
+          isFineApplicable: eligible && (originalFine > 0),
+          Fine_Amount: 0, // input value to collect now (will remain 0 if not eligible)
+
+          // concessions/receive
+          defaultConcessionAmount: detail.concession_applied ? detail.concession_amount : 0,
+          Fee_Recieved: 0,
+          Concession: extraConcession,
+
+          // transport
+          VanFee: 0,
+          Van_Fee_Concession: 0,
+          SelectedRoute: lastRoute,
+          ShowVanFeeInput: transportApplicable,
+          _receivedVanFee: receivedVanFee,
+          _vanFeeConcession: vanFeeConcession,
+          Van_Fee_Due: finalVanDue,
+          Van_Fine_Amount: vanFineAmount,
+        };
+      });
+
+      setFeeHeads(feeDetails);
+      setNewTransactionDetails(feeDetails);
+      if (feeResponse.data.student) {
+        setSelectedStudentInfo(feeResponse.data.student);
       }
-      const vanFinePercentage = selectedRouteObj ? selectedRouteObj.finePercentage || 0 : 0;
-      const vanFineAmount =
-        vanOverdueDays > 0 && selectedRouteFee > receivedVanFee
-          ? Math.ceil(((selectedRouteFee - receivedVanFee) * vanFinePercentage * vanOverdueDays) / 100)
-          : 0;
-
-      const finalVanDue = Math.max(0, selectedRouteFee - receivedVanFee - vanFeeConcession + vanFineAmount);
-
-      return {
-        // ids/names
-        Fee_Head: headId,
-        Fee_Heading_Name: detail.fee_heading,
-
-        // academic fee numbers
-        Fee_Due: academicDue,
-        Original_Fee_Due: detail.original_fee_due,
-
-        // fine fields (front-end view only; charge only if eligible)
-        fineAmount: originalFine,
-        isFineApplicable: eligible && fineDue > 0, // <--- KEY: if not eligible, never show as applicable
-        Fine_Amount: 0, // input value to collect now (will remain 0 if not eligible)
-
-        // concessions/receive
-        defaultConcessionAmount: detail.concession_applied ? detail.concession_amount : 0,
-        Fee_Recieved: 0,
-        Concession: extraConcession,
-
-        // transport
-        VanFee: 0,
-        Van_Fee_Concession: 0,
-        SelectedRoute: lastRoute,
-        ShowVanFeeInput: transportApplicable,
-        _receivedVanFee: receivedVanFee,
-        _vanFeeConcession: vanFeeConcession,
-        Van_Fee_Due: finalVanDue,
-        Van_Fine_Amount: vanFineAmount,
-      };
-    });
-
-    setFeeHeads(feeDetails);
-    setNewTransactionDetails(feeDetails);
-    if (feeResponse.data.student) {
-      setSelectedStudentInfo(feeResponse.data.student);
+    } catch (error) {
+      console.error("Error fetching fee details:", error);
+      setFeeHeads([]);
+      setNewTransactionDetails([]);
     }
-  } catch (error) {
-    console.error("Error fetching fee details:", error);
-    setFeeHeads([]);
-    setNewTransactionDetails([]);
-  }
-};
-
+  };
 
   const fetchStudentAndFeeByAdmissionNumber = async () => {
     if (!searchAdmissionNumber) return;
@@ -344,6 +338,84 @@ if (fineEligibilityMap && Object.prototype.hasOwnProperty.call(fineEligibilityMa
       console.error("Error fetching student:", error);
       Swal.fire("Error!", "An error occurred while searching for the student.", "error");
     }
+  };
+
+  /* ---------------- Quick Allocate Logic ---------------- */
+  const getAcademicRemaining = (row) =>
+    Math.max(0, (row.Fee_Due || 0) - (row.Fee_Recieved || 0) - (row.Concession || 0));
+
+  const getFineRemaining = (row) =>
+    row.isFineApplicable ? Math.max(0, (row.fineAmount || 0) - (row.Fine_Amount || 0)) : 0;
+
+  const sortTuitionFirst = (rows) => {
+    // Tuition-fee rows first (case-insensitive substring match), maintain relative order otherwise
+    const withIdx = rows.map((r, i) => ({ r, i }));
+    withIdx.sort((a, b) => {
+      const at = /tuition/i.test(a.r.Fee_Heading_Name) ? 1 : 0;
+      const bt = /tuition/i.test(b.r.Fee_Heading_Name) ? 1 : 0;
+      if (bt !== at) return bt - at; // tuition first
+      return a.i - b.i;
+    });
+    return withIdx.map((x) => x.i);
+  };
+
+  // ALWAYS allocates: per head -> dues first, then its fine, then next head
+  const autoAllocateQuickAmount = () => {
+    const amt = parseInt(quickAmount, 10);
+    if (isNaN(amt) || amt <= 0) {
+      Swal.fire("Enter amount", "Please enter a positive amount to auto-fill.", "info");
+      return;
+    }
+    if (!newTransactionDetails.length) {
+      Swal.fire("Select Student", "Pick a student and load fee details first.", "warning");
+      return;
+    }
+
+    let remaining = amt;
+    const updated = newTransactionDetails.map((d) => ({ ...d }));
+    const order = sortTuitionFirst(updated);
+
+    for (const idx of order) {
+      if (remaining <= 0) break;
+      const row = updated[idx];
+
+      // 1) Academic due for this head
+      const acadNeed = getAcademicRemaining(row);
+      if (acadNeed > 0 && remaining > 0) {
+        const take = Math.min(remaining, acadNeed);
+        row.Fee_Recieved = (row.Fee_Recieved || 0) + take;
+        remaining -= take;
+      }
+
+      // 2) Fine for this head (if applicable)
+      const fineNeed = getFineRemaining(row);
+      if (fineNeed > 0 && remaining > 0) {
+        const takeFine = Math.min(remaining, fineNeed);
+        row.Fine_Amount = (row.Fine_Amount || 0) + takeFine;
+        remaining -= takeFine;
+      }
+    }
+
+    setNewTransactionDetails(updated);
+
+    if (remaining > 0) {
+      Swal.fire(
+        "Amount left",
+        `₹${remaining.toLocaleString("en-IN")} could not be allocated (no remaining dues/fines).`,
+        "info"
+      );
+    }
+  };
+
+  const clearQuickAllocations = () => {
+    if (!newTransactionDetails.length) return;
+    const cleared = newTransactionDetails.map((d) => ({
+      ...d,
+      Fee_Recieved: 0,
+      Fine_Amount: 0,
+      // leave Concession, VanFee, etc. untouched
+    }));
+    setNewTransactionDetails(cleared);
   };
 
   /* ---------------- Mutations ---------------- */
@@ -421,14 +493,12 @@ if (fineEligibilityMap && Object.prototype.hasOwnProperty.call(fineEligibilityMa
           fetchDaySummary();
         }
         await fetchFeeHeadsForStudent(selectedStudentInfo.class_id, selectedStudentInfo.id);
-
       }
     } catch (error) {
       console.error("Error saving transactions:", error);
       Swal.fire("Error!", "An error occurred while saving the transaction.", "error");
     }
   };
-  
 
   const resetForm = () => {
     setFeeHeads([]);
@@ -440,6 +510,7 @@ if (fineEligibilityMap && Object.prototype.hasOwnProperty.call(fineEligibilityMa
     setShowModal(false);
     setPaymentMode("Cash");
     setTransactionID("");
+    setQuickAmount("");
   };
 
   const cancelTransaction = async (id) => {
@@ -482,6 +553,7 @@ if (fineEligibilityMap && Object.prototype.hasOwnProperty.call(fineEligibilityMa
       setNewTransactionDetails([]);
       setPaymentMode("Cash");
       setTransactionID("");
+      setQuickAmount("");
     }
   }, [showModal]);
 
@@ -919,6 +991,34 @@ if (fineEligibilityMap && Object.prototype.hasOwnProperty.call(fineEligibilityMa
                 </Tab>
               </Tabs>
 
+              {/* ====== AUTOFILL TOOLBAR (TOP) ====== */}
+              {feeHeads.length > 0 && (
+                <Card className="mb-3 shadow-sm">
+                  <Card.Body className="d-flex flex-wrap align-items-end gap-2">
+                    <Form.Group style={{ minWidth: 220 }}>
+                      <Form.Label className="mb-1">Quick Amount</Form.Label>
+                      <Form.Control
+                        type="number"
+                        placeholder="Enter amount (e.g. 2500)"
+                        value={quickAmount}
+                        onChange={(e) => setQuickAmount(e.target.value)}
+                      />
+                      <div className="form-text">
+                        Allocates per head: <strong>Due first, then its Fine</strong> (Tuition heads prioritized).
+                      </div>
+                    </Form.Group>
+                    <div className="d-flex align-items-end gap-2">
+                      <Button variant="success" onClick={autoAllocateQuickAmount}>
+                        Auto-fill
+                      </Button>
+                      <Button variant="outline-secondary" onClick={clearQuickAllocations}>
+                        Clear
+                      </Button>
+                    </div>
+                  </Card.Body>
+                </Card>
+              )}
+
               {/* Fee Details Table (only this area scrolls; header sticky) */}
               {feeHeads.length > 0 && (
                 <>
@@ -1028,7 +1128,12 @@ if (fineEligibilityMap && Object.prototype.hasOwnProperty.call(fineEligibilityMa
                                 value={feeDetail.Fee_Recieved || ""}
                                 onChange={(e) => {
                                   const updated = [...newTransactionDetails];
-                                  updated[index].Fee_Recieved = parseInt(e.target.value, 10) || 0;
+                                  const val = parseInt(e.target.value, 10) || 0;
+                                  const maxAllowed = Math.max(
+                                    0,
+                                    (feeDetail.Fee_Due || 0) - (feeDetail.Concession || 0)
+                                  );
+                                  updated[index].Fee_Recieved = Math.min(val, maxAllowed);
                                   setNewTransactionDetails(updated);
                                 }}
                                 disabled={(feeDetail.Fee_Due || 0) <= 0}
@@ -1067,8 +1172,16 @@ if (fineEligibilityMap && Object.prototype.hasOwnProperty.call(fineEligibilityMa
                                 value={feeDetail.Fine_Amount || ""}
                                 onChange={(e) => {
                                   const updated = [...newTransactionDetails];
-                                  const value = parseInt(e.target.value, 10);
-                                  updated[index].Fine_Amount = isNaN(value) ? 0 : value;
+                                  const value = parseInt(e.target.value, 10) || 0;
+                                  // clamp to remaining fine (not total)
+                                  const remainingFine = feeDetail.isFineApplicable
+                                    ? Math.max(0, (feeDetail.fineAmount || 0) - (feeDetail.Fine_Amount || 0))
+                                    : 0;
+                                  const next = Math.min(value, (feeDetail.fineAmount || 0));
+                                  // ensure we don't exceed original fine
+                                  updated[index].Fine_Amount = Math.min(next, feeDetail.fineAmount || 0);
+                                  // also prevent negative
+                                  if (updated[index].Fine_Amount < 0) updated[index].Fine_Amount = 0;
                                   setNewTransactionDetails(updated);
                                 }}
                                 disabled={!feeDetail.isFineApplicable}
@@ -1229,6 +1342,7 @@ if (fineEligibilityMap && Object.prototype.hasOwnProperty.call(fineEligibilityMa
                     />
                   </div>
                 </Form.Group>
+
                 {paymentMode === "Online" && (
                   <Form.Group className="mt-2">
                     <Form.Label>Transaction ID</Form.Label>
@@ -1270,23 +1384,32 @@ if (fineEligibilityMap && Object.prototype.hasOwnProperty.call(fineEligibilityMa
             {/* Totals (right) */}
             <div
               className="p-3 rounded border bg-white shadow-sm d-flex flex-wrap align-items-center justify-content-between"
-              style={{ minWidth: 420, flex: 1 }}
+              style={{ minWidth: 520, flex: 1 }}
             >
               <div className="text-center me-3 mb-2">
                 <div className="small text-muted">Academic Fee</div>
                 <div className="fs-5 fw-bold text-success">{formatINR(totalFeeReceived)}</div>
               </div>
+
               <div className="text-center me-3 mb-2">
                 <div className="small text-muted">Van Fee</div>
                 <div className="fs-5 fw-bold text-warning">{formatINR(totalVanFee)}</div>
               </div>
+
+              <div className="text-center me-3 mb-2">
+                <div className="small text-muted">Fine</div>
+                <div className="fs-5 fw-bold text-danger">{formatINR(totalFine)}</div>
+              </div>
+
               <div className="text-center me-3 mb-2">
                 <div className="small text-muted">Concessions</div>
-                <div className="fs-5 fw-bold text-danger">{formatINR(totalConcessions)}</div>
+                <div className="fs-5 fw-bold text-secondary">{formatINR(totalConcessions)}</div>
               </div>
+
               <div className="text-center mb-2">
                 <div className="small text-muted">Grand Total</div>
                 <div className="fs-5 fw-bold">{formatINR(grandTotal)}</div>
+                {/* grandTotal = totalFeeReceived + totalVanFee + totalFine */}
               </div>
             </div>
 
