@@ -27,24 +27,11 @@ const Schools = () => {
   const fetchSchools = async () => {
     try {
       const response = await api.get("/schools");
-      setSchools(response.data);
+      // controller returns { success: true, schools: [...] }
+      setSchools(response.data?.schools || []);
     } catch (error) {
+      console.error("fetchSchools error:", error);
       Swal.fire("Error", "Failed to fetch schools.", "error");
-    }
-  };
-
-  // ---------------- Upload ----------------
-  const handleFileUpload = async (file) => {
-    const formData = new FormData();
-    formData.append("logo", file);
-    try {
-      const response = await api.post("/upload", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
-      return response.data.logoUrl;
-    } catch {
-      Swal.fire("Error", "Failed to upload logo.", "error");
-      return null;
     }
   };
 
@@ -52,16 +39,16 @@ const Schools = () => {
   const getModalHtml = (school = {}) => `
     <div class="form-container">
       <label for="swal-name">School Name *</label>
-      <input id="swal-name" class="form-field" placeholder="School Name" value="${school.name || ""}">
+      <input id="swal-name" class="form-field" placeholder="School Name" value="${(school.name || "").replace(/"/g, "&quot;")}">
       
       <label for="swal-description">Description</label>
-      <input id="swal-description" class="form-field" placeholder="Description" value="${school.description || ""}">
+      <input id="swal-description" class="form-field" placeholder="Description" value="${(school.description || "").replace(/"/g, "&quot;")}">
       
       <label for="swal-phone">Phone Number</label>
-      <input id="swal-phone" class="form-field" placeholder="Phone Number" value="${school.phone || ""}">
+      <input id="swal-phone" class="form-field" placeholder="Phone Number" value="${(school.phone || "").replace(/"/g, "&quot;")}">
       
       <label for="swal-email">Email</label>
-      <input id="swal-email" class="form-field" placeholder="Email" value="${school.email || ""}">
+      <input id="swal-email" class="form-field" placeholder="Email" value="${(school.email || "").replace(/"/g, "&quot;")}">
       
       <label for="swal-logo">Logo</label>
       <input type="file" id="swal-logo" class="form-field">
@@ -69,7 +56,7 @@ const Schools = () => {
       <div id="swal-logo-preview" style="margin-top:10px;">
         ${
           school.logo
-            ? `<img src="http://localhost:3000${school.logo}" style="width:100px;height:100px;object-fit:cover;border-radius:5px;" alt="Logo Preview">`
+            ? `<img src="${school.logo}" style="width:100px;height:100px;object-fit:cover;border-radius:5px;" alt="Logo Preview">`
             : ""
         }
       </div>
@@ -79,7 +66,6 @@ const Schools = () => {
   // ---------------- Add ----------------
   const handleAdd = async () => {
     let file = null;
-    let logoUrl = "";
 
     Swal.fire({
       title: "Add New School",
@@ -102,31 +88,38 @@ const Schools = () => {
           }
         });
       },
-      preConfirm: async () => {
+      preConfirm: () => {
         const popup = Swal.getPopup();
         const name = popup.querySelector("#swal-name").value.trim();
         if (!name) {
           Swal.showValidationMessage("School Name is required");
           return false;
         }
-        if (file) {
-          logoUrl = await handleFileUpload(file);
-        }
         return {
           name,
           description: popup.querySelector("#swal-description").value.trim(),
           phone: popup.querySelector("#swal-phone").value.trim(),
           email: popup.querySelector("#swal-email").value.trim(),
-          logo: logoUrl,
         };
       },
     }).then(async (res) => {
       if (res.isConfirmed) {
         try {
-          await api.post("/schools", res.value);
+          const values = res.value;
+          const formData = new FormData();
+          formData.append("name", values.name);
+          formData.append("description", values.description || "");
+          formData.append("phone", values.phone || "");
+          formData.append("email", values.email || "");
+          if (file) formData.append("logo", file);
+
+          await api.post("/schools", formData, {
+            headers: { "Content-Type": "multipart/form-data" },
+          });
           Swal.fire("Added!", "School has been added successfully.", "success");
           fetchSchools();
-        } catch {
+        } catch (err) {
+          console.error("Add school error:", err);
           Swal.fire("Error", "Failed to add the school.", "error");
         }
       }
@@ -136,7 +129,6 @@ const Schools = () => {
   // ---------------- Edit ----------------
   const handleEdit = async (school) => {
     let file = null;
-    let logoUrl = school.logo || "";
 
     Swal.fire({
       title: "Edit School",
@@ -159,32 +151,39 @@ const Schools = () => {
           }
         });
       },
-      preConfirm: async () => {
+      preConfirm: () => {
         const popup = Swal.getPopup();
         const name = popup.querySelector("#swal-name").value.trim();
         if (!name) {
           Swal.showValidationMessage("School Name is required");
           return false;
         }
-        if (file) {
-          const up = await handleFileUpload(file);
-          if (up) logoUrl = up;
-        }
         return {
           name,
           description: popup.querySelector("#swal-description").value.trim(),
           phone: popup.querySelector("#swal-phone").value.trim(),
           email: popup.querySelector("#swal-email").value.trim(),
-          logo: logoUrl,
         };
       },
     }).then(async (res) => {
       if (res.isConfirmed) {
         try {
-          await api.put(`/schools/${school.id}`, res.value);
+          const values = res.value;
+          const formData = new FormData();
+          formData.append("name", values.name);
+          formData.append("description", values.description || "");
+          formData.append("phone", values.phone || "");
+          formData.append("email", values.email || "");
+          // append file only if a new file was selected
+          if (file) formData.append("logo", file);
+
+          await api.put(`/schools/${school.id}`, formData, {
+            headers: { "Content-Type": "multipart/form-data" },
+          });
           Swal.fire("Updated!", "School has been updated successfully.", "success");
           fetchSchools();
-        } catch {
+        } catch (err) {
+          console.error("Update school error:", err);
           Swal.fire("Error", "Failed to update the school.", "error");
         }
       }
@@ -211,7 +210,8 @@ const Schools = () => {
           await api.delete(`/schools/${school.id}`);
           Swal.fire("Deleted!", "School has been deleted successfully.", "success");
           fetchSchools();
-        } catch {
+        } catch (err) {
+          console.error("Delete school error:", err);
           Swal.fire("Error", "Failed to delete the school.", "error");
         }
       }
@@ -266,7 +266,7 @@ const Schools = () => {
               <td>
                 {school.logo ? (
                   <img
-                    src={`http://localhost:3000${school.logo}`}
+                    src={school.logo}
                     alt="School Logo"
                     style={{
                       width: "50px",

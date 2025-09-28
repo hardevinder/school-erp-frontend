@@ -7,7 +7,7 @@ import { Doughnut, Line, Bar } from "react-chartjs-2";
 import {
   Chart as ChartJS,
   ArcElement,
-  Tooltip,
+  Tooltip as ChartTooltip,
   Legend,
   LineElement,
   PointElement,
@@ -20,7 +20,7 @@ import {
 
 ChartJS.register(
   ArcElement,
-  Tooltip,
+  ChartTooltip,
   Legend,
   LineElement,
   PointElement,
@@ -100,7 +100,7 @@ const Dashboard = () => {
   });
 
   // Settings
-  const POLLING_INTERVAL = 15000; // 15s calmer than 5s
+  const POLLING_INTERVAL = 15000; // 15s
 
   // Fetchers
   const fetchReportData = useCallback(async () => {
@@ -161,7 +161,6 @@ const Dashboard = () => {
 
   // Auto-refresh
   useEffect(() => {
-    // clear existing
     Object.values(timersRef.current || {}).forEach(clearInterval);
     timersRef.current = {};
 
@@ -313,9 +312,7 @@ const Dashboard = () => {
         y: {
           title: { display: true, text: "Fee Received" },
           beginAtZero: true,
-          ticks: {
-            callback: (val) => compactNumber(val),
-          },
+          ticks: { callback: (val) => compactNumber(val) },
         },
       },
       plugins: { legend: { display: showLegends.line } },
@@ -383,416 +380,529 @@ const Dashboard = () => {
     0
   );
 
+  // Quick links – EXACT routes + Collect Fee + Students
+  const quickLinks = [
+    { label: "Collect Fee", icon: "bi-cash-stack", href: "/transactions", gradient: "linear-gradient(135deg,#16a34a,#22c55e)" },
+    { label: "Fee Due Report", icon: "bi-receipt", href: "/student-due", gradient: "linear-gradient(135deg,#22c55e,#16a34a)" },
+    { label: "Pending Due", icon: "bi-list-check", href: "/reports/school-fee-summary", gradient: "linear-gradient(135deg,#3b82f6,#2563eb)" },
+    { label: "Day Summary", icon: "bi-calendar2-check", href: "/reports/day-wise", gradient: "linear-gradient(135deg,#f59e0b,#f97316)" },
+    { label: "Transport", icon: "bi-truck", href: "/reports/van-fee", gradient: "linear-gradient(135deg,#0891b2,#06b6d4)" },
+    { label: "Students", icon: "bi-people", href: "/students", gradient: "linear-gradient(135deg,#8b5cf6,#6d28d9)" }, // ← added
+  ];
+
+  const LinkCard = ({ href, icon, label, gradient }) => (
+    <a
+      href={href}
+      className="link-card-ex btn shadow-sm"
+      title={label}
+      style={{ backgroundImage: gradient }}
+    >
+      <span className="icon-wrap">
+        <i className={`bi ${icon}`} />
+      </span>
+      <span className="text-wrap">
+        <span className="label">{label}</span>
+        <span className="arrow"><i className="bi bi-arrow-right" /></span>
+      </span>
+    </a>
+  );
+
   return (
-    <div className="container-fluid px-3">
-      {/* Header */}
-      <div className="d-flex flex-wrap align-items-center justify-content-between gap-2 my-3">
-        <div>
-          <h2 className="mb-0 fw-bold d-flex align-items-center gap-2">
-            Dashboard
-            {autoRefresh && (
-              <span
-                className="badge bg-success-subtle text-success border d-inline-flex align-items-center gap-1"
-                title="Auto-refresh is ON"
-              >
-                <span className="pulse-dot" /> Live
-              </span>
-            )}
-          </h2>
-          <small className="text-muted">
-            {lastUpdated ? `Last updated: ${lastUpdated.toLocaleString()}` : "Fetching…"}
-          </small>
-        </div>
-        <div className="d-flex gap-2">
-          <button
-            className={`btn ${autoRefresh ? "btn-outline-secondary" : "btn-outline-success"}`}
-            onClick={() => setAutoRefresh((v) => !v)}
-          >
-            {autoRefresh ? "Pause Auto-Refresh" : "Resume Auto-Refresh"}
-          </button>
-          <button className="btn btn-primary" onClick={refreshAll}>
-            <i className="bi bi-arrow-clockwise me-1" /> Refresh
-          </button>
-        </div>
-      </div>
+    <div
+      className="dashboard-bg"
+      style={{
+        backgroundImage: `url(/images/SchooBackground.jpeg)`,
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+        minHeight: "100vh",
+      }}
+    >
+      <div className="dashboard-overlay" />
 
-      {error ? (
-        <div className="alert alert-danger d-flex align-items-start gap-2" role="alert">
-          <i className="bi bi-exclamation-octagon-fill fs-5"></i>
-          <div className="flex-grow-1">
-            <div className="fw-semibold">Something went wrong</div>
-            <div className="small">{error}</div>
+      <div className="container-fluid px-3" style={{ position: "relative", zIndex: 2 }}>
+        {/* Header */}
+        <div className="d-flex flex-wrap align-items-center justify-content-between gap-2 my-3">
+          <div>
+            <h2 className="mb-0 fw-bold d-flex align-items-center gap-2">
+              Dashboard
+              {autoRefresh && (
+                <span
+                  className="badge bg-success-subtle text-success border d-inline-flex align-items-center gap-1"
+                  title="Auto-refresh is ON"
+                >
+                  <span className="pulse-dot" /> Live
+                </span>
+              )}
+            </h2>
+            <small className="text-muted">
+              {lastUpdated ? `Last updated: ${lastUpdated.toLocaleString()}` : "Fetching…"}
+            </small>
           </div>
-          <button className="btn btn-sm btn-light border" onClick={refreshAll}>
-            Try again
-          </button>
-        </div>
-      ) : null}
-
-      {/* KPI Cards */}
-      <div className="row g-3 mb-4">
-        {kpis.map((kpi, i) => (
-          <div key={kpi.label} className="col-12 col-sm-6 col-md-4 col-xl-2">
-            <div
-              className="card text-white shadow-sm border-0 h-100 kpi-card hover-lift"
-              style={{ background: cardGradients[i % cardGradients.length] }}
+          <div className="d-flex gap-2">
+            <button
+              className={`btn ${autoRefresh ? "btn-outline-secondary" : "btn-outline-success"}`}
+              onClick={() => setAutoRefresh((v) => !v)}
             >
-              <div className="card-body">
-                <div className="d-flex justify-content-between align-items-start">
-                  <div>
-                    <div className="small text-white-50">{kpi.label}</div>
-                    <div className="h4 mb-1">{formatCurrency(kpi.value)}</div>
-                    <span className="small text-white-50">
-                      {loading.report || loading.day || loading.class ? "Updating…" : "Up to date"}
-                    </span>
-                  </div>
-                  <div className="text-end d-flex flex-column align-items-end">
-                    <i className={`bi ${kpi.icon} fs-3 opacity-75`}></i>
-                    <span className="badge bg-dark bg-opacity-25 border mt-2">
-                      {compactNumber(kpi.value)}
-                    </span>
-                  </div>
-                </div>
-              </div>
-              {loading.report && i < 3 ? <div className="kpi-shimmer" /> : null}
+              {autoRefresh ? "Pause Auto-Refresh" : "Resume Auto-Refresh"}
+            </button>
+            <button className="btn btn-primary" onClick={refreshAll}>
+              <i className="bi bi-arrow-clockwise me-1" /> Refresh
+            </button>
+          </div>
+        </div>
+
+        {error ? (
+          <div className="alert alert-danger d-flex align-items-start gap-2" role="alert">
+            <i className="bi bi-exclamation-octagon-fill fs-5"></i>
+            <div className="flex-grow-1">
+              <div className="fw-semibold">Something went wrong</div>
+              <div className="small">{error}</div>
+            </div>
+            <button className="btn btn-sm btn-light border" onClick={refreshAll}>
+              Try again
+            </button>
+          </div>
+        ) : null}
+
+        {/* Quick Links (sticky) */}
+        <div className="quick-links sticky-top mb-3">
+          <div className="quick-links-inner px-3 py-2 rounded shadow-sm bg-white border">
+            <div className="d-flex flex-wrap gap-3">
+              {quickLinks.map((q) => (
+                <LinkCard key={q.label} {...q} />
+              ))}
             </div>
           </div>
-        ))}
-      </div>
+        </div>
 
-      {/* Category cards */}
-      <div className="row g-3 mb-4">
-        {Object.entries(summary).map(([category, totals], index) => {
-          const share =
-            totalForShare > 0 ? (totals.totalFeeReceived / totalForShare) * 100 : 0;
-        return (
-          <div key={category} className="col-12 col-md-6 col-xl-4">
-            <div className="card h-100 shadow-sm hover-lift">
+        {/* KPI Cards */}
+        <div className="row g-3 mb-4">
+          {kpis.map((kpi, i) => (
+            <div key={kpi.label} className="col-12 col-sm-6 col-md-4 col-xl-2">
               <div
-                className="card-header text-white"
-                style={{ background: cardGradients[index % cardGradients.length] }}
+                className="card text-white shadow-sm border-0 h-100 kpi-card"
+                style={{ background: cardGradients[i % cardGradients.length] }}
               >
-                <div className="d-flex justify-content-between align-items-center">
-                  <strong>{category}</strong>
-                  {(loading.report || loading.day) && (
-                    <span
-                      className="spinner-border spinner-border-sm"
-                      role="status"
-                      aria-hidden="true"
-                    ></span>
-                  )}
-                </div>
-              </div>
-              <div className="card-body">
-                <div className="row small g-2 mb-3">
-                  <div className="col-6">
-                    <strong>Fee Received:</strong>
-                    <br />
-                    {formatCurrency(totals.totalFeeReceived)}
-                  </div>
-                  <div className="col-6">
-                    <strong>Concession:</strong>
-                    <br />
-                    {formatCurrency(totals.totalConcession)}
-                  </div>
-                  <div className="col-6">
-                    <strong>Van Fee:</strong>
-                    <br />
-                    {formatCurrency(totals.totalVanFee)}
-                  </div>
-                  <div className="col-6">
-                    <strong>Van Fee Concession:</strong>
-                    <br />
-                    {formatCurrency(totals.totalVanFeeConcession)}
-                  </div>
-                  {category === "Tuition Fee" && (
-                    <div className="col-12">
-                      <strong>Fine:</strong> {formatCurrency(totals.totalFine || 0)}
+                <div className="card-body">
+                  <div className="d-flex justify-content-between align-items-start">
+                    <div>
+                      <div className="small text-white-50">{kpi.label}</div>
+                      <div className="h4 mb-1">{formatCurrency(kpi.value)}</div>
+                      <span className="small text-white-50">
+                        {loading.report || loading.day || loading.class ? "Updating…" : "Up to date"}
+                      </span>
                     </div>
-                  )}
-                </div>
-                {/* Share bar */}
-                <div>
-                  <div className="d-flex justify-content-between small text-muted mb-1">
-                    <span>Share of total</span>
-                    <span>{share.toFixed(1)}%</span>
-                  </div>
-                  <div className="progress" role="progressbar" aria-label="Share of total">
-                    <div
-                      className="progress-bar"
-                      style={{
-                        width: `${share}%`,
-                        backgroundColor: palette[index % palette.length],
-                      }}
-                    />
+                    <div className="text-end d-flex flex-column align-items-end">
+                      <i className={`bi ${kpi.icon} fs-3 opacity-75`}></i>
+                      <span className="badge bg-dark bg-opacity-25 border mt-2">
+                        {compactNumber(kpi.value)}
+                      </span>
+                    </div>
                   </div>
                 </div>
+                {loading.report && i < 3 ? <div className="kpi-shimmer" /> : null}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Category cards */}
+        <div className="row g-3 mb-4">
+          {Object.entries(summary).map(([category, totals], index) => {
+            const share =
+              totalForShare > 0 ? (totals.totalFeeReceived / totalForShare) * 100 : 0;
+            return (
+              <div key={category} className="col-12 col-md-6 col-xl-4">
+                <div className="card h-100 shadow-sm">
+                  <div
+                    className="card-header text-white d-flex justify-content-between align-items-center"
+                    style={{ background: cardGradients[index % cardGradients.length] }}
+                  >
+                    <strong>{category}</strong>
+                    {(loading.report || loading.day) && (
+                      <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                    )}
+                  </div>
+                  <div className="card-body">
+                    <div className="row small g-2 mb-3">
+                      <div className="col-6">
+                        <strong>Fee Received:</strong>
+                        <br />
+                        {formatCurrency(totals.totalFeeReceived)}
+                      </div>
+                      <div className="col-6">
+                        <strong>Concession:</strong>
+                        <br />
+                        {formatCurrency(totals.totalConcession)}
+                      </div>
+                      <div className="col-6">
+                        <strong>Van Fee:</strong>
+                        <br />
+                        {formatCurrency(totals.totalVanFee)}
+                      </div>
+                      <div className="col-6">
+                        <strong>Van Fee Concession:</strong>
+                        <br />
+                        {formatCurrency(totals.totalVanFeeConcession)}
+                      </div>
+                      {category === "Tuition Fee" && (
+                        <div className="col-12">
+                          <strong>Fine:</strong> {formatCurrency(totals.totalFine || 0)}
+                        </div>
+                      )}
+                    </div>
+                    {/* Share bar */}
+                    <div>
+                      <div className="d-flex justify-content-between small text-muted mb-1">
+                        <span>Share of total</span>
+                        <span>{share.toFixed(1)}%</span>
+                      </div>
+                      <div className="progress" role="progressbar" aria-label="Share of total">
+                        <div
+                          className="progress-bar"
+                          style={{
+                            width: `${share}%`,
+                            backgroundColor: palette[index % palette.length],
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Charts Row */}
+        <div className="row g-3 mb-4">
+          {/* PIE */}
+          <div className="col-12 col-xl-6">
+            <div className="card h-100 shadow-sm">
+              <div className="card-header bg-primary text-white d-flex align-items-center justify-content-between">
+                <h5 className="card-title mb-0">Fee Received Distribution</h5>
+                <div className="d-flex gap-2">
+                  <a href="/reports/day-wise" className="btn btn-sm btn-light" title="Open Day Summary">
+                    <i className="bi bi-box-arrow-up-right" />
+                  </a>
+                  <button
+                    className="btn btn-sm btn-light"
+                    onClick={() => setShowLegends((s) => ({ ...s, pie: !s.pie }))}
+                    title="Toggle legend"
+                  >
+                    <i className="bi bi-list-task" />
+                  </button>
+                  <button
+                    className="btn btn-sm btn-light"
+                    onClick={() => downloadChart(pieRef, "fee-distribution.png")}
+                    title="Download PNG"
+                  >
+                    <i className="bi bi-download" />
+                  </button>
+                  <button className="btn btn-sm btn-light" onClick={fetchReportData} title="Refresh">
+                    <i className="bi bi-arrow-clockwise" />
+                  </button>
+                </div>
+              </div>
+              <div className="card-body" style={{ height: 340 }}>
+                {loading.report ? (
+                  <div className="skeleton-chart" />
+                ) : pieData.labels.length ? (
+                  <Doughnut ref={pieRef} data={pieData} options={pieChartOptions} />
+                ) : (
+                  <div className="text-center text-muted">No data</div>
+                )}
               </div>
             </div>
           </div>
-        )})}
-      </div>
 
-      {/* Charts Row */}
-      <div className="row g-3 mb-4">
-        {/* PIE */}
-        <div className="col-12 col-xl-6">
-          <div className="card h-100 shadow-sm">
-            <div className="card-header bg-primary text-white d-flex align-items-center justify-content-between">
-              <h5 className="card-title mb-0">Fee Received Distribution</h5>
-              <div className="d-flex gap-2">
-                <button
-                  className="btn btn-sm btn-light"
-                  onClick={() => setShowLegends((s) => ({ ...s, pie: !s.pie }))}
-                  title="Toggle legend"
-                >
-                  <i className="bi bi-list-task" />
-                </button>
-                <button
-                  className="btn btn-sm btn-light"
-                  onClick={() => downloadChart(pieRef, "fee-distribution.png")}
-                  title="Download PNG"
-                >
-                  <i className="bi bi-download" />
-                </button>
-                <button className="btn btn-sm btn-light" onClick={fetchReportData} title="Refresh">
-                  <i className="bi bi-arrow-clockwise" />
-                </button>
+          {/* LINE */}
+          <div className="col-12 col-xl-6">
+            <div className="card h-100 shadow-sm">
+              <div className="card-header bg-info text-white d-flex align-items-center justify-content-between">
+                <h5 className="card-title mb-0">Fee Received Trend by Category</h5>
+                <div className="d-flex gap-2">
+                  <a href="/reports/day-wise" className="btn btn-sm btn-light" title="Open Day Summary">
+                    <i className="bi bi-box-arrow-up-right" />
+                  </a>
+                  <button
+                    className="btn btn-sm btn-light"
+                    onClick={() => setShowLegends((s) => ({ ...s, line: !s.line }))}
+                    title="Toggle legend"
+                  >
+                    <i className="bi bi-list-task" />
+                  </button>
+                  <button
+                    className="btn btn-sm btn-light"
+                    onClick={() => downloadChart(lineRef, "fee-trend.png")}
+                    title="Download PNG"
+                  >
+                    <i className="bi bi-download" />
+                  </button>
+                  <button className="btn btn-sm btn-light" onClick={fetchDayWiseSummary} title="Refresh">
+                    <i className="bi bi-arrow-clockwise" />
+                  </button>
+                </div>
               </div>
-            </div>
-            <div className="card-body" style={{ height: 340 }}>
-              {loading.report ? (
-                <div className="skeleton-chart" />
-              ) : pieData.labels.length ? (
-                <Doughnut ref={pieRef} data={pieData} options={pieChartOptions} />
-              ) : (
-                <div className="text-center text-muted">No data</div>
-              )}
+              <div className="card-body" style={{ height: 380 }}>
+                {loading.day ? (
+                  <div className="skeleton-chart" />
+                ) : uniqueDates.length ? (
+                  <Line ref={lineRef} data={lineChartData} options={lineChartOptions} />
+                ) : (
+                  <div className="text-center text-muted">No data</div>
+                )}
+              </div>
             </div>
           </div>
         </div>
 
-        {/* LINE */}
-        <div className="col-12 col-xl-6">
-          <div className="card h-100 shadow-sm">
-            <div className="card-header bg-info text-white d-flex align-items-center justify-content-between">
-              <h5 className="card-title mb-0">Fee Received Trend by Category</h5>
-              <div className="d-flex gap-2">
-                <button
-                  className="btn btn-sm btn-light"
-                  onClick={() => setShowLegends((s) => ({ ...s, line: !s.line }))}
-                  title="Toggle legend"
-                >
-                  <i className="bi bi-list-task" />
-                </button>
-                <button
-                  className="btn btn-sm btn-light"
-                  onClick={() => downloadChart(lineRef, "fee-trend.png")}
-                  title="Download PNG"
-                >
-                  <i className="bi bi-download" />
-                </button>
-                <button className="btn btn-sm btn-light" onClick={fetchDayWiseSummary} title="Refresh">
-                  <i className="bi bi-arrow-clockwise" />
-                </button>
+        {/* Enrollment table */}
+        <div className="row g-3 mb-4">
+          <div className="col-12">
+            <div className="card shadow-sm">
+              <div className="card-header bg-dark text-white d-flex align-items-center justify-content-between">
+                <h5 className="mb-0">Enrollments</h5>
+                {loading.class && (
+                  <div className="spinner-border spinner-border-sm" role="status"></div>
+                )}
               </div>
-            </div>
-            <div className="card-body" style={{ height: 380 }}>
-              {loading.day ? (
-                <div className="skeleton-chart" />
-              ) : uniqueDates.length ? (
-                <Line ref={lineRef} data={lineChartData} options={lineChartOptions} />
-              ) : (
-                <div className="text-center text-muted">No data</div>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Enrollment table */}
-      <div className="row g-3 mb-4">
-        <div className="col-12">
-          <div className="card shadow-sm">
-            <div className="card-header bg-dark text-white d-flex align-items-center justify-content-between">
-              <h5 className="mb-0">Enrollments</h5>
-              {loading.class && (
-                <div className="spinner-border spinner-border-sm" role="status"></div>
-              )}
-            </div>
-            <div className="card-body" style={{ overflowX: "auto" }}>
-              {classColumns.length === 0 ? (
-                <div className="text-center text-muted py-3">No enrollment data</div>
-              ) : (
-                <table className="table table-sm align-middle mb-0">
-                  <thead className="table-light" style={{ position: "sticky", top: 0, zIndex: 1 }}>
-                    <tr>
-                      {classColumns.map((cls, i) => (
-                        <th
-                          key={cls}
-                          className="text-nowrap"
-                          style={{
-                            textAlign: "left",
-                            borderRight:
-                              i !== classColumns.length - 1 ? "1px solid #dee2e6" : "none",
-                          }}
-                        >
-                          {cls}
-                        </th>
-                      ))}
-                      <th className="text-nowrap" style={{ textAlign: "left" }}>
-                        Total
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr>
-                      {classColumns.map((cls, i) => (
-                        <td
-                          key={`new-${cls}`}
-                          style={{
-                            textAlign: "left",
-                            borderRight:
-                              i !== classColumns.length - 1 ? "1px solid #dee2e6" : "none",
-                          }}
-                        >
-                          <span className="badge text-bg-success">N {classWiseEnrollments[cls].new}</span>
-                        </td>
-                      ))}
-                      <td style={{ textAlign: "left" }}>
-                        <span className="badge text-bg-success">N {overallNew}</span>
-                      </td>
-                    </tr>
-                    <tr>
-                      {classColumns.map((cls, i) => (
-                        <td
-                          key={`old-${cls}`}
-                          style={{
-                            textAlign: "left",
-                            borderRight:
-                              i !== classColumns.length - 1 ? "1px solid #dee2e6" : "none",
-                          }}
-                        >
-                          <span className="badge text-bg-secondary">
-                            O {classWiseEnrollments[cls].old}
-                          </span>
-                        </td>
-                      ))}
-                      <td style={{ textAlign: "left" }}>
-                        <span className="badge text-bg-secondary">O {overallOld}</span>
-                      </td>
-                    </tr>
-                    <tr>
-                      {classColumns.map((cls, i) => {
-                        const t =
-                          classWiseEnrollments[cls].new + classWiseEnrollments[cls].old;
-                        return (
-                          <td
-                            key={`tot-${cls}`}
+              <div className="card-body" style={{ overflowX: "auto" }}>
+                {classColumns.length === 0 ? (
+                  <div className="text-center text-muted py-3">No enrollment data</div>
+                ) : (
+                  <table className="table table-sm align-middle mb-0">
+                    <thead className="table-light" style={{ position: "sticky", top: 0, zIndex: 1 }}>
+                      <tr>
+                        {classColumns.map((cls, i) => (
+                          <th
+                            key={cls}
+                            className="text-nowrap"
                             style={{
                               textAlign: "left",
                               borderRight:
                                 i !== classColumns.length - 1 ? "1px solid #dee2e6" : "none",
                             }}
                           >
-                            <strong>T {t}</strong>
+                            {cls}
+                          </th>
+                        ))}
+                        <th className="text-nowrap" style={{ textAlign: "left" }}>
+                          Total
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        {classColumns.map((cls, i) => (
+                          <td
+                            key={`new-${cls}`}
+                            style={{
+                              textAlign: "left",
+                              borderRight:
+                                i !== classColumns.length - 1 ? "1px solid #dee2e6" : "none",
+                            }}
+                          >
+                            <span className="badge text-bg-success">N {classWiseEnrollments[cls].new}</span>
                           </td>
-                        );
-                      })}
-                      <td style={{ textAlign: "left" }}>
-                        <strong>T {overallTotal}</strong>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Bar chart */}
-      <div className="row g-3 mb-5">
-        <div className="col-12">
-          <div className="card shadow-sm">
-            <div className="card-header bg-primary text-white d-flex align-items-center justify-content-between">
-              <h5 className="card-title mb-0">Student Count by Class</h5>
-              <div className="d-flex gap-2">
-                <button
-                  className="btn btn-sm btn-light"
-                  onClick={() => setShowLegends((s) => ({ ...s, bar: !s.bar }))}
-                  title="Toggle legend"
-                >
-                  <i className="bi bi-list-task" />
-                </button>
-                <button
-                  className="btn btn-sm btn-light"
-                  onClick={() => downloadChart(barRef, "student-count.png")}
-                  title="Download PNG"
-                >
-                  <i className="bi bi-download" />
-                </button>
-                <button className="btn btn-sm btn-light" onClick={fetchClassWiseCount} title="Refresh">
-                  <i className="bi bi-arrow-clockwise" />
-                </button>
+                        ))}
+                        <td style={{ textAlign: "left" }}>
+                          <span className="badge text-bg-success">N {overallNew}</span>
+                        </td>
+                      </tr>
+                      <tr>
+                        {classColumns.map((cls, i) => (
+                          <td
+                            key={`old-${cls}`}
+                            style={{
+                              textAlign: "left",
+                              borderRight:
+                                i !== classColumns.length - 1 ? "1px solid #dee2e6" : "none",
+                            }}
+                          >
+                            <span className="badge text-bg-secondary">
+                              O {classWiseEnrollments[cls].old}
+                            </span>
+                          </td>
+                        ))}
+                        <td style={{ textAlign: "left" }}>
+                          <span className="badge text-bg-secondary">O {overallOld}</span>
+                        </td>
+                      </tr>
+                      <tr>
+                        {classColumns.map((cls, i) => {
+                          const t =
+                            classWiseEnrollments[cls].new + classWiseEnrollments[cls].old;
+                          return (
+                            <td
+                              key={`tot-${cls}`}
+                              style={{
+                                textAlign: "left",
+                                borderRight:
+                                  i !== classColumns.length - 1 ? "1px solid #dee2e6" : "none",
+                              }}
+                            >
+                              <strong>T {t}</strong>
+                            </td>
+                          );
+                        })}
+                        <td style={{ textAlign: "left" }}>
+                          <strong>T {overallTotal}</strong>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                )}
               </div>
             </div>
-            <div className="card-body" style={{ height: 380 }}>
-              {loading.class ? (
-                <div className="skeleton-chart" />
-              ) : uniqueClasses.length ? (
-                <Bar ref={barRef} data={barChartData} options={barChartOptions} />
-              ) : (
-                <div className="text-center text-muted">No data</div>
-              )}
+          </div>
+        </div>
+
+        {/* Bar chart */}
+        <div className="row g-3 mb-5">
+          <div className="col-12">
+            <div className="card shadow-sm">
+              <div className="card-header bg-primary text-white d-flex align-items-center justify-content-between">
+                <h5 className="card-title mb-0">Student Count by Class</h5>
+                <div className="d-flex gap-2">
+                  <button
+                    className="btn btn-sm btn-light"
+                    onClick={() => setShowLegends((s) => ({ ...s, bar: !s.bar }))}
+                    title="Toggle legend"
+                  >
+                    <i className="bi bi-list-task" />
+                  </button>
+                  <button
+                    className="btn btn-sm btn-light"
+                    onClick={() => downloadChart(barRef, "student-count.png")}
+                    title="Download PNG"
+                  >
+                    <i className="bi bi-download" />
+                  </button>
+                  <button className="btn btn-sm btn-light" onClick={fetchClassWiseCount} title="Refresh">
+                    <i className="bi bi-arrow-clockwise" />
+                  </button>
+                </div>
+              </div>
+              <div className="card-body" style={{ height: 380 }}>
+                {loading.class ? (
+                  <div className="skeleton-chart" />
+                ) : uniqueClasses.length ? (
+                  <Bar ref={barRef} data={barChartData} options={barChartOptions} />
+                ) : (
+                  <div className="text-center text-muted">No data</div>
+                )}
+              </div>
             </div>
           </div>
         </div>
+
+        {/* Styles */}
+        <style>{`
+          .dashboard-bg { position: relative; }
+          .dashboard-overlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(255,255,255,0.72);
+            z-index: 1;
+            pointer-events: none;
+          }
+
+          .quick-links { top: 0; z-index: 3; }
+          .quick-links-inner { backdrop-filter: blur(6px); }
+
+          /* Enhanced Link Cards */
+          .link-card-ex {
+            display: inline-flex;
+            align-items: center;
+            gap: .9rem;
+            padding: .9rem 1.1rem;
+            border-radius: 1rem;
+            color: #fff;
+            text-decoration: none;
+            border: 0;
+            position: relative;
+            overflow: hidden;
+            transition: transform .2s ease, box-shadow .2s ease, opacity .2s ease;
+            background-size: 140% 140%;
+            background-position: 0% 50%;
+          }
+          .link-card-ex:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 .75rem 1.25rem rgba(0,0,0,.15);
+            background-position: 100% 50%;
+          }
+          .link-card-ex:active { transform: translateY(0); }
+
+          .link-card-ex .icon-wrap {
+            display: inline-grid;
+            place-items: center;
+            width: 2.6rem;
+            height: 2.6rem;
+            border-radius: 50%;
+            background: rgba(255,255,255,.16);
+            box-shadow: inset 0 0 0 2px rgba(255,255,255,.18);
+          }
+          .link-card-ex .icon-wrap i { font-size: 1.2rem; }
+
+          .link-card-ex .text-wrap {
+            display: inline-flex;
+            align-items: center;
+            gap: .6rem;
+            font-weight: 600;
+            letter-spacing: .2px;
+          }
+          .link-card-ex .label { font-size: .98rem; }
+          .link-card-ex .arrow { opacity: .85; }
+
+          .card {
+            border-radius: 1rem;
+            background-clip: padding-box;
+          }
+          .card:not([style*="linear-gradient"]) {
+            background-color: rgba(255,255,255,0.92) !important;
+          }
+
+          .card-header { border-top-left-radius: 1rem !important; border-top-right-radius: 1rem !important; }
+          .hover-lift { transition: transform .2s ease, box-shadow .2s ease; }
+          .hover-lift:hover { transform: translateY(-2px); box-shadow: 0 0.75rem 1.25rem rgba(0,0,0,.08); }
+
+          .kpi-card { position: relative; overflow: hidden; backdrop-filter: saturate(1.2) blur(2px); }
+          .kpi-shimmer {
+            position: absolute; inset: 0;
+            background: linear-gradient(110deg, rgba(255,255,255,.08), rgba(255,255,255,.18), rgba(255,255,255,.08));
+            background-size: 200% 100%;
+            animation: shimmer 1.2s infinite linear;
+            pointer-events: none;
+          }
+          @keyframes shimmer { to { background-position-x: -200%; } }
+
+          .skeleton-chart {
+            height: 100%; width: 100%; border-radius: .75rem;
+            background: linear-gradient(110deg, #f3f4f6 8%, #e5e7eb 18%, #f3f4f6 33%);
+            background-size: 200% 100%;
+            animation: shimmer 1.2s infinite linear;
+          }
+
+          .pulse-dot {
+            width: .5rem; height: .5rem; border-radius: 50%;
+            background: #22c55e; display: inline-block; position: relative;
+          }
+          .pulse-dot::after {
+            content: ""; position: absolute; inset: 0; border-radius: 50%;
+            box-shadow: 0 0 0 0 rgba(34,197,94,.6); animation: pulse 1.5s infinite;
+          }
+          @keyframes pulse { 70% { box-shadow: 0 0 0 .45rem rgba(34,197,94,0); } 100% { box-shadow: 0 0 0 0 rgba(34,197,94,0); } }
+
+          button:focus-visible, a:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+        `}</style>
+
+        {/* Bootstrap Icons (optional if not already globally included) */}
+        <link
+          rel="stylesheet"
+          href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css"
+        />
       </div>
-
-      {/* Styles */}
-      <style>{`
-        .card { border-radius: 1rem; }
-        .card-header { border-top-left-radius: 1rem !important; border-top-right-radius: 1rem !important; }
-        .hover-lift { transition: transform .2s ease, box-shadow .2s ease; }
-        .hover-lift:hover { transform: translateY(-2px); box-shadow: 0 0.75rem 1.25rem rgba(0,0,0,.08); }
-
-        .kpi-card { position: relative; overflow: hidden; backdrop-filter: saturate(1.2) blur(2px); }
-        .kpi-shimmer {
-          position: absolute; inset: 0;
-          background: linear-gradient(110deg, rgba(255,255,255,.08), rgba(255,255,255,.18), rgba(255,255,255,.08));
-          background-size: 200% 100%;
-          animation: shimmer 1.2s infinite linear;
-          pointer-events: none;
-        }
-        @keyframes shimmer { to { background-position-x: -200%; } }
-
-        .skeleton-chart {
-          height: 100%; width: 100%; border-radius: .75rem;
-          background: linear-gradient(110deg, #f3f4f6 8%, #e5e7eb 18%, #f3f4f6 33%);
-          background-size: 200% 100%;
-          animation: shimmer 1.2s infinite linear;
-        }
-
-        .pulse-dot {
-          width: .5rem; height: .5rem; border-radius: 50%;
-          background: #22c55e; display: inline-block; position: relative;
-        }
-        .pulse-dot::after {
-          content: ""; position: absolute; inset: 0; border-radius: 50%;
-          box-shadow: 0 0 0 0 rgba(34,197,94,.6); animation: pulse 1.5s infinite;
-        }
-        @keyframes pulse { 70% { box-shadow: 0 0 0 .45rem rgba(34,197,94,0); } 100% { box-shadow: 0 0 0 0 rgba(34,197,94,0); } }
-
-        /* Better focus outline for a11y */
-        button:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
-      `}</style>
-
-      {/* Bootstrap Icons (optional if not already globally included) */}
-      <link
-        rel="stylesheet"
-        href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css"
-      />
     </div>
   );
 };

@@ -1,3 +1,4 @@
+// File: DayWiseReport.jsx
 import React, { useState, useEffect } from 'react';
 import {
   Container,
@@ -120,8 +121,18 @@ const DayWiseReport = () => {
   const fetchSchoolDetails = async () => {
     try {
       const response = await api.get('/schools');
-      if (response.data && response.data.length > 0) {
-        setSchool(response.data[0]);
+      // normalize possible shapes
+      const data = response.data;
+      if (Array.isArray(data) && data.length > 0) {
+        setSchool(data[0]);
+      } else if (data && Array.isArray(data.schools) && data.schools.length) {
+        setSchool(data.schools[0]);
+      } else if (data && data.school) {
+        setSchool(data.school);
+      } else if (data && typeof data === 'object' && Object.keys(data).length) {
+        setSchool(data);
+      } else {
+        setSchool(null);
       }
     } catch (err) {
       console.error('Error fetching school details:', err);
@@ -161,7 +172,7 @@ const DayWiseReport = () => {
       const start = formatDate(startDate);
       const end = formatDate(endDate);
       const response = await api.get(`/reports/day-wise?startDate=${start}&endDate=${end}`);
-      setReportData(response.data);
+      setReportData(response.data || []);
       setCurrentPage(1);
     } catch (err) {
       if (err.response && err.response.status === 401) {
@@ -180,41 +191,118 @@ const DayWiseReport = () => {
     }
   };
 
-  // Function to open the entire report as a PDF.
-  const openPdfInNewTab = async () => {
-    if (!school) {
-      alert('School details not available.');
-      return;
+  // NEW: Robust handlePrintReceipt - mirrors Transactions implementation
+  const handlePrintReceipt = async (slipId) => {
+    try {
+      Swal.fire({
+        title: "Preparing receipt PDF…",
+        didOpen: () => Swal.showLoading(),
+        allowOutsideClick: false,
+        showConfirmButton: false,
+      });
+
+      // fetch in parallel and normalize
+      const [schoolResp, receiptResp] = await Promise.allSettled([
+        api.get("/schools"),
+        api.get(`/transactions/slip/${slipId}`),
+      ]);
+
+      // Normalize receipt
+      let receipt = null;
+      if (receiptResp.status === "fulfilled") {
+        const r = receiptResp.value?.data;
+        if (r && Array.isArray(r.data)) receipt = r.data;
+        else if (Array.isArray(r)) receipt = r;
+        else if (r && typeof r === "object") {
+          if (r.data && Array.isArray(r.data)) receipt = r.data;
+          else if (r.data && typeof r.data === "object") receipt = [r.data];
+          else if (r.receipt && Array.isArray(r.receipt)) receipt = r.receipt;
+          else receipt = [r];
+        } else {
+          receipt = receiptResp.value?.data ?? null;
+          if (receipt && !Array.isArray(receipt)) receipt = [receipt];
+        }
+      }
+
+      if (!receipt || receipt.length === 0) {
+        Swal.close();
+        Swal.fire("No receipt", "Server returned no receipt data.", "error");
+        return;
+      }
+
+      // Normalize school
+      let schoolData = null;
+      if (schoolResp.status === "fulfilled") {
+        const d = schoolResp.value?.data;
+        if (d && Array.isArray(d.schools) && d.schools.length) schoolData = d.schools[0];
+        else if (Array.isArray(d)) schoolData = d[0];
+        else if (d && Array.isArray(d.data) && d.data.length) schoolData = d.data[0];
+        else if (d && d.school) schoolData = d.school;
+        else if (d && typeof d === "object" && Object.keys(d).length) schoolData = d;
+      }
+
+      // fallback to embedded school in receipt
+      if (!schoolData && receipt[0]) {
+        const item = receipt[0];
+        if (item.School || item.school) schoolData = item.School || item.school;
+        else if (item.schoolName || item.institute_name) {
+          schoolData = {
+            name: item.schoolName || item.institute_name,
+            address: item.schoolAddress || item.address || "",
+            logo: item.logo || null,
+          };
+        }
+      }
+
+      // fallback minimal school
+      if (!schoolData) {
+        schoolData = { name: "Your School", address: "", logo: null, phone: "", email: "" };
+      }
+
+      // Prefer server-side PDF generation if you have an endpoint
+      try {
+        const payload = { receipt, school: schoolData, fileName: `Receipt-${slipId}` };
+        const res = await api.post("/receipt-pdf/receipt/generate-pdf", payload, {
+          responseType: "blob",
+        });
+        const blob = new Blob([res.data], { type: "application/pdf" });
+        const url = window.URL.createObjectURL(blob);
+        window.open(url, "_blank");
+        setTimeout(() => window.URL.revokeObjectURL(url), 60 * 1000);
+        Swal.close();
+        return;
+      } catch (err) {
+        // server endpoint might not exist — fall back to client-side generation
+        console.warn("Server-side PDF generation failed or not available, falling back to client-side PDF. ", err?.message || err);
+      }
+
+      // Fallback: render using client-side @react-pdf/renderer (existing approach)
+      try {
+        const student = receipt[0].Student || receipt[0].student || null;
+        // If your PdfReceiptDocument expects school/receipt/student props, adapt accordingly
+        const blob = await pdf(
+          <PdfReceiptDocument school={schoolData} receipt={receipt} student={student} />
+        ).toBlob();
+        const blobUrl = URL.createObjectURL(blob);
+        window.open(blobUrl, '_blank');
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 60 * 1000);
+        Swal.close();
+      } catch (err) {
+        Swal.close();
+        console.error("Error generating PDF blob:", err);
+        Swal.fire("Error", "Failed to generate receipt PDF.", "error");
+      }
+    } catch (err) {
+      Swal.close();
+      console.error("Unexpected error preparing receipt:", err);
+      Swal.fire("Error", err?.message || "Failed to prepare receipt PDF", "error");
     }
-    const doc = (
-      <PdfReports
-        school={school}
-        // Keep API-friendly format for PDF props if your PDF expects yyyy-MM-dd
-        startDate={formatDate(startDate)}
-        endDate={formatDate(endDate)}
-        aggregatedData={filteredData} // Use filtered data for PDF
-        feeCategories={[]} // Adjust or populate if needed.
-        categorySummary={calculateFeeHeadingSummary(filteredData)}
-        totalSummary={filteredData.reduce((acc, item) => {
-          acc.totalFeeReceived += Number(item.totalFeeReceived) || 0;
-          acc.totalConcession += Number(item.totalConcession) || 0;
-          acc.totalVanFee += Number(item.totalVanFee) || 0;
-          acc.totalVanFeeConcession += Number(item.totalVanFeeConcession) || 0;
-          acc.totalReceived += (Number(item.totalFeeReceived) || 0) + (Number(item.totalVanFee) || 0);
-          return acc;
-        }, { totalFeeReceived: 0, totalConcession: 0, totalVanFee: 0, totalVanFeeConcession: 0, totalReceived: 0 })}
-      />
-    );
-    const asPdf = pdf(doc);
-    const blob = await asPdf.toBlob();
-    const url = URL.createObjectURL(blob);
-    window.open(url, '_blank');
   };
 
   // For the Collection Report table (detailed student rows).
   const studentData = filteredData; // Use filtered data
 
-  // Calculate pagination.
+  // Pagination calculations.
   const indexOfLastRecord = currentPage * recordsPerPage;
   const indexOfFirstRecord = indexOfLastRecord - recordsPerPage;
   const currentRecords = studentData.slice(indexOfFirstRecord, indexOfLastRecord);
@@ -290,30 +378,34 @@ const DayWiseReport = () => {
     setShowReceiptModal(true);
   };
 
-  // Function to generate and print PDF for an individual receipt.
-  const handlePrintReceipt = async (slipId) => {
-    try {
-      const schoolResponse = await api.get("/schools");
-      const schoolData = schoolResponse.data.length > 0 ? schoolResponse.data[0] : null;
-      const receiptResponse = await api.get(`/transactions/slip/${slipId}`);
-      const receiptData = receiptResponse.data.data;
-      if (!schoolData || !receiptData || receiptData.length === 0) {
-        console.error("Insufficient data to generate PDF");
-        return;
-      }
-      const student = receiptData[0].Student;
-      if (!student) {
-        console.error("Student data missing in receipt");
-        return;
-      }
-      const blob = await pdf(
-        <PdfReceiptDocument school={schoolData} receipt={receiptData} student={student} />
-      ).toBlob();
-      const blobUrl = URL.createObjectURL(blob);
-      window.open(blobUrl, "_blank");
-    } catch (error) {
-      console.error("Error generating PDF blob:", error);
+  // Function to open the entire report as a PDF (unchanged).
+  const openPdfInNewTab = async () => {
+    if (!school) {
+      alert('School details not available.');
+      return;
     }
+    const doc = (
+      <PdfReports
+        school={school}
+        startDate={formatDate(startDate)}
+        endDate={formatDate(endDate)}
+        aggregatedData={filteredData}
+        feeCategories={[]}
+        categorySummary={calculateFeeHeadingSummary(filteredData)}
+        totalSummary={filteredData.reduce((acc, item) => {
+          acc.totalFeeReceived += Number(item.totalFeeReceived) || 0;
+          acc.totalConcession += Number(item.totalConcession) || 0;
+          acc.totalVanFee += Number(item.totalVanFee) || 0;
+          acc.totalVanFeeConcession += Number(item.totalVanFeeConcession) || 0;
+          acc.totalReceived += (Number(item.totalFeeReceived) || 0) + (Number(item.totalVanFee) || 0);
+          return acc;
+        }, { totalFeeReceived: 0, totalConcession: 0, totalVanFee: 0, totalVanFeeConcession: 0, totalReceived: 0 })}
+      />
+    );
+    const asPdf = pdf(doc);
+    const blob = await asPdf.toBlob();
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank');
   };
 
   return (

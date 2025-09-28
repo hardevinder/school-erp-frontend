@@ -50,3 +50,55 @@
     grid-column: 1 / 2;
   }
 }
+
+
+/* New Added */
+
+/* ===== Vertical tabs for Add/Edit Student modal ===== */
+.vtabs {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 12px;
+  max-height: 60vh;
+}
+.vtabs-nav {
+  border-right: 1px solid #eee;
+  overflow: auto;
+  padding-right: 6px;
+}
+.vtabs-link {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 1px solid #eee;
+  background: #fafafa;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+}
+.vtabs-link.active {
+  background: #e9f5ff;
+  border-color: #b5ddff;
+}
+.vtabs-content {
+  overflow: hidden;
+}
+.vtabs-pane {
+  display: none;
+  max-height: 60vh;
+  overflow: auto;
+  padding-right: 8px;
+}
+.vtabs-pane.active {
+  display: block;
+}
+.vtabs-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.vtabs-grid .full-row {
+  grid-column: 1 / -1;
+}

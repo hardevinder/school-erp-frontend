@@ -1,107 +1,141 @@
-/* --- Page wrapper with soft gradient background --- */
-.login-wrap {
+:root {
+  --glass-bg: rgba(255, 255, 255, 0.08);
+  --glass-border: rgba(255, 255, 255, 0.25);
+  --white-75: rgba(255,255,255,0.75);
+  --white-50: rgba(255,255,255,0.55);
+}
+
+.text-white-75 { color: var(--white-75) !important; }
+
+/* FULLSCREEN BACKDROP */
+.login-hero {
   min-height: 100vh;
+  width: 100%;
+  background-size: cover;
+  background-position: center center;
+  background-repeat: no-repeat;
   position: relative;
-  background: radial-gradient(1200px 800px at -10% -10%, #e8f0ff 0%, #ffffff 40%),
-              radial-gradient(900px 700px at 110% 10%, #fff1f1 0%, #ffffff 45%),
-              linear-gradient(180deg, #ffffff, #ffffff);
-  display: flex;
-  align-items: center;
+  overflow: hidden;
 }
 
-/* Floating background blobs */
-.login-wrap .blob {
-  position: absolute;
-  z-index: 0;
-  filter: blur(60px);
-  opacity: 0.5;
-}
-.login-wrap .blob-1 {
-  width: 300px;
-  height: 300px;
-  background: #cfe2ff;
-  top: 8%;
-  left: -60px;
-  border-radius: 50%;
-}
-.login-wrap .blob-2 {
-  width: 360px;
-  height: 360px;
-  background: #ffe0e0;
-  right: -80px;
-  bottom: 6%;
-  border-radius: 50%;
+/* gradient overlay is already set inline via linear-gradient in style */
+
+/* content container spacing */
+.login-hero__content {
+  padding-top: 6vh;
+  padding-bottom: 6vh;
 }
 
-/* Card layout */
-.login-card {
+/* GLASS CARD */
+.glass-card {
+  background: var(--glass-bg);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid var(--glass-border);
   border-radius: 18px;
-  backdrop-filter: saturate(1.1);
-  position: relative;
-  z-index: 1;
+  box-shadow: 0 20px 70px rgba(0,0,0,0.45);
 }
 
-/* Brand side */
-.bg-brand {
-  background: linear-gradient(135deg, #0d6efd 0%, #6ea8fe 100%);
-  color: #fff;
+.glass-card__footer {
+  background: transparent;
+  border-top: 1px solid rgba(255,255,255,0.15);
 }
-.brand-pane {
-  color: #f8f9fa;
+
+/* Inputs look nice against dark bg */
+.glass-card .form-control {
+  background: rgba(255,255,255,0.9);
+  border: 1px solid rgba(0,0,0,0.12);
+  border-radius: 12px;
 }
+
+.glass-card .form-control:focus {
+  outline: none;
+  box-shadow: 0 0 0 0.25rem rgba(13,110,253,0.25);
+}
+
+.glass-card .btn-outline-light {
+  border-radius: 12px;
+}
+
+/* BRAND */
 .brand-logo {
-  height: 64px;
-  width: auto;
-  object-fit: contain;
-  filter: drop-shadow(0 6px 16px rgba(0,0,0,0.2));
-}
-.brand-logo--placeholder {
-  width: 64px;
-  height: 64px;
-  border-radius: 14px;
-  background: rgba(255,255,255,0.18);
-  display: grid;
-  place-items: center;
-  font-size: 28px;
-}
-.brand-title {
-  font-weight: 700;
-  letter-spacing: 0.3px;
-}
-.brand-subtitle {
-  opacity: 0.95;
-}
-
-/* Mobile logo */
-.mobile-logo {
   height: 56px;
   width: auto;
   object-fit: contain;
+  filter: drop-shadow(0 6px 24px rgba(0,0,0,0.35));
 }
 
-/* Inputs / buttons polish */
-.form-control {
-  border-radius: 12px;
+.brand-logo--placeholder {
+  height: 56px;
+  width: 56px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255,255,255,0.15);
+  border: 1px solid rgba(255,255,255,0.3);
+  border-radius: 14px;
+  font-size: 26px;
 }
-.input-group .btn {
-  border-radius: 0 12px 12px 0;
-}
-.btn-primary.btn-lg {
-  border-radius: 12px;
-  box-shadow: 0 8px 18px rgba(13,110,253,0.2);
-}
-.btn-outline-dark.btn-lg {
+
+/* Subtle translucent hint card */
+.bg-translucent {
+  background: rgba(255,255,255,0.06);
+  border: 1px dashed rgba(255,255,255,0.25) !important;
   border-radius: 12px;
 }
 
-/* Hint card */
-.login-hint {
+/* BLOBS */
+.blob {
+  position: absolute;
+  width: 520px;
+  height: 520px;
+  filter: blur(60px);
+  opacity: 0.35;
+  z-index: 0;
+  pointer-events: none;
+  transform: translateZ(0);
+}
+.blob-1 {
+  top: -120px;
+  left: -120px;
+  background: radial-gradient(circle at 30% 30%, #7aa2ff, transparent 60%);
+  animation: float1 18s ease-in-out infinite;
+}
+.blob-2 {
+  bottom: -140px;
+  right: -140px;
+  background: radial-gradient(circle at 70% 70%, #ff8fcf, transparent 65%);
+  animation: float2 22s ease-in-out infinite;
+}
+@keyframes float1 { 0%,100% { transform: translate(0,0); } 50% { transform: translate(20px, 30px); } }
+@keyframes float2 { 0%,100% { transform: translate(0,0); } 50% { transform: translate(-25px, -20px); } }
+
+/* Buttons */
+.btn-primary {
   border-radius: 12px;
 }
 
-/* Tighten container on huge screens */
-@media (min-width: 1400px) {
-  .container {
-    max-width: 1140px;
-  }
+.btn-outline-light {
+  border-color: rgba(255,255,255,0.6);
+}
+
+/* Make alerts sit nicely on glass */
+.alert {
+  border-radius: 12px;
+}
+
+/* Mobile tweaks */
+@media (max-width: 576px) {
+  .login-hero__content { padding-top: 5vh; padding-bottom: 5vh; }
+  .brand-logo { height: 48px; }
+}
+
+/* Optional: prefer dark scrollbars on glassy bg (WebKit) */
+.login-hero ::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+.login-hero ::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.25);
+  border-radius: 10px;
 }

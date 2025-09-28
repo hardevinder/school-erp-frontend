@@ -1,3 +1,4 @@
+// src/components/Sidebar.jsx
 import React, { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import "bootstrap/dist/css/bootstrap.min.css";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -62,6 +63,9 @@ export default function Sidebar({ headerHeight = 56 }) {
     return item.roles.map((r) => (r || "").toLowerCase()).includes(roleLower);
   };
 
+  // search state (desktop)
+  const [q, setQ] = useState("");
+
   // ===== MENU GROUPS =====
   const menuGroups = useMemo(() => {
     const groups = [];
@@ -87,9 +91,20 @@ export default function Sidebar({ headerHeight = 56 }) {
           { key: "vanFeeDetailedReport", label: "Van Fee Report", icon: "bi-truck-front", path: "/reports/van-fee" },
           { key: "feeStructure", label: "Fee Structure", icon: "bi-cash-coin", path: "/fee-structure" },
           { key: "transportation", label: "Transportation Cost", icon: "bi-truck", path: "/transportation" },
+          // NEW: transport assignments (student-route mapping)
+          { key: "student-transport", label: "Transport Assignments", icon: "bi-truck", path: "/student-transport" },
           { key: "feeHeadings", label: "Fee Headings", icon: "bi-bookmark", path: "/fee-headings" },
           { key: "feeCategory", label: "Fee Category", icon: "bi-tags", path: "/fee-category" },
           { key: "concessions", label: "Concessions", icon: "bi-percent", path: "/concessions" },
+
+          // NEW: Opening Balances (admin/superadmin only)
+          {
+            key: "opening-balances",
+            label: "Opening Balances",
+            icon: "bi-clipboard-data",
+            path: "/opening-balances",
+            roles: ["admin", "superadmin"],
+          },
         ],
       });
       groups.push({
@@ -98,6 +113,7 @@ export default function Sidebar({ headerHeight = 56 }) {
           { key: "students", label: "Admissions", icon: "bi-people", path: "/students" },
           { key: "classes", label: "Classes", icon: "bi-list-task", path: "/classes" },
           { key: "sections", label: "Sections", icon: "bi-grid", path: "/sections" },
+          { key: "sessions", label: "Sessions", icon: "bi-calendar4-week", path: "/sessions" }, // sessions
         ],
       });
       groups.push({
@@ -131,6 +147,9 @@ export default function Sidebar({ headerHeight = 56 }) {
           { key: "substitution", label: "Substitutions", icon: "bi-arrow-repeat", path: "/substitution" },
           { key: "substitutionListing", label: "Substitution Listing", icon: "bi-list-ul", path: "/substitution-listing" },
           { key: "studentUserAccounts", label: "Create Student Login", icon: "bi-person-plus", path: "/student-user-accounts" },
+          { key: "sessions", label: "Sessions", icon: "bi-calendar4-week", path: "/sessions" }, // sessions for academic
+          // expose transport assignments to academic coordinators as well
+          { key: "student-transport", label: "Transport Assignments", icon: "bi-truck", path: "/student-transport" },
         ],
       });
       groups.push({
@@ -255,10 +274,31 @@ export default function Sidebar({ headerHeight = 56 }) {
     return groups;
   }, [isAdmin, isAcademic, isTeacher, isStudent, isHR, isSuperAdmin, roleLower]);
 
+  // filter groups by desktop search query (q)
+  const filteredGroups = useMemo(() => {
+    const s = (q || "").trim().toLowerCase();
+    if (!s) return menuGroups;
+    const out = [];
+    for (const g of menuGroups) {
+      const matchedItems = g.items.filter((it) => {
+        const label = (it.label || "").toLowerCase();
+        const path = (it.path || "").toLowerCase();
+        const group = (g.heading || "").toLowerCase();
+        return label.includes(s) || path.includes(s) || group.includes(s);
+      });
+      if (matchedItems.length) {
+        out.push({ ...g, items: matchedItems });
+      }
+    }
+    return out;
+  }, [q, menuGroups]);
+
   const isPathActive = (path) =>
     location.pathname === path || location.pathname.startsWith(path + "/");
 
-  const handleMenuClick = (item) => navigate(item.path);
+  const handleMenuClick = (item) => {
+    navigate(item.path);
+  };
 
   const asideStyle = {
     top: `${headerHeight}px`,
@@ -274,19 +314,19 @@ export default function Sidebar({ headerHeight = 56 }) {
 
   // choose primary by role; else take first 4
   const PRIMARY_BY_ROLE = {
-    admin: ["dashboard", "transactions", "studentDue", "schoolFeeSummary"],
+    admin: ["dashboard", "transactions", "studentDue", "opening-balances"], // added opening-balances
     academic_coordinator: ["dashboard", "combined-timetable", "students", "exam-schemes"],
     teacher: ["dashboard", "mark-attendance", "teacher-timetable-display", "marks-entry"],
     student: ["dashboard", "student-attendance", "student-timetable-display", "my-assignments"],
     hr: ["dashboard", "employees", "employee-attendance", "hr-leave-requests"],
-    superadmin: ["dashboard", "users", "reports/day-wise", "transactions"],
+    superadmin: ["dashboard", "users", "reports/day-wise", "transactions", "opening-balances"], // added opening-balances
   };
 
   const primaryKeys = PRIMARY_BY_ROLE[roleLower] || allItems.slice(0, 4).map((i) => i.key);
   const primaryItems = allItems.filter((i) => primaryKeys.includes(i.key)).slice(0, 5);
   const moreItems = allItems.filter((i) => !primaryKeys.includes(i.key));
 
-  // Render
+  // Render mobile first
   if (isMobile) {
     return (
       <>
@@ -301,11 +341,12 @@ export default function Sidebar({ headerHeight = 56 }) {
     );
   }
 
-  // Desktop: your existing sidebar
+  // Desktop: sidebar with search
   return (
     <>
       <aside className="app-sidebar" style={asideStyle} aria-label="Sidebar navigation">
-        <div className="sidebar-top d-flex align-items-center">
+        <div className="sidebar-top d-flex align-items-center px-2">
+          {/* Toggle */}
           <button
             className="btn toggle-btn ms-auto"
             onClick={() => setIsExpanded((p) => !p)}
@@ -316,8 +357,20 @@ export default function Sidebar({ headerHeight = 56 }) {
           </button>
         </div>
 
-        <nav className="mt-2">
-          {menuGroups.map((group, gi) => (
+        {/* Search (desktop) */}
+        <div className="px-3 py-2">
+          <input
+            type="search"
+            className="form-control form-control-sm"
+            placeholder="Search menu..."
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            aria-label="Search menu"
+          />
+        </div>
+
+        <nav className="mt-1">
+          {filteredGroups.map((group, gi) => (
             <div key={gi}>
               {isExpanded && (
                 <h6 className="group-heading text-uppercase px-3 mt-3 mb-1">{group.heading}</h6>
@@ -348,6 +401,11 @@ export default function Sidebar({ headerHeight = 56 }) {
               </ul>
             </div>
           ))}
+
+          {/* If search produced no results */}
+          {filteredGroups.length === 0 && (
+            <div className="px-3 py-2 text-muted small">No menu items match “{q}”.</div>
+          )}
         </nav>
       </aside>
 

@@ -1,11 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { Container, Row, Col, Form, Button, Table, Alert, Pagination } from 'react-bootstrap';
+import { Container, Row, Col, Form, Button, Table, Alert, Pagination, Spinner } from 'react-bootstrap';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import api from '../api'; // Custom Axios instance (with token interceptor)
 import Swal from 'sweetalert2';
 import { pdf } from '@react-pdf/renderer';
-import PdfReports from './PdfCategoryReport'; // Your PDF component saved in the same folder
+import PdfReports from './PdfCategoryReport'; // Update path if your PDF component filename is different
+
+// Excel libs
+import * as XLSX from 'xlsx';
+import { saveAs } from 'file-saver';
 
 /* -------------------------------------------------
    Helpers
@@ -48,8 +52,7 @@ const pivotReportData = (data) => {
         Student: curr.Student,
         feeCategories: {},
         vanFeeTotal: 0,
-        // fineAmount: Number(curr.totalFine || 0),
-        fineAmount: 0, // initialize at 0
+        fineAmount: 0,
       };
     }
     const category = curr.feeCategoryName;
@@ -148,11 +151,12 @@ const DayWiseReport = () => {
   const [reportData, setReportData] = useState([]);
   const [school, setSchool] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [pdfLoading, setPdfLoading] = useState(false); // NEW: PDF loader state
   const [error, setError] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const recordsPerPage = 500;
 
-  // Fetch school details from API
+  // Fetch school details from API (initial load - optional)
   const fetchSchoolDetails = async () => {
     try {
       const response = await api.get('/schools');
@@ -180,6 +184,7 @@ const DayWiseReport = () => {
       const end = formatDate(endDate);      // yyyy-MM-dd for backend
       const response = await api.get(`/reports/day-wise?startDate=${start}&endDate=${end}`);
       setReportData(response.data);
+      console.log('REPORT DATA LENGTH', response.data.length);
       setCurrentPage(1); // Reset pagination to first page
     } catch (err) {
       if (err.response && err.response.status === 401) {
@@ -249,33 +254,191 @@ const DayWiseReport = () => {
 
   const overallFineTotal = pivotedData.reduce((sum, row) => sum + (row.fineAmount || 0), 0);
 
-  // Function to generate PDF blob and open in a new tab
+  // NEW: openPdfInNewTab now fetches school details on-demand if missing,
+  // and uses pivotedData/categorySummary/uniqueCategories to generate the same report PDF.
   const openPdfInNewTab = async () => {
-    if (!school) {
-      alert('School details not available.');
+    if (!reportData || reportData.length === 0) {
+      alert('No report data to print. Please generate the report first.');
       return;
     }
-    const doc = (
-      <PdfReports
-        school={school}
-        startDate={formatDate(startDate)} // yyyy-MM-dd for PDF data generation
-        endDate={formatDate(endDate)}     // yyyy-MM-dd for PDF data generation
-        aggregatedData={reportData}
-        feeCategories={uniqueCategories}
-        categorySummary={categorySummary}
-        transactionIds={reportData.map(item => item.Transaction_ID)} // ✅ ADD THIS
-      />
-    );
-    const asPdf = pdf(doc);
-    const blob = await asPdf.toBlob();
-    const url = URL.createObjectURL(blob);
-    window.open(url, '_blank');
+
+    setPdfLoading(true);
+    let schoolData = school;
+    try {
+      if (!schoolData) {
+        // Fetch school details if not already loaded
+        try {
+          const resp = await api.get('/schools');
+          if (resp.data && resp.data.length > 0) {
+            schoolData = resp.data[0];
+            setSchool(schoolData);
+            console.log('Fetched school data for PDF header');
+          } else {
+            console.warn('No school data returned from /schools');
+          }
+        } catch (err) {
+          console.error('Error fetching school details before PDF generation:', err);
+          // warn user but continue
+          Swal.fire({
+            title: 'Warning',
+            text: 'Could not fetch school details. PDF will be generated without school header.',
+            icon: 'warning',
+            confirmButtonText: 'OK'
+          });
+        }
+      }
+
+      // Build document props consistent with the pivoted view
+      const docProps = {
+        school: schoolData,
+        startDate: startDate ? formatDate(startDate) : null,
+        endDate: endDate ? formatDate(endDate) : null,
+        aggregatedData: reportData, // raw data (PdfReports component can decide how to use it)
+        pivotedData,                // the pivoted rows — handy if your PDF component supports it
+        feeCategories: uniqueCategories,
+        categorySummary,
+        totals: {
+          grandTotal,
+          overallVanFeeTotal,
+          overallFineTotal,
+        },
+        transactionIds: reportData.map(item => item.Transaction_ID || item.Slip_ID)
+      };
+
+      const doc = <PdfReports {...docProps} />;
+      const asPdf = pdf(doc);
+      const blob = await asPdf.toBlob();
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank');
+    } catch (err) {
+      console.error('Error generating PDF:', err);
+      alert('Error generating PDF. Check console for details.');
+    } finally {
+      setPdfLoading(false);
+    }
+  };
+
+  /* ======================================================
+     Excel export helpers
+     - Builds 2 sheets: Collection (pivoted) + Category Summary
+     - Uses XLSX to create workbook and file-saver to download
+     ====================================================== */
+
+  const buildCollectionSheetRows = (pivoted, categories) => {
+    // Build header order
+    const header = [
+      'Sr No',
+      'Slip_ID',
+      'Admission Number',
+      'Student Name',
+      'Class',
+      'PaymentMode',
+      'Created At',
+      ...categories,
+      'Van Fee',
+      'Fine',
+      'Overall Total'
+    ];
+
+    // Build rows
+    const rows = pivoted.map((row, idx) => {
+      // Sum category totals
+      const categoryTotal = Object.values(row.feeCategories).reduce(
+        (sum, feeData) => sum + (feeData.totalReceived || 0), 0
+      );
+      const overallTotal = categoryTotal + (row.vanFeeTotal || 0) + (row.fineAmount || 0);
+
+      // Flatten categories into values following header order
+      const categoryValues = categories.map(cat => {
+        const fd = row.feeCategories[cat];
+        return fd ? fd.totalReceived : 0;
+      });
+
+      return {
+        'Sr No': idx + 1,
+        Slip_ID: row.Slip_ID,
+        'Admission Number': row.Student?.admission_number || '',
+        'Student Name': row.Student?.name || '',
+        Class: row.Student?.Class?.class_name || '',
+        PaymentMode: row.PaymentMode || '',
+        'Created At': formatToDDMMYYYY(row.createdAt),
+        ...categories.reduce((acc, cat, i) => { acc[cat] = categoryValues[i]; return acc; }, {}),
+        'Van Fee': row.vanFeeTotal || 0,
+        'Fine': row.fineAmount || 0,
+        'Overall Total': overallTotal
+      };
+    });
+
+    return { header, rows };
+  };
+
+  const buildCategorySummaryRows = (categorySummaryList) => {
+    const rows = categorySummaryList.map((item) => ({
+      Category: item.category,
+      'Cash - FeeReceived': item.cash.totalFeeReceived || 0,
+      'Online - FeeReceived': item.online.totalFeeReceived || 0,
+      'Overall - FeeReceived': (item.cash.totalFeeReceived || 0) + (item.online.totalFeeReceived || 0),
+      'Cash - Concession': item.cash.totalConcession || 0,
+      'Online - Concession': item.online.totalConcession || 0,
+      'Overall - Concession': (item.cash.totalConcession || 0) + (item.online.totalConcession || 0),
+      'Cash - VanFee': item.cash.totalVanFee || 0,
+      'Online - VanFee': item.online.totalVanFee || 0,
+      'Overall - VanFee': (item.cash.totalVanFee || 0) + (item.online.totalVanFee || 0),
+      'Cash - TotalReceived': item.cash.totalReceived || 0,
+      'Online - TotalReceived': item.online.totalReceived || 0,
+      'Overall - TotalReceived': (item.cash.totalReceived || 0) + (item.online.totalReceived || 0),
+    }));
+
+    return rows;
+  };
+
+  const exportToExcel = () => {
+    if (!reportData || reportData.length === 0) {
+      alert('No data to export.');
+      return;
+    }
+
+    // Build Collection sheet
+    const { header, rows } = buildCollectionSheetRows(pivotedData, uniqueCategories);
+    const wsCollection = XLSX.utils.json_to_sheet(rows, { header: header });
+    // Auto width (basic)
+    const colWidths = header.map(h => ({ wch: Math.max(10, String(h).length + 2) }));
+    wsCollection['!cols'] = colWidths;
+
+    // Build Category Summary sheet
+    const catRows = buildCategorySummaryRows(categorySummary);
+    const wsCategory = XLSX.utils.json_to_sheet(catRows);
+    wsCategory['!cols'] = Object.keys(catRows[0] || {}).map(k => ({ wch: Math.max(12, k.length + 2) }));
+
+    // Create workbook and append sheets
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, wsCollection, 'Collection');
+    XLSX.utils.book_append_sheet(wb, wsCategory, 'Category Summary');
+
+    // Add a totals sheet optionally
+    const totalsSheetData = [
+      { Metric: 'Grand Total (Categories)', Value: grandTotal },
+      { Metric: 'Overall Van Fee Total', Value: overallVanFeeTotal },
+      { Metric: 'Overall Fine Total', Value: overallFineTotal },
+      { Metric: 'Grand Combined Total', Value: grandTotal + overallVanFeeTotal + overallFineTotal }
+    ];
+    const wsTotals = XLSX.utils.json_to_sheet(totalsSheetData);
+    XLSX.utils.book_append_sheet(wb, wsTotals, 'Totals');
+
+    // Generate binary and save
+    const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    const blob = new Blob([wbout], { type: 'application/octet-stream' });
+    const fileName = `DayWiseReport_${formatDate(startDate)}_to_${formatDate(endDate)}.xlsx`;
+    saveAs(blob, fileName);
   };
 
   return (
     <Container className="mt-4">
       <h1 className="text-center">Day Wise Report</h1>
       
+      {/* -------------------------
+         Date pickers and action buttons
+         ------------------------- */}
       <Row className="justify-content-center mt-4">
         <Col md={3}>
           <Form.Group controlId="startDate">
@@ -314,24 +477,54 @@ const DayWiseReport = () => {
             />
           </Form.Group>
         </Col>
-        <Col md={3} className="d-flex align-items-end">
+        <Col md={4} className="d-flex align-items-end">
           <div className="w-100 d-flex">
             <Button
               variant="primary"
               onClick={handleGenerateReport}
-              disabled={loading}
+              disabled={loading || pdfLoading}
               className="me-2 flex-fill"
             >
-              {loading ? 'Generating...' : 'Generate Report'}
+              {loading ? (
+                <>
+                  <Spinner animation="border" size="sm" className="me-2" />
+                  Generating...
+                </>
+              ) : 'Generate Report'}
             </Button>
-            {reportData.length > 0 && school && (
-              <Button variant="secondary" onClick={openPdfInNewTab} className="flex-fill">
-                Print As PDF
-              </Button>
-            )}
+
+            {/* Print as PDF - enabled when reportData exists; fetches school if needed */}
+            <Button
+              variant="secondary"
+              onClick={openPdfInNewTab}
+              disabled={!reportData || reportData.length === 0 || pdfLoading}
+              className="me-2 flex-fill"
+              title={(!reportData || reportData.length === 0) ? 'No report data' : 'Print as PDF'}
+            >
+              {pdfLoading ? (
+                <>
+                  <Spinner animation="border" size="sm" className="me-2" />
+                  Generating PDF...
+                </>
+              ) : (
+                'Print As PDF'
+              )}
+            </Button>
+
+            {/* Export to Excel - always visible, disabled if no data or pdf is generating */}
+            <Button
+              variant="success"
+              onClick={exportToExcel}
+              disabled={!reportData || reportData.length === 0 || pdfLoading}
+              className="flex-fill"
+              title={(!reportData || reportData.length === 0) ? 'No data to export' : 'Export as Excel'}
+            >
+              Export As Excel
+            </Button>
           </div>
         </Col>
       </Row>
+
       {error && (
         <Row className="mt-3">
           <Col>

@@ -1,14 +1,49 @@
-// src/components/Login.jsx
+// Login.js
 import React, { useEffect, useRef, useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import "bootstrap/dist/css/bootstrap.min.css";
 import { auth, provider, signInWithPopup } from "../firebase/firebaseConfig";
 import socket from "../socket";
-import "./login.css"; // <-- add this line
+import "./login.css";
 
-// Priority order to pick default activeRole
 const ROLE_ORDER = ["superadmin", "admin", "hr", "academic_coordinator", "teacher", "student"];
+
+// --- Background resolver (robust) ---
+const BG_CANDIDATES = [
+  `${process.env.PUBLIC_URL}/images/SchoolBackground.jpeg`,
+  `${process.env.PUBLIC_URL}/images/SchoolBackground.jpg`,
+  `${process.env.PUBLIC_URL}/images/SchooBackground.jpeg`,
+  `${process.env.PUBLIC_URL}/images/SchooBackground.jpg`,
+  `${process.env.PUBLIC_URL}/image/SchoolBackground.jpeg`,
+  `${process.env.PUBLIC_URL}/image/SchoolBackground.jpg`,
+  `${process.env.PUBLIC_URL}/image/SchooBackground.jpeg`,
+  `${process.env.PUBLIC_URL}/image/SchooBackground.jpg`,
+];
+
+function resolveFirstExistingImage(candidates) {
+  return new Promise((resolve) => {
+    let resolved = false;
+    let remaining = candidates.length;
+    if (!remaining) return resolve(null);
+
+    candidates.forEach((src) => {
+      const img = new Image();
+      img.onload = () => {
+        if (!resolved) {
+          resolved = true;
+          resolve(src);
+        }
+      };
+      img.onerror = () => {
+        remaining -= 1;
+        if (remaining === 0 && !resolved) resolve(null);
+      };
+      img.src = src;
+    });
+  });
+}
+// -----------------------------------------------------
 
 const joinRooms = (user, roles = []) => {
   if (roles.includes("student")) {
@@ -34,9 +69,10 @@ const GoogleIcon = () => (
 );
 
 const Login = () => {
-  const [login, setLogin] = useState("");          // email OR username
+  const [login, setLogin] = useState("");
   const [password, setPassword] = useState("");
   const [school, setSchool] = useState(null);
+  const [bgUrl, setBgUrl] = useState(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [showPass, setShowPass] = useState(false);
@@ -46,26 +82,30 @@ const Login = () => {
   const userInputRef = useRef(null);
   const apiBase = useMemo(() => process.env.REACT_APP_API_URL?.replace(/\/+$/, ""), []);
 
-  // Focus first field & fetch school details
   useEffect(() => {
     userInputRef.current?.focus();
     axios
       .get(`${apiBase}/schools`)
       .then((res) => res.data?.length && setSchool(res.data[0]))
-      .catch(() => {}); // silent fail
+      .catch(() => {});
   }, [apiBase]);
 
-  // Persist axios token on app boot if already logged in
   useEffect(() => {
     const token = localStorage.getItem("token");
     if (token) axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      const found = await resolveFirstExistingImage(BG_CANDIDATES);
+      setBgUrl(found);
+    })();
   }, []);
 
   const afterAuth = (data) => {
     const { token, user, roles } = data;
     const roleArr = Array.isArray(roles) ? roles : roles ? [roles] : [];
 
-    // Persist auth info
     if (remember) {
       localStorage.setItem("token", token);
       localStorage.setItem("roles", JSON.stringify(roleArr));
@@ -73,7 +113,6 @@ const Login = () => {
       localStorage.setItem("userId", user.id);
       localStorage.setItem("name", user.name);
     } else {
-      // session-only: store in-memory-like (fallback to localStorage but clear on unload)
       localStorage.setItem("token", token);
       localStorage.setItem("roles", JSON.stringify(roleArr));
       localStorage.setItem("username", user.username);
@@ -89,22 +128,13 @@ const Login = () => {
       });
     }
 
-    // legacy cleanup
     localStorage.removeItem("userRole");
-
     const defaultActive = ROLE_ORDER.find((r) => roleArr.includes(r)) || roleArr[0] || "";
     localStorage.setItem("activeRole", defaultActive);
 
-    // Make token available to axios immediately
     axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
-
-    // notify listeners (e.g., header role chip)
     window.dispatchEvent(new Event("role-changed"));
-
-    // Socket rooms
     joinRooms(user, roleArr);
-
-    // Navigate to dashboard
     navigate("/dashboard", { replace: true });
   };
 
@@ -137,182 +167,153 @@ const Login = () => {
       afterAuth(data);
     } catch (err) {
       setError(err.response?.data?.error || "Google login failed");
-      // eslint-disable-next-line no-console
       console.error(err);
     } finally {
       setLoading(false);
     }
   };
 
-  const schoolLogoSrc =
-    school?.logo ? `${apiBase}${school.logo}` : null;
+  const schoolLogoSrc = school?.logo ? `${apiBase}${school.logo}` : null;
+  const schoolName = school?.name || "Pathseekers International School";
+  const fallbackLogo = `${process.env.PUBLIC_URL}/images/pts_logo.png`;
 
   return (
-    <div className="login-wrap">
-      {/* Decorative gradient blobs */}
-      <div className="blob blob-1" />
-      <div className="blob blob-2" />
+    <div
+      className="login-hero"
+      style={{
+        minHeight: "100vh",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundImage: `linear-gradient(rgba(8,8,18,0.55), rgba(8,8,18,0.8))${bgUrl ? `, url(${bgUrl})` : ""}`,
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+        backgroundRepeat: "no-repeat",
+      }}
+    >
+      <div className="login-hero__content container">
+        <div className="row justify-content-center">
+          <div className="col-12 col-md-10 col-lg-7 col-xl-5">
+            <div className="card glass-card shadow-xl border-0 overflow-hidden">
+              <div className="card-body p-4 p-sm-5">
+                <div className="text-center mb-4">
+                  <img
+                    src={schoolLogoSrc || fallbackLogo}
+                    alt="School Logo"
+                    className="brand-logo"
+                    style={{ maxWidth: "120px", height: "auto" }}   // ✅ Bigger logo
+                    onError={(e) => {
+                      e.currentTarget.onerror = null;
+                      e.currentTarget.src = fallbackLogo;
+                    }}
+                  />
 
-      <div className="container py-5">
-        <div className="row justify-content-center g-0">
-          <div className="col-12 col-lg-10">
-            <div className="card login-card shadow-lg border-0 overflow-hidden">
-              <div className="row g-0">
-                {/* Brand / Illustration side (hidden on <lg) */}
-                <div className="col-lg-6 d-none d-lg-flex align-items-stretch bg-brand">
-                  <div className="brand-pane w-100 p-4 p-xl-5 d-flex flex-column justify-content-between">
-                    <div>
-                      {schoolLogoSrc ? (
-                        <img
-                          src={schoolLogoSrc}
-                          alt={school?.name || "School"}
-                          className="brand-logo mb-3"
-                          onError={(e) => (e.currentTarget.style.display = "none")}
-                        />
-                      ) : (
-                        <div className="brand-logo--placeholder mb-3">🏫</div>
-                      )}
-                      <h2 className="brand-title mb-2">{school?.name || "School ERP"}</h2>
-                      <p className="brand-subtitle mb-0">
-                        Welcome back! Manage academics, fees, attendance, HR, and more from a single dashboard.
-                      </p>
-                    </div>
-                    <div className="brand-footer text-muted small">
-                      <span>© {new Date().getFullYear()} {school?.name || "Your School"}</span>
-                    </div>
-                  </div>
+                  <h4 className="mt-2 mb-0 fw-semibold text-white">{schoolName}</h4>
+                  <p className="text-white-50 small mb-0">
+                    Manage academics, fees, attendance, HR & more.
+                  </p>
                 </div>
 
-                {/* Form side */}
-                <div className="col-12 col-lg-6 d-flex align-items-stretch">
-                  <div className="p-4 p-sm-5 w-100">
-                    <div className="text-center d-lg-none mb-4">
-                      {schoolLogoSrc ? (
-                        <img
-                          src={schoolLogoSrc}
-                          alt={school?.name || "School"}
-                          className="mobile-logo"
-                          onError={(e) => (e.currentTarget.style.display = "none")}
-                        />
-                      ) : (
-                        <div className="brand-logo--placeholder mb-2">🏫</div>
-                      )}
-                      <h4 className="mb-0">{school?.name || "School ERP"}</h4>
-                    </div>
+                {error && <div className="alert alert-danger py-2">{error}</div>}
 
-                    <h3 className="fw-semibold mb-1">Sign in</h3>
-                    <p className="text-muted mb-4">Use your username/email and password to continue.</p>
+                <h5 className="fw-semibold mb-2 text-white">Sign in</h5>
+                <p className="text-white-50 mb-4">Use your username/email and password to continue.</p>
 
-                    {error && (
-                      <div className="alert alert-danger py-2" role="alert">
-                        {error}
-                      </div>
-                    )}
+                <form onSubmit={handleLogin} noValidate>
+                  <div className="mb-3">
+                    <label className="form-label text-white-75">User (Email or Username)</label>
+                    <input
+                      ref={userInputRef}
+                      type="text"
+                      className="form-control form-control-lg"
+                      value={login}
+                      onChange={(e) => setLogin(e.target.value)}
+                      placeholder="e.g., principal@school.edu or admin01"
+                      autoComplete="username"
+                      required
+                    />
+                  </div>
 
-                    <form onSubmit={handleLogin} noValidate>
-                      <div className="mb-3">
-                        <label className="form-label">User (Email or Username)</label>
-                        <input
-                          ref={userInputRef}
-                          type="text"
-                          className="form-control form-control-lg"
-                          value={login}
-                          onChange={(e) => setLogin(e.target.value)}
-                          placeholder="e.g., principal@school.edu or admin01"
-                          autoComplete="username"
-                          required
-                        />
-                      </div>
-
-                      <div className="mb-2">
-                        <label className="form-label">Password</label>
-                        <div className="input-group input-group-lg">
-                          <input
-                            type={showPass ? "text" : "password"}
-                            className="form-control"
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            placeholder="Enter your password"
-                            autoComplete="current-password"
-                            required
-                          />
-                          <button
-                            type="button"
-                            className="btn btn-outline-secondary"
-                            onClick={() => setShowPass((s) => !s)}
-                            aria-label={showPass ? "Hide password" : "Show password"}
-                          >
-                            {showPass ? "Hide" : "Show"}
-                          </button>
-                        </div>
-                      </div>
-
-                      <div className="d-flex justify-content-between align-items-center mb-4">
-                        <div className="form-check">
-                          <input
-                            className="form-check-input"
-                            type="checkbox"
-                            id="rememberMe"
-                            checked={remember}
-                            onChange={(e) => setRemember(e.target.checked)}
-                          />
-                          <label className="form-check-label" htmlFor="rememberMe">
-                            Remember me
-                          </label>
-                        </div>
-                        <button
-                          type="button"
-                          className="btn btn-link p-0 small"
-                          onClick={() => navigate("/forgot-password")}
-                        >
-                          Forgot password?
-                        </button>
-                      </div>
-
-                      <button
-                        type="submit"
-                        className="btn btn-primary btn-lg w-100 mb-3"
-                        disabled={loading}
-                      >
-                        {loading ? "Signing in…" : "Login"}
-                      </button>
-
-                      <div className="text-center text-muted my-2">or</div>
-
+                  <div className="mb-2">
+                    <label className="form-label text-white-75">Password</label>
+                    <div className="input-group input-group-lg">
+                      <input
+                        type={showPass ? "text" : "password"}
+                        className="form-control"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="Enter your password"
+                        autoComplete="current-password"
+                        required
+                      />
                       <button
                         type="button"
-                        className="btn btn-outline-dark btn-lg w-100 d-flex align-items-center justify-content-center gap-2"
-                        onClick={handleGoogleLogin}
-                        disabled={loading}
+                        className="btn btn-outline-light"
+                        onClick={() => setShowPass((s) => !s)}
+                        aria-label={showPass ? "Hide password" : "Show password"}
                       >
-                        <GoogleIcon />
-                        <span>{loading ? "Please wait…" : "Login with Google"}</span>
+                        {showPass ? "Hide" : "Show"}
                       </button>
-                    </form>
-
-                    <div className="mt-4 small text-muted">
-                      By continuing you agree to our{" "}
-                      <button className="btn btn-link p-0 align-baseline" onClick={() => navigate("/terms")}>
-                        Terms
-                      </button>{" "}
-                      and{" "}
-                      <button className="btn btn-link p-0 align-baseline" onClick={() => navigate("/privacy")}>
-                        Privacy Policy
-                      </button>.
-                    </div>
-
-                    <div className="mt-4">
-                      <div className="login-hint card border-0 bg-light-subtle">
-                        <div className="card-body py-2 small text-muted">
-                          Tip: You can use your email or username in the first field.
-                        </div>
-                      </div>
                     </div>
                   </div>
+
+                  <div className="d-flex justify-content-between align-items-center mb-4">
+                    <div className="form-check">
+                      <input
+                        className="form-check-input"
+                        type="checkbox"
+                        id="rememberMe"
+                        checked={remember}
+                        onChange={(e) => setRemember(e.target.checked)}
+                      />
+                      <label className="form-check-label text-white-75" htmlFor="rememberMe">
+                        Remember me
+                      </label>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn btn-link p-0 small text-white-75"
+                      onClick={() => navigate("/forgot-password")}
+                    >
+                      Forgot password?
+                    </button>
+                  </div>
+
+                  <button type="submit" className="btn btn-primary btn-lg w-100 mb-3" disabled={loading}>
+                    {loading ? "Signing in…" : "Login"}
+                  </button>
+
+                  <div className="text-center text-white-50 my-2">or</div>
+
+                  <button
+                    type="button"
+                    className="btn btn-outline-light btn-lg w-100 d-flex align-items-center justify-content-center gap-2"
+                    onClick={handleGoogleLogin}
+                    disabled={loading}
+                  >
+                    <GoogleIcon />
+                    <span>{loading ? "Please wait…" : "Login with Google"}</span>
+                  </button>
+                </form>
+
+                <div className="mt-4 small text-white-50">
+                  By continuing you agree to our{" "}
+                  <button className="btn btn-link p-0 align-baseline text-white" onClick={() => navigate("/terms")}>
+                    Terms
+                  </button>{" "}
+                  and{" "}
+                  <button className="btn btn-link p-0 align-baseline text-white" onClick={() => navigate("/privacy")}>
+                    Privacy Policy
+                  </button>.
                 </div>
-                {/* /Form side */}
+              </div>
+
+              <div className="card-footer glass-card__footer text-center small text-white-50">
+                © {new Date().getFullYear()} {schoolName}
               </div>
             </div>
+
+            {/* <div className="text-center mt-3 text-white-50 small">Powered by FeePanel</div> */}
           </div>
         </div>
       </div>

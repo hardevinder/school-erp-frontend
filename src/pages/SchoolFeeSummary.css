@@ -193,3 +193,10 @@
 .chip-danger  { background: #ffebee; color: #b02a37; border-color: #ffcdd2; }
 
 .overflow-x-auto { overflow-x: auto; }
+
+/* Soft highlight for overdue OB rows */
+.ob-row { transition: background-color .2s ease; }
+.ob-overdue { background-color: #fff1f1; } /* light red */
+.ob-overdue .ob-amount { color: #b42318; font-weight: 600; }
+.ob-ok .ob-amount { color: #6c757d; }
+

@@ -95,43 +95,55 @@ const styles = StyleSheet.create({
     marginTop: 6,
     textAlign: "center",
   },
+  note: {
+    fontSize: 9,
+    marginTop: 6,
+    textAlign: "center",
+  },
 });
 
-// Helper function to format numbers using the Indian numbering system (without currency symbol)
-const formatValue = (val) => {
-  return Number(val) === 0 ? "-" : Number(val).toLocaleString("en-IN");
-};
+// Helper: Indian format; show "-" for 0
+const formatValue = (val) => (Number(val) === 0 ? "-" : Number(val).toLocaleString("en-IN"));
 
-// Get a sorted array of unique fee headings across all student data
+// Admission number (various shapes)
+const getAdmissionNo = (s) =>
+  s?.AdmissionNumber ??
+  s?.admission_number ??
+  s?.admissionNo ??
+  s?.admission_no ??
+  s?.id ??
+  "";
+
+// Student id (fallback)
+const getStudentId = (s) =>
+  Number(s?.id ?? s?.student_id ?? s?.Student_ID ?? s?.StudentId ?? s?.Student?.id ?? 0);
+
+// Unique fee headings across all students
 const getUniqueFeeHeadings = (studentData) => {
   const headings = new Set();
   studentData.forEach((student) => {
-    if (student.feeDetails) {
-      student.feeDetails.forEach((fee) => {
-        headings.add(fee.fee_heading);
-      });
-    }
+    (student.feeDetails || []).forEach((fee) => headings.add(fee.fee_heading));
   });
   return Array.from(headings);
 };
 
-// For each student, create a map of fee details keyed by fee heading.
+// Map heading -> finalAmountDue for a student
 const mapStudentFeeDetails = (student) => {
   const feeMap = {};
-  if (student.feeDetails) {
-    student.feeDetails.forEach((fee) => {
-      feeMap[fee.fee_heading] = fee.finalAmountDue;
-    });
-  }
+  (student.feeDetails || []).forEach((fee) => {
+    feeMap[fee.fee_heading] = fee.finalAmountDue;
+  });
   return feeMap;
 };
 
-// Component for the table header (displayed on every page)
+// Header (repeats every page)
 const TableHeader = ({ feeHeadings }) => (
   <View style={styles.tableHeaderRow}>
     <Text style={[styles.tableHeaderCell, { flex: 0.8 }]}>Sr. No</Text>
-    <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Student ID</Text>
+    <Text style={[styles.tableHeaderCell, { flex: 1.2 }]}>Admission No.</Text>
     <Text style={[styles.tableHeaderCell, { flex: 2 }]}>Student Name</Text>
+    {/* NEW: Previous Balance column */}
+    <Text style={[styles.tableHeaderCell, { flex: 1.2 }]}>Previous Balance</Text>
     {feeHeadings.map((heading, idx) => (
       <Text key={idx} style={[styles.tableHeaderCell, { flex: 1.2 }]}>
         {heading}
@@ -140,33 +152,47 @@ const TableHeader = ({ feeHeadings }) => (
   </View>
 );
 
-const PdfStudentDueReport = ({ school, selectedClass, studentData, headSummary, grandSummary }) => {
-  // Get unique fee headings from student data.
+const PdfStudentDueReport = ({
+  school,
+  selectedClass,
+  studentData,
+  headSummary,
+  grandSummary,
+  // NEW: pass this from StudentDueTable (optional)
+  prevBalanceMap = {},
+  // Optional: let caller pass a display label for session (e.g., "2025-26")
+  sessionLabel = "2025-26",
+}) => {
   const feeHeadings = getUniqueFeeHeadings(studentData);
-
-  // Today's date string
   const today = new Date().toLocaleDateString("en-IN");
-
-  // Use the passed class name directly.
   const className = selectedClass;
 
-  // Uniformly paginate studentData with 20 records per page.
+  // Pagination
   const recordsPerPage = 20;
   const totalPages = Math.ceil(studentData.length / recordsPerPage);
   const studentPages = [];
 
   for (let pageIndex = 0; pageIndex < totalPages; pageIndex++) {
-    const pageData = studentData.slice(pageIndex * recordsPerPage, (pageIndex + 1) * recordsPerPage);
+    const pageData = studentData.slice(
+      pageIndex * recordsPerPage,
+      (pageIndex + 1) * recordsPerPage
+    );
+
     studentPages.push(
-      <Page size="A4" orientation="landscape" style={styles.page} key={`student-page-${pageIndex}`}>
-        {/* Only on the first page, render the full header */}
+      <Page
+        size="A4"
+        orientation="landscape"
+        style={styles.page}
+        key={`student-page-${pageIndex}`}
+      >
+        {/* Full header only on first page */}
         {pageIndex === 0 && (
           <View style={styles.headerContainer}>
             <View style={styles.headerLeft}>
               <Text style={styles.reportTitle}>{school?.name}</Text>
               <Text style={styles.schoolBold}>{school?.description}</Text>
               <Text style={styles.schoolBold}>Student Fee Due Report</Text>
-              <Text style={styles.schoolInfo}>Session: 2025-26</Text>
+              <Text style={styles.schoolInfo}>Session: {sessionLabel}</Text>
               <Text style={styles.schoolInfo}>Class: {className}</Text>
             </View>
             <View style={styles.headerRight}>
@@ -174,16 +200,30 @@ const PdfStudentDueReport = ({ school, selectedClass, studentData, headSummary, 
             </View>
           </View>
         )}
-        {/* On all pages, repeat the table header */}
+
+        {/* Table */}
         <View style={styles.table}>
           <TableHeader feeHeadings={feeHeadings} />
           {pageData.map((student, index) => {
             const feeMap = mapStudentFeeDetails(student);
+            const sid = getStudentId(student);
+            const prevBal = Number(prevBalanceMap[sid] || 0);
             return (
-              <View style={styles.tableRow} key={student.id}>
-                <Text style={[styles.tableCell, { flex: 0.8 }]}>{pageIndex * recordsPerPage + index + 1}</Text>
-                <Text style={[styles.tableCell, { flex: 1 }]}>{student.id}</Text>
+              <View style={styles.tableRow} key={`${sid}-${index}`}>
+                <Text style={[styles.tableCell, { flex: 0.8 }]}>
+                  {pageIndex * recordsPerPage + index + 1}
+                </Text>
+                <Text style={[styles.tableCell, { flex: 1.2 }]}>{getAdmissionNo(student)}</Text>
                 <Text style={[styles.tableCell, { flex: 2 }]}>{student.name}</Text>
+                {/* NEW: Previous Balance cell */}
+                <Text
+                  style={[
+                    styles.tableCell,
+                    { flex: 1.2 },
+                  ]}
+                >
+                  {formatValue(prevBal)}
+                </Text>
                 {feeHeadings.map((heading, idx) => (
                   <Text key={idx} style={[styles.tableCell, { flex: 1.2 }]}>
                     {feeMap[heading] ? formatValue(feeMap[heading]) : "-"}
@@ -193,16 +233,22 @@ const PdfStudentDueReport = ({ school, selectedClass, studentData, headSummary, 
             );
           })}
         </View>
-        {/* Signature (this remains on every page; adjust if needed) */}
+
+        {/* Signature */}
         <View style={styles.signatureContainer}>
           <Text style={styles.signatureText}>Signature: ___________________</Text>
         </View>
-        <Text style={styles.pageFooter} render={({ pageNumber, totalPages }) => `${pageNumber} / ${totalPages}`} fixed />
+
+        <Text
+          style={styles.pageFooter}
+          render={({ pageNumber, totalPages }) => `${pageNumber} / ${totalPages}`}
+          fixed
+        />
       </Page>
     );
   }
 
-  // Summary page for headwise and grand summary.
+  // Summary page
   const summaryPage = (
     <Page size="A4" orientation="landscape" style={styles.page} key="summary-page">
       <View style={styles.headerContainer}>
@@ -213,6 +259,7 @@ const PdfStudentDueReport = ({ school, selectedClass, studentData, headSummary, 
           <Text>As on: {today}</Text>
         </View>
       </View>
+
       <View style={styles.table}>
         <View style={styles.tableHeaderRow}>
           <Text style={[styles.tableHeaderCell, { flex: 2 }]}>Fee Heading</Text>
@@ -221,6 +268,7 @@ const PdfStudentDueReport = ({ school, selectedClass, studentData, headSummary, 
           <Text style={[styles.tableHeaderCell, { flex: 2 }]}>Final Due</Text>
           <Text style={[styles.tableHeaderCell, { flex: 2 }]}>Received</Text>
         </View>
+
         {Object.entries(headSummary).map(([heading, summary]) => (
           <View style={styles.tableRow} key={heading}>
             <Text style={[styles.tableCell, { flex: 2 }]}>{heading}</Text>
@@ -230,18 +278,37 @@ const PdfStudentDueReport = ({ school, selectedClass, studentData, headSummary, 
             <Text style={[styles.tableCell, { flex: 2 }]}>{formatValue(summary.totalFeeReceived)}</Text>
           </View>
         ))}
+
         <View style={styles.tableRow}>
           <Text style={[styles.tableCell, { flex: 2, fontWeight: "bold" }]}>Grand Total</Text>
-          <Text style={[styles.tableCell, { flex: 2, fontWeight: "bold" }]}>{formatValue(grandSummary.originalFeeDue)}</Text>
-          <Text style={[styles.tableCell, { flex: 2, fontWeight: "bold" }]}>{formatValue(grandSummary.effectiveFeeDue)}</Text>
-          <Text style={[styles.tableCell, { flex: 2, fontWeight: "bold" }]}>{formatValue(grandSummary.finalAmountDue)}</Text>
-          <Text style={[styles.tableCell, { flex: 2, fontWeight: "bold" }]}>{formatValue(grandSummary.totalFeeReceived)}</Text>
+          <Text style={[styles.tableCell, { flex: 2, fontWeight: "bold" }]}>
+            {formatValue(grandSummary.originalFeeDue)}
+          </Text>
+          <Text style={[styles.tableCell, { flex: 2, fontWeight: "bold" }]}>
+            {formatValue(grandSummary.effectiveFeeDue)}
+          </Text>
+          <Text style={[styles.tableCell, { flex: 2, fontWeight: "bold" }]}>
+            {formatValue(grandSummary.finalAmountDue)}
+          </Text>
+          <Text style={[styles.tableCell, { flex: 2, fontWeight: "bold" }]}>
+            {formatValue(grandSummary.totalFeeReceived)}
+          </Text>
         </View>
       </View>
+
+      <Text style={styles.note}>
+        Note: “Previous Balance” is shown per student on the detail pages and is not included in headwise totals.
+      </Text>
+
       <View style={styles.signatureContainer}>
         <Text style={styles.signatureText}>Signature: ___________________</Text>
       </View>
-      <Text style={styles.pageFooter} render={({ pageNumber, totalPages }) => `${pageNumber} / ${totalPages}`} fixed />
+
+      <Text
+        style={styles.pageFooter}
+        render={({ pageNumber, totalPages }) => `${pageNumber} / ${totalPages}`}
+        fixed
+      />
     </Page>
   );
 

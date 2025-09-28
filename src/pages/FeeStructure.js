@@ -1,14 +1,7 @@
-// src/pages/FeeStructure.jsx
-// Superadmin-only Delete button, 2-column SweetAlert forms, no outside-click close
-// Now with Excel-style multi-select dropdowns (checkboxes) for Class & Category and bulk "Fill All Filtered".
-
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import api from "../api"; // Custom Axios instance
 import Swal from "sweetalert2";
 import "./FeeStructure.css";
-
-// If your install name is different, switch this to:
-//   import { MultiSelect } from "multi-select-component";
 import { MultiSelect } from "react-multi-select-component";
 
 // -------------------------------------------------------------
@@ -25,16 +18,14 @@ const getRoleFlags = () => {
   };
 };
 
-// Helper: if date invalid/empty -> null so backend can store NULL
 const safeDateOrNull = (dateStr) => {
   if (!dateStr) return null;
   const d = new Date(dateStr);
   return d.toString() === "Invalid Date" ? null : dateStr;
 };
 
-// Common SweetAlert options
 const swalBaseOpts = {
-  width: "650px",
+  width: "700px",
   allowOutsideClick: false,
   allowEscapeKey: false,
   focusConfirm: false,
@@ -48,10 +39,17 @@ const FeeStructure = () => {
   const [feeStructures, setFeeStructures] = useState([]);
   const [classes, setClasses] = useState([]);
   const [feeHeadings, setFeeHeadings] = useState([]);
+  const [sessions, setSessions] = useState([]);
+
+  // Selected session (single). default to active session if available
+  const [selectedSessionId, setSelectedSessionId] = useState(null);
 
   // Excel-style multi-select dropdown state (arrays of {label, value})
   const [selectedClasses, setSelectedClasses] = useState([]);
   const [selectedFeeHeadings, setSelectedFeeHeadings] = useState([]);
+
+  // Quick search text (client-side filter)
+  const [searchText, setSearchText] = useState("");
 
   // Bulk fill form state
   const [bulkValues, setBulkValues] = useState({
@@ -61,22 +59,29 @@ const FeeStructure = () => {
     fineAmountPerSlab: "",
     fineSlabDuration: "",
     fineStartDate: "",
-    admissionType: "", // "", "New", "Old", "All"
-    concessionApplicable: "", // "", "Yes", "No"
-    transportApplicable: "", // "", "Yes", "No"
+    admissionType: "",
+    concessionApplicable: "",
+    transportApplicable: "",
   });
   const [isBulkApplying, setIsBulkApplying] = useState(false);
 
-  // -------------------------- Fetchers --------------------------
-  const fetchFeeStructures = async () => {
-    try {
-      const { data } = await api.get("/fee-structures");
-      setFeeStructures(data.fees);
-    } catch (err) {
-      console.error(err);
-      Swal.fire("Error", "Failed to fetch fee structures.", "error");
-    }
-  };
+  // unified fetch hook that will fetch fee structures based on session and refresh
+  const fetchFeeStructures = useCallback(
+    async ({ sessionId = selectedSessionId } = {}) => {
+      try {
+        const params = {};
+        if (sessionId) params.session_id = sessionId;
+        const query = new URLSearchParams(params).toString();
+        const url = query ? `/fee-structures?${query}` : "/fee-structures";
+        const { data } = await api.get(url);
+        setFeeStructures(data.fees || []);
+      } catch (err) {
+        console.error("fetchFeeStructures error", err);
+        Swal.fire("Error", "Failed to fetch fee structures.", "error");
+      }
+    },
+    [selectedSessionId]
+  );
 
   const fetchClasses = async () => {
     try {
@@ -102,6 +107,25 @@ const FeeStructure = () => {
     }
   };
 
+  const fetchSessions = async () => {
+    try {
+      const { data } = await api.get("/sessions");
+      setSessions(data || []);
+
+      // if no selected session, default to active session or first session
+      if (!selectedSessionId) {
+        const active = (data || []).find((s) => s.is_active) || (data && data[0]);
+        if (active) setSelectedSessionId(active.id);
+      }
+
+      return data;
+    } catch (err) {
+      console.error(err);
+      Swal.fire("Error", "Failed to fetch sessions.", "error");
+      return [];
+    }
+  };
+
   // ---------------------------- CRUD ----------------------------
   const handleDelete = async (fee) => {
     if (!isSuperadmin) {
@@ -110,9 +134,7 @@ const FeeStructure = () => {
 
     const result = await Swal.fire({
       title: "Are you sure you want to delete this fee structure?",
-      text: `Class: ${fee.Class?.class_name || "Unknown"} - Fee Heading: ${
-        fee.FeeHeading?.fee_heading || "Unknown"
-      }`,
+      text: `Class: ${fee.Class?.class_name || "Unknown"} - Fee Heading: ${fee.FeeHeading?.fee_heading || "Unknown"}`,
       icon: "warning",
       showCancelButton: true,
       confirmButtonText: "Yes, delete it!",
@@ -124,16 +146,18 @@ const FeeStructure = () => {
       try {
         await api.delete(`/fee-structures/${fee.id}`);
         Swal.fire("Deleted!", "Fee structure has been deleted.", "success");
-        fetchFeeStructures();
+        fetchFeeStructures({ sessionId: selectedSessionId });
       } catch (error) {
         Swal.fire("Error", "Failed to delete the fee structure.", "error");
       }
     }
   };
 
-  const handleAdd = async () => {
-    let classesData = classes.length ? classes : await fetchClasses();
-    let feeHeadingsData = feeHeadings.length ? feeHeadings : await fetchFeeHeadings();
+  const openAddOrEditModal = async (existing = null) => {
+    // ensure dropdown data is loaded
+    const classesData = classes.length ? classes : await fetchClasses();
+    const feeHeadingsData = feeHeadings.length ? feeHeadings : await fetchFeeHeadings();
+    const sessionData = sessions.length ? sessions : await fetchSessions();
 
     const classOptions = classesData
       .map((cls) => `<option value="${cls.id}">${cls.class_name}</option>`)
@@ -141,80 +165,109 @@ const FeeStructure = () => {
     const feeHeadingOptions = feeHeadingsData
       .map((fh) => `<option value="${fh.id}">${fh.fee_heading}</option>`)
       .join("");
+    const sessionOptions = (sessionData || [])
+      .map((s) => `<option value="${s.id}">${s.name}${s.is_active ? " (Active)" : ""}</option>`)
+      .join("");
 
-    Swal.fire({
-      ...swalBaseOpts,
-      title: "Add New Fee Structure",
-      html: `
-        <div class="two-col-grid">
-          <div class="full-row">
-            <label>Class:</label>
-            <select id="classId" class="form-field form-select">${classOptions}</select>
-          </div>
+    const isEdit = Boolean(existing);
+    const fineStartDateFormatted = existing && existing.fineStartDate
+      ? new Date(existing.fineStartDate).toISOString().split("T")[0]
+      : "";
+    const originalFineType = existing?.fineType || "percentage";
 
-          <div class="full-row">
-            <label>Fee Heading (Category):</label>
-            <select id="feeHeadingId" class="form-field form-select">${feeHeadingOptions}</select>
-          </div>
-
-          <div>
-            <label>Fee Due:</label>
-            <input type="number" id="feeDue" class="form-field form-control" placeholder="Enter Fee Due">
-          </div>
-
-          <div>
-            <label>Fine Type:</label>
-            <select id="fineType" class="form-field form-select">
-              <option value="percentage">Percentage</option>
-              <option value="slab">Slab</option>
-            </select>
-          </div>
-
-          <div id="finePercentageFields" class="full-row">
-            <label>Fine Percentage (%):</label>
-            <input type="number" id="finePercentage" class="form-field form-control" placeholder="Enter Fine %">
-          </div>
-
-          <div id="fineSlabFields" class="full-row" style="display:none;">
-            <label>Fine Amount Per Slab:</label>
-            <input type="number" id="fineAmountPerSlab" class="form-field form-control" placeholder="Amount/Slab">
-            <label class="mt-2">Fine Slab Duration (days):</label>
-            <input type="number" id="fineSlabDuration" class="form-field form-control" placeholder="Days/Slab">
-          </div>
-
-          <div>
-            <label>Fine Start Date:</label>
-            <input type="date" id="fineStartDate" class="form-field form-control">
-          </div>
-
-          <div>
-            <label>Admission Type:</label>
-            <select id="admissionType" class="form-field form-select">
-              <option value="" disabled selected>Select</option>
-              <option value="New">New</option>
-              <option value="Old">Old</option>
-              <option value="All">All</option>
-            </select>
-          </div>
-
-          <div>
-            <label>Concession Applicable:</label>
-            <select id="concessionApplicable" class="form-field form-select">
-              <option value="No">No</option>
-              <option value="Yes">Yes</option>
-            </select>
-          </div>
-
-          <div>
-            <label>Transport Applicable:</label>
-            <select id="transportApplicable" class="form-field form-select">
-              <option value="No">No</option>
-              <option value="Yes">Yes</option>
-            </select>
-          </div>
+    const html = `
+      <div class="two-col-grid">
+        <div class="full-row">
+          <label>Session:</label>
+          <select id="sessionId" class="form-field form-select">${sessionOptions}</select>
         </div>
-      `,
+
+        <div class="full-row">
+          <label>Class:</label>
+          <select id="classId" class="form-field form-select">${classOptions}</select>
+        </div>
+
+        <div class="full-row">
+          <label>Fee Heading (Category):</label>
+          <select id="feeHeadingId" class="form-field form-select">${feeHeadingOptions}</select>
+        </div>
+
+        <div>
+          <label>Fee Due:</label>
+          <input type="number" id="feeDue" class="form-field form-control" placeholder="Enter Fee Due" value="${existing?.feeDue ?? ""}">
+        </div>
+
+        <div>
+          <label>Fine Type:</label>
+          <select id="fineType" class="form-field form-select">
+            <option value="percentage">Percentage</option>
+            <option value="slab">Slab</option>
+          </select>
+        </div>
+
+        <div id="finePercentageFields" class="full-row" style="display:${originalFineType === "percentage" ? "block" : "none"};">
+          <label>Fine Percentage (%):</label>
+          <input type="number" id="finePercentage" class="form-field form-control" value="${existing?.finePercentage ?? ""}">
+        </div>
+
+        <div id="fineSlabFields" class="full-row" style="display:${originalFineType === "slab" ? "block" : "none"};">
+          <label>Fine Amount Per Slab:</label>
+          <input type="number" id="fineAmountPerSlab" class="form-field form-control" value="${existing?.fineAmountPerSlab ?? ""}">
+          <label class="mt-2">Fine Slab Duration (days):</label>
+          <input type="number" id="fineSlabDuration" class="form-field form-control" value="${existing?.fineSlabDuration ?? ""}">
+        </div>
+
+        <div>
+          <label>Fine Start Date:</label>
+          <input type="date" id="fineStartDate" class="form-field form-control" value="${fineStartDateFormatted}">
+        </div>
+
+        <div>
+          <label>Admission Type:</label>
+          <select id="admissionType" class="form-field form-select">
+            <option value="New">New</option>
+            <option value="Old">Old</option>
+            <option value="All">All</option>
+          </select>
+        </div>
+
+        <div>
+          <label>Concession Applicable:</label>
+          <select id="concessionApplicable" class="form-field form-select">
+            <option value="No">No</option>
+            <option value="Yes">Yes</option>
+          </select>
+        </div>
+
+        <div>
+          <label>Transport Applicable:</label>
+          <select id="transportApplicable" class="form-field form-select">
+            <option value="No">No</option>
+            <option value="Yes">Yes</option>
+          </select>
+        </div>
+      </div>
+    `;
+
+    return Swal.fire({
+      ...swalBaseOpts,
+      title: isEdit ? "Edit Fee Structure" : "Add New Fee Structure",
+      html,
       didOpen: () => {
+        // set current values if edit
+        if (existing) {
+          document.getElementById("sessionId").value = existing.Session?.id ?? selectedSessionId ?? "";
+          document.getElementById("classId").value = existing.Class?.id ?? "";
+          document.getElementById("feeHeadingId").value = existing.FeeHeading?.id ?? "";
+          document.getElementById("admissionType").value = existing.admissionType ?? "";
+          document.getElementById("concessionApplicable").value = existing.concessionApplicable ?? "No";
+          document.getElementById("transportApplicable").value = existing.transportApplicable ?? "No";
+          document.getElementById("fineType").value = existing.fineType ?? "percentage";
+        } else {
+          // default session select to currently selectedSessionId
+          if (selectedSessionId) document.getElementById("sessionId").value = selectedSessionId;
+        }
+
         const fineTypeSelect = document.getElementById("fineType");
         const pctBox = document.getElementById("finePercentageFields");
         const slabBox = document.getElementById("fineSlabFields");
@@ -232,12 +285,19 @@ const FeeStructure = () => {
       },
       preConfirm: () => {
         const fineType = document.getElementById("fineType").value;
+        const sessionId = document.getElementById("sessionId").value;
         const admissionType = document.getElementById("admissionType").value;
+        if (!sessionId) {
+          Swal.showValidationMessage("Session is required");
+          return false;
+        }
         if (!admissionType) {
           Swal.showValidationMessage("Admission Type is required");
           return false;
         }
+
         return {
+          session_id: sessionId,
           class_id: document.getElementById("classId").value,
           fee_heading_id: document.getElementById("feeHeadingId").value,
           feeDue: document.getElementById("feeDue").value,
@@ -254,165 +314,26 @@ const FeeStructure = () => {
     }).then(async (res) => {
       if (res.isConfirmed) {
         try {
-          await api.post("/fee-structures", res.value);
-          Swal.fire("Added!", "Fee structure has been added successfully.", "success");
-          fetchFeeStructures();
+          if (isEdit) {
+            await api.put(`/fee-structures/${existing.id}`, res.value);
+            Swal.fire("Updated!", "Fee structure has been updated successfully.", "success");
+          } else {
+            await api.post(`/fee-structures`, res.value);
+            Swal.fire("Added!", "Fee structure has been added successfully.", "success");
+          }
+          // refresh with the session that was used/selected
+          setSelectedSessionId(Number(res.value.session_id));
+          fetchFeeStructures({ sessionId: Number(res.value.session_id) });
         } catch (e) {
           console.error(e);
-          Swal.fire("Error", "Failed to add the fee structure.", "error");
+          Swal.fire("Error", `Failed to ${isEdit ? "update" : "add"} the fee structure.`, "error");
         }
       }
     });
   };
 
-  const handleEdit = async (fee) => {
-    await fetchClasses();
-    await fetchFeeHeadings();
-
-    const fineStartDateFormatted = fee.fineStartDate
-      ? new Date(fee.fineStartDate).toISOString().split("T")[0]
-      : "";
-    const originalFineType = fee.fineType || "percentage";
-
-    const classOptions = classes
-      .map((cls) => `<option value="${cls.id}">${cls.class_name}</option>`)
-      .join("");
-    const feeHeadingOptions = feeHeadings
-      .map((fh) => `<option value="${fh.id}">${fh.fee_heading}</option>`)
-      .join("");
-
-    Swal.fire({
-      ...swalBaseOpts,
-      title: "Edit Fee Structure",
-      html: `
-        <div class="two-col-grid">
-          <div class="full-row">
-            <label>Class:</label>
-            <select id="classId" class="form-field form-select">${classOptions}</select>
-          </div>
-
-          <div class="full-row">
-            <label>Fee Heading (Category):</label>
-            <select id="feeHeadingId" class="form-field form-select">${feeHeadingOptions}</select>
-          </div>
-
-          <div>
-            <label>Fee Due:</label>
-            <input type="number" id="feeDue" class="form-field form-control" value="${fee.feeDue}">
-          </div>
-
-          <div>
-            <label>Fine Type:</label>
-            <select id="fineType" class="form-field form-select">
-              <option value="percentage">Percentage</option>
-              <option value="slab">Slab</option>
-            </select>
-          </div>
-
-          <div id="finePercentageFields" class="full-row" style="display:${
-            originalFineType === "percentage" ? "block" : "none"
-          };">
-            <label>Fine Percentage (%):</label>
-            <input type="number" id="finePercentage" class="form-field form-control" value="${
-              fee.finePercentage || ""
-            }">
-          </div>
-
-          <div id="fineSlabFields" class="full-row" style="display:${
-            originalFineType === "slab" ? "block" : "none"
-          };">
-            <label>Fine Amount Per Slab:</label>
-            <input type="number" id="fineAmountPerSlab" class="form-field form-control" value="${
-              fee.fineAmountPerSlab || ""
-            }">
-            <label class="mt-2">Fine Slab Duration (days):</label>
-            <input type="number" id="fineSlabDuration" class="form-field form-control" value="${
-              fee.fineSlabDuration || ""
-            }">
-          </div>
-
-          <div>
-            <label>Fine Start Date:</label>
-            <input type="date" id="fineStartDate" class="form-field form-control" value="${fineStartDateFormatted}">
-          </div>
-
-          <div>
-            <label>Admission Type:</label>
-            <select id="admissionType" class="form-field form-select">
-              <option value="New">New</option>
-              <option value="Old">Old</option>
-              <option value="All">All</option>
-            </select>
-          </div>
-
-          <div>
-            <label>Concession Applicable:</label>
-            <select id="concessionApplicable" class="form-field form-select">
-              <option value="No">No</option>
-              <option value="Yes">Yes</option>
-            </select>
-          </div>
-
-          <div>
-            <label>Transport Applicable:</label>
-            <select id="transportApplicable" class="form-field form-select">
-              <option value="No">No</option>
-              <option value="Yes">Yes</option>
-            </select>
-          </div>
-        </div>
-      `,
-      didOpen: () => {
-        document.getElementById("classId").value = fee.Class?.id ?? "";
-        document.getElementById("feeHeadingId").value = fee.FeeHeading?.id ?? "";
-        document.getElementById("admissionType").value = fee.admissionType ?? "";
-        document.getElementById("concessionApplicable").value = fee.concessionApplicable ?? "No";
-        document.getElementById("transportApplicable").value = fee.transportApplicable ?? "No";
-        document.getElementById("fineType").value = originalFineType;
-
-        const fineTypeSelect = document.getElementById("fineType");
-        const pctBox = document.getElementById("finePercentageFields");
-        const slabBox = document.getElementById("fineSlabFields");
-        fineTypeSelect.addEventListener("change", () => {
-          const isPct = fineTypeSelect.value === "percentage";
-          pctBox.style.display = isPct ? "block" : "none";
-          slabBox.style.display = isPct ? "none" : "block";
-          if (isPct) {
-            document.getElementById("fineAmountPerSlab").value = "";
-            document.getElementById("fineSlabDuration").value = "";
-          } else {
-            document.getElementById("finePercentage").value = "";
-          }
-        });
-      },
-      preConfirm: () => {
-        const fineType = document.getElementById("fineType").value;
-        return {
-          class_id: document.getElementById("classId").value,
-          fee_heading_id: document.getElementById("feeHeadingId").value,
-          feeDue: document.getElementById("feeDue").value,
-          fineType,
-          finePercentage: fineType === "percentage" ? document.getElementById("finePercentage").value : null,
-          fineAmountPerSlab: fineType === "slab" ? document.getElementById("fineAmountPerSlab").value : null,
-          fineSlabDuration: fineType === "slab" ? document.getElementById("fineSlabDuration").value : null,
-          fineStartDate: safeDateOrNull(document.getElementById("fineStartDate").value),
-          admissionType: document.getElementById("admissionType").value,
-          concessionApplicable: document.getElementById("concessionApplicable").value,
-          transportApplicable: document.getElementById("transportApplicable").value,
-        };
-      },
-    }).then(async (res) => {
-      if (res.isConfirmed) {
-        try {
-          await api.put(`/fee-structures/${fee.id}`, res.value);
-          Swal.fire("Updated!", "Fee structure has been updated successfully.", "success");
-          fetchFeeStructures();
-        } catch (e) {
-          Swal.fire("Error", "Failed to update the fee structure.", "error");
-        }
-      }
-    });
-  };
+  const handleAdd = () => openAddOrEditModal(null);
+  const handleEdit = (fee) => openAddOrEditModal(fee);
 
   // ---------------------- Options & Filters ----------------------
   const classOptions = useMemo(
@@ -427,14 +348,23 @@ const FeeStructure = () => {
   const filteredFeeStructures = useMemo(() => {
     const classSet = new Set(selectedClasses.map((s) => s.value));
     const headSet = new Set(selectedFeeHeadings.map((s) => s.value));
+    const text = searchText.trim().toLowerCase();
+
     return feeStructures.filter((fee) => {
       const classId = String(fee.Class?.id ?? "");
       const headId = String(fee.FeeHeading?.id ?? "");
       const classMatch = classSet.size ? classSet.has(classId) : true;
       const headMatch = headSet.size ? headSet.has(headId) : true;
-      return classMatch && headMatch;
+
+      const textMatch = !text || [fee.Class?.class_name, fee.FeeHeading?.fee_heading, (fee.feeDue||"")] 
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(text);
+
+      return classMatch && headMatch && textMatch;
     });
-  }, [feeStructures, selectedClasses, selectedFeeHeadings]);
+  }, [feeStructures, selectedClasses, selectedFeeHeadings, searchText]);
 
   // ------------------------ Bulk Apply ---------------------------
   const buildBulkPayload = () => {
@@ -523,7 +453,7 @@ const FeeStructure = () => {
         `Updated: ${success}\nFailed: ${failed}`,
         failed ? "warning" : "success"
       );
-      fetchFeeStructures();
+      fetchFeeStructures({ sessionId: selectedSessionId });
     } catch (e) {
       console.error(e);
       Swal.fire("Error", "Bulk update failed due to an unexpected error.", "error");
@@ -534,18 +464,70 @@ const FeeStructure = () => {
 
   // ---------------------------- Mount ----------------------------
   useEffect(() => {
-    fetchFeeStructures();
-    fetchClasses();
-    fetchFeeHeadings();
-    const pollingInterval = setInterval(fetchFeeStructures, 5000);
-    return () => clearInterval(pollingInterval);
+    (async () => {
+      await Promise.all([fetchSessions(), fetchClasses(), fetchFeeHeadings()]);
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // when selectedSessionId changes, fetch fees for that session
+  useEffect(() => {
+    fetchFeeStructures({ sessionId: selectedSessionId });
+  }, [selectedSessionId, fetchFeeStructures]);
+
+  // optional polling (keeps UI updated) - 5s
+  useEffect(() => {
+    const polling = setInterval(() => fetchFeeStructures({ sessionId: selectedSessionId }), 5000);
+    return () => clearInterval(polling);
+  }, [selectedSessionId, fetchFeeStructures]);
 
   // ---------------------------- Render ---------------------------
   return (
     <div className="container mt-4">
       <h1>Fee Structure Management</h1>
+
+      {/* Session selector + Refresh + Search */}
+      <div className="row g-3 mb-3 align-items-end">
+        <div className="col-md-4">
+          <label className="form-label">Session</label>
+          <select
+            className="form-select"
+            value={selectedSessionId ?? ""}
+            onChange={(e) => setSelectedSessionId(Number(e.target.value) || null)}
+          >
+            <option value="">(All sessions)</option>
+            {sessions.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name} {s.is_active ? "(Active)" : ""}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="col-md-3">
+          <label className="form-label">Quick Search</label>
+          <input
+            className="form-control"
+            placeholder="Search by class, category or fee"
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
+          />
+        </div>
+
+        <div className="col-md-2">
+          <button className="btn btn-outline-secondary" onClick={() => fetchFeeStructures({ sessionId: selectedSessionId })}>
+            Refresh
+          </button>
+        </div>
+
+        <div className="col-md-3 text-end">
+          {canEdit && (
+            <button className="btn btn-success" onClick={handleAdd}>
+              Add Fee Structure
+            </button>
+          )}
+        </div>
+      </div>
 
       {/* Excel-style Multi-select Filters */}
       <div className="row g-3 mb-3">
@@ -560,9 +542,7 @@ const FeeStructure = () => {
             disableSearch={false}
             ClearSelectedIcon={null}
           />
-          <small className="text-muted d-block mt-1">
-            If none selected, all classes are included.
-          </small>
+          <small className="text-muted d-block mt-1">If none selected, all classes are included.</small>
         </div>
         <div className="col-md-6">
           <label className="form-label">Category (Fee Heading)</label>
@@ -575,9 +555,7 @@ const FeeStructure = () => {
             disableSearch={false}
             ClearSelectedIcon={null}
           />
-          <small className="text-muted d-block mt-1">
-            If none selected, all categories are included.
-          </small>
+          <small className="text-muted d-block mt-1">If none selected, all categories are included.</small>
         </div>
       </div>
 
@@ -629,9 +607,7 @@ const FeeStructure = () => {
                       type="number"
                       className="form-control"
                       value={bulkValues.fineAmountPerSlab}
-                      onChange={(e) =>
-                        setBulkValues((s) => ({ ...s, fineAmountPerSlab: e.target.value }))
-                      }
+                      onChange={(e) => setBulkValues((s) => ({ ...s, fineAmountPerSlab: e.target.value }))}
                       placeholder="₹"
                     />
                   </div>
@@ -641,9 +617,7 @@ const FeeStructure = () => {
                       type="number"
                       className="form-control"
                       value={bulkValues.fineSlabDuration}
-                      onChange={(e) =>
-                        setBulkValues((s) => ({ ...s, fineSlabDuration: e.target.value }))
-                      }
+                      onChange={(e) => setBulkValues((s) => ({ ...s, fineSlabDuration: e.target.value }))}
                       placeholder="days"
                     />
                   </div>
@@ -681,9 +655,7 @@ const FeeStructure = () => {
                 <select
                   className="form-select"
                   value={bulkValues.concessionApplicable}
-                  onChange={(e) =>
-                    setBulkValues((s) => ({ ...s, concessionApplicable: e.target.value }))
-                  }
+                  onChange={(e) => setBulkValues((s) => ({ ...s, concessionApplicable: e.target.value }))}
                 >
                   <option value="">(No change)</option>
                   <option value="Yes">Yes</option>
@@ -696,9 +668,7 @@ const FeeStructure = () => {
                 <select
                   className="form-select"
                   value={bulkValues.transportApplicable}
-                  onChange={(e) =>
-                    setBulkValues((s) => ({ ...s, transportApplicable: e.target.value }))
-                  }
+                  onChange={(e) => setBulkValues((s) => ({ ...s, transportApplicable: e.target.value }))}
                 >
                   <option value="">(No change)</option>
                   <option value="Yes">Yes</option>
@@ -711,34 +681,23 @@ const FeeStructure = () => {
                   className="btn btn-primary"
                   onClick={handleBulkApply}
                   disabled={isBulkApplying}
-                  title={
-                    filteredFeeStructures.length
-                      ? `Apply to ${filteredFeeStructures.length} filtered item(s)`
-                      : "No filtered items"
-                  }
+                  title={filteredFeeStructures.length ? `Apply to ${filteredFeeStructures.length} filtered item(s)` : "No filtered items"}
                 >
                   {isBulkApplying ? "Applying..." : `Fill All Filtered (${filteredFeeStructures.length})`}
                 </button>
               </div>
             </div>
-            <small className="text-muted d-block mt-2">
-              Only fields you enter/select are updated. Leave a field blank to keep existing values.
-            </small>
+            <small className="text-muted d-block mt-2">Only fields you enter/select are updated. Leave a field blank to keep existing values.</small>
           </div>
         </div>
       )}
 
-      {/* Add Fee Structure Button */}
-      {canEdit && (
-        <button className="btn btn-success mb-3" onClick={handleAdd}>
-          Add Fee Structure
-        </button>
-      )}
-
+      {/* Table */}
       <table className="table table-striped">
         <thead>
           <tr>
             <th>#</th>
+            <th>Session</th>
             <th>Class</th>
             <th>Category (Fee Heading)</th>
             <th>Fee Due</th>
@@ -756,44 +715,27 @@ const FeeStructure = () => {
             filteredFeeStructures.map((fee, index) => (
               <tr key={fee.id}>
                 <td>{index + 1}</td>
+                <td>{fee.Session?.name || "-"}</td>
                 <td>{fee.Class?.class_name || "Unknown"}</td>
                 <td>{fee.FeeHeading?.fee_heading || "Unknown"}</td>
                 <td>{fee.feeDue}</td>
                 <td>{fee.fineType}</td>
-                <td>
-                  {fee.fineType === "percentage"
-                    ? (fee.finePercentage ?? "0") + "%"
-                    : `₹${fee.fineAmountPerSlab || "0"} / ${fee.fineSlabDuration || "0"} days`}
-                </td>
+                <td>{fee.fineType === "percentage" ? (fee.finePercentage ?? "0") + "%" : `₹${fee.fineAmountPerSlab || "0"} / ${fee.fineSlabDuration || "0"} days`}</td>
                 <td>{fee.fineStartDate || "N/A"}</td>
                 <td>{fee.admissionType}</td>
                 <td>{fee.concessionApplicable}</td>
                 <td>{fee.transportApplicable}</td>
                 {canEdit && (
                   <td>
-                    <button
-                      className="btn btn-primary btn-sm me-2"
-                      onClick={() => handleEdit(fee)}
-                    >
-                      Edit
-                    </button>
-                    {isSuperadmin && (
-                      <button
-                        className="btn btn-danger btn-sm"
-                        onClick={() => handleDelete(fee)}
-                      >
-                        Delete
-                      </button>
-                    )}
+                    <button className="btn btn-primary btn-sm me-2" onClick={() => handleEdit(fee)}>Edit</button>
+                    {isSuperadmin && <button className="btn btn-danger btn-sm" onClick={() => handleDelete(fee)}>Delete</button>}
                   </td>
                 )}
               </tr>
             ))
           ) : (
             <tr>
-              <td colSpan={canEdit ? 11 : 10} className="text-center">
-                No Fee Structures Found
-              </td>
+              <td colSpan={canEdit ? 12 : 11} className="text-center">No Fee Structures Found</td>
             </tr>
           )}
         </tbody>
@@ -803,30 +745,3 @@ const FeeStructure = () => {
 };
 
 export default FeeStructure;
-
-/* --------------------------------------------------------------
-Add this to FeeStructure.css (or any global CSS loaded by the page):
-
-.swal2-html-container .two-col-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px 16px;
-}
-.swal2-html-container .two-col-grid label {
-  font-weight: 600;
-  margin-bottom: 2px;
-}
-.swal2-html-container .two-col-grid .full-row {
-  grid-column: 1 / 3;
-}
-
-/* Optional UI polish */
-// .card .card-title {
-//   font-weight: 600;
-// }
-
-/* Ensure the MultiSelect dropdown overlays within modals/containers nicely */
-// .rmsc { --rmsc-radius: 8px; }
-// .rmsc .dropdown-container { z-index: 10; }           /* local stacking */
-// .rmsc .items, .rmsc .select-panel { z-index: 1056; }  /* above Bootstrap card/table; below SweetAlert (1060+) */
-// */

@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from "react";
+// File: src/components/StudentDueTable.jsx
+import React, { useState, useEffect, useMemo } from "react";
 import api from "../api"; // Custom Axios instance
 import { Tooltip } from "react-tooltip"; // Named export from react-tooltip v5+
 import "react-tooltip/dist/react-tooltip.css"; // Tooltip styles
@@ -7,8 +8,7 @@ import { pdf } from "@react-pdf/renderer";
 import * as XLSX from "xlsx"; // SheetJS
 import PdfStudentDueReport from "./PdfStudentDueReport"; // Your PDF component
 
-// Helper function to format numbers using the Indian numbering system.
-// If the number is 0, return '-' instead.
+// Helper: Indian format; show "-" for 0
 const formatINR = (amount) => {
   if (Number(amount) === 0) return "-";
   return new Intl.NumberFormat("en-IN", {
@@ -17,6 +17,29 @@ const formatINR = (amount) => {
   }).format(amount);
 };
 
+// Helper: get admission number safely (supports alias or snake_case; falls back to id)
+const getAdmissionNo = (s) =>
+  s?.AdmissionNumber ??
+  s?.admission_number ??
+  s?.admissionNo ??
+  s?.admission_no ??
+  s?.id ??
+  "";
+
+// Helper: student id (various shapes)
+const getStudentId = (s) =>
+  Number(
+    s?.id ??
+      s?.student_id ??
+      s?.Student_ID ??
+      s?.StudentId ??
+      s?.Student?.id ??
+      0
+  );
+
+// Helper: safe id for tooltip (no spaces/specials)
+const safeId = (v) => String(v ?? "").replace(/[^\w-]+/g, "_");
+
 const StudentDueTable = () => {
   const [classes, setClasses] = useState([]);
   const [selectedClass, setSelectedClass] = useState("");
@@ -24,14 +47,44 @@ const StudentDueTable = () => {
   const [feeHeadings, setFeeHeadings] = useState([]);
   const [school, setSchool] = useState(null);
 
+  // NEW: sessions, selected session (use active by default)
+  const [sessions, setSessions] = useState([]);
+  const [selectedSession, setSelectedSession] = useState(null);
+
+  // NEW: previous balance map per student_id
+  const [prevBalanceMap, setPrevBalanceMap] = useState({}); // { [student_id]: number }
+  const [loadingPrev, setLoadingPrev] = useState(false);
+
+  // NEW: search box
+  const [search, setSearch] = useState("");
+
   // Fetch school details on mount.
   useEffect(() => {
     api
       .get("/schools")
       .then((response) => {
-        setSchool(response.data[0]); // Assuming first school
+        // support array or {data:[...]}
+        const payload = Array.isArray(response.data) ? response.data : response.data?.data || [];
+        setSchool(payload[0] || null);
       })
       .catch((error) => console.error("Error fetching schools:", error));
+  }, []);
+
+  // Fetch sessions on mount (choose active)
+  useEffect(() => {
+    const fetchSessions = async () => {
+      try {
+        const res = await api.get("/sessions");
+        const list = Array.isArray(res.data) ? res.data : res.data?.data || [];
+        setSessions(list);
+        let active = list.find((s) => s.is_active === true);
+        if (!active && list.length) active = list[0];
+        if (active) setSelectedSession(Number(active.id));
+      } catch (e) {
+        console.error("Error fetching sessions:", e);
+      }
+    };
+    fetchSessions();
   }, []);
 
   // Fetch classes on mount.
@@ -39,29 +92,69 @@ const StudentDueTable = () => {
     api
       .get("/classes")
       .then((response) => {
-        setClasses(response.data);
+        setClasses(Array.isArray(response.data) ? response.data : response.data?.data || []);
       })
       .catch((error) => console.error("Error fetching classes:", error));
   }, []);
 
   // Fetch fee data when a class is selected.
   useEffect(() => {
-    if (selectedClass) {
-      api
-        .get(`/feedue/class/${selectedClass}/fees`)
-        .then((response) => {
-          const data = response.data;
-          setStudentData(data);
-          if (data.length > 0 && data[0].feeDetails) {
-            const heads = data[0].feeDetails.map((detail) => detail.fee_heading);
-            setFeeHeadings(heads);
-          } else {
-            setFeeHeadings([]);
-          }
-        })
-        .catch((error) => console.error("Error fetching fee data:", error));
-    }
+    if (!selectedClass) return;
+    api
+      .get(`/feedue/class/${selectedClass}/fees`)
+      .then((response) => {
+        const data = Array.isArray(response.data) ? response.data : response.data?.data || [];
+        setStudentData(data);
+        if (data.length > 0 && data[0].feeDetails) {
+          const heads = data[0].feeDetails.map((detail) => detail.fee_heading);
+          setFeeHeadings(heads);
+        } else {
+          setFeeHeadings([]);
+        }
+      })
+      .catch((error) => console.error("Error fetching fee data:", error));
   }, [selectedClass]);
+
+  // Fetch Previous Balance per student for selected session (after studentData loads)
+  useEffect(() => {
+    const run = async () => {
+      if (!selectedSession || !studentData?.length) {
+        setPrevBalanceMap({});
+        return;
+      }
+      setLoadingPrev(true);
+      try {
+        const entries = await Promise.all(
+          studentData.map(async (stu) => {
+            const sid = getStudentId(stu);
+            if (!sid) return [sid, 0];
+            try {
+              const resp = await api.get("/opening-balances/outstanding", {
+                params: { student_id: sid, session_id: selectedSession },
+              });
+              const val =
+                Number(
+                  resp?.data?.data?.outstanding ??
+                    resp?.data?.outstanding ??
+                    resp?.data?.totalOutstanding
+                ) || 0;
+              return [sid, val];
+            } catch (_) {
+              return [sid, 0];
+            }
+          })
+        );
+        const map = {};
+        entries.forEach(([sid, val]) => {
+          if (sid) map[sid] = val;
+        });
+        setPrevBalanceMap(map);
+      } finally {
+        setLoadingPrev(false);
+      }
+    };
+    run();
+  }, [studentData, selectedSession]);
 
   // Compute headwise summary for each fee heading.
   const computeHeadwiseSummary = () => {
@@ -114,6 +207,17 @@ const StudentDueTable = () => {
   const headSummary = computeHeadwiseSummary();
   const grandSummary = computeGrandSummary(headSummary);
 
+  // Filtered rows by search
+  const filteredStudents = useMemo(() => {
+    if (!search.trim()) return studentData;
+    const q = search.trim().toLowerCase();
+    return studentData.filter((s) => {
+      const name = String(s?.name ?? "").toLowerCase();
+      const adm = String(getAdmissionNo(s) ?? "").toLowerCase();
+      return name.includes(q) || adm.includes(q);
+    });
+  }, [studentData, search]);
+
   // ---------- Export to Excel (Frontend with SheetJS) ----------
   const exportToExcel = () => {
     if (!selectedClass || studentData.length === 0) {
@@ -123,29 +227,29 @@ const StudentDueTable = () => {
 
     // Resolve Class Name
     const className =
-      classes.find((c) => Number(c.id) === Number(selectedClass))?.class_name ||
-      selectedClass;
+      classes.find((c) => Number(c.id) === Number(selectedClass))?.class_name || selectedClass;
 
     // ---------- Sheet 1: Student Dues ----------
-    const studentHeader = ["Student ID", "Student Name", ...feeHeadings];
+    const studentHeader = ["Admission No.", "Student Name", "Previous Balance", ...feeHeadings];
     const studentRows = studentData.map((stu) => {
+      const admNo = getAdmissionNo(stu);
+      const sid = getStudentId(stu);
+      const prevBal = prevBalanceMap[sid] || 0;
+
       const map = new Map(
         (stu.feeDetails || []).map((f) => [f.fee_heading, Number(f.finalAmountDue) || 0])
       );
       const perHead = feeHeadings.map((h) => map.get(h) ?? 0);
-      return [stu.id, stu.name, ...perHead];
+      return [admNo, stu.name, prevBal, ...perHead];
     });
     const studentSheet = XLSX.utils.aoa_to_sheet([
       [`Class Name: ${className}`],
+      selectedSession ? [`Session ID: ${selectedSession}`] : [],
       [],
       studentHeader,
       ...studentRows,
     ]);
-    studentSheet["!cols"] = [
-      { wch: 12 },
-      { wch: 28 },
-      ...feeHeadings.map(() => ({ wch: 16 })),
-    ];
+    studentSheet["!cols"] = [{ wch: 16 }, { wch: 28 }, { wch: 18 }, ...feeHeadings.map(() => ({ wch: 16 }))];
 
     // ---------- Sheet 2: Headwise Summary ----------
     const headHeader = [
@@ -168,6 +272,7 @@ const StudentDueTable = () => {
     ]);
     const headSheet = XLSX.utils.aoa_to_sheet([
       [`Class Name: ${className}`],
+      selectedSession ? [`Session ID: ${selectedSession}`] : [],
       [],
       headHeader,
       ...headRows,
@@ -194,6 +299,7 @@ const StudentDueTable = () => {
     ];
     const grandSheet = XLSX.utils.aoa_to_sheet([
       [`Class Name: ${className}`],
+      selectedSession ? [`Session ID: ${selectedSession}`] : [],
       [],
       ...grandRows,
     ]);
@@ -208,15 +314,19 @@ const StudentDueTable = () => {
     XLSX.writeFile(wb, `StudentDue_${className}.xlsx`);
   };
 
-  // Print as PDF (same as before)
+  // Print as PDF (now passes Previous Balance + session label)
   const openPdfInNewTab = async () => {
     if (!selectedClass) {
       alert("Please select a class.");
       return;
     }
     const selectedClassName =
-      classes.find((cls) => Number(cls.id) === Number(selectedClass))?.class_name ||
-      selectedClass;
+      classes.find((cls) => Number(cls.id) === Number(selectedClass))?.class_name || selectedClass;
+
+    const sessionLabel =
+      sessions.find((s) => Number(s.id) === Number(selectedSession))?.name ||
+      sessions.find((s) => Number(s.id) === Number(selectedSession))?.label ||
+      (selectedSession ? String(selectedSession) : "");
 
     const doc = (
       <PdfStudentDueReport
@@ -225,6 +335,8 @@ const StudentDueTable = () => {
         studentData={studentData}
         headSummary={headSummary}
         grandSummary={grandSummary}
+        prevBalanceMap={prevBalanceMap}     // ✅ pass Previous Balance
+        sessionLabel={sessionLabel}         // ✅ nicer session text in PDF header
       />
     );
     const asPdf = pdf(doc);
@@ -242,10 +354,11 @@ const StudentDueTable = () => {
         </div>
       )}
 
-      {/* Class Select + Buttons */}
-      <div className="row mb-4 align-items-end">
-        <div className="col-md-6">
-          <label htmlFor="classSelect">Select Class:</label>
+      {/* Controls Row */}
+      <div className="row mb-4 align-items-end g-3">
+        {/* Class Select */}
+        <div className="col-md-3">
+          <label htmlFor="classSelect" className="form-label">Select Class:</label>
           <select
             id="classSelect"
             className="form-control"
@@ -260,10 +373,42 @@ const StudentDueTable = () => {
             ))}
           </select>
         </div>
-        <div className="col-md-6 text-md-right mt-3 mt-md-0 d-flex justify-content-md-end gap-2">
+
+        {/* Session */}
+        <div className="col-md-3">
+          <label className="form-label">Academic Session:</label>
+          <select
+            className="form-control"
+            value={selectedSession ?? ""}
+            onChange={(e) => setSelectedSession(e.target.value ? Number(e.target.value) : null)}
+          >
+            <option value="">-- Select session --</option>
+            {sessions.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name || s.label || s.id}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Search box */}
+        <div className="col-md-4">
+          <label htmlFor="searchBox" className="form-label">Search (name / admission no.)</label>
+          <input
+            id="searchBox"
+            type="text"
+            className="form-control"
+            placeholder="Type to filter…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+
+        {/* Export / Print */}
+        <div className="col-md-2 text-md-right d-flex justify-content-md-end gap-2">
           {selectedClass && studentData.length > 0 && (
             <>
-              <button className="btn btn-success mr-2" onClick={exportToExcel}>
+              <button className="btn btn-success me-2" onClick={exportToExcel}>
                 Export Excel
               </button>
               <button className="btn btn-secondary" onClick={openPdfInNewTab}>
@@ -274,18 +419,22 @@ const StudentDueTable = () => {
         </div>
       </div>
 
-      {selectedClass && studentData.length > 0 && (
+      {selectedClass && filteredStudents.length > 0 && (
         <>
           {/* Student Data Table */}
-          <div style={{ maxHeight: "400px", overflowY: "auto", position: "relative" }}>
+          <div style={{ maxHeight: "420px", overflowY: "auto", position: "relative" }}>
             <table className="table table-bordered table-hover">
               <thead className="thead-dark">
                 <tr>
                   <th className="sticky-top bg-white" style={{ top: 0 }}>
-                    Student ID
+                    Admission No.
                   </th>
                   <th className="sticky-top bg-white" style={{ top: 0 }}>
                     Student Name
+                  </th>
+                  {/* NEW: Previous Balance column */}
+                  <th className="sticky-top bg-white" style={{ top: 0 }}>
+                    Previous Balance {loadingPrev ? "(…)" : ""}
                   </th>
                   {feeHeadings.map((heading, idx) => (
                     <th key={idx} className="sticky-top bg-white" style={{ top: 0 }}>
@@ -295,35 +444,59 @@ const StudentDueTable = () => {
                 </tr>
               </thead>
               <tbody>
-                {studentData.map((student) => (
-                  <tr key={student.id}>
-                    <td>{student.id}</td>
-                    <td>{student.name}</td>
-                    {student.feeDetails.map((fee, idx) => (
-                      <td key={idx}>
-                        <span
-                          data-tooltip-id={`tooltip-${student.id}-${idx}`}
-                          className="font-weight-bold"
-                        >
-                          {formatINR(fee.finalAmountDue)}
-                        </span>
-                        <Tooltip
-                          id={`tooltip-${student.id}-${idx}`}
-                          place="top"
-                          content={
-                            <>
-                              <div><strong>Original:</strong> {formatINR(fee.originalFeeDue)}</div>
-                              <div><strong>Effective:</strong> {formatINR(fee.effectiveFeeDue)}</div>
-                              <div><strong>Received:</strong> {formatINR(fee.totalFeeReceived)}</div>
-                              <div><strong>Van Fee:</strong> {formatINR(fee.totalVanFeeReceived)}</div>
-                              <div><strong>Concession:</strong> {formatINR(fee.totalConcessionReceived)}</div>
-                            </>
-                          }
-                        />
+                {filteredStudents.map((student) => {
+                  const admNo = getAdmissionNo(student);
+                  const sid = getStudentId(student);
+                  const rowKey = safeId(admNo);
+
+                  const prevBal = prevBalanceMap[sid] || 0;
+
+                  return (
+                    <tr key={rowKey}>
+                      <td>{admNo}</td>
+                      <td>{student.name}</td>
+                      {/* NEW: Previous Balance cell */}
+                      <td className={prevBal > 0 ? "fw-semibold text-danger" : ""}>
+                        {formatINR(prevBal)}
                       </td>
-                    ))}
-                  </tr>
-                ))}
+
+                      {(student.feeDetails || []).map((fee, idx) => {
+                        const tipId = `tooltip-${rowKey}-${idx}`;
+                        return (
+                          <td key={idx}>
+                            <span data-tooltip-id={tipId} className="font-weight-bold">
+                              {formatINR(fee.finalAmountDue)}
+                            </span>
+                            <Tooltip
+                              id={tipId}
+                              place="top"
+                              content={
+                                <>
+                                  <div>
+                                    <strong>Original:</strong> {formatINR(fee.originalFeeDue)}
+                                  </div>
+                                  <div>
+                                    <strong>Effective:</strong> {formatINR(fee.effectiveFeeDue)}
+                                  </div>
+                                  <div>
+                                    <strong>Received:</strong> {formatINR(fee.totalFeeReceived)}
+                                  </div>
+                                  <div>
+                                    <strong>Van Fee:</strong> {formatINR(fee.totalVanFeeReceived)}
+                                  </div>
+                                  <div>
+                                    <strong>Concession:</strong>{" "}
+                                    {formatINR(fee.totalConcessionReceived)}
+                                  </div>
+                                </>
+                              }
+                            />
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -393,14 +566,21 @@ const StudentDueTable = () => {
                     <p>{formatINR(grandSummary.totalConcessionReceived)}</p>
                   </div>
                 </div>
+                <div className="small text-muted mt-2">
+                  Note: “Previous Balance” is shown per student in the table (not part of headwise totals).
+                </div>
               </div>
             </div>
           </div>
         </>
       )}
 
-      {selectedClass && studentData.length === 0 && (
-        <p className="text-muted">No student data available for the selected class.</p>
+      {selectedClass && filteredStudents.length === 0 && (
+        <p className="text-muted">No student data matches your search.</p>
+      )}
+
+      {!selectedClass && (
+        <p className="text-muted">Select a class to view due amounts.</p>
       )}
     </div>
   );

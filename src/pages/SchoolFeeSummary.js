@@ -53,6 +53,19 @@ const SchoolFeeSummary = () => {
   const [error, setError] = useState('');
   const [school, setSchool] = useState(null);
 
+  // Sessions + active session
+  const [sessions, setSessions] = useState([]);
+  const [activeSessionId, setActiveSessionId] = useState(null);
+
+  // Fee headings (source of truth for id -> name)
+  const [feeHeadings, setFeeHeadings] = useState([]);
+
+  // OB totals/state
+  const [obByHeadId, setObByHeadId] = useState({});  // { fee_head_id: total } for type='fee'
+  const [obVanTotal, setObVanTotal] = useState(0);   // type='van'
+  const [obGenericTotal, setObGenericTotal] = useState(0); // type='generic'
+  const [obBreakdown, setObBreakdown] = useState([]); // rows for the mini table
+
   const [selectedFeeHeadingId, setSelectedFeeHeadingId] = useState(null);
   const [selectedStatus, setSelectedStatus] = useState(null);
   const [selectedHeadingName, setSelectedHeadingName] = useState('');
@@ -63,8 +76,6 @@ const SchoolFeeSummary = () => {
   const [loadingDetails, setLoadingDetails] = useState(false);
 
   const [search, setSearch] = useState('');
-
-  // New: which fee heads are selected for WA/overall total
   const [selectedHeads, setSelectedHeads] = useState(new Set());
 
   const fetchFeeSummary = async () => {
@@ -87,6 +98,75 @@ const SchoolFeeSummary = () => {
       if (res.data && res.data.length > 0) setSchool(res.data[0]);
     } catch (error) {
       console.error('Error fetching school:', error);
+    }
+  };
+
+  const fetchSessions = async () => {
+    try {
+      const { data } = await api.get('/sessions');
+      setSessions(data || []);
+      const active = (data || []).find((s) => s.is_active) || (data && data[0]);
+      if (active) setActiveSessionId(active.id);
+    } catch (err) {
+      console.error('Error fetching sessions:', err);
+    }
+  };
+
+  // Fee headings for mapping id -> name
+  const fetchFeeHeadings = async () => {
+    try {
+      const { data } = await api.get('/fee-headings');
+      setFeeHeadings(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error('Error fetching fee headings:', err);
+      setFeeHeadings([]);
+    }
+  };
+
+  // Opening Balance aggregation (client-side, paged)
+  const fetchOpeningBalanceSummary = async () => {
+    try {
+      const limit = 500;
+      let page = 1;
+      let total = 0;
+
+      const byHead = {};
+      let vanTotal = 0;
+      let genericTotal = 0;
+
+      do {
+        const params = {
+          page,
+          limit,
+          session_id: activeSessionId || undefined, // target session
+        };
+        const { data } = await api.get('/opening-balances', { params });
+
+        const rows = Array.isArray(data?.rows) ? data.rows : Array.isArray(data) ? data : [];
+        total = Number(data?.total || rows.length);
+
+        rows.forEach((r) => {
+          const amt = Number(r.amount || 0);
+          if (r.type === 'fee' && r.fee_head_id) {
+            byHead[r.fee_head_id] = (byHead[r.fee_head_id] || 0) + amt;
+          } else if (r.type === 'van') {
+            vanTotal += amt;
+          } else if (r.type === 'generic') {
+            genericTotal += amt;
+          }
+        });
+
+        page += 1;
+      } while ((page - 1) * limit < total);
+
+      setObByHeadId(byHead);
+      setObVanTotal(vanTotal);
+      setObGenericTotal(genericTotal);
+    } catch (err) {
+      console.error('Error fetching opening balances:', err);
+      setObByHeadId({});
+      setObVanTotal(0);
+      setObGenericTotal(0);
     }
   };
 
@@ -248,159 +328,111 @@ const SchoolFeeSummary = () => {
     saveAs(blob, `${selectedHeadingName}_${selectedStatus}_Students.xlsx`.replace(/\s+/g, '_'));
   };
 
-  // WhatsApp: send only checked heads; include per-head lines and overall total
-  const sendWhatsAppTest = async () => {
-    if (selectedHeads.size === 0) {
-      await Swal.fire({
-        icon: 'info',
-        title: 'Select Fee Heads',
-        text: 'Please select at least one fee head to include in WhatsApp.',
-        confirmButtonText: 'OK',
-      });
-      return;
-    }
-
-    setShowModal(false);
-    await new Promise((r) => setTimeout(r, 150));
-
-    const count = filteredDetails.length;
-
-    const confirm = await Swal.fire({
-      title: 'Send WhatsApp Messages?',
-      html: `This will send reminders to <b>${count}</b> students for <b>${selectedHeads.size}</b> fee head(s).`,
-      icon: 'question',
-      showCancelButton: true,
-      confirmButtonText: 'Send Now',
-      cancelButtonText: 'Cancel',
-      allowOutsideClick: () => !Swal.isLoading(),
-    });
-    if (!confirm.isConfirmed) return;
-
-    try {
-      Swal.showLoading();
-
-      const payload = {
-  students: filteredDetails
-    .map((s) => {
-      // Build included heads: only selected AND amount > 0
-      const included = [];
-      let overall = 0;
-
-      Array.from(selectedHeads).forEach((head) => {
-        const amount = Number(s[`${head} - Remaining`] || 0);
-        if (amount <= 0) return; // skip heads with zero amount
-
-        const fine = Number(s[`${head} - Fine`] || 0);
-        const total = amount + fine;
-        overall += total;
-
-        included.push({ head, amount, fine, total });
-      });
-
-      // If no heads qualify, skip this student
-      if (included.length === 0) return null;
-
-      // Compose message (professional template)
-      const lines = [
-        `*Dear Parent/Guardian of ${s.name},*`,
-        ``,
-        `This is a kind reminder regarding the pending school fees:`,
-        ``,
-        `*Fee Details:*`,
-        ...included.map(
-          (i) => `• ${i.head} — Amount: ${currencyPlain(i.amount)} | Fine: ${currencyPlain(i.fine)}`
-        ),
-        ``,
-        `*Total Pending:* *${currencyPlain(overall)}*`,
-        ``,
-        `Student: ${s.name}`,
-        s.className ? `Class: ${s.className}` : null,
-        s.admissionNumber ? `Admission No: ${s.admissionNumber}` : null,
-        ``,
-        `We kindly request you to clear the pending dues at the earliest.`,
-        `If you have already made the payment, please ignore this message.`,
-        ``,
-        `*Thank you for your prompt attention.*`,
-      ].filter(Boolean);
-
-      const message = lines.join('\n');
-
-      return {
-        id: s.id ?? s.admissionNumber,
-        name: s.name,
-        phone: '919417873297', // test number
-        admissionNumber: s.admissionNumber,
-        className: s.className,
-        feeHeads: included.map((i) => i.head),
-
-        // Numeric breakdown for server
-        breakdown: included,
-        overallTotal: overall,
-
-        // Prebuilt message
-        message,
-      };
-    })
-    .filter(Boolean), // remove students with no qualifying heads
-};
-
-
-      const resp = await api.post('/integrations/whatsapp/send-batch', payload);
-      const data = resp?.data;
-
-      Swal.hideLoading();
-
-      if (data?.ok) {
-        const sent = Array.isArray(data.sent) ? data.sent : [];
-        const failedCount = sent.filter((x) => !x.ok).length;
-        const successCount = sent.length - failedCount;
-
-        await Swal.fire({
-          title: failedCount ? 'Partial Success' : 'Success',
-          html: failedCount
-            ? `Sent: <b>${successCount}</b> &nbsp;|&nbsp; Failed: <b>${failedCount}</b>.<br/>All messages targeted to <b>9417873297</b>.`
-            : `All <b>${sent.length}</b> messages sent.`,
-          icon: failedCount ? 'warning' : 'success',
-          confirmButtonText: 'Done',
-          showCancelButton: false,
-        });
-      } else {
-        await Swal.fire({
-          title: 'Error',
-          html: 'Message sending failed from the server.',
-          icon: 'error',
-          confirmButtonText: 'OK',
-          showCancelButton: false,
-        });
-      }
-    } catch (err) {
-      console.error('WA test error:', err);
-      Swal.hideLoading();
-      await Swal.fire({
-        title: 'Error',
-        html: `Unable to send WhatsApp messages.<br/><small>${(err?.response?.data?.message || err?.message || 'Unknown error')}</small>`,
-        icon: 'error',
-        confirmButtonText: 'OK',
-        showCancelButton: false,
-      });
-    }
-  };
-
+  // INITIAL LOAD
   useEffect(() => {
-    fetchFeeSummary();
-    fetchSchool();
+    (async () => {
+      await Promise.all([fetchSessions(), fetchSchool(), fetchFeeHeadings()]);
+      await fetchFeeSummary();
+    })();
   }, []);
 
+  // When active session is known, fetch OB aggregation
+  useEffect(() => {
+    if (activeSessionId) {
+      fetchOpeningBalanceSummary();
+    }
+  }, [activeSessionId]);
+
+  // Build display rows for the OB mini table whenever data changes
+  useEffect(() => {
+    // Prefer mapping from /fee-headings (most reliable)
+    const fromFeeHeadings = Object.fromEntries(
+      (feeHeadings || []).map((fh) => [String(fh.id), fh.fee_heading])
+    );
+    // Fallback to names present in summary (in case some heads appear only there)
+    const fromSummary = Object.fromEntries(
+      (summary || []).map((s) => [String(s.id), s.fee_heading])
+    );
+
+    const nameById = new Proxy(fromFeeHeadings, {
+      get(target, prop) {
+        const key = String(prop);
+        return target[key] ?? fromSummary[key];
+      }
+    });
+
+    const feeRows = Object.entries(obByHeadId || {}).map(([fid, amt]) => ({
+      key: `fee-${fid}`,
+      label: nameById[String(fid)] || `Unknown Head (#${fid})`,
+      amount: Number(amt || 0),
+    }));
+
+    // Sort fee rows by label for a nicer look
+    feeRows.sort((a, b) => String(a.label).localeCompare(String(b.label)));
+
+    const rows = [...feeRows];
+    if (obVanTotal > 0) rows.push({ key: 'van', label: 'Van (Opening Balance)', amount: obVanTotal });
+    if (obGenericTotal > 0) rows.push({ key: 'generic', label: 'Generic (Opening Balance)', amount: obGenericTotal });
+
+    setObBreakdown(rows);
+  }, [summary, feeHeadings, obByHeadId, obVanTotal, obGenericTotal]);
+
+  // --- UI ---
   return (
     <Container className="mt-4">
       <div className="d-flex justify-content-between align-items-center mb-3 gap-2">
         <h2 className="m-0">School Fee Summary</h2>
         {summary.length > 0 && (
-          <Button variant="outline-secondary" onClick={generatePDF}>
+          <Button variant="outline-secondary" onClick={async () => {
+            const blob = await pdf(<PdfSchoolFeeSummary school={school} summary={summary} />).toBlob();
+            const url = URL.createObjectURL(blob);
+            window.open(url, '_blank');
+          }}>
             Print PDF
           </Button>
         )}
       </div>
+
+      {/* Opening Balance — shown separately by its own head/type */}
+      {(obBreakdown.length > 0) && (
+        <div className="mb-4">
+          <h5 className="mb-2">Opening Balances (separate)</h5>
+          <Table striped bordered hover size="sm">
+            <thead>
+              <tr>
+                <th style={{width: 60}}>#</th>
+                <th>Head / Type</th>
+                <th className="text-end">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              {obBreakdown.map((row, i) => {
+                const isOverdue = Number(row.amount) > 0;
+                return (
+                  <tr key={row.key} className={`ob-row ${isOverdue ? 'ob-overdue' : 'ob-ok'}`}>
+                    <td>{i + 1}</td>
+                    <td>
+                      {row.label}{' '}
+                      {isOverdue && (
+                        <span className="badge bg-danger-subtle text-danger-emphasis ms-1">
+                          Overdue
+                        </span>
+                      )}
+                    </td>
+                    <td className="text-end ob-amount">{formatCurrency(row.amount)}</td>
+                  </tr>
+                );
+              })}
+              <tr className={obBreakdown.reduce((a, r) => a + Number(r.amount || 0), 0) > 0 ? 'ob-overdue' : ''}>
+                <td colSpan={2} className="text-end fw-semibold">Total</td>
+                <td className="text-end fw-semibold ob-amount">
+                  {formatCurrency(obBreakdown.reduce((a, r) => a + Number(r.amount || 0), 0))}
+                </td>
+              </tr>
+            </tbody>
+          </Table>
+        </div>
+      )}
 
       {loading ? (
         <div className="text-center py-4">
@@ -421,6 +453,7 @@ const SchoolFeeSummary = () => {
                 <th>Total Received</th>
                 <th>Concession</th>
                 <th>Remaining Due</th>
+                {/* OB column removed since OB is shown separately */}
                 <th>Fully Paid</th>
                 <th>Partially Paid</th>
                 <th>Unpaid</th>
@@ -530,7 +563,140 @@ const SchoolFeeSummary = () => {
               <Button variant="outline-primary" size="sm" onClick={selectAllHeads}>Select All</Button>
               <Button variant="outline-secondary" size="sm" onClick={clearAllHeads}>Clear</Button>
               <Button variant="success" onClick={exportToExcel}>Export to Excel</Button>
-              <Button variant="success" onClick={sendWhatsAppTest}>WhatsApp</Button>
+              <Button variant="success" onClick={async () => {
+                if (selectedHeads.size === 0) {
+                  await Swal.fire({
+                    icon: 'info',
+                    title: 'Select Fee Heads',
+                    text: 'Please select at least one fee head to include in WhatsApp.',
+                    confirmButtonText: 'OK',
+                  });
+                  return;
+                }
+                setShowModal(false);
+                await new Promise((r) => setTimeout(r, 150));
+
+                const count = filteredDetails.length;
+
+                const confirm = await Swal.fire({
+                  title: 'Send WhatsApp Messages?',
+                  html: `This will send reminders to <b>${count}</b> students for <b>${selectedHeads.size}</b> fee head(s).`,
+                  icon: 'question',
+                  showCancelButton: true,
+                  confirmButtonText: 'Send Now',
+                  cancelButtonText: 'Cancel',
+                  allowOutsideClick: () => !Swal.isLoading(),
+                });
+                if (!confirm.isConfirmed) return;
+
+                try {
+                  Swal.showLoading();
+
+                  const payload = {
+                    students: filteredDetails
+                      .map((s) => {
+                        // Build included heads: only selected AND amount > 0
+                        const included = [];
+                        let overall = 0;
+
+                        Array.from(selectedHeads).forEach((head) => {
+                          const amount = Number(s[`${head} - Remaining`] || 0);
+                          if (amount <= 0) return; // skip heads with zero amount
+
+                          const fine = Number(s[`${head} - Fine`] || 0);
+                          const total = amount + fine;
+                          overall += total;
+
+                          included.push({ head, amount, fine, total });
+                        });
+
+                        // If no heads qualify, skip this student
+                        if (included.length === 0) return null;
+
+                        // Compose message (professional template)
+                        const lines = [
+                          `*Dear Parent/Guardian of ${s.name},*`,
+                          ``,
+                          `This is a kind reminder regarding the pending school fees:`,
+                          ``,
+                          `*Fee Details:*`,
+                          ...included.map(
+                            (i) => `• ${i.head} — Amount: ${currencyPlain(i.amount)} | Fine: ${currencyPlain(i.fine)}`
+                          ),
+                          ``,
+                          `*Total Pending:* *${currencyPlain(overall)}*`,
+                          ``,
+                          `Student: ${s.name}`,
+                          s.className ? `Class: ${s.className}` : null,
+                          s.admissionNumber ? `Admission No: ${s.admissionNumber}` : null,
+                          ``,
+                          `We kindly request you to clear the pending dues at the earliest.`,
+                          `If you have already made the payment, please ignore this message.`,
+                          ``,
+                          `*Thank you for your prompt attention.*`,
+                        ].filter(Boolean);
+
+                        const message = lines.join('\n');
+
+                        return {
+                          id: s.id ?? s.admissionNumber,
+                          name: s.name,
+                          phone: '919417873297', // test number
+                          admissionNumber: s.admissionNumber,
+                          className: s.className,
+                          feeHeads: included.map((i) => i.head),
+
+                          // Numeric breakdown for server
+                          breakdown: included,
+                          overallTotal: overall,
+
+                          // Prebuilt message
+                          message,
+                        };
+                      })
+                      .filter(Boolean), // remove students with no qualifying heads
+                  };
+
+                  const resp = await api.post('/integrations/whatsapp/send-batch', payload);
+                  const data = resp?.data;
+
+                  Swal.hideLoading();
+
+                  if (data?.ok) {
+                    const sent = Array.isArray(data.sent) ? data.sent : [];
+                    const failedCount = sent.filter((x) => !x.ok).length;
+                    const successCount = sent.length - failedCount;
+
+                    await Swal.fire({
+                      title: failedCount ? 'Partial Success' : 'Success',
+                      html: failedCount
+                        ? `Sent: <b>${successCount}</b> &nbsp;|&nbsp; Failed: <b>${failedCount}</b>.<br/>All messages targeted to <b>9417873297</b>.`
+                        : `All <b>${sent.length}</b> messages sent.`,
+                      icon: failedCount ? 'warning' : 'success',
+                      confirmButtonText: 'Done',
+                      showCancelButton: false,
+                    });
+                  } else {
+                    await Swal.fire({
+                      title: 'Error',
+                      html: 'Message sending failed from the server.',
+                      icon: 'error',
+                      confirmButtonText: 'OK',
+                      showCancelButton: false,
+                    });
+                  }
+                } catch (err) {
+                  console.error('WA test error:', err);
+                  Swal.hideLoading();
+                  await Swal.fire({
+                    title: 'Error',
+                    html: `Unable to send WhatsApp messages.<br/><small>${(err?.response?.data?.message || err?.message || 'Unknown error')}</small>`,
+                    icon: 'error',
+                    confirmButtonText: 'OK',
+                    showCancelButton: false,
+                  });
+                }
+              }}>WhatsApp</Button>
               <Button variant="outline-secondary" onClick={() => setShowModal(false)}>Close</Button>
             </div>
           </div>

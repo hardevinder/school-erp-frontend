@@ -1,0 +1,19 @@
+/* Make Modal.Body the scroll container */
+.collection-modal .modal-body {
+  max-height: calc(100vh - 200px);
+  overflow: auto;
+}
+
+/* Sticky wrapper for the student-pick Tabs */
+.collection-modal .sticky-subnav {
+  position: sticky;
+  top: 0;
+  z-index: 1045;   /* above table stickies */
+  background: #fff;
+  padding-top: 6px;
+}
+
+/* Ensure the nav strip has a solid background */
+.collection-modal .sticky-subnav .nav-tabs {
+  background: #fff;
+}

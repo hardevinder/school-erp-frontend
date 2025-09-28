@@ -20,6 +20,7 @@ import ChatContainer from "./components/ChatContainer";
 
 // Pages
 import Classes from "./pages/Classes";
+import Sessions from "./pages/Sessions"; // <-- ADDED
 import Subjects from "./pages/Subjects";
 import Student from "./pages/Students";
 import FeeStructure from "./pages/FeeStructure";
@@ -100,6 +101,10 @@ import ReportCardFormats from "./pages/ReportCardFormats";
 import AssignReportCardFormat from "./pages/AssignReportCardFormat";
 import ReportCardGenerator from "./pages/ReportCardGenerator";
 import StudentRemarksEntry from "./pages/StudentRemarksEntry";
+// Pages (add near other pages)
+import StudentTransport from "./pages/StudentTransport";
+import OpeningBalances from "./pages/OpeningBalances";
+
 
 
 function App() {
@@ -140,6 +145,7 @@ function App() {
 
           {/* Core / Admissions */}
           <Route path="/classes" element={<Classes />} />
+          <Route path="/sessions" element={<Sessions />} /> {/* <-- ADDED */}
           <Route path="/subjects" element={<Subjects />} />
           <Route path="/students" element={<Student />} />
           <Route path="/sections" element={<Sections />} />
@@ -149,7 +155,9 @@ function App() {
           <Route path="/fee-structure" element={<FeeStructure />} />
           <Route path="/fee-headings" element={<FeeHeadings />} />
           <Route path="/fee-category" element={<FeeCategory />} />
+          <Route path="/concessions" element={<Concessions />} />
           <Route path="/student-due" element={<StudentDueTable />} />
+          <Route path="/opening-balances" element={<OpeningBalances />} />  {/* ⬅ NEW */}
           <Route path="/reports/day-wise" element={<DayWiseReport />} />
           <Route path="/reports/day-wise-category" element={<DayWiseCategoryReports />} />
           <Route path="/reports/school-fee-summary" element={<SchoolFeeSummary />} />
@@ -264,6 +272,8 @@ function App() {
           <Route path="/assign-report-card-format" element={<AssignReportCardFormat />} />
           <Route path="/report-card-generator" element={<ReportCardGenerator />} /> {/* NEW */}
           <Route path="/academic-years" element={<AcademicYearManagement />} />
+
+          <Route path="/student-transport" element={<StudentTransport />} />
 
 
           {/* Catch-all (inside app) */}
