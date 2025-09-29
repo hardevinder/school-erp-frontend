@@ -104,6 +104,8 @@ import StudentRemarksEntry from "./pages/StudentRemarksEntry";
 // Pages (add near other pages)
 import StudentTransport from "./pages/StudentTransport";
 import OpeningBalances from "./pages/OpeningBalances";
+import CasteGenderReport from "./pages/CasteGenderReport"; // ⬅ NEW
+
 
 
 
@@ -274,6 +276,8 @@ function App() {
           <Route path="/academic-years" element={<AcademicYearManagement />} />
 
           <Route path="/student-transport" element={<StudentTransport />} />
+
+          <Route path="/reports/caste-gender" element={<CasteGenderReport />} /> {/* ⬅ NEW */}
 
 
           {/* Catch-all (inside app) */}

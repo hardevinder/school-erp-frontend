@@ -105,6 +105,14 @@ export default function Sidebar({ headerHeight = 56 }) {
             path: "/opening-balances",
             roles: ["admin", "superadmin"],
           },
+
+          // ✅ NEW: Caste/Gender Report
+          {
+            key: "caste-gender-report",
+            label: "Caste/Gender Report",
+            icon: "bi-people-fill",
+            path: "/reports/caste-gender",
+          },
         ],
       });
       groups.push({
@@ -150,6 +158,14 @@ export default function Sidebar({ headerHeight = 56 }) {
           { key: "sessions", label: "Sessions", icon: "bi-calendar4-week", path: "/sessions" }, // sessions for academic
           // expose transport assignments to academic coordinators as well
           { key: "student-transport", label: "Transport Assignments", icon: "bi-truck", path: "/student-transport" },
+
+          // ✅ NEW (Academic access): Caste/Gender Report
+          {
+            key: "caste-gender-report",
+            label: "Caste/Gender Report",
+            icon: "bi-people-fill",
+            path: "/reports/caste-gender",
+          },
         ],
       });
       groups.push({
@@ -245,20 +261,6 @@ export default function Sidebar({ headerHeight = 56 }) {
           { key: "coscholastic-entry", label: "Co-Scholastic Entry", icon: "bi-stars", path: "/co-scholastic-entry" },
           { key: "student-remarks-entry", label: "Student Remarks Entry", icon: "bi-chat-square-text", path: "/student-remarks-entry" },
           { key: "report-card-generator", label: "Print Report Cards", icon: "bi-printer", path: "/report-card-generator" },
-        ],
-      });
-    }
-
-    if (isStudent) {
-      groups.push({
-        heading: "Main",
-        items: [
-          { key: "dashboard", label: "Dashboard", icon: "bi-speedometer2", path: "/dashboard" },
-          { key: "student-circulars", label: "Circulars", icon: "bi-megaphone", path: "/student-circulars" },
-          { key: "student-fee", label: "Fees", icon: "bi-cash-coin", path: "/student-fee" },
-          { key: "student-attendance", label: "Attendance", icon: "bi-calendar2-check", path: "/student-attendance" },
-          { key: "my-assignments", label: "My Assignments", icon: "bi-clipboard", path: "/my-assignments" },
-          { key: "student-timetable-display", label: "Time Table", icon: "bi-table", path: "/student-timetable-display" },
         ],
       });
     }

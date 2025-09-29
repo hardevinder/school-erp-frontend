@@ -31,6 +31,57 @@ ChartJS.register(
   TimeScale
 );
 
+/* ------------------- INLINE VALUE LABEL PLUGIN -------------------
+   Draws values directly on the chart (no hover needed)
+-------------------------------------------------------------------*/
+const ValueLabelPlugin = {
+  id: "valueLabel",
+  afterDatasetsDraw(chart, args, opts) {
+    const { enabled = false, formatter, showZero = true, align = "center", offsetY = -6 } = opts || {};
+    if (!enabled) return;
+
+    const { ctx } = chart;
+    ctx.save();
+
+    chart.data.datasets.forEach((dataset, datasetIndex) => {
+      const meta = chart.getDatasetMeta(datasetIndex);
+      if (!meta || meta.hidden) return;
+
+      meta.data.forEach((element, index) => {
+        const raw = dataset.data[index];
+        const value = Number(raw || 0);
+        if (!showZero && !value) return;
+
+        // Position
+        let pos = element.tooltipPosition ? element.tooltipPosition() : element.getCenterPoint?.() || { x: 0, y: 0 };
+        let x = pos.x;
+        let y = pos.y;
+
+        // For bars, nudge above the bar
+        if (meta.type === "bar") {
+          y = y + (offsetY || -6);
+        }
+
+        // Text
+        const text = typeof formatter === "function" ? formatter(value, { chart, dataset, datasetIndex, index }) : String(value);
+
+        // Style
+        ctx.font = (ChartJS.defaults.font && ChartJS.defaults.font.string) || "12px sans-serif";
+        ctx.fillStyle = "#111";
+        ctx.textAlign = align;
+        ctx.textBaseline = "middle";
+
+        if (x < 0 || x > chart.width || y < 0 || y > chart.height) return;
+
+        ctx.fillText(text, x, y);
+      });
+    });
+
+    ctx.restore();
+  },
+};
+ChartJS.register(ValueLabelPlugin);
+
 // ---------- SMALL UTILITIES ----------
 const formatCurrency = (amount) =>
   "₹" +
@@ -43,6 +94,8 @@ const compactNumber = (n) =>
     notation: "compact",
     maximumFractionDigits: 1,
   }).format(Number(n || 0));
+
+const intIN = (n) => Number(n || 0).toLocaleString("en-IN");
 
 const palette = [
   "#ef4444",
@@ -80,8 +133,15 @@ const Dashboard = () => {
   const [dayWiseSummary, setDayWiseSummary] = useState([]); // daily fee trend by category
   const [classWiseCount, setClassWiseCount] = useState([]); // class-wise new/old counts
 
+  // NEW: caste/religion report
+  const [casteCategories, setCasteCategories] = useState(["SC", "ST", "OBC", "General"]);
+  const [religionCategories, setReligionCategories] = useState(["Hindu", "Sikh", "Muslim", "Christian", "Other"]);
+  const [genderKeys, setGenderKeys] = useState(["Male", "Female"]);
+  const [grandTotal, setGrandTotal] = useState(null);
+  const [religionGrandTotal, setReligionGrandTotal] = useState(null);
+
   // UX states
-  const [loading, setLoading] = useState({ report: false, day: false, class: false });
+  const [loading, setLoading] = useState({ report: false, day: false, class: false, cr: false });
   const [error, setError] = useState("");
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [lastUpdated, setLastUpdated] = useState(null);
@@ -92,11 +152,19 @@ const Dashboard = () => {
   const lineRef = useRef(null);
   const barRef = useRef(null);
 
+  // NEW: refs for the three new charts
+  const genderPieRef = useRef(null);
+  const casteBarRef = useRef(null);
+  const religionBarRef = useRef(null);
+
   // Legend toggle per chart
   const [showLegends, setShowLegends] = useState({
     pie: true,
     line: true,
     bar: true,
+    genderPie: true,
+    casteBar: true,
+    religionBar: true,
   });
 
   // Settings
@@ -148,11 +216,33 @@ const Dashboard = () => {
     }
   }, []);
 
+  // NEW: fetch caste + religion rollup
+  const fetchCasteReligion = useCallback(async () => {
+    setLoading((s) => ({ ...s, cr: true }));
+    try {
+      const res = await api.get("/student-caste-report/caste-gender-report");
+      const data = res?.data || {};
+      if (Array.isArray(data?.categories)) setCasteCategories(data.categories);
+      if (Array.isArray(data?.religions)) setReligionCategories(data.religions);
+      if (Array.isArray(data?.genders)) setGenderKeys(data.genders);
+      if (data?.grandTotal) setGrandTotal(data.grandTotal);
+      if (data?.religionGrandTotal) setReligionGrandTotal(data.religionGrandTotal);
+      setError("");
+      setLastUpdated(new Date());
+    } catch (e) {
+      console.error("Error fetching caste/religion summary:", e);
+      setError("Failed to fetch caste/religion summary.");
+    } finally {
+      setLoading((s) => ({ ...s, cr: false }));
+    }
+  }, []);
+
   const refreshAll = useCallback(() => {
     fetchReportData();
     fetchDayWiseSummary();
     fetchClassWiseCount();
-  }, [fetchReportData, fetchDayWiseSummary, fetchClassWiseCount]);
+    fetchCasteReligion(); // NEW
+  }, [fetchReportData, fetchDayWiseSummary, fetchClassWiseCount, fetchCasteReligion]);
 
   useEffect(() => {
     // initial fetch
@@ -169,13 +259,14 @@ const Dashboard = () => {
     timersRef.current.report = setInterval(fetchReportData, POLLING_INTERVAL);
     timersRef.current.day = setInterval(fetchDayWiseSummary, POLLING_INTERVAL);
     timersRef.current.class = setInterval(fetchClassWiseCount, POLLING_INTERVAL);
+    timersRef.current.cr = setInterval(fetchCasteReligion, POLLING_INTERVAL);
 
     return () => {
       Object.values(timersRef.current || {}).forEach(clearInterval);
     };
-  }, [autoRefresh, fetchReportData, fetchDayWiseSummary, fetchClassWiseCount]);
+  }, [autoRefresh, fetchReportData, fetchDayWiseSummary, fetchClassWiseCount, fetchCasteReligion]);
 
-  // ---- DERIVED AGGREGATIONS ----
+  // ---- DERIVED AGGREGATIONS (fees/enrollments) ----
   const summary = useMemo(() => {
     return reportData.reduce((acc, item) => {
       const category = item.feeCategoryName;
@@ -227,8 +318,29 @@ const Dashboard = () => {
   const overallOld = classColumns.reduce((s, c) => s + classWiseEnrollments[c].old, 0);
   const overallTotal = overallNew + overallOld;
 
+  // ---- NEW: DERIVED AGGREGATIONS (gender/caste/religion) ----
+  const genderTotals = useMemo(() => {
+    const boys = grandTotal?.Total?.Boys || 0;
+    const girls = grandTotal?.Total?.Girls || 0;
+    return { boys: Number(boys), girls: Number(girls) };
+  }, [grandTotal]);
+
+  const casteBoysGirls = useMemo(() => {
+    const labels = casteCategories;
+    const boys = labels.map((c) => Number(grandTotal?.[c]?.Boys || 0));
+    const girls = labels.map((c) => Number(grandTotal?.[c]?.Girls || 0));
+    return { labels, boys, girls };
+  }, [casteCategories, grandTotal]);
+
+  const religionBoysGirls = useMemo(() => {
+    const labels = religionCategories;
+    const boys = labels.map((r) => Number(religionGrandTotal?.[r]?.Boys || 0));
+    const girls = labels.map((r) => Number(religionGrandTotal?.[r]?.Girls || 0));
+    return { labels, boys, girls };
+  }, [religionCategories, religionGrandTotal]);
+
   // ---- CHART DATA ----
-  // Pie
+  // Pie (fee distribution)
   const pieData = useMemo(() => {
     const labels = Object.keys(summary);
     const data = Object.values(summary).map((t) => t.totalFeeReceived);
@@ -269,7 +381,7 @@ const Dashboard = () => {
     [showLegends.pie]
   );
 
-  // Line
+  // Line (fee trend)
   const uniqueDates = useMemo(
     () => Array.from(new Set(dayWiseSummary.map((r) => r.transactionDate))).sort(),
     [dayWiseSummary]
@@ -365,6 +477,137 @@ const Dashboard = () => {
     [showLegends.bar]
   );
 
+  // ---- NEW CHARTS: Gender/Caste/Religion ----
+  const genderPieData = useMemo(() => {
+    const labels = ["Boys", "Girls"];
+    const data = [genderTotals.boys, genderTotals.girls];
+    return {
+      labels,
+      datasets: [
+        {
+          label: "Students",
+          data,
+          backgroundColor: labels.map((_, i) => `${palette[i % palette.length]}33`),
+          borderColor: labels.map((_, i) => palette[i % palette.length]),
+          borderWidth: 1.5,
+        },
+      ],
+    };
+  }, [genderTotals]);
+
+  const genderPieOptions = useMemo(
+    () => ({
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: showLegends.genderPie, position: "right" },
+        // ALWAYS-VISIBLE LABELS (count + %)
+        valueLabel: {
+          enabled: true,
+          showZero: false,
+          formatter: (value, { chart, datasetIndex }) => {
+            const ds = chart.data.datasets[datasetIndex];
+            const total = ds.data.reduce((a, b) => a + Number(b || 0), 0);
+            const pct = total ? Math.round((value / total) * 100) : 0;
+            return `${intIN(value)} (${pct}%)`;
+          },
+        },
+      },
+      cutout: "58%",
+    }),
+    [showLegends.genderPie]
+  );
+
+  const casteBarData = useMemo(
+    () => ({
+      labels: casteBoysGirls.labels,
+      datasets: [
+        {
+          label: "Boys",
+          data: casteBoysGirls.boys,
+          backgroundColor: `${palette[1 % palette.length]}33`,
+          borderColor: palette[1 % palette.length],
+          borderWidth: 1,
+        },
+        {
+          label: "Girls",
+          data: casteBoysGirls.girls,
+          backgroundColor: `${palette[2 % palette.length]}33`,
+          borderColor: palette[2 % palette.length],
+          borderWidth: 1,
+        },
+      ],
+    }),
+    [casteBoysGirls]
+  );
+
+  const casteBarOptions = useMemo(
+    () => ({
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        x: { title: { display: true, text: "Caste" } },
+        y: { title: { display: true, text: "Students" }, beginAtZero: true, ticks: { precision: 0 } },
+      },
+      plugins: {
+        legend: { display: showLegends.casteBar },
+        // ALWAYS-VISIBLE LABELS (count)
+        valueLabel: {
+          enabled: true,
+          showZero: false,
+          formatter: (value) => intIN(value),
+          offsetY: -6,
+        },
+      },
+    }),
+    [showLegends.casteBar]
+  );
+
+  const religionBarData = useMemo(
+    () => ({
+      labels: religionBoysGirls.labels,
+      datasets: [
+        {
+          label: "Boys",
+          data: religionBoysGirls.boys,
+          backgroundColor: `${palette[3 % palette.length]}33`,
+          borderColor: palette[3 % palette.length],
+          borderWidth: 1,
+        },
+        {
+          label: "Girls",
+          data: religionBoysGirls.girls,
+          backgroundColor: `${palette[4 % palette.length]}33`,
+          borderColor: palette[4 % palette.length],
+          borderWidth: 1,
+        },
+      ],
+    }),
+    [religionBoysGirls]
+  );
+
+  const religionBarOptions = useMemo(
+    () => ({
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        x: { title: { display: true, text: "Religion" } },
+        y: { title: { display: true, text: "Students" }, beginAtZero: true, ticks: { precision: 0 } },
+      },
+      plugins: {
+        legend: { display: showLegends.religionBar },
+        // ALWAYS-VISIBLE LABELS (count)
+        valueLabel: {
+          enabled: true,
+          showZero: false,
+          formatter: (value) => intIN(value),
+          offsetY: -6,
+        },
+      },
+    }),
+    [showLegends.religionBar]
+  );
+
   // ---------- RENDER ----------
   const kpis = [
     { label: "Fee Received (MTD)", value: totalFeeReceived, icon: "bi-cash-coin" },
@@ -380,14 +623,15 @@ const Dashboard = () => {
     0
   );
 
-  // Quick links – EXACT routes + Collect Fee + Students
+  // Quick links – add Caste/Gender Report
   const quickLinks = [
     { label: "Collect Fee", icon: "bi-cash-stack", href: "/transactions", gradient: "linear-gradient(135deg,#16a34a,#22c55e)" },
     { label: "Fee Due Report", icon: "bi-receipt", href: "/student-due", gradient: "linear-gradient(135deg,#22c55e,#16a34a)" },
     { label: "Pending Due", icon: "bi-list-check", href: "/reports/school-fee-summary", gradient: "linear-gradient(135deg,#3b82f6,#2563eb)" },
     { label: "Day Summary", icon: "bi-calendar2-check", href: "/reports/day-wise", gradient: "linear-gradient(135deg,#f59e0b,#f97316)" },
     { label: "Transport", icon: "bi-truck", href: "/reports/van-fee", gradient: "linear-gradient(135deg,#0891b2,#06b6d4)" },
-    { label: "Students", icon: "bi-people", href: "/students", gradient: "linear-gradient(135deg,#8b5cf6,#6d28d9)" }, // ← added
+    { label: "Students", icon: "bi-people", href: "/students", gradient: "linear-gradient(135deg,#8b5cf6,#6d28d9)" },
+    { label: "Caste/Gender & Religion", icon: "bi-people-fill", href: "/reports/caste-gender", gradient: "linear-gradient(135deg,#ef4444,#f97316)" }, // NEW
   ];
 
   const LinkCard = ({ href, icon, label, gradient }) => (
@@ -489,7 +733,7 @@ const Dashboard = () => {
                       <div className="small text-white-50">{kpi.label}</div>
                       <div className="h4 mb-1">{formatCurrency(kpi.value)}</div>
                       <span className="small text-white-50">
-                        {loading.report || loading.day || loading.class ? "Updating…" : "Up to date"}
+                        {loading.report || loading.day || loading.class || loading.cr ? "Updating…" : "Up to date"}
                       </span>
                     </div>
                     <div className="text-end d-flex flex-column align-items-end">
@@ -576,7 +820,7 @@ const Dashboard = () => {
 
         {/* Charts Row */}
         <div className="row g-3 mb-4">
-          {/* PIE */}
+          {/* PIE (fees) */}
           <div className="col-12 col-xl-6">
             <div className="card h-100 shadow-sm">
               <div className="card-header bg-primary text-white d-flex align-items-center justify-content-between">
@@ -616,7 +860,7 @@ const Dashboard = () => {
             </div>
           </div>
 
-          {/* LINE */}
+          {/* LINE (fees trend) */}
           <div className="col-12 col-xl-6">
             <div className="card h-100 shadow-sm">
               <div className="card-header bg-info text-white d-flex align-items-center justify-content-between">
@@ -649,6 +893,129 @@ const Dashboard = () => {
                   <div className="skeleton-chart" />
                 ) : uniqueDates.length ? (
                   <Line ref={lineRef} data={lineChartData} options={lineChartOptions} />
+                ) : (
+                  <div className="text-center text-muted">No data</div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* NEW: Gender/Caste/Religion row */}
+        <div className="row g-3 mb-4">
+          {/* Gender Pie */}
+          <div className="col-12 col-xl-4">
+            <div className="card h-100 shadow-sm">
+              <div className="card-header bg-secondary text-white d-flex align-items-center justify-content-between">
+                <h5 className="card-title mb-0">Students by Gender</h5>
+                <div className="d-flex gap-2">
+                  <a href="/reports/caste-gender" className="btn btn-sm btn-light" title="Open Caste/Gender Report">
+                    <i className="bi bi-box-arrow-up-right" />
+                  </a>
+                  <button
+                    className="btn btn-sm btn-light"
+                    onClick={() => setShowLegends((s) => ({ ...s, genderPie: !s.genderPie }))}
+                    title="Toggle legend"
+                  >
+                    <i className="bi bi-list-task" />
+                  </button>
+                  <button
+                    className="btn btn-sm btn-light"
+                    onClick={() => downloadChart(genderPieRef, "students-by-gender.png")}
+                    title="Download PNG"
+                  >
+                    <i className="bi bi-download" />
+                  </button>
+                  <button className="btn btn-sm btn-light" onClick={fetchCasteReligion} title="Refresh">
+                    <i className="bi bi-arrow-clockwise" />
+                  </button>
+                </div>
+              </div>
+              <div className="card-body" style={{ height: 320 }}>
+                {loading.cr ? (
+                  <div className="skeleton-chart" />
+                ) : (genderTotals.boys + genderTotals.girls) > 0 ? (
+                  <Doughnut ref={genderPieRef} data={genderPieData} options={genderPieOptions} />
+                ) : (
+                  <div className="text-center text-muted">No data</div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Caste Bar */}
+          <div className="col-12 col-xl-4">
+            <div className="card h-100 shadow-sm">
+              <div className="card-header bg-warning text-white d-flex align-items-center justify-content-between">
+                <h5 className="card-title mb-0">Caste Distribution</h5>
+                <div className="d-flex gap-2">
+                  <a href="/reports/caste-gender" className="btn btn-sm btn-light" title="Open Caste/Gender Report">
+                    <i className="bi bi-box-arrow-up-right" />
+                  </a>
+                  <button
+                    className="btn btn-sm btn-light"
+                    onClick={() => setShowLegends((s) => ({ ...s, casteBar: !s.casteBar }))}
+                    title="Toggle legend"
+                  >
+                    <i className="bi bi-list-task" />
+                  </button>
+                  <button
+                    className="btn btn-sm btn-light"
+                    onClick={() => downloadChart(casteBarRef, "caste-distribution.png")}
+                    title="Download PNG"
+                  >
+                    <i className="bi bi-download" />
+                  </button>
+                  <button className="btn btn-sm btn-light" onClick={fetchCasteReligion} title="Refresh">
+                    <i className="bi bi-arrow-clockwise" />
+                  </button>
+                </div>
+              </div>
+              <div className="card-body" style={{ height: 320 }}>
+                {loading.cr ? (
+                  <div className="skeleton-chart" />
+                ) : casteBoysGirls.labels.length ? (
+                  <Bar ref={casteBarRef} data={casteBarData} options={casteBarOptions} />
+                ) : (
+                  <div className="text-center text-muted">No data</div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Religion Bar */}
+          <div className="col-12 col-xl-4">
+            <div className="card h-100 shadow-sm">
+              <div className="card-header bg-danger text-white d-flex align-items-center justify-content-between">
+                <h5 className="card-title mb-0">Religion Distribution</h5>
+                <div className="d-flex gap-2">
+                  <a href="/reports/caste-gender" className="btn btn-sm btn-light" title="Open Caste/Gender Report">
+                    <i className="bi bi-box-arrow-up-right" />
+                  </a>
+                  <button
+                    className="btn btn-sm btn-light"
+                    onClick={() => setShowLegends((s) => ({ ...s, religionBar: !s.religionBar }))}
+                    title="Toggle legend"
+                  >
+                    <i className="bi bi-list-task" />
+                  </button>
+                  <button
+                    className="btn btn-sm btn-light"
+                    onClick={() => downloadChart(religionBarRef, "religion-distribution.png")}
+                    title="Download PNG"
+                  >
+                    <i className="bi bi-download" />
+                  </button>
+                  <button className="btn btn-sm btn-light" onClick={fetchCasteReligion} title="Refresh">
+                    <i className="bi bi-arrow-clockwise" />
+                  </button>
+                </div>
+              </div>
+              <div className="card-body" style={{ height: 320 }}>
+                {loading.cr ? (
+                  <div className="skeleton-chart" />
+                ) : religionBoysGirls.labels.length ? (
+                  <Bar ref={religionBarRef} data={religionBarData} options={religionBarOptions} />
                 ) : (
                   <div className="text-center text-muted">No data</div>
                 )}

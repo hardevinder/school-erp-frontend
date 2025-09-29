@@ -1,4 +1,4 @@
-// src/components/Students.jsx
+// src/pages/Students.js
 import React, { useState, useEffect } from "react";
 import api from "../api";
 import Swal from "sweetalert2";
@@ -15,6 +15,26 @@ const getRoleFlags = () => {
     isSuperadmin: roles.includes("superadmin"),
   };
 };
+
+// --- helpers: photo URL + fallback SVG ---
+const apiBase = (() => {
+  const b = api?.defaults?.baseURL;
+  return b ? b.replace(/\/+$/, "") : window.location.origin;
+})();
+
+const buildPhotoURL = (fileName) =>
+  fileName ? `${apiBase}/uploads/photoes/students/${encodeURIComponent(fileName)}` : "";
+
+// Small neutral "no photo" SVG placeholder
+const NO_PHOTO_SVG =
+  'data:image/svg+xml;utf8,' +
+  encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64">
+       <rect width="100%" height="100%" fill="#f0f0f0"/>
+       <circle cx="32" cy="24" r="14" fill="#d9d9d9"/>
+       <rect x="10" y="42" width="44" height="14" rx="7" fill="#d9d9d9"/>
+     </svg>`
+  );
 
 // fetch next admission-number suggestion from backend
 const fetchNextAdmissionNumber = async (prefix) => {
@@ -39,10 +59,10 @@ const RELIGIONS = ["Hindu","Muslim","Sikh","Christian","Buddhist","Jain","Other"
 
 // colors for sibling badges
 const SIBLING_COLORS = [
-  { bg: "#e6f3ff", border: "#91caff" }, // light blue
-  { bg: "#e6ffe6", border: "#99e699" }, // light green
-  { bg: "#fff2e6", border: "#ffcc99" }, // light orange
-  { bg: "#ffe6e6", border: "#ff9999" }, // light red
+  { bg: "#e6f3ff", border: "#91caff" },
+  { bg: "#e6ffe6", border: "#99e699" },
+  { bg: "#fff2e6", border: "#ffcc99" },
+  { bg: "#ffe6e6", border: "#ff9999" },
 ];
 
 const Students = () => {
@@ -55,7 +75,7 @@ const Students = () => {
   const [sections, setSections] = useState([]);
   const [concessions, setConcessions] = useState([]);
   const [sessions, setSessions] = useState([]);
-  const [transportations, setTransportations] = useState([]); // <-- added
+  const [transportations, setTransportations] = useState([]);
 
   // UI state
   const [search, setSearch] = useState("");
@@ -112,15 +132,12 @@ const Students = () => {
     }
   };
 
-  // fetch transportations
   const fetchTransportations = async () => {
     try {
       const { data } = await api.get("/transportations");
-      // Expecting an array with fields: id, RouteName, Cost, maybe Villages
       setTransportations(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error("fetchTransportations:", err);
-      // Not fatal — silently continue
       setTransportations([]);
     }
   };
@@ -130,7 +147,7 @@ const Students = () => {
     fetchClasses();
     fetchSections();
     fetchSessions();
-    fetchTransportations(); // <-- added
+    fetchTransportations();
     if (isAdminOrSuperAdmin) fetchConcessions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAdminOrSuperAdmin]);
@@ -179,23 +196,52 @@ const Students = () => {
     }
   };
 
-  // ---------------- ADD / EDIT with in-modal sibling dependent selects ----------------
+  // PHOTO: choose file + upload
+  const promptAndUploadPhoto = (student) => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*";
+    input.onchange = async (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+
+      const fd = new FormData();
+      fd.append("photo", file);
+      if (student.admission_number) fd.append("admission_number", student.admission_number);
+
+      try {
+        Swal.showLoading();
+        const { data } = await api.post(`/students/${student.id}/photo`, fd, {
+          headers: { "Content-Type": "multipart/form-data" },
+        });
+        Swal.close();
+        await Swal.fire("Uploaded", data?.message || "Photo uploaded", "success");
+        fetchStudents();
+      } catch (err) {
+        console.error("upload photo error:", err);
+        Swal.close();
+        Swal.fire("Error", err.response?.data?.message || "Failed to upload photo", "error");
+      }
+    };
+    input.click();
+  };
+
+  // ---------------- ADD / EDIT with fixed sibling block ----------------
   const showStudentForm = async (mode = "add", student = null) => {
     await fetchClasses();
     await fetchSections();
     await fetchSessions();
-    await fetchTransportations(); // ensure routes fresh
+    await fetchTransportations();
     if (isAdminOrSuperAdmin) await fetchConcessions();
 
     const isEdit = mode === "edit";
     const s = student || {};
 
-     // 🔽 NEW: pre-fill with +1 for ADD mode
-      let nextSuggestion = "";
-      if (!isEdit) {
-        // if you use prefixes like "PS-", pass it here instead of undefined
-        nextSuggestion = await fetchNextAdmissionNumber(/* optionalPrefix */);
-      }
+    // pre-fill +1 for ADD mode
+    let nextSuggestion = "";
+    if (!isEdit) {
+      nextSuggestion = await fetchNextAdmissionNumber();
+    }
 
     const classOptions = `<option value="">Select Class</option>${classes
       .map((c) => `<option value="${c.id}" ${c.id === s.class_id ? "selected" : ""}>${c.class_name}</option>`)
@@ -212,7 +258,6 @@ const Students = () => {
       .map((ss) => `<option value="${ss.id}" ${ss.id === s.session_id ? "selected" : ""}>${ss.name}</option>`)
       .join("")}`;
 
-    // transport options (RouteName)
     const transportOptions = `<option value="">No Transport</option>${transportations
       .map((t) => `<option value="${t.id}" ${t.id === s.route_id ? "selected" : ""}>${(t.RouteName || t.Route || ("Route " + t.id))}${t.Cost ? ` — ₹${t.Cost}` : ""}</option>`)
       .join("")}`;
@@ -224,12 +269,11 @@ const Students = () => {
           <input id="f_name" class="form-field form-control" value="${(s.name || "").replace(/"/g, "&quot;")}" aria-required="true" />
         </div>
 
-     <div>
-        <label>Admission Number (optional)</label>
-        <input id="f_admission_number" class="form-field form-control"
-              value="${isEdit ? (s.admission_number || "") : (s.admission_number || nextSuggestion || "")}" />
-      </div>
-
+        <div>
+          <label>Admission Number (optional)</label>
+          <input id="f_admission_number" class="form-field form-control"
+                value="${isEdit ? (s.admission_number || "") : (s.admission_number || nextSuggestion || "")}" />
+        </div>
 
         <div>
           <label>Father's Name</label>
@@ -382,21 +426,34 @@ const Students = () => {
             <div style="display:flex;gap:8px;flex-wrap:wrap">
               <select id="sib_class_${slot}" class="form-field form-select" style="min-width:160px">
                 <option value="">Select Class</option>
-                ${classes.map((c) => `<option value="${c.id}" ${c.id === (s[`sibling_class_${slot}`] || "") ? "selected" : ""}>${c.class_name}</option>`).join("")}
+                ${classes.map((c) => `
+                  <option value="${c.id}" ${c.id === (s['sibling_class_' + slot] || "") ? "selected" : ""}>
+                    ${c.class_name}
+                  </option>`).join("")}
               </select>
 
               <select id="sib_section_${slot}" class="form-field form-select" style="min-width:160px">
                 <option value="">All Sections</option>
-                ${sections.map((sec) => `<option value="${sec.id}" data-class="${sec.class_id}" ${sec.id === (s[`sibling_section_${slot}`] || "") ? "selected" : ""}>${sec.section_name}</option>`).join("")}
+                ${sections.map((sec) => `
+                  <option value="${sec.id}" data-class="${sec.class_id}" ${sec.id === (s['sibling_section_' + slot] || "") ? "selected" : ""}>
+                    ${sec.section_name}
+                  </option>`).join("")}
               </select>
 
               <select id="sib_student_${slot}" class="form-field form-select" style="min-width:260px">
                 <option value="">Select Student</option>
-                ${s[`sibling_id_${slot}`] ? `<option value="${s[`sibling_id_${slot}`]}" selected>${(s[`sibling_name_${slot}`] || "Selected")}${s[`sibling_id_${slot}`] ? ` (ID:${s[`sibling_id_${slot}`]})` : ""}</option>` : ""}
+                ${
+                  s['sibling_id_' + slot]
+                    ? `<option value="${s['sibling_id_' + slot]}" selected>
+                        ${(s['sibling_name_' + slot] || "Selected").replace(/"/g, "&quot;")}
+                        ${s['sibling_id_' + slot] ? ` (ID:${s['sibling_id_' + slot]})` : ""}
+                      </option>`
+                    : ""
+                }
               </select>
 
-              <input id="f_sibling_id_${slot}" type="hidden" value="${s[`sibling_id_${slot}`] || ""}" />
-              <input id="f_sibling_name_${slot}" type="hidden" value="${(s[`sibling_name_${slot}`] || "").replace(/"/g, "&quot;")}" />
+              <input id="f_sibling_id_${slot}" type="hidden" value="${s['sibling_id_' + slot] || ""}" />
+              <input id="f_sibling_name_${slot}" type="hidden" value="${(s['sibling_name_' + slot] || "").replace(/"/g, "&quot;")}" />
             </div>
             <div style="font-size:12px;color:#666;margin-top:6px">Choose class → section (optional) → student. Selected student's admission number & name will be saved.</div>
           </div>
@@ -670,7 +727,6 @@ const Students = () => {
   const enabledCount = filteredStudents.filter((s) => s.status === "enabled").length;
   const disabledCount = filteredStudents.filter((s) => s.status === "disabled").length;
 
-  // replace existing handleSiblingClick with this
   const handleSiblingClick = async (siblingIdOrAdmission) => {
     if (!siblingIdOrAdmission) return;
 
@@ -686,12 +742,7 @@ const Students = () => {
     for (const url of tryUrls) {
       try {
         const resp = await api.get(url);
-        if (Array.isArray(resp.data)) {
-          respData = resp.data[0] || null;
-        } else {
-          respData = resp.data;
-        }
-
+        respData = Array.isArray(resp.data) ? (resp.data[0] || null) : resp.data;
         if (respData) break;
       } catch (err) {
         lastError = err;
@@ -705,6 +756,43 @@ const Students = () => {
     }
 
     handleView(respData);
+  };
+
+  const PhotoCell = ({ student }) => {
+    const src = buildPhotoURL(student.photo);
+    const hasPhoto = !!student.photo;
+
+    return (
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <img
+          src={hasPhoto ? src : NO_PHOTO_SVG}
+          alt={student.name || "Student"}
+          loading="lazy"
+          referrerPolicy="no-referrer"
+          onError={(e) => { e.currentTarget.src = NO_PHOTO_SVG; }}
+          style={{
+            width: 44,
+            height: 44,
+            objectFit: "cover",
+            borderRadius: 8,
+            border: "1px solid #eee",
+            background: "#fff",
+          }}
+        />
+        {isAdminOrSuperAdmin && (
+          <button
+            className="btn btn-sm btn-outline-secondary"
+            onClick={(ev) => {
+              ev.stopPropagation();
+              promptAndUploadPhoto(student);
+            }}
+            title={hasPhoto ? "Replace photo" : "Upload photo"}
+          >
+            {hasPhoto ? "Change" : "Upload"}
+          </button>
+        )}
+      </div>
+    );
   };
 
   return (
@@ -815,6 +903,7 @@ const Students = () => {
         <thead>
           <tr>
             <th>#</th>
+            <th>Photo</th>
             <th>Admission #</th>
             <th>Name</th>
             <th>Father</th>
@@ -824,7 +913,7 @@ const Students = () => {
             <th>Aadhaar</th>
             <th>Type</th>
             {isAdminOrSuperAdmin && <th>Concession</th>}
-            <th>Route</th> {/* added */}
+            <th>Route</th>
             <th>Actions</th>
           </tr>
         </thead>
@@ -853,6 +942,7 @@ const Students = () => {
                 return (
                   <tr key={stu.id} style={{ cursor: "pointer" }}>
                     <td>{idx + 1}</td>
+                    <td onClick={() => handleView(stu)}><PhotoCell student={stu} /></td>
                     <td onClick={() => handleView(stu)}>{stu.admission_number || "-"}</td>
                     <td onClick={() => handleView(stu)} style={{ verticalAlign: "middle" }}>
                       <div>{stu.name}</div>
@@ -891,7 +981,7 @@ const Students = () => {
                     <td onClick={() => handleView(stu)}>{stu.aadhaar_number || "-"}</td>
                     <td onClick={() => handleView(stu)}>{stu.admission_type}</td>
                     {isAdminOrSuperAdmin && <td onClick={() => handleView(stu)}>{stu.concession_name || "-"}</td>}
-                    <td onClick={() => handleView(stu)}>{stu.route_name || (stu.route_id ? `ID:${stu.route_id}` : "-")}</td> {/* show route_name or id */}
+                    <td onClick={() => handleView(stu)}>{stu.route_name || (stu.route_id ? `ID:${stu.route_id}` : "-")}</td>
                     <td onClick={(e) => e.stopPropagation()}>
                       {isAdminOrSuperAdmin && (
                         <>
@@ -900,6 +990,13 @@ const Students = () => {
                           </div>
                           <button className="btn btn-primary btn-sm me-2" onClick={() => handleEdit(stu)}>
                             Edit
+                          </button>
+                          <button
+                            className="btn btn-outline-secondary btn-sm me-2"
+                            onClick={() => promptAndUploadPhoto(stu)}
+                            title={stu.photo ? "Replace Photo" : "Upload Photo"}
+                          >
+                            {stu.photo ? "Change Photo" : "Upload Photo"}
                           </button>
                         </>
                       )}
@@ -914,7 +1011,7 @@ const Students = () => {
               })
           ) : (
             <tr>
-              <td colSpan={isAdminOrSuperAdmin ? 12 : 11} className="text-center">
+              <td colSpan={isAdminOrSuperAdmin ? 13 : 12} className="text-center">
                 No students found
               </td>
             </tr>
@@ -925,7 +1022,6 @@ const Students = () => {
   );
 
   function handleView(student) {
-    // Build two-column grid styled details, wider popup similar to edit modal
     const siblingRows = [];
     for (let i = 1; i <= 4; i++) {
       const id = student[`sibling_id_${i}`];
@@ -968,10 +1064,12 @@ const Students = () => {
       fields.push({ label: 'Concession', value: student.concession_name || '-' });
     }
 
-    // add transport info
     fields.push({ label: 'Transport Route', value: student.route_name || (student.route_id ? `ID:${student.route_id}` : '-') });
     fields.push({ label: 'Status', value: student.status || '-' });
     fields.push({ label: 'Address', value: student.address || '-' });
+
+    const photoUrl = buildPhotoURL(student.photo);
+    const hasPhoto = !!student.photo;
 
     const fieldHtml = fields.map(f => `
       <div class="detail-item">
@@ -992,9 +1090,17 @@ const Students = () => {
       </div>
     `;
 
+    const photoHtml = `
+      <div style="display:flex;align-items:center;gap:16px;margin-bottom:14px">
+        <img src="${hasPhoto ? photoUrl : NO_PHOTO_SVG}" alt="photo" style="width:96px;height:96px;object-fit:cover;border-radius:12px;border:1px solid #eee;background:#fff" />
+        ${isAdminOrSuperAdmin ? `<button id="btnChangePhoto" class="swal2-confirm swal2-styled" style="background:#6c757d"> ${hasPhoto ? "Change Photo" : "Upload Photo"} </button>` : ""}
+      </div>
+    `;
+
     const html = `
       <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background:#fff; padding:18px; border-radius:10px;">
         <h2 style="margin:0 0 12px; text-align:center; font-size:22px">${student.name || 'Student'} Details</h2>
+        ${photoHtml}
         <div class="details-grid">
           ${fieldHtml}
           ${siblingHtml}
@@ -1027,7 +1133,6 @@ const Students = () => {
           word-break: break-word;
         }
         .sibling-item .detail-value:hover { text-decoration: underline; }
-        /* make some rows span full width (address or long text) */
         .detail-item[data-full="true"] { grid-column: 1 / -1; }
       </style>
     `;
@@ -1040,7 +1145,6 @@ const Students = () => {
       showConfirmButton: false,
       customClass: { popup: "modern-swal-popup" },
       didOpen: () => {
-        // Attach click handlers for sibling items inside the popup
         const popup = document.querySelector('.modern-swal-popup');
         if (popup) {
           const siblingEls = popup.querySelectorAll('[data-sibling-id]');
@@ -1050,16 +1154,18 @@ const Students = () => {
               el.addEventListener('click', (e) => {
                 e.stopPropagation();
                 Swal.close();
-                // small delay to allow Swal to close cleanly
                 setTimeout(() => handleSiblingClick(id), 50);
               });
             }
           });
         }
+        const btn = document.getElementById("btnChangePhoto");
+        if (btn && isAdminOrSuperAdmin) {
+          btn.addEventListener("click", () => {
+            promptAndUploadPhoto(student);
+          });
+        }
       },
-      willClose: () => {
-        // nothing special
-      }
     });
   }
 };
