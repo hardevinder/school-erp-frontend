@@ -1,6 +1,6 @@
 // File: src/components/Navbar.jsx
 import React, { useState, useEffect, useRef } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, Link, useLocation } from "react-router-dom";
 import axios from "axios";
 import "bootstrap/dist/css/bootstrap.min.css";
 import { FaBell } from "react-icons/fa";
@@ -8,6 +8,7 @@ import { useRoles } from "../hooks/useRoles";
 
 const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
   const navigate = useNavigate();
+  const location = useLocation();
   const dropdownRef = useRef(null);
 
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -102,6 +103,11 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
   // ✅ Brand logo from same location as Login page:
   const brandLogo = `${process.env.PUBLIC_URL}/images/pts_logo.png`;
 
+  const isActive = (path) => {
+    // Basic startsWith match so /students/123 also highlights
+    return location.pathname === path || location.pathname.startsWith(path + "/");
+  };
+
   return (
     <>
       <nav
@@ -156,18 +162,24 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
             ref={dropdownRef}
           >
             {/* Quick links strip (before bell + profile) */}
-            <div className="d-flex align-items-center gap-3 me-2 quick-links-strip">
-              {quickLinks.map((q) => (
-                <Link
-                  key={q.href}
-                  to={q.href}
-                  className="text-decoration-none text-center small quick-link-icon"
-                  title={q.label}
-                >
-                  <i className={`bi ${q.icon} d-block`} aria-hidden="true" />
-                  <span className="qlabel">{q.label}</span>
-                </Link>
-              ))}
+            <div className="d-flex align-items-center gap-2 gap-sm-3 me-2 quick-links-strip">
+              {quickLinks.map((q) => {
+                const active = isActive(q.href);
+                return (
+                  <Link
+                    key={q.href}
+                    to={q.href}
+                    className={`text-decoration-none text-center small quick-link-icon ${active ? "ql-active" : ""}`}
+                    title={q.label}
+                    aria-label={q.label}
+                  >
+                    <span className="ql-icon-wrap">
+                      <i className={`bi ${q.icon}`} aria-hidden="true" />
+                    </span>
+                    <span className="qlabel">{q.label}</span>
+                  </Link>
+                );
+              })}
             </div>
 
             {/* Notifications */}
@@ -267,22 +279,85 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
       <style>{`
         /* Keep quick links in one line and compact */
         .quick-links-strip { white-space: nowrap; }
+
         .quick-link-icon {
-          min-width: 48px;
-          color: #495057 !important;
-          transition: color .2s ease;
+          min-width: 60px;
+          color: #343a40 !important;
+          transition: color .2s ease, transform .15s ease;
+          display: inline-flex;
+          flex-direction: column;
+          align-items: center;
         }
-        .quick-link-icon:hover { color: #0d6efd !important; }
+
+        .quick-link-icon .ql-icon-wrap {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 44px;
+          height: 44px;
+          border-radius: 12px;
+          background: linear-gradient(145deg, #f8f9fa, #e9ecef);
+          border: 1px solid #dee2e6;
+          box-shadow: 0 2px 4px rgba(0,0,0,.08);
+          transition: all .2s ease;
+        }
+
         .quick-link-icon i {
-          font-size: 1rem;     /* small icon size */
-          line-height: 1;      /* tight line height */
+          font-size: 1.25rem;    /* Bigger icon */
+          font-weight: 600;      /* Bolder */
+          line-height: 1;
         }
+
         .quick-link-icon .qlabel {
           display: block;
-          font-size: 0.7rem;   /* tiny label */
-          margin-top: 2px;
+          font-size: 0.75rem;   /* slightly larger */
+          font-weight: 500;     /* medium bold */
+          margin-top: 4px;
+          letter-spacing: .3px;
+        }
+
+        /* Hover state */
+        .quick-link-icon:hover {
+          color: #0d6efd !important;
+          transform: translateY(-2px) scale(1.05);
+        }
+        .quick-link-icon:hover .ql-icon-wrap {
+          background: linear-gradient(145deg, #eaf3ff, #dbe7ff);
+          border-color: #cfe2ff;
+          box-shadow: 0 4px 8px rgba(13,110,253,.2);
+        }
+
+        /* Active route state */
+        .quick-link-icon.ql-active {
+          color: #0b5ed7 !important;
+        }
+        .quick-link-icon.ql-active .ql-icon-wrap {
+          background: linear-gradient(145deg, #e0edff, #cfe2ff);
+          border-color: #91c3ff;
+          box-shadow: 0 0 0 3px rgba(13,110,253,.2), 0 4px 10px rgba(13,110,253,.25);
+        }
+
+        /* Dark mode tweaks */
+        @media (prefers-color-scheme: dark) {
+          .quick-link-icon { color: #e9ecef !important; }
+          .quick-link-icon .ql-icon-wrap {
+            background: linear-gradient(145deg, #2a2f36, #23272e);
+            border-color: #3a3f47;
+            box-shadow: 0 2px 4px rgba(0,0,0,.4);
+          }
+          .quick-link-icon:hover .ql-icon-wrap {
+            background: linear-gradient(145deg, #1e2d44, #24344f);
+            border-color: #2f4b6a;
+            box-shadow: 0 4px 10px rgba(0,0,0,.55);
+          }
+          .quick-link-icon.ql-active .ql-icon-wrap {
+            background: linear-gradient(145deg, #23406a, #1e3557);
+            border-color: #3a6db8;
+            box-shadow: 0 0 0 3px rgba(13,110,253,.35), 0 4px 12px rgba(13,110,253,.35);
+          }
         }
       `}</style>
+
     </>
   );
 };
