@@ -7,7 +7,8 @@ import { auth, provider, signInWithPopup } from "../firebase/firebaseConfig";
 import socket from "../socket";
 import "./login.css";
 
-const ROLE_ORDER = ["superadmin", "admin", "hr", "academic_coordinator", "teacher", "student"];
+// 👇 Added "accounts" (placed after admin, before hr)
+const ROLE_ORDER = ["superadmin", "admin", "accounts", "hr", "academic_coordinator", "teacher", "student"];
 
 // --- Background resolver (robust) ---
 const BG_CANDIDATES = [
@@ -46,16 +47,22 @@ function resolveFirstExistingImage(candidates) {
 // -----------------------------------------------------
 
 const joinRooms = (user, roles = []) => {
-  if (roles.includes("student")) {
+  const rl = roles.map((r) => (r || "").toLowerCase());
+
+  if (rl.includes("student")) {
     socket.emit("joinRoom", { room: user.username });
     socket.emit("joinRoom", { room: "students" });
   }
-  if (roles.includes("teacher") || roles.includes("academic_coordinator")) {
+  if (rl.includes("teacher") || rl.includes("academic_coordinator")) {
     socket.emit("joinRoom", { room: `teacher-${user.id}` });
     socket.emit("joinRoom", { room: "teachers" });
   }
-  if (roles.includes("admin") || roles.includes("superadmin")) {
+  if (rl.includes("admin") || rl.includes("superadmin")) {
     socket.emit("joinRoom", { room: "admins" });
+  }
+  // 👇 Optional: a dedicated accounts room
+  if (rl.includes("accounts")) {
+    socket.emit("joinRoom", { room: "accounts" });
   }
 };
 
@@ -105,7 +112,9 @@ const Login = () => {
   const afterAuth = (data) => {
     const { token, user, roles } = data;
     const roleArr = Array.isArray(roles) ? roles : roles ? [roles] : [];
+    const roleArrLower = roleArr.map((r) => (r || "").toLowerCase());
 
+    // Persist session
     if (remember) {
       localStorage.setItem("token", token);
       localStorage.setItem("roles", JSON.stringify(roleArr));
@@ -128,14 +137,20 @@ const Login = () => {
       });
     }
 
+    // Pick default active role by ROLE_ORDER
     localStorage.removeItem("userRole");
-    const defaultActive = ROLE_ORDER.find((r) => roleArr.includes(r)) || roleArr[0] || "";
+    const defaultActive =
+      ROLE_ORDER.find((r) => roleArrLower.includes(r)) || (roleArrLower[0] || "");
     localStorage.setItem("activeRole", defaultActive);
 
     axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
     window.dispatchEvent(new Event("role-changed"));
-    joinRooms(user, roleArr);
-    navigate("/dashboard", { replace: true });
+
+    joinRooms(user, roleArrLower);
+
+    // 👇 Redirect: Accounts role lands on Accounts Dashboard
+    const redirectPath = defaultActive === "accounts" ? "/accounts-dashboard" : "/dashboard";
+    navigate(redirectPath, { replace: true });
   };
 
   const handleLogin = async (e) => {
@@ -181,7 +196,7 @@ const Login = () => {
     <div
       className="login-hero"
       style={{
-        minHeight: "100vh",
+        minHeight: "100dvh",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
@@ -191,129 +206,134 @@ const Login = () => {
         backgroundRepeat: "no-repeat",
       }}
     >
-      <div className="login-hero__content container">
-        <div className="row justify-content-center">
-          <div className="col-12 col-md-10 col-lg-7 col-xl-5">
-            <div className="card glass-card shadow-xl border-0 overflow-hidden">
-              <div className="card-body p-4 p-sm-5">
-                <div className="text-center mb-4">
-                  <img
-                    src={schoolLogoSrc || fallbackLogo}
-                    alt="School Logo"
-                    className="brand-logo"
-                    style={{ maxWidth: "120px", height: "auto" }}   // ✅ Bigger logo
-                    onError={(e) => {
-                      e.currentTarget.onerror = null;
-                      e.currentTarget.src = fallbackLogo;
-                    }}
-                  />
-
-                  <h4 className="mt-2 mb-0 fw-semibold text-white">{schoolName}</h4>
-                  <p className="text-white-50 small mb-0">
-                    Manage academics, fees, attendance, HR & more.
-                  </p>
-                </div>
-
-                {error && <div className="alert alert-danger py-2">{error}</div>}
-
-                <h5 className="fw-semibold mb-2 text-white">Sign in</h5>
-                <p className="text-white-50 mb-4">Use your username/email and password to continue.</p>
-
-                <form onSubmit={handleLogin} noValidate>
-                  <div className="mb-3">
-                    <label className="form-label text-white-75">User (Email or Username)</label>
-                    <input
-                      ref={userInputRef}
-                      type="text"
-                      className="form-control form-control-lg"
-                      value={login}
-                      onChange={(e) => setLogin(e.target.value)}
-                      placeholder="e.g., principal@school.edu or admin01"
-                      autoComplete="username"
-                      required
+      {/* Scroller ensures vertical/horizontal scroll on tight screens */}
+      <div className="login-hero__scroller">
+        <div className="login-hero__content container">
+          <div className="row justify-content-center">
+            <div className="col-12 col-md-10 col-lg-7 col-xl-5">
+              <div className="card glass-card shadow-xl border-0 overflow-hidden">
+                <div className="card-body p-4 p-sm-5">
+                  <div className="text-center mb-4">
+                    <img
+                      src={schoolLogoSrc || fallbackLogo}
+                      alt="School Logo"
+                      className="brand-logo"
+                      style={{ maxWidth: "120px", height: "auto" }}
+                      onError={(e) => {
+                        e.currentTarget.onerror = null;
+                        e.currentTarget.src = fallbackLogo;
+                      }}
                     />
+
+                    <h4 className="mt-2 mb-0 fw-semibold text-white">{schoolName}</h4>
+                    <p className="text-white-50 small mb-0">
+                      Manage academics, fees, attendance, HR & more.
+                    </p>
                   </div>
 
-                  <div className="mb-2">
-                    <label className="form-label text-white-75">Password</label>
-                    <div className="input-group input-group-lg">
+                  {error && <div className="alert alert-danger py-2">{error}</div>}
+
+                  <h5 className="fw-semibold mb-2 text-white">Sign in</h5>
+                  <p className="text-white-50 mb-4">Use your username/email and password to continue.</p>
+
+                  <form onSubmit={handleLogin} noValidate>
+                    <div className="mb-3">
+                      <label className="form-label text-white-75">User (Email or Username)</label>
                       <input
-                        type={showPass ? "text" : "password"}
-                        className="form-control"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        placeholder="Enter your password"
-                        autoComplete="current-password"
+                        ref={userInputRef}
+                        type="text"
+                        className="form-control form-control-lg"
+                        value={login}
+                        onChange={(e) => setLogin(e.target.value)}
+                        placeholder="e.g., principal@school.edu or admin01"
+                        autoComplete="username"
                         required
                       />
+                    </div>
+
+                    <div className="mb-2">
+                      <label className="form-label text-white-75">Password</label>
+                      <div className="input-group input-group-lg">
+                        <input
+                          type={showPass ? "text" : "password"}
+                          className="form-control"
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          placeholder="Enter your password"
+                          autoComplete="current-password"
+                          required
+                        />
+                        <button
+                          type="button"
+                          className="btn btn-outline-light"
+                          onClick={() => setShowPass((s) => !s)}
+                          aria-label={showPass ? "Hide password" : "Show password"}
+                        >
+                          {showPass ? "Hide" : "Show"}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="d-flex justify-content-between align-items-center mb-4">
+                      <div className="form-check">
+                        <input
+                          className="form-check-input"
+                          type="checkbox"
+                          id="rememberMe"
+                          checked={remember}
+                          onChange={(e) => setRemember(e.target.checked)}
+                        />
+                        <label className="form-check-label text-white-75" htmlFor="rememberMe">
+                          Remember me
+                        </label>
+                      </div>
                       <button
                         type="button"
-                        className="btn btn-outline-light"
-                        onClick={() => setShowPass((s) => !s)}
-                        aria-label={showPass ? "Hide password" : "Show password"}
+                        className="btn btn-link p-0 small text-white-75"
+                        onClick={() => navigate("/forgot-password")}
                       >
-                        {showPass ? "Hide" : "Show"}
+                        Forgot password?
                       </button>
                     </div>
-                  </div>
 
-                  <div className="d-flex justify-content-between align-items-center mb-4">
-                    <div className="form-check">
-                      <input
-                        className="form-check-input"
-                        type="checkbox"
-                        id="rememberMe"
-                        checked={remember}
-                        onChange={(e) => setRemember(e.target.checked)}
-                      />
-                      <label className="form-check-label text-white-75" htmlFor="rememberMe">
-                        Remember me
-                      </label>
-                    </div>
+                    <button type="submit" className="btn btn-primary btn-lg w-100 mb-3" disabled={loading}>
+                      {loading ? "Signing in…" : "Login"}
+                    </button>
+
+                    <div className="text-center text-white-50 my-2">or</div>
+
                     <button
                       type="button"
-                      className="btn btn-link p-0 small text-white-75"
-                      onClick={() => navigate("/forgot-password")}
+                      className="btn btn-outline-light btn-lg w-100 d-flex align-items-center justify-content-center gap-2"
+                      onClick={handleGoogleLogin}
+                      disabled={loading}
                     >
-                      Forgot password?
+                      <GoogleIcon />
+                      <span>{loading ? "Please wait…" : "Login with Google"}</span>
                     </button>
+                  </form>
+
+                  <div className="mt-4 small text-white-50">
+                    By continuing you agree to our{" "}
+                    <button className="btn btn-link p-0 align-baseline text-white" onClick={() => navigate("/terms")}>
+                      Terms
+                    </button>{" "}
+                    and{" "}
+                    <button className="btn btn-link p-0 align-baseline text-white" onClick={() => navigate("/privacy")}>
+                      Privacy Policy
+                    </button>.
                   </div>
+                </div>
 
-                  <button type="submit" className="btn btn-primary btn-lg w-100 mb-3" disabled={loading}>
-                    {loading ? "Signing in…" : "Login"}
-                  </button>
-
-                  <div className="text-center text-white-50 my-2">or</div>
-
-                  <button
-                    type="button"
-                    className="btn btn-outline-light btn-lg w-100 d-flex align-items-center justify-content-center gap-2"
-                    onClick={handleGoogleLogin}
-                    disabled={loading}
-                  >
-                    <GoogleIcon />
-                    <span>{loading ? "Please wait…" : "Login with Google"}</span>
-                  </button>
-                </form>
-
-                <div className="mt-4 small text-white-50">
-                  By continuing you agree to our{" "}
-                  <button className="btn btn-link p-0 align-baseline text-white" onClick={() => navigate("/terms")}>
-                    Terms
-                  </button>{" "}
-                  and{" "}
-                  <button className="btn btn-link p-0 align-baseline text-white" onClick={() => navigate("/privacy")}>
-                    Privacy Policy
-                  </button>.
+                <div className="card-footer glass-card__footer text-center small text-white-50">
+                  © {new Date().getFullYear()} {schoolName}
                 </div>
               </div>
 
-              <div className="card-footer glass-card__footer text-center small text-white-50">
-                © {new Date().getFullYear()} {schoolName}
+              <div className="text-center mt-3 text-white-50 small d-sm-none">
+                If parts are cut off, you can scroll vertically or swipe sideways.
               </div>
             </div>
-
-            {/* <div className="text-center mt-3 text-white-50 small">Powered by FeePanel</div> */}
           </div>
         </div>
       </div>

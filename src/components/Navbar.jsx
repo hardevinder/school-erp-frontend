@@ -15,7 +15,64 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
   const [profilePhoto, setProfilePhoto] = useState("https://via.placeholder.com/40");
   const [userName, setUserName] = useState("");
 
-  const { roles, activeRole, changeRole } = useRoles();
+  const { roles = [], activeRole, changeRole } = useRoles();
+
+  // --- role helpers ---
+  const roleLower = (activeRole || "").toLowerCase();
+  const isSuperAdmin = roleLower === "superadmin" || roleLower === "super_admin";
+  const isAdmin = isSuperAdmin || roleLower === "admin";
+  const isStudent = roleLower === "student";
+
+  // --- api base + helpers (match Students.js) ---
+  const API_BASE = (process.env.REACT_APP_API_URL || "").replace(/\/+$/, "");
+  const buildStudentPhotoURL = (fileName) =>
+    fileName ? `${API_BASE}/uploads/photoes/students/${encodeURIComponent(fileName)}` : "";
+
+  const NO_STUDENT_PHOTO_SVG =
+    "data:image/svg+xml;utf8," +
+    encodeURIComponent(
+      `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64">
+         <rect width="100%" height="100%" fill="#f0f0f0"/>
+         <circle cx="32" cy="24" r="14" fill="#d9d9d9"/>
+         <rect x="10" y="42" width="44" height="14" rx="7" fill="#d9d9d9"/>
+       </svg>`
+    );
+
+  // Try to resolve the student's photo when user is a student (fallback if user.profilePhoto is empty)
+  const trySetStudentPhoto = async () => {
+    try {
+      const userId = localStorage.getItem("userId");      // set during login
+      const username = localStorage.getItem("username");  // often admission #
+      const tryEndpoints = [
+        `${API_BASE}/students/me`,
+        userId ? `${API_BASE}/students/by-user/${encodeURIComponent(userId)}` : null,
+        username ? `${API_BASE}/students?username=${encodeURIComponent(username)}` : null,
+        username ? `${API_BASE}/students?admission_number=${encodeURIComponent(username)}` : null,
+      ].filter(Boolean);
+
+      let student = null;
+      for (const url of tryEndpoints) {
+        // Using axios directly (same defaults/auth as profile call)
+        const resp = await axios.get(url);
+        const data = resp.data;
+        if (!data) continue;
+        if (Array.isArray(data)) {
+          if (data.length) {
+            student = data[0];
+            break;
+          }
+        } else if (typeof data === "object") {
+          student = data;
+          break;
+        }
+      }
+
+      const studentPhoto = student?.photo ? buildStudentPhotoURL(student.photo) : null;
+      setProfilePhoto(studentPhoto || NO_STUDENT_PHOTO_SVG);
+    } catch {
+      setProfilePhoto(NO_STUDENT_PHOTO_SVG);
+    }
+  };
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -23,30 +80,43 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
         const token = localStorage.getItem("token");
         if (!token) return;
 
-        const { data } = await axios.get(
-          `${process.env.REACT_APP_API_URL}/users/profile`,
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
+        const { data } = await axios.get(`${API_BASE}/users/profile`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
 
-        const user = data.user || {};
+        const user = data?.user || {};
+        if (user.name) setUserName(user.name);
+
+        // If user has an explicit profilePhoto, honor it (absolute or relative).
         if (user.profilePhoto) {
           const full = user.profilePhoto.startsWith("http")
             ? user.profilePhoto
-            : `${process.env.REACT_APP_API_URL}${user.profilePhoto}`;
+            : `${API_BASE}${user.profilePhoto}`;
           setProfilePhoto(full);
+        } else if (isStudent) {
+          // Fallback to student's uploaded photo
+          await trySetStudentPhoto();
         }
-        if (user.name) setUserName(user.name);
       } catch (err) {
         console.error("Failed to fetch profile:", err);
+        // If student and profile failed, still try student photo
+        if (isStudent) {
+          await trySetStudentPhoto();
+        }
       }
     };
     fetchProfile();
-  }, []);
+    // run again if role changes at runtime
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isStudent]);
 
   const handleLogout = () => {
     localStorage.removeItem("token");
     localStorage.removeItem("roles");
     localStorage.removeItem("activeRole");
+    // optional: also clear these if you store them
+    // localStorage.removeItem("username");
+    // localStorage.removeItem("userId");
     navigate("/");
   };
 
@@ -100,13 +170,11 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
     { label: "Students", href: "/students", icon: "bi-people" },
   ];
 
-  // ✅ Brand logo from same location as Login page:
+  // Brand logo from same location as Login page:
   const brandLogo = `${process.env.PUBLIC_URL}/images/pts_logo.png`;
 
-  const isActive = (path) => {
-    // Basic startsWith match so /students/123 also highlights
-    return location.pathname === path || location.pathname.startsWith(path + "/");
-  };
+  const isActive = (path) =>
+    location.pathname === path || location.pathname.startsWith(path + "/");
 
   return (
     <>
@@ -157,30 +225,29 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
           )}
 
           {/* Right cluster */}
-          <div
-            className="ms-auto d-flex align-items-center gap-2 me-3"
-            ref={dropdownRef}
-          >
-            {/* Quick links strip (before bell + profile) */}
-            <div className="d-flex align-items-center gap-2 gap-sm-3 me-2 quick-links-strip">
-              {quickLinks.map((q) => {
-                const active = isActive(q.href);
-                return (
-                  <Link
-                    key={q.href}
-                    to={q.href}
-                    className={`text-decoration-none text-center small quick-link-icon ${active ? "ql-active" : ""}`}
-                    title={q.label}
-                    aria-label={q.label}
-                  >
-                    <span className="ql-icon-wrap">
-                      <i className={`bi ${q.icon}`} aria-hidden="true" />
-                    </span>
-                    <span className="qlabel">{q.label}</span>
-                  </Link>
-                );
-              })}
-            </div>
+          <div className="ms-auto d-flex align-items-center gap-2 me-3" ref={dropdownRef}>
+            {/* Quick links strip (only for Admin & Superadmin) */}
+            {isAdmin && (
+              <div className="d-flex align-items-center gap-2 gap-sm-3 me-2 quick-links-strip">
+                {quickLinks.map((q) => {
+                  const active = isActive(q.href);
+                  return (
+                    <Link
+                      key={q.href}
+                      to={q.href}
+                      className={`text-decoration-none text-center small quick-link-icon ${active ? "ql-active" : ""}`}
+                      title={q.label}
+                      aria-label={q.label}
+                    >
+                      <span className="ql-icon-wrap">
+                        <i className={`bi ${q.icon}`} aria-hidden="true" />
+                      </span>
+                      <span className="qlabel">{q.label}</span>
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
 
             {/* Notifications */}
             <button
@@ -217,14 +284,12 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
                   className="rounded-circle"
                   style={{ width: 30, height: 30, objectFit: "cover" }}
                   onError={(e) => {
-                    e.currentTarget.src = "https://via.placeholder.com/40";
+                    e.currentTarget.src = NO_STUDENT_PHOTO_SVG;
                   }}
                   referrerPolicy="no-referrer"
                 />
                 <span className="d-none d-sm-inline">{userName || "User"}</span>
-                <i
-                  className={`bi ${dropdownOpen ? "bi-chevron-up" : "bi-chevron-down"} ms-1`}
-                />
+                <i className={`bi ${dropdownOpen ? "bi-chevron-up" : "bi-chevron-down"} ms-1`} />
               </button>
 
               <ul
@@ -303,15 +368,15 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
         }
 
         .quick-link-icon i {
-          font-size: 1.25rem;    /* Bigger icon */
-          font-weight: 600;      /* Bolder */
+          font-size: 1.25rem;
+          font-weight: 600;
           line-height: 1;
         }
 
         .quick-link-icon .qlabel {
           display: block;
-          font-size: 0.75rem;   /* slightly larger */
-          font-weight: 500;     /* medium bold */
+          font-size: 0.75rem;
+          font-weight: 500;
           margin-top: 4px;
           letter-spacing: .3px;
         }
@@ -357,7 +422,6 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
           }
         }
       `}</style>
-
     </>
   );
 };

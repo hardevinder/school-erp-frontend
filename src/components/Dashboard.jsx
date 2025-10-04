@@ -92,7 +92,7 @@ const compactNumber = (n) =>
 
 const intIN = (n) => Number(n || 0).toLocaleString("en-IN");
 
-// Updated color palette
+// Enhanced colorful palette
 const palette = [
   "#ff3b30",
   "#3b82f6",
@@ -102,8 +102,13 @@ const palette = [
   "#14b8a6",
   "#84cc16",
   "#ec4899",
+  "#10b981",
+  "#f97316",
+  "#8b5cf6",
+  "#06b6d4",
 ];
 
+// Enhanced gradient palette for more vibrancy
 const cardGradients = [
   "linear-gradient(135deg, #6366f1 0%, #3b82f6 100%)",
   "linear-gradient(135deg, #22c55e 0%, #16a34a 100%)",
@@ -111,6 +116,8 @@ const cardGradients = [
   "linear-gradient(135deg, #06b6d4 0%, #0891b2 100%)",
   "linear-gradient(135deg, #ef4444 0%, #dc2626 100%)",
   "linear-gradient(135deg, #6b7280 0%, #4b5563 100%)",
+  "linear-gradient(135deg, #ec4899 0%, #db2777 100%)",
+  "linear-gradient(135deg, #84cc16 0%, #4d7c0f 100%)",
 ];
 
 // Download helper (PNG)
@@ -366,7 +373,7 @@ const Dashboard = () => {
         {
           label: "Total Fee Received",
           data,
-          backgroundColor: labels.map((_, i) => `${palette[i % palette.length]}40`),
+          backgroundColor: labels.map((_, i) => palette[i % palette.length] + "66"), // More opaque for vibrancy
           borderColor: labels.map((_, i) => palette[i % palette.length]),
           borderWidth: 2,
           hoverOffset: 24,
@@ -397,7 +404,7 @@ const Dashboard = () => {
         },
       },
       cutout: "60%",
-      animation: { animateScale: true, animateRotate: true, duration: 1000 },
+      animation: { animateScale: true, animateRotate: true, duration: 1200, easing: "easeOutBack" },
     }),
     [showLegends.pie]
   );
@@ -426,10 +433,11 @@ const Dashboard = () => {
         backgroundColor: `${palette[idx % palette.length]}33`,
         tension: 0.4,
         fill: true,
-        pointRadius: 3,
-        pointHoverRadius: 6,
+        pointRadius: 4,
+        pointHoverRadius: 8,
         pointBackgroundColor: "#ffffff",
         pointBorderWidth: 2,
+        pointBorderColor: palette[idx % palette.length],
       })),
     [uniqueCategories, uniqueDates, dayWiseSummary]
   );
@@ -457,7 +465,7 @@ const Dashboard = () => {
       },
       plugins: { legend: { display: showLegends.line, labels: { font: { family: "'Inter', sans-serif", size: 13 } } } },
       interaction: { intersect: false, mode: "index" },
-      animation: { duration: 1000, easing: "easeOutQuart" },
+      animation: { duration: 1200, easing: "easeOutQuart" },
     }),
     [showLegends.line]
   );
@@ -479,10 +487,10 @@ const Dashboard = () => {
           const rec = classWiseCount.find((r) => r.className === cls && r.admissionType === type);
           return rec ? Number(rec.studentCount || 0) : 0;
         }),
-        backgroundColor: `${palette[idx % palette.length]}40`,
+        backgroundColor: `${palette[idx % palette.length]}66`, // More vibrant
         borderColor: palette[idx % palette.length],
         borderWidth: 2,
-        borderRadius: 6,
+        borderRadius: 8,
       })),
     [uniqueAdmissionTypes, uniqueClasses, classWiseCount]
   );
@@ -515,7 +523,7 @@ const Dashboard = () => {
           offsetY: -8,
         },
       },
-      animation: { duration: 1000, easing: "easeOutQuart" },
+      animation: { duration: 1200, easing: "easeOutQuart" },
     }),
     [showLegends.bar]
   );
@@ -565,7 +573,7 @@ const Dashboard = () => {
     <div
       className="dashboard-bg"
       style={{
-        backgroundImage: `linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(16, 185, 129, 0.1)), url(/images/SchooBackground.jpeg)`,
+        backgroundImage: `linear-gradient(135deg, rgba(99, 102, 241, 0.15), rgba(34, 197, 94, 0.15), rgba(245, 158, 11, 0.15)), url(/images/SchooBackground.jpeg)`,
         backgroundSize: "cover",
         backgroundPosition: "center",
         minHeight: "100vh",
@@ -773,7 +781,7 @@ const Dashboard = () => {
           {/* PIE (fees) */}
           <div className="col-12 col-xl-6">
             <div className="card h-100 shadow-lg hover-lift">
-              <div className="card-header bg-primary text-white d-flex align-items-center justify-content-between">
+              <div className="card-header text-white d-flex align-items-center justify-content-between" style={{ background: cardGradients[0] }}>
                 <h5 className="card-title mb-0" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 600 }}>Fee Received Distribution (Session)</h5>
                 <div className="d-flex gap-2">
                   <button
@@ -818,7 +826,7 @@ const Dashboard = () => {
           {/* LINE (fees trend) */}
           <div className="col-12 col-xl-6">
             <div className="card h-100 shadow-lg hover-lift">
-              <div className="card-header bg-info text-white d-flex align-items-center justify-content-between">
+              <div className="card-header text-white d-flex align-items-center justify-content-between" style={{ background: cardGradients[1] }}>
                 <h5 className="card-title mb-0" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 600 }}>Fee Trend by Category (Session)</h5>
                 <div className="d-flex gap-2">
                   <button
@@ -866,7 +874,7 @@ const Dashboard = () => {
           {/* Gender Pie */}
           <div className="col-12 col-xl-4">
             <div className="card h-100 shadow-lg hover-lift">
-              <div className="card-header bg-secondary text-white d-flex align-items-center justify-content-between">
+              <div className="card-header text-white d-flex align-items-center justify-content-between" style={{ background: cardGradients[2] }}>
                 <h5 className="card-title mb-0" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 600 }}>Students by Gender</h5>
                 <div className="d-flex gap-2">
                   <a href="/reports/caste-gender" className="btn btn-sm btn-light shadow-sm" title="Open Caste/Gender Report" aria-label="Open Caste/Gender Report">
@@ -917,7 +925,7 @@ const Dashboard = () => {
           {/* Caste Bar */}
           <div className="col-12 col-xl-4">
             <div className="card h-100 shadow-lg hover-lift">
-              <div className="card-header bg-warning text-white d-flex align-items-center justify-content-between">
+              <div className="card-header text-white d-flex align-items-center justify-content-between" style={{ background: cardGradients[3] }}>
                 <h5 className="card-title mb-0" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 600 }}>Caste Distribution</h5>
                 <div className="d-flex gap-2">
                   <a href="/reports/caste-gender" className="btn btn-sm btn-light shadow-sm" title="Open Caste/Gender Report" aria-label="Open Caste/Gender Report">
@@ -968,7 +976,7 @@ const Dashboard = () => {
           {/* Religion Bar */}
           <div className="col-12 col-xl-4">
             <div className="card h-100 shadow-lg hover-lift">
-              <div className="card-header bg-danger text-white d-flex align-items-center justify-content-between">
+              <div className="card-header text-white d-flex align-items-center justify-content-between" style={{ background: cardGradients[4] }}>
                 <h5 className="card-title mb-0" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 600 }}>Religion Distribution</h5>
                 <div className="d-flex gap-2">
                   <a href="/reports/caste-gender" className="btn btn-sm btn-light shadow-sm" title="Open Caste/Gender Report" aria-label="Open Caste/Gender Report">
@@ -1021,7 +1029,7 @@ const Dashboard = () => {
         <div className="row g-4 mb-4">
           <div className="col-12">
             <div className="card shadow-lg hover-lift">
-              <div className="card-header bg-dark text-white d-flex align-items-center justify-content-between">
+              <div className="card-header text-white d-flex align-items-center justify-content-between" style={{ background: cardGradients[5] }}>
                 <h5 className="mb-0" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 600 }}>Enrollments</h5>
                 {loading.class && (
                   <div className="spinner-border spinner-border-sm" role="status" aria-hidden="true"></div>
@@ -1032,7 +1040,7 @@ const Dashboard = () => {
                   <div className="text-center text-muted py-3" style={{ fontFamily: "'Inter', sans-serif" }}>No enrollment data</div>
                 ) : (
                   <table className="table table-sm align-middle mb-0">
-                    <thead className="table-light" style={{ position: "sticky", top: 0, zIndex: 1 }}>
+                    <thead className="table-light" style={{ position: "sticky", top: 0, zIndex: 1, background: "linear-gradient(135deg, #f8fafc, #e2e8f0)" }}>
                       <tr>
                         {classColumns.map((cls, i) => (
                           <th
@@ -1100,12 +1108,12 @@ const Dashboard = () => {
                                   i !== classColumns.length - 1 ? "1px solid #dee2e6" : "none",
                               }}
                             >
-                              <strong style={{ fontFamily: "'Inter', sans-serif" }}>{`T ${t}`}</strong>
+                              <strong style={{ fontFamily: "'Inter', sans-serif", color: "#3b82f6" }}>{`T ${t}`}</strong>
                             </td>
                           );
                         })}
                         <td style={{ textAlign: "left" }}>
-                          <strong style={{ fontFamily: "'Inter', sans-serif" }}>{`T ${overallTotal}`}</strong>
+                          <strong style={{ fontFamily: "'Inter', sans-serif", color: "#3b82f6" }}>{`T ${overallTotal}`}</strong>
                         </td>
                       </tr>
                     </tbody>
@@ -1120,7 +1128,7 @@ const Dashboard = () => {
         <div className="row g-4 mb-5">
           <div className="col-12">
             <div className="card shadow-lg hover-lift">
-              <div className="card-header bg-primary text-white d-flex align-items-center justify-content-between">
+              <div className="card-header text-white d-flex align-items-center justify-content-between" style={{ background: cardGradients[6] }}>
                 <h5 className="card-title mb-0" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 600 }}>Student Count by Class</h5>
                 <div className="d-flex gap-2">
                   <button
@@ -1170,7 +1178,7 @@ const Dashboard = () => {
           .dashboard-bg { position: relative; background-attachment: fixed; }
           .dashboard-overlay {
             position: absolute; inset: 0;
-            background: linear-gradient(135deg, rgba(255, 255, 255, 0.85), rgba(255, 255, 255, 0.7));
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.8), rgba(255, 255, 255, 0.6));
             z-index: 1; pointer-events: none;
           }
           .quick-links { top: 5rem; z-index: 3; }
@@ -1225,6 +1233,8 @@ const Dashboard = () => {
             .row.g-4 { gap: 1rem; }
           }
           [role="alert"] { border-radius: .75rem; box-shadow: 0 4px 12px rgba(0,0,0,.1); }
+          .card { animation: fadeInUp 0.6s ease-out; }
+          @keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
         `}</style>
 
         {/* Bootstrap Icons */}
@@ -1252,7 +1262,7 @@ function genderPieDataFactory(genderTotals, palette) {
       {
         label: "Students",
         data,
-        backgroundColor: labels.map((_, i) => `${palette[i % palette.length]}40`),
+        backgroundColor: labels.map((_, i) => palette[i % palette.length] + "66"), // More vibrant
         borderColor: labels.map((_, i) => palette[i % palette.length]),
         borderWidth: 2,
         hoverOffset: 24,
@@ -1283,7 +1293,7 @@ function genderPieOptionsFactory(showLegends) {
       },
     },
     cutout: "60%",
-    animation: { animateScale: true, animateRotate: true, duration: 1000 },
+    animation: { animateScale: true, animateRotate: true, duration: 1200, easing: "easeOutBack" },
   };
 }
 
@@ -1294,18 +1304,18 @@ function casteBarDataFactory(casteBoysGirls, palette) {
       {
         label: "Boys",
         data: casteBoysGirls.boys,
-        backgroundColor: `${palette[1 % palette.length]}40`,
+        backgroundColor: `${palette[1 % palette.length]}66`,
         borderColor: palette[1 % palette.length],
         borderWidth: 2,
-        borderRadius: 6,
+        borderRadius: 8,
       },
       {
         label: "Girls",
         data: casteBoysGirls.girls,
-        backgroundColor: `${palette[2 % palette.length]}40`,
+        backgroundColor: `${palette[2 % palette.length]}66`,
         borderColor: palette[2 % palette.length],
         borderWidth: 2,
-        borderRadius: 6,
+        borderRadius: 8,
       },
     ],
   };
@@ -1328,7 +1338,7 @@ function casteBarOptionsFactory(showLegends) {
       valueLabel: { enabled: true, showZero: false, formatter: (value) => intIN(value), offsetY: -8 },
       tooltip: { backgroundColor: "rgba(31, 41, 55, 0.9)", titleFont: { family: "'Inter', sans-serif", size: 14 }, bodyFont: { family: "'Inter', sans-serif", size: 12 } },
     },
-    animation: { duration: 1000, easing: "easeOutQuart" },
+    animation: { duration: 1200, easing: "easeOutQuart" },
   };
 }
 
@@ -1339,18 +1349,18 @@ function religionBarDataFactory(religionBoysGirls, palette) {
       {
         label: "Boys",
         data: religionBoysGirls.boys,
-        backgroundColor: `${palette[3 % palette.length]}40`,
+        backgroundColor: `${palette[3 % palette.length]}66`,
         borderColor: palette[3 % palette.length],
         borderWidth: 2,
-        borderRadius: 6,
+        borderRadius: 8,
       },
       {
         label: "Girls",
         data: religionBoysGirls.girls,
-        backgroundColor: `${palette[4 % palette.length]}40`,
+        backgroundColor: `${palette[4 % palette.length]}66`,
         borderColor: palette[4 % palette.length],
         borderWidth: 2,
-        borderRadius: 6,
+        borderRadius: 8,
       },
     ],
   };
@@ -1373,7 +1383,7 @@ function religionBarOptionsFactory(showLegends) {
       valueLabel: { enabled: true, showZero: false, formatter: (value) => intIN(value), offsetY: -8 },
       tooltip: { backgroundColor: "rgba(31, 41, 55, 0.9)", titleFont: { family: "'Inter', sans-serif", size: 14 }, bodyFont: { family: "'Inter', sans-serif", size: 12 } },
     },
-    animation: { duration: 1000, easing: "easeOutQuart" },
+    animation: { duration: 1200, easing: "easeOutQuart" },
   };
 }
 

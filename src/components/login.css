@@ -7,26 +7,41 @@
 
 .text-white-75 { color: var(--white-75) !important; }
 
-/* FULLSCREEN BACKDROP */
+/* =========================
+   FULLSCREEN BACKDROP
+   ========================= */
 .login-hero {
-  min-height: 100vh;
+  min-height: 100dvh;                 /* fix mobile browser chrome issues */
   width: 100%;
   background-size: cover;
   background-position: center center;
   background-repeat: no-repeat;
   position: relative;
-  overflow: hidden;
+  overflow: hidden;                   /* scroller handles actual scrolling */
+  display: flex;                      /* allow vertical centering on wider screens */
+  align-items: center;
+  justify-content: center;
 }
 
-/* gradient overlay is already set inline via linear-gradient in style */
+/* The actual scroller: enables both vertical & horizontal scroll if needed */
+.login-hero__scroller {
+  height: 100%;
+  width: 100%;
+  overflow: auto;                     /* vertical + horizontal when required */
+  -webkit-overflow-scrolling: touch;  /* smooth iOS momentum scrolling */
+}
 
 /* content container spacing */
 .login-hero__content {
   padding-top: 6vh;
   padding-bottom: 6vh;
+  overflow-x: auto;                   /* allow sideways pan on ultra-narrow screens */
+  overflow-y: visible;
 }
 
-/* GLASS CARD */
+/* =========================
+   GLASS CARD
+   ========================= */
 .glass-card {
   background: var(--glass-bg);
   backdrop-filter: blur(10px);
@@ -34,6 +49,12 @@
   border: 1px solid var(--glass-border);
   border-radius: 18px;
   box-shadow: 0 20px 70px rgba(0,0,0,0.45);
+
+  /* Make the form usable on tiny phones by allowing horizontal pan */
+  min-width: 380px;     /* you can increase to 420px if your labels wrap too much */
+  width: 100%;
+  max-width: 520px;
+  margin: 0 auto;
 }
 
 .glass-card__footer {
@@ -57,7 +78,9 @@
   border-radius: 12px;
 }
 
-/* BRAND */
+/* =========================
+   BRAND
+   ========================= */
 .brand-logo {
   height: 56px;
   width: auto;
@@ -84,7 +107,9 @@
   border-radius: 12px;
 }
 
-/* BLOBS */
+/* =========================
+   BLOBS (optional decor)
+   ========================= */
 .blob {
   position: absolute;
   width: 520px;
@@ -110,7 +135,9 @@
 @keyframes float1 { 0%,100% { transform: translate(0,0); } 50% { transform: translate(20px, 30px); } }
 @keyframes float2 { 0%,100% { transform: translate(0,0); } 50% { transform: translate(-25px, -20px); } }
 
-/* Buttons */
+/* =========================
+   Buttons / Alerts
+   ========================= */
 .btn-primary {
   border-radius: 12px;
 }
@@ -119,18 +146,48 @@
   border-color: rgba(255,255,255,0.6);
 }
 
-/* Make alerts sit nicely on glass */
 .alert {
   border-radius: 12px;
 }
 
-/* Mobile tweaks */
-@media (max-width: 576px) {
-  .login-hero__content { padding-top: 5vh; padding-bottom: 5vh; }
+/* =========================
+   Mobile tweaks
+   ========================= */
+@media (max-width: 575.98px) {
+  /* Start near top so nothing clips; scroller manages the rest */
+  .login-hero {
+    align-items: flex-start !important;
+    justify-content: center !important;
+    padding-top: 20px;
+    padding-bottom: 24px;
+  }
+
+  .login-hero__content { 
+    padding-top: 5vh; 
+    padding-bottom: 5vh; 
+  }
+
   .brand-logo { height: 48px; }
+
+  /* Comfortable touch sizes on tiny phones */
+  .form-control-lg,
+  .input-group-lg > .form-control,
+  .btn-lg {
+    font-size: 1rem;
+    padding: 0.6rem 0.9rem;
+  }
 }
 
-/* Optional: prefer dark scrollbars on glassy bg (WebKit) */
+@media (min-width: 576px) {
+  /* Restore vertical centering feel */
+  .login-hero {
+    align-items: center !important;
+  }
+}
+
+/* =========================
+   Scrollbar aesthetics (WebKit)
+   ========================= */
 .login-hero ::-webkit-scrollbar {
   width: 10px;
   height: 10px;

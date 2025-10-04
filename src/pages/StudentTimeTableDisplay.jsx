@@ -1,6 +1,8 @@
-import React, { useState, useEffect } from 'react';
+// src/pages/StudentTimetableDisplay.jsx
+import React, { useState, useEffect, useMemo } from "react";
+import "bootstrap/dist/css/bootstrap.min.css";
 
-const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
 const StudentTimetableDisplay = () => {
   const [periods, setPeriods] = useState([]);
@@ -10,145 +12,138 @@ const StudentTimetableDisplay = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [studentSubs, setStudentSubs] = useState({});
 
+  // NEW: which accordion is open on mobile
+  const [mobileOpenIdx, setMobileOpenIdx] = useState(0);
+
   const token = localStorage.getItem("token");
 
-  // Helper: format Date as "YYYY-MM-DD"
+  // Utils
   const formatDate = (date) => {
     const yyyy = date.getFullYear();
-    const mm = String(date.getMonth() + 1).padStart(2, '0');
-    const dd = String(date.getDate()).padStart(2, '0');
+    const mm = String(date.getMonth() + 1).padStart(2, "0");
+    const dd = String(date.getDate()).padStart(2, "0");
     return `${yyyy}-${mm}-${dd}`;
   };
 
-  // Manage navigation: store the current week's Monday.
   const [currentMonday, setCurrentMonday] = useState(() => {
     const today = new Date();
-    const dayIndex = (today.getDay() + 6) % 7; // Adjust so Monday is index 0.
+    const dayIndex = (today.getDay() + 6) % 7; // Monday=0
     const monday = new Date(today);
     monday.setDate(today.getDate() - dayIndex);
     return monday;
   });
 
-  // Build a map of dates for each day in the current week.
-  const weekDates = {};
-  days.forEach((day, index) => {
-    const d = new Date(currentMonday);
-    d.setDate(currentMonday.getDate() + index);
-    weekDates[day] = formatDate(d);
-  });
+  // Build this week's date map
+  const weekDates = useMemo(() => {
+    const map = {};
+    days.forEach((_, index) => {
+      const d = new Date(currentMonday);
+      d.setDate(currentMonday.getDate() + index);
+      map[days[index]] = formatDate(d);
+    });
+    return map;
+  }, [currentMonday]);
 
-  // Today's date string (for highlighting the current day).
   const currentDateStr = formatDate(new Date());
 
-  // Fetch periods for table columns.
+  // NEW: compute today's index inside this week (or -1 if not in this week)
+  const todaysIdx = useMemo(() => {
+    const idx = days.findIndex((d) => weekDates[d] === currentDateStr);
+    return idx; // -1 if not found
+  }, [weekDates, currentDateStr]);
+
+  // Data: periods
   useEffect(() => {
-    fetch('http://localhost:3000/periods', {
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      }
+    fetch("http://localhost:3000/periods", {
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
     })
-      .then(res => res.json())
-      .then(data => setPeriods(data || []))
-      .catch(err => console.error("Error fetching periods:", err));
+      .then((res) => res.json())
+      .then((data) => setPeriods(data || []))
+      .catch((err) => console.error("Error fetching periods:", err));
   }, [token]);
 
-  // Fetch timetable details.
+  // Data: timetable
   useEffect(() => {
-    fetch('http://localhost:3000/period-class-teacher-subject/student/timetable', {
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      }
+    fetch("http://localhost:3000/period-class-teacher-subject/student/timetable", {
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
     })
-      .then(res => res.json())
-      .then(data => {
-        console.log("Timetable API response:", data);
-        if (Array.isArray(data)) {
-          setTimetable(data);
-        } else if (data && Array.isArray(data.timetable)) {
-          setTimetable(data.timetable);
-        } else {
-          console.error("Unexpected timetable data format:", data);
-          setTimetable([]);
-        }
+      .then((res) => res.json())
+      .then((data) => {
+        if (Array.isArray(data)) setTimetable(data);
+        else if (data && Array.isArray(data.timetable)) setTimetable(data.timetable);
+        else setTimetable([]);
         setIsLoading(false);
       })
-      .catch(err => {
+      .catch((err) => {
         console.error("Error fetching timetable:", err);
         setIsLoading(false);
       });
   }, [token]);
 
-  // Fetch holidays.
+  // Data: holidays
   useEffect(() => {
-    fetch('http://localhost:3000/holidays', {
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      }
+    fetch("http://localhost:3000/holidays", {
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
     })
-      .then(res => res.json())
-      .then(data => setHolidays(data || []))
-      .catch(err => console.error("Error fetching holidays:", err));
+      .then((res) => res.json())
+      .then((data) => setHolidays(data || []))
+      .catch((err) => console.error("Error fetching holidays:", err));
   }, [token]);
 
-  // Build grid: grid[day][periodId] = array of timetable records.
+  // Build grid
   useEffect(() => {
-    if (!Array.isArray(timetable)) {
-      console.error("timetable is not an array:", timetable);
-      return;
-    }
+    if (!Array.isArray(timetable)) return;
 
     const newGrid = {};
-    days.forEach(day => {
+    days.forEach((day) => {
       newGrid[day] = {};
-      periods.forEach(period => {
+      periods.forEach((period) => {
         newGrid[day][period.id] = [];
       });
     });
-    timetable.forEach(record => {
+
+    timetable.forEach((record) => {
       const { day, periodId } = record;
       if (newGrid[day] && newGrid[day][periodId] !== undefined) {
         newGrid[day][periodId].push(record);
       }
     });
+
     setGrid(newGrid);
   }, [timetable, periods]);
 
-  // Fetch student substitutions for each day of the week.
+  // Data: substitutions per date of current week
   useEffect(() => {
     const fetchSubs = async () => {
       const subs = {};
-      const dates = [];
-      days.forEach((_, index) => {
+      const dates = days.map((_, i) => {
         const d = new Date(currentMonday);
-        d.setDate(currentMonday.getDate() + index);
-        dates.push(formatDate(d));
+        d.setDate(currentMonday.getDate() + i);
+        return formatDate(d);
       });
+
       await Promise.all(
         dates.map(async (date) => {
           try {
-            const res = await fetch(`http://localhost:3000/substitutions/by-date/student?date=${date}`, {
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-              }
-            });
+            const res = await fetch(
+              `http://localhost:3000/substitutions/by-date/student?date=${date}`,
+              { headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` } }
+            );
             const data = await res.json();
             subs[date] = data;
           } catch (err) {
-            console.error(`Error fetching substitutions for date ${date}:`, err);
+            console.error(`Error fetching substitutions for ${date}:`, err);
             subs[date] = [];
           }
         })
       );
       setStudentSubs(subs);
     };
+
     fetchSubs();
   }, [token, currentMonday]);
 
-  // Week navigation handlers.
+  // Week nav
   const handlePrevWeek = () => {
     const prevMonday = new Date(currentMonday);
     prevMonday.setDate(currentMonday.getDate() - 7);
@@ -161,153 +156,276 @@ const StudentTimetableDisplay = () => {
     setCurrentMonday(nextMonday);
   };
 
-  // Define cell styling.
-  const cellStyle = {
-    minWidth: '200px',
-    height: '80px',
-    verticalAlign: 'middle',
-    textAlign: 'center'
+  const handleThisWeek = () => {
+    const today = new Date();
+    const dayIndex = (today.getDay() + 6) % 7;
+    const monday = new Date(today);
+    monday.setDate(today.getDate() - dayIndex);
+    setCurrentMonday(monday);
   };
 
+  // THEME (bluish & cleaner)
+  const theme = {
+    header: { background: "linear-gradient(135deg, #0d6efd 0%, #5aa1ff 100%)", color: "white" },
+    chip: { background: "rgba(13,110,253,.08)", border: "1px solid rgba(13,110,253,.25)", borderRadius: 12 },
+    substitution: { background: "rgba(13,110,253,.06)", border: "1px dashed rgba(13,110,253,.45)", borderRadius: 12 },
+    todayOutline: { boxShadow: "inset 0 0 0 2px #0d6efd", borderRadius: "12px" },
+  };
+
+  const cellBase = { minWidth: "160px", height: "84px", verticalAlign: "middle", textAlign: "center" };
+
+  const weekRangeText = `${formatDate(currentMonday)} — ${formatDate(
+    new Date(currentMonday.getFullYear(), currentMonday.getMonth(), currentMonday.getDate() + 5)
+  )}`;
+
+  const DayHeading = ({ day }) => {
+    const isCurrentDay = weekDates[day] === currentDateStr;
+    const holidayForDay = holidays.find((h) => h.date === weekDates[day]);
+    return (
+      <div className="d-flex align-items-center gap-2">
+        <span className="fw-semibold">{day}</span>
+        {isCurrentDay && <span className="badge text-bg-primary">Today</span>}
+        {holidayForDay && <span className="badge text-bg-danger">Holiday</span>}
+      </div>
+    );
+  };
+
+  // NEW: when week changes, open Today's accordion on mobile if present; else open first day
+  useEffect(() => {
+    setMobileOpenIdx(todaysIdx >= 0 ? todaysIdx : 0);
+  }, [todaysIdx, currentMonday]);
+
   return (
-    <div className="container mt-4">
-      <div className="card shadow">
-        <div className="card-header bg-white text-dark">
-          <h3 className="mb-0">My Timetable</h3>
-        </div>
-        <div className="card-body">
-          {/* Navigation Controls with Angle Icons */}
-          <div className="d-flex justify-content-between align-items-center mb-3">
-            <button 
-              onClick={handlePrevWeek} 
-              title="Previous Week" 
-              className="btn btn-light rounded-circle shadow-sm d-flex align-items-center justify-content-center" 
-              style={{ width: '50px', height: '50px' }}
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 16 16">
-                <path fillRule="evenodd" d="M11.354 1.646a.5.5 0 0 1 0 .708L6.707 7l4.647 4.646a.5.5 0 0 1-.708.708l-5-5a.5.5 0 0 1 0-.708l5-5a.5.5 0 0 1 .708 0z"/>
-              </svg>
-            </button>
+    <div className="container py-3">
+      {/* Header */}
+      <div className="card shadow-sm border-0 overflow-hidden">
+        <div className="card-header border-0" style={theme.header}>
+          <div className="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-2">
             <div>
-              Week: {formatDate(currentMonday)} - {formatDate(new Date(currentMonday.getFullYear(), currentMonday.getMonth(), currentMonday.getDate() + 5))}
+              <h3 className="mb-1">My Timetable</h3>
+              <div className="opacity-75 small">Week: {weekRangeText}</div>
             </div>
-            <button 
-              onClick={handleNextWeek} 
-              title="Next Week" 
-              className="btn btn-light rounded-circle shadow-sm d-flex align-items-center justify-content-center" 
-              style={{ width: '50px', height: '50px' }}
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 16 16">
-                <path fillRule="evenodd" d="M4.646 1.646a.5.5 0 0 1 .708 0l5 5a.5.5 0 0 1 0 .708l-5 5a.5.5 0 1 1-.708-.708L9.293 7 4.646 2.354a.5.5 0 0 1 0-.708z"/>
-              </svg>
-            </button>
+
+            <div className="d-flex align-items-center gap-2">
+              <button onClick={handlePrevWeek} className="btn btn-light btn-sm rounded-pill px-3" title="Previous Week">
+                ‹ Prev
+              </button>
+              <button
+                onClick={handleThisWeek}
+                className="btn btn-outline-light btn-sm rounded-pill px-3"
+                title="Jump to This Week"
+              >
+                This Week
+              </button>
+              <button onClick={handleNextWeek} className="btn btn-light btn-sm rounded-pill px-3" title="Next Week">
+                Next ›
+              </button>
+            </div>
           </div>
+        </div>
+
+        <div className="card-body">
           {isLoading ? (
             <div className="text-center my-5">
-              <div className="spinner-border text-primary" role="status">
-                <span className="sr-only">Loading...</span>
-              </div>
+              <div className="spinner-border text-primary" role="status" aria-label="Loading timetable"></div>
+              <div className="small mt-2 text-muted">Fetching your timetable…</div>
             </div>
           ) : (
-            <div>
-              <table
-                className="table table-striped table-bordered table-hover"
-                style={{ tableLayout: 'fixed', width: '100%' }}
-              >
-                <thead className="thead-dark">
-                  <tr>
-                    <th style={cellStyle}>Day</th>
-                    {periods.map(period => (
-                      <th key={period.id} style={cellStyle}>
-                        {period.period_name}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {days.map(day => {
-                    // Check for a holiday on this day.
-                    const holidayForDay = holidays.find(holiday => holiday.date === weekDates[day]);
+            <>
+              {/* Legend */}
+              <div className="d-flex flex-wrap gap-2 mb-3">
+                <span className="badge rounded-pill text-bg-primary">Today</span>
+                <span className="badge rounded-pill text-bg-danger">Holiday</span>
+                <span className="badge rounded-pill text-bg-info">Substitution</span>
+              </div>
+
+              {/* Desktop / Tablet table */}
+              <div className="d-none d-md-block">
+                <div className="table-responsive-md">
+                  <table className="table align-middle table-bordered table-hover">
+                    <thead className="table-light" style={{ position: "sticky", top: 0, zIndex: 1 }}>
+                      <tr>
+                        <th style={{ ...cellBase, minWidth: "200px" }}>Day</th>
+                        {periods.map((p) => (
+                          <th key={p.id} className="text-center" style={cellBase}>
+                            <div className="fw-semibold">{p.period_name}</div>
+                            {p.start_time && p.end_time && (
+                              <small className="text-muted">
+                                {p.start_time}–{p.end_time}
+                              </small>
+                            )}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {days.map((day) => {
+                        const holidayForDay = holidays.find((h) => h.date === weekDates[day]);
+                        const isCurrentDay = weekDates[day] === currentDateStr;
+
+                        return (
+                          <tr key={day} className={holidayForDay ? "table-danger" : ""} style={isCurrentDay ? theme.todayOutline : {}}>
+                            <td style={{ ...cellBase, textAlign: "left" }}>
+                              <DayHeading day={day} />
+                              <small className="text-muted">{weekDates[day]}</small>
+                            </td>
+
+                            {holidayForDay ? (
+                              <td colSpan={periods.length} style={cellBase}>
+                                <div className="fw-semibold">{holidayForDay.description || "Holiday"}</div>
+                              </td>
+                            ) : (
+                              periods.map((period) => {
+                                const subsForDay = studentSubs[weekDates[day]] || [];
+                                const subsForPeriod = subsForDay.filter(
+                                  (sub) => sub.periodId === period.id && sub.day === day
+                                );
+
+                                if (subsForPeriod.length > 0) {
+                                  const s = subsForPeriod[0];
+                                  return (
+                                    <td key={period.id} style={cellBase}>
+                                      <div className="p-2 small" style={theme.substitution}>
+                                        <div className="fw-semibold mb-1">Substitution</div>
+                                        <div>{s.Subject ? s.Subject.name : ""}</div>
+                                        <div className="text-muted">{s.Teacher ? s.Teacher.name : ""}</div>
+                                      </div>
+                                    </td>
+                                  );
+                                }
+
+                                const cellRecords = grid[day]?.[period.id] || [];
+                                return (
+                                  <td key={period.id} style={cellBase} className={cellRecords.length === 0 ? "bg-light" : ""}>
+                                    {cellRecords.length > 0 ? (
+                                      cellRecords.map((record, i) => (
+                                        <div key={i} className="p-2 small mb-2" style={theme.chip}>
+                                          <div className="fw-semibold">
+                                            {record.Subject ? record.Subject.name : record.subjectId}
+                                          </div>
+                                          <div className="text-muted">{record.Teacher ? record.Teacher.name : ""}</div>
+                                        </div>
+                                      ))
+                                    ) : (
+                                      <span className="text-muted small">—</span>
+                                    )}
+                                  </td>
+                                );
+                              })
+                            )}
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Mobile cards / accordion — NOW auto-opens Today */}
+              <div className="d-md-none">
+                <div className="accordion" id="timetableAccordion">
+                  {days.map((day, idx) => {
+                    const holidayForDay = holidays.find((h) => h.date === weekDates[day]);
                     const isCurrentDay = weekDates[day] === currentDateStr;
-                    const rowClasses = `${holidayForDay ? 'table-danger' : ''} ${isCurrentDay ? 'border border-primary' : ''}`;
+                    const expanded = mobileOpenIdx === idx;
 
                     return (
-                      <tr key={day} className={rowClasses}>
-                        <td className="font-weight-bold" style={cellStyle}>
-                          {day} {holidayForDay ? `(Holiday)` : ''} {isCurrentDay ? `(Today)` : ''}
-                          <br />
-                          <small>{weekDates[day]}</small>
-                        </td>
-                        {holidayForDay ? (
-                          <td colSpan={periods.length} style={cellStyle}>
-                            {holidayForDay.description}
-                          </td>
-                        ) : (
-                          periods.map(period => {
-                            // Check if a substitution record exists for this day and period.
-                            const subsForDay = studentSubs[weekDates[day]] || [];
-                            const subsForPeriod = subsForDay.filter(
-                              sub => sub.periodId === period.id && sub.day === day
-                            );
-                            
-                            if (subsForPeriod.length > 0) {
-                              // If a substitution is found, show a cell with the updated teacher and subject.
-                              const substitution = subsForPeriod[0];
-                              return (
-                                <td key={period.id} style={cellStyle}>
-                                  <div 
-                                    className="p-2 border rounded shadow-sm" 
-                                    style={{ backgroundColor: '#e2f0fb' }} // subtle light-blue background
-                                  >
-                                    <div className="small font-weight-bold">
-                                      Updated Teacher
-                                    </div>
-                                    <div className="small">
-                                      {substitution.Teacher ? substitution.Teacher.name : ''}
-                                    </div>
-                                    <div className="small">
-                                      {substitution.Subject ? substitution.Subject.name : ''}
-                                    </div>
-                                  </div>
-                                </td>
-                              );
-                            } else {
-                              // Otherwise, render the regular timetable cell.
-                              const cellRecords = (grid[day] && grid[day][period.id]) ? grid[day][period.id] : [];
-                              return (
-                                <td
-                                  key={period.id}
-                                  style={cellStyle}
-                                  className={cellRecords.length === 0 ? 'bg-light' : ''}
-                                >
-                                  {cellRecords.length > 0 ? (
-                                    cellRecords.map((record, index) => (
-                                      <div key={index} className="mb-2 p-2 border rounded shadow-sm">
-                                        <div className="small">
-                                          <strong>{record.Teacher ? record.Teacher.name : ''}</strong>
-                                        </div>
-                                        <div className="small">
-                                          {record.Subject ? record.Subject.name : record.subjectId}
+                      <div className="accordion-item mb-2 border-0 shadow-sm" key={day}>
+                        <h2 className="accordion-header">
+                          <button
+                            className={`accordion-button ${holidayForDay ? "bg-danger-subtle" : ""} ${expanded ? "" : "collapsed"}`}
+                            type="button"
+                            onClick={() => setMobileOpenIdx(expanded ? -1 : idx)}
+                            aria-expanded={expanded}
+                            aria-controls={`pane-${idx}`}
+                            style={isCurrentDay ? theme.todayOutline : {}}
+                          >
+                            <div className="d-flex flex-column">
+                              <DayHeading day={day} />
+                              <small className="text-muted">{weekDates[day]}</small>
+                            </div>
+                          </button>
+                        </h2>
+
+                        <div id={`pane-${idx}`} className={`accordion-collapse collapse ${expanded ? "show" : ""}`}>
+                          <div className="accordion-body">
+                            {holidayForDay ? (
+                              <div className="alert alert-danger mb-0">{holidayForDay.description || "Holiday"}</div>
+                            ) : (
+                              <div className="d-flex flex-column gap-2">
+                                {periods.map((p) => {
+                                  const subsForDay = studentSubs[weekDates[day]] || [];
+                                  const subsForPeriod = subsForDay.filter(
+                                    (sub) => sub.periodId === p.id && sub.day === day
+                                  );
+
+                                  if (subsForPeriod.length > 0) {
+                                    const s = subsForPeriod[0];
+                                    return (
+                                      <div key={p.id} className="card border-0 shadow-sm">
+                                        <div className="card-body p-3">
+                                          <div className="d-flex justify-content-between align-items-center mb-1">
+                                            <div className="fw-semibold">{p.period_name}</div>
+                                            {p.start_time && p.end_time && (
+                                              <small className="text-muted">
+                                                {p.start_time}–{p.end_time}
+                                              </small>
+                                            )}
+                                          </div>
+                                          <div className="p-2 small" style={theme.substitution}>
+                                            <div className="fw-semibold mb-1">Substitution</div>
+                                            <div>{s.Subject ? s.Subject.name : ""}</div>
+                                            <div className="text-muted">{s.Teacher ? s.Teacher.name : ""}</div>
+                                          </div>
                                         </div>
                                       </div>
-                                    ))
-                                  ) : (
-                                    <div>&nbsp;</div>
-                                  )}
-                                </td>
-                              );
-                            }
-                          })
-                        )}
-                      </tr>
+                                    );
+                                  }
+
+                                  const cellRecords = grid[day]?.[p.id] || [];
+                                  return (
+                                    <div key={p.id} className="card border-0 shadow-sm">
+                                      <div className="card-body p-3">
+                                        <div className="d-flex justify-content-between align-items-center mb-1">
+                                          <div className="fw-semibold">{p.period_name}</div>
+                                          {p.start_time && p.end_time && (
+                                            <small className="text-muted">
+                                              {p.start_time}–{p.end_time}
+                                            </small>
+                                          )}
+                                        </div>
+
+                                        {cellRecords.length > 0 ? (
+                                          cellRecords.map((record, i) => (
+                                            <div key={i} className="p-2 small mb-1" style={theme.chip}>
+                                              <div className="fw-semibold">
+                                                {record.Subject ? record.Subject.name : record.subjectId}
+                                              </div>
+                                              <div className="text-muted">{record.Teacher ? record.Teacher.name : ""}</div>
+                                            </div>
+                                          ))
+                                        ) : (
+                                          <span className="text-muted small">No class</span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
                     );
                   })}
-                </tbody>
-              </table>
-            </div>
+                </div>
+              </div>
+            </>
           )}
         </div>
       </div>
+
+      <div className="text-muted small mt-2">Tip: Use “This Week” to jump back to the current week.</div>
     </div>
   );
 };

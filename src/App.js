@@ -105,9 +105,18 @@ import StudentRemarksEntry from "./pages/StudentRemarksEntry";
 import StudentTransport from "./pages/StudentTransport";
 import OpeningBalances from "./pages/OpeningBalances";
 import CasteGenderReport from "./pages/CasteGenderReport"; // ⬅ NEW
+import DigitalDiary from "./pages/DigitalDiary"; // ⬅ NEW
+import StudentDiary from "./pages/StudentDiary";   // ⬅️ new
+import DiaryDetail from "./pages/DiaryDetail";     // ⬅️ new
+import AccountsDashboard from "./components/AccountsDashboard";
 
 
-
+const RequireRole = ({ roles = [], children }) => {
+  const stored = JSON.parse(localStorage.getItem("roles") || "[]");
+  const userRoles = stored.map((r) => (r || "").toLowerCase());
+  const allowed = roles.length === 0 || roles.some((r) => userRoles.includes(r.toLowerCase()));
+  return allowed ? children : <Navigate to="/dashboard" replace />;
+};
 
 function App() {
   useEffect(() => {
@@ -147,7 +156,7 @@ function App() {
 
           {/* Core / Admissions */}
           <Route path="/classes" element={<Classes />} />
-          <Route path="/sessions" element={<Sessions />} /> {/* <-- ADDED */}
+          <Route path="/sessions" element={<Sessions />} />
           <Route path="/subjects" element={<Subjects />} />
           <Route path="/students" element={<Student />} />
           <Route path="/sections" element={<Sections />} />
@@ -159,7 +168,7 @@ function App() {
           <Route path="/fee-category" element={<FeeCategory />} />
           <Route path="/concessions" element={<Concessions />} />
           <Route path="/student-due" element={<StudentDueTable />} />
-          <Route path="/opening-balances" element={<OpeningBalances />} />  {/* ⬅ NEW */}
+          <Route path="/opening-balances" element={<OpeningBalances />} />
           <Route path="/reports/day-wise" element={<DayWiseReport />} />
           <Route path="/reports/day-wise-category" element={<DayWiseCategoryReports />} />
           <Route path="/reports/school-fee-summary" element={<SchoolFeeSummary />} />
@@ -234,10 +243,10 @@ function App() {
 
           {/* Exam / Results */}
           <Route path="/exam-schemes" element={<ExamSchemeManagement />} />
-          <Route path="/exams" element={<ExamManagement />} /> {/* NEW */}
+          <Route path="/exams" element={<ExamManagement />} />
           <Route path="/exam-schedules" element={<ExamScheduleManagement />} />
           <Route path="/roll-numbers" element={<RollNumberManagement />} />
-          <Route path="/marks-entry" element={<MarksEntry />} /> {/* NEW */}
+          <Route path="/marks-entry" element={<MarksEntry />} />
           <Route path="/report-builder" element={<ReportBuilder />} />
           <Route path="/student-remarks-entry" element={<StudentRemarksEntry />} />
           <Route
@@ -248,36 +257,56 @@ function App() {
             path="/reports/result-report-designer"
             element={<ResultReportDesigner />}
           />
-          <Route path="/grade-schemes" element={<GradeSchemeManagement />} /> {/* NEW */}
+          <Route path="/grade-schemes" element={<GradeSchemeManagement />} />
           <Route
             path="/combined-exam-schemes"
             element={<CombinedExamSchemeManagement />}
-          /> {/* NEW */}
+          />
           <Route path="/term-management" element={<TermManagement />} />
           <Route path="/assessment-components" element={<AssessmentComponentManagement />} /> 
           <Route
             path="/reports/final-result-summary"
             element={<FinalResultSummary />}
-          /> {/* NEW */}
+          />
 
           {/* Co-Scholastic */}
-          <Route path="/co-scholastic-areas" element={<CoScholasticAreaManagement />} /> {/* NEW */}
+          <Route path="/co-scholastic-areas" element={<CoScholasticAreaManagement />} />
           <Route path="/co-scholastic-grades" element={<CoScholasticGradeManagement />} />
           <Route path="/co-scholastic-entry" element={<CoScholasticEntry />} />
           <Route
             path="/class-co-scholastic-mapping"
             element={<ClassCoScholasticMapping />}
-          /> {/* NEW */}
+          />
 
           {/* Report Cards */}
           <Route path="/report-card-formats" element={<ReportCardFormats />} />
           <Route path="/assign-report-card-format" element={<AssignReportCardFormat />} />
-          <Route path="/report-card-generator" element={<ReportCardGenerator />} /> {/* NEW */}
+          <Route path="/report-card-generator" element={<ReportCardGenerator />} />
           <Route path="/academic-years" element={<AcademicYearManagement />} />
 
+          {/* Transport */}
           <Route path="/student-transport" element={<StudentTransport />} />
 
-          <Route path="/reports/caste-gender" element={<CasteGenderReport />} /> {/* ⬅ NEW */}
+          {/* Reports */}
+          <Route path="/reports/caste-gender" element={<CasteGenderReport />} />
+
+          {/* Digital Diary (NEW) */}
+          <Route path="/digital-diary" element={<DigitalDiary />} />
+          {/* Optional alias to the same page */}
+          <Route path="/diary-feed" element={<DigitalDiary />} />
+
+          <Route path="/student-diary" element={<StudentDiary />} />
+          <Route path="/diary/:id" element={<DiaryDetail />} />
+
+          {/* Accounts Dashboard */}
+          <Route
+            path="/accounts-dashboard"
+            element={
+              <RequireRole roles={["accounts", "admin", "superadmin"]}>
+                <AccountsDashboard />
+              </RequireRole>
+            }
+          />
 
 
           {/* Catch-all (inside app) */}
@@ -286,10 +315,6 @@ function App() {
 
         {/* Any other URL → login */}
         <Route path="*" element={<Navigate to="/login" replace />} />
-
-
-    
-    
       </Routes>
     </Router>
   );

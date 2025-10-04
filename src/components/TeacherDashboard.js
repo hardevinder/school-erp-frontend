@@ -1,204 +1,52 @@
 // File: src/components/TeacherDashboard.jsx
-// Dashboard-only. Chat moved to ChatContainer.
-
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import moment from "moment";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
+import { useNavigate } from "react-router-dom";
 
 // Inline pages (keep real if you already have them)
 import StudentRemarksEntry from "../pages/StudentRemarksEntry";
 import CoScholasticEntry from "../pages/CoScholasticEntry";
 
-// Socket (to mirror fee notifications into the drawer)
+// API + sockets
+import api from "../api"; // your axios instance with auth
 import socket from "../socket";
 
 // The separated chat container (REAL, not dummy)
 import ChatContainer from "./chat/ChatContainer";
 
-/* ----------------------------- DUMMY WIDGETS ----------------------------- */
-/** KPIs row - purely dummy values; replace with props/state later */
-function DummyKpisRow() {
-  const kpis = [
-    { label: "Today's Classes", value: 3, icon: "📅" },
-    { label: "Pending Evaluations", value: 5, icon: "📝" },
-    { label: "Avg. Attendance", value: "85%", icon: "🧮" },
-    { label: "Upcoming Exam", value: "Maths • 26 Apr", icon: "🧪" },
-  ];
-  return (
-    <div className="row g-3 mb-4">
-      {kpis.map((k) => (
-        <div className="col-12 col-sm-6 col-lg-3" key={k.label}>
-          <div className="card shadow-sm h-100">
-            <div className="card-body d-flex align-items-center gap-3">
-              <div style={{ fontSize: 28 }}>{k.icon}</div>
-              <div>
-                <div className="text-muted small">{k.label}</div>
-                <div className="fw-semibold fs-5">{k.value}</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-/** Dummy schedule for today */
-function DummySchedule() {
-  const items = [
-    { time: "09:00 – 10:00", subject: "English", class: "5B", room: "A-104" },
-    { time: "11:00 – 12:00", subject: "History", class: "6A", room: "B-201" },
-    { time: "12:30 – 01:30", subject: "Geography", class: "7C", room: "Lab-2" },
-  ];
-  return (
-    <div className="card shadow-sm h-100">
-      <div className="card-header">
-        <strong>My Schedule (Dummy)</strong>
-      </div>
-      <div className="card-body">
-        <ul className="list-group list-group-flush">
-          {items.map((it, idx) => (
-            <li className="list-group-item d-flex justify-content-between" key={idx}>
-              <div>
-                <div className="fw-semibold">{it.time}</div>
-                <div className="text-muted small">{it.subject}</div>
-              </div>
-              <div className="text-end">
-                <div className="badge text-bg-primary me-2">Class {it.class}</div>
-                <span className="text-muted small">{it.room}</span>
-              </div>
-            </li>
-          ))}
-        </ul>
-      </div>
-    </div>
-  );
-}
-
-/** Dummy performance “bars” without chart libs */
-function DummyPerformance() {
-  const bars = [
-    { label: "Eng", val: 65 },
-    { label: "Math", val: 78 },
-    { label: "Sci", val: 72 },
-    { label: "Hist", val: 90 },
-    { label: "Geo", val: 58 },
-  ];
-  return (
-    <div className="card shadow-sm h-100">
-      <div className="card-header">
-        <strong>Student Performance (Dummy)</strong>
-      </div>
-      <div className="card-body">
-        {bars.map((b) => (
-          <div className="mb-3" key={b.label}>
-            <div className="d-flex justify-content-between">
-              <span className="small text-muted">{b.label}</span>
-              <span className="small">{b.val}%</span>
-            </div>
-            <div className="progress" style={{ height: 8 }}>
-              <div
-                className="progress-bar"
-                role="progressbar"
-                style={{ width: `${b.val}%` }}
-                aria-valuenow={b.val}
-                aria-valuemin="0"
-                aria-valuemax="100"
-              />
-            </div>
-          </div>
-        ))}
-        <div className="text-muted small">* Demo data — replace with real analytics.</div>
-      </div>
-    </div>
-  );
-}
-
-/** Dummy circulars list */
-function DummyLatestTeacherCirculars() {
-  const data = [
-    { id: 1, title: "Inter-house Debate", date: "30 Apr", note: "Hall A • 10 AM" },
-    { id: 2, title: "PTM Window", date: "02 May", note: "Slots open till 5 PM" },
-    { id: 3, title: "Lab Maintenance", date: "04 May", note: "Science lab closed" },
-  ];
-  return (
-    <div className="card shadow-sm">
-      <div className="card-header d-flex align-items-center">
-        <h6 className="mb-0">Latest Circulars (Dummy)</h6>
-      </div>
-      <div className="card-body">
-        <ul className="list-group list-group-flush">
-          {data.map((c) => (
-            <li key={c.id} className="list-group-item d-flex align-items-start">
-              <div className="me-2">📢</div>
-              <div className="flex-grow-1">
-                <div className="fw-semibold">{c.title}</div>
-                <div className="small text-muted">{c.note}</div>
-              </div>
-              <span className="badge text-bg-light">{c.date}</span>
-            </li>
-          ))}
-        </ul>
-      </div>
-    </div>
-  );
-}
-
-/** Dummy substitutions table */
-function DummyLatestTeacherSubstitutions() {
-  const rows = [
-    { period: 2, cls: "8A", subj: "Math", by: "Mr. Rao" },
-    { period: 5, cls: "9C", subj: "Chemistry", by: "Ms. Lata" },
-    { period: 7, cls: "7B", subj: "English", by: "Ms. Priya" },
-  ];
-  return (
-    <div className="card shadow-sm">
-      <div className="card-header d-flex align-items-center">
-        <h6 className="mb-0">Latest Substitutions (Dummy)</h6>
-      </div>
-      <div className="card-body table-responsive">
-        <table className="table align-middle mb-0">
-          <thead className="table-light">
-            <tr>
-              <th>Period</th>
-              <th>Class</th>
-              <th>Subject</th>
-              <th>Substituted By</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r, i) => (
-              <tr key={i}>
-                <td>{r.period}</td>
-                <td>{r.cls}</td>
-                <td>{r.subj}</td>
-                <td>{r.by}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        <div className="text-muted small mt-2">* Demo data — plug into your API later.</div>
-      </div>
-    </div>
-  );
-}
-/* --------------------------- END DUMMY WIDGETS --------------------------- */
+/**
+ * Teacher Dashboard — Mobile-first, responsive, attractive + QUICK ACTION TILES
+ * - Greeting + date
+ * - KPI tiles
+ * - NEW: Quick Actions (teacher sidebar items as colorful tiles)
+ * - Today’s Timetable
+ * - Attendance (today)
+ * - My Substitutions (today)
+ * - Recent Circulars
+ * - NEW: Recent Digital Diaries (scrollable)
+ * - Collapsible Co-Scholastic & Student Remarks
+ * - Floating Chat + Notifications Drawer
+ */
 
 export default function TeacherDashboard() {
-  const [notifications, setNotifications] = useState([]);
-  const [showNotifications, setShowNotifications] = useState(false);
+  const navigate = useNavigate();
 
-  // — NEW: chat UI state & last message snapshot —
+  const teacherId = Number(localStorage.getItem("teacherId")) || 0;
+  const todayStr = useMemo(() => moment().format("YYYY-MM-DD"), []);
+  const todayName = useMemo(() => moment().format("dddd"), []);
+
+  // ------- UI state -------
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [notifications, setNotifications] = useState([]);
   const [chatUnread, setChatUnread] = useState(0);
   const [chatOpen, setChatOpen] = useState(false);
   const lastTitleRef = useRef(document?.title || "Dashboard");
   const audioRef = useRef(null);
-
-  // Hysteresis/persistence helpers to avoid badge flicker
   const lastNonZeroUnreadRef = useRef(0);
   const zeroTimerRef = useRef(null);
 
-  // Toggles
   const [showRemarks, setShowRemarks] = useState(true);
   const [showCoScholastic, setShowCoScholastic] = useState(false);
 
@@ -211,67 +59,175 @@ export default function TeacherDashboard() {
     }
   }, []);
 
-  // Load saved notifications on mount
+  const isTeacher = useMemo(
+    () => userRoles.map((r) => (r || "").toLowerCase()).includes("teacher"),
+    [userRoles]
+  );
+
+  // ------- Data state -------
+  const [periods, setPeriods] = useState([]);
+  const [todayClasses, setTodayClasses] = useState([]);
+  const [inchargeStudents, setInchargeStudents] = useState([]);
+  const [attendanceTodayMarked, setAttendanceTodayMarked] = useState(null); // null=loading
+  const [pendingLeave, setPendingLeave] = useState(0);
+  const [newCircularsCount, setNewCircularsCount] = useState(0);
+  const [recentCirculars, setRecentCirculars] = useState([]);
+  const [assignmentsCount, setAssignmentsCount] = useState(0);
+  const [subsTook, setSubsTook] = useState([]);
+  const [subsFreed, setSubsFreed] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [errors, setErrors] = useState([]);
+
+  // NEW: recent digital diaries (compact feed)
+  const [recentDiaries, setRecentDiaries] = useState([]);
+  const [recentDiariesLoading, setRecentDiariesLoading] = useState(true);
+
+  const pushError = (m) => setErrors((p) => [...p, m]);
+
+  // ------- Fetch data on mount -------
   useEffect(() => {
-    const stored = localStorage.getItem("notifications");
-    if (stored) {
+    let cancelled = false;
+    (async () => {
       try {
-        setNotifications(JSON.parse(stored) || []);
+        setLoading(true);
+        setErrors([]);
+
+        // Periods
+        try {
+          const pRes = await api.get("/periods");
+          const p = Array.isArray(pRes.data) ? pRes.data : pRes.data?.periods || [];
+          if (!cancelled) setPeriods(p);
+        } catch {
+          pushError("Failed to load periods.");
+        }
+
+        // Timetable for teacher (today only)
+        try {
+          const tt = await api.get("/period-class-teacher-subject/timetable-teacher", {
+            params: { teacherId, teacher_id: teacherId },
+          });
+          const list = Array.isArray(tt.data)
+            ? tt.data
+            : Array.isArray(tt.data?.timetable)
+            ? tt.data.timetable
+            : [];
+          const todays = list.filter((r) => normalizeDay(r?.day) === todayName);
+          if (!cancelled) setTodayClasses(todays);
+        } catch {
+          pushError("Failed to load timetable.");
+        }
+
+        // Incharge students + attendance
+        try {
+          const inc = await api.get("/incharges/students");
+          const s = inc.data?.students || [];
+          if (!cancelled) setInchargeStudents(s);
+          if (s.length) {
+            const classId = s[0]?.class_id;
+            try {
+              const att = await api.get(`/attendance/date/${todayStr}/${classId}`);
+              const rows = att.data || [];
+              if (!cancelled) setAttendanceTodayMarked(rows.length > 0);
+            } catch {
+              if (!cancelled) setAttendanceTodayMarked(false);
+            }
+          } else if (!cancelled) {
+            setAttendanceTodayMarked(false);
+          }
+        } catch {
+          pushError("Failed to load incharge students.");
+        }
+
+        // Leave list (pending count)
+        try {
+          const lr = await api.get("/leave");
+          const arr = Array.isArray(lr.data) ? lr.data : [];
+          if (!cancelled) setPendingLeave(arr.filter((x) => (x.status || "").toLowerCase() === "pending").length);
+        } catch {}
+
+        // Circulars (recent + new count in last 48h)
+        try {
+          const c = await api.get("/circulars");
+          const circs = c.data?.circulars || [];
+          const sorted = [...circs].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+          if (!cancelled) {
+            setRecentCirculars(sorted.slice(0, 5));
+            setNewCircularsCount(
+              sorted.filter((x) => Date.now() - new Date(x.createdAt).getTime() < 48 * 3600 * 1000).length
+            );
+          }
+        } catch {}
+
+        // Assignments count
+        try {
+          const a = await api.get("/assignments");
+          if (!cancelled) setAssignmentsCount((a.data?.assignments || []).length);
+        } catch {}
+
+        // Substitutions (today)
+        try {
+          const q = { date: todayStr, teacherId, teacher_id: teacherId };
+          const s1 = await api.get("/substitutions/by-date/original", { params: q });
+          const s2 = await api.get("/substitutions/by-date/substituted", { params: q });
+          if (!cancelled) {
+            setSubsFreed(Array.isArray(s1.data) ? s1.data : s1.data?.rows || []);
+            setSubsTook(Array.isArray(s2.data) ? s2.data : s2.data?.rows || []);
+          }
+        } catch {}
       } catch {
-        setNotifications([]);
+        pushError("Failed to load dashboard data.");
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-    }
-  }, []);
+    })();
 
-  // Restore last unread on mount (prevents blink after reload)
-  useEffect(() => {
-    const cached = Number(sessionStorage.getItem("chatUnread") || "0");
-    if (Number.isFinite(cached) && cached > 0) {
-      setChatUnread(cached);
-      lastNonZeroUnreadRef.current = cached;
-    }
-  }, []);
-
-  // Persist unread to sessionStorage
-  useEffect(() => {
-    sessionStorage.setItem("chatUnread", String(chatUnread));
-  }, [chatUnread]);
-
-  // ——— Browser Notification permission (ask once) ———
-  useEffect(() => {
-    const asked = localStorage.getItem("notifPermAsked");
-    if (!asked && "Notification" in window) {
-      const t = setTimeout(() => {
-        Notification.requestPermission().finally(() => {
-          localStorage.setItem("notifPermAsked", "1");
-        });
-      }, 1200);
-      return () => clearTimeout(t);
-    }
-  }, []);
-
-  // ——— Tiny ping sound (non-blocking) ———
-  useEffect(() => {
-    // Replace with your own asset if you like: new Audio('/sounds/chat-ping.mp3')
-    audioRef.current = new Audio(
-      "data:audio/mp3;base64,//uQZAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAACcQAA..."
-    );
-  }, []);
-
-  // ——— Title badge when unread > 0 ———
-  useEffect(() => {
-    if (!document) return;
-    if (chatUnread > 0) {
-      document.title = `• (${chatUnread}) ${lastTitleRef.current}`;
-    } else {
-      document.title = lastTitleRef.current;
-    }
     return () => {
-      document.title = lastTitleRef.current;
+      cancelled = true;
     };
-  }, [chatUnread]);
+  }, [teacherId, todayStr, todayName]);
 
-  // Mirror socket fee-notification events into the drawer (no extra alerts here)
+  // ------- NEW: Load recent digital diaries (dedup across classes) -------
+  useEffect(() => {
+    let cancelled = false;
+    const fetchRecent = async () => {
+      setRecentDiariesLoading(true);
+      try {
+        // pull the first page, show up to 10 grouped items
+        const { data } = await api.get("/diaries", {
+          params: { page: 1, pageSize: 20, dateFrom: undefined, dateTo: undefined },
+        });
+        const raw = Array.isArray(data?.data) ? data.data : [];
+        const grouped = groupDiaries(raw).slice(0, 10);
+        if (!cancelled) setRecentDiaries(grouped);
+      } catch {
+        if (!cancelled) setRecentDiaries([]);
+      } finally {
+        if (!cancelled) setRecentDiariesLoading(false);
+      }
+    };
+    fetchRecent();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // ------- Live circular update via socket -------
+  useEffect(() => {
+    if (!socket?.on) return;
+    const onNew = ({ circular }) => {
+      setRecentCirculars((prev) => [circular, ...prev].slice(0, 5));
+      setNewCircularsCount((n) => n + 1);
+      pushMainNotification({
+        title: "New Circular",
+        message: circular?.title || "",
+        tag: "circular",
+      });
+    };
+    socket.on("newCircular", onNew);
+    return () => socket.off("newCircular", onNew);
+  }, []);
+
+  // ------- Fee notifications to drawer (kept) -------
   useEffect(() => {
     if (!socket?.on) return;
     const onFee = (data) => {
@@ -287,7 +243,18 @@ export default function TeacherDashboard() {
     return () => socket.off("fee-notification", onFee);
   }, []);
 
-  // ——— Helper to push into main notification drawer ———
+  // ------- Notifications storage -------
+  useEffect(() => {
+    const stored = localStorage.getItem("notifications");
+    if (stored) {
+      try {
+        setNotifications(JSON.parse(stored) || []);
+      } catch {
+        setNotifications([]);
+      }
+    }
+  }, []);
+
   const pushMainNotification = (payload) => {
     setNotifications((prev) => {
       const item = {
@@ -303,13 +270,93 @@ export default function TeacherDashboard() {
     });
   };
 
-  // ——— Show toast + system notification + add to drawer on chat ping ———
-  const handleIncomingChatWhenClosed = async (detail) => {
-    const { last } = detail || {};
+  // ------- Chat unread + desktop notifications -------
+  useEffect(() => {
+    if (!document) return;
+    if (chatUnread > 0) document.title = `• (${chatUnread}) ${lastTitleRef.current}`;
+    else document.title = lastTitleRef.current;
+    return () => (document.title = lastTitleRef.current);
+  }, [chatUnread]);
+
+  useEffect(() => {
+    audioRef.current = new Audio(
+      "data:audio/mp3;base64,//uQZAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAACcQAA..."
+    );
+  }, []);
+
+  useEffect(() => {
+    const asked = localStorage.getItem("notifPermAsked");
+    if (!asked && "Notification" in window) {
+      const t = setTimeout(() => {
+        Notification.requestPermission().finally(() => localStorage.setItem("notifPermAsked", "1"));
+      }, 1000);
+      return () => clearTimeout(t);
+    }
+  }, []);
+
+  useEffect(() => {
+    const onUnread = (e) => {
+      const { count = 0, last } = e.detail || {};
+      setUnreadStably(count, { force: chatOpen });
+      if (!chatOpen && last) handleIncomingChatWhenClosed({ last });
+    };
+    const onOpened = () => {
+      setChatOpen(true);
+      if (zeroTimerRef.current) {
+        clearTimeout(zeroTimerRef.current);
+        zeroTimerRef.current = null;
+      }
+    };
+    const onClosed = () => {
+      setChatOpen(false);
+      if (lastNonZeroUnreadRef.current > 0) setChatUnread(lastNonZeroUnreadRef.current);
+    };
+    const openRequest = () => setChatOpen(true);
+
+    window.addEventListener("chat:unread", onUnread);
+    window.addEventListener("chat:opened", onOpened);
+    window.addEventListener("chat:closed", onClosed);
+    window.addEventListener("chat:open-request", openRequest);
+    return () => {
+      window.removeEventListener("chat:unread", onUnread);
+      window.removeEventListener("chat:opened", onOpened);
+      window.removeEventListener("chat:closed", onClosed);
+      window.removeEventListener("chat:open-request", openRequest);
+    };
+  }, [chatOpen]);
+
+  const setUnreadStably = (next, { force = false } = {}) => {
+    if (next > 0) {
+      if (zeroTimerRef.current) {
+        clearTimeout(zeroTimerRef.current);
+        zeroTimerRef.current = null;
+      }
+      lastNonZeroUnreadRef.current = next;
+      setChatUnread(next);
+      return;
+    }
+    if (force) {
+      if (zeroTimerRef.current) {
+        clearTimeout(zeroTimerRef.current);
+        zeroTimerRef.current = null;
+      }
+      lastNonZeroUnreadRef.current = 0;
+      setChatUnread(0);
+      return;
+    }
+    if (!zeroTimerRef.current) {
+      zeroTimerRef.current = setTimeout(() => {
+        lastNonZeroUnreadRef.current = 0;
+        setChatUnread(0);
+        zeroTimerRef.current = null;
+      }, 4500);
+    }
+  };
+
+  const handleIncomingChatWhenClosed = async ({ last }) => {
     const from = last?.fromName || last?.from || "New message";
     const body = last?.text || last?.message || "You have a new message";
 
-    // 1) Toast with action
     toast.info(
       <div className="d-flex align-items-start">
         <div className="me-2">💬</div>
@@ -330,19 +377,16 @@ export default function TeacherDashboard() {
       { autoClose: 6000 }
     );
 
-    // 2) Desktop notification (ask now if still "default")
     if ("Notification" in window) {
       try {
-        if (Notification.permission === "default") {
-          await Notification.requestPermission();
-        }
+        if (Notification.permission === "default") await Notification.requestPermission();
         if (Notification.permission === "granted") {
           const n = new Notification(from, {
             body,
-            tag: `chat-${Date.now()}`, // prevents collapsing
-            icon: "/icons/chat-128.png", // optional
-            badge: "/icons/badge-72.png", // optional
-            silent: true, // we play our own gentle sound
+            tag: `chat-${Date.now()}`,
+            icon: "/icons/chat-128.png",
+            badge: "/icons/badge-72.png",
+            silent: true,
           });
           n.onclick = () => {
             window.focus?.();
@@ -350,111 +394,24 @@ export default function TeacherDashboard() {
             n.close?.();
           };
         }
-      } catch {
-        // ignore
-      }
+      } catch {}
     }
 
-    // 3) Soft chime
     try {
       if (audioRef.current) {
         audioRef.current.currentTime = 0;
         await audioRef.current.play();
       }
-    } catch {
-      // autoplay may be blocked until user interacts with the page—safe to ignore
-    }
+    } catch {}
 
-    // 4) Log in main drawer
-    pushMainNotification({
-      title: "New chat message",
-      message: `${from}: ${body}`,
-      tag: "chat",
-    });
+    pushMainNotification({ title: "New chat message", message: `${from}: ${body}`, tag: "chat" });
   };
-
-  // Stable setter with hysteresis for unread (prevents flicker)
-  const setUnreadStably = (next, { force = false } = {}) => {
-    if (next > 0) {
-      if (zeroTimerRef.current) {
-        clearTimeout(zeroTimerRef.current);
-        zeroTimerRef.current = null;
-      }
-      lastNonZeroUnreadRef.current = next;
-      setChatUnread(next);
-      return;
-    }
-
-    // Going to zero
-    if (force) {
-      if (zeroTimerRef.current) {
-        clearTimeout(zeroTimerRef.current);
-        zeroTimerRef.current = null;
-      }
-      lastNonZeroUnreadRef.current = 0;
-      setChatUnread(0);
-      return;
-    }
-
-    // Soft zero: debounce in case it's transient (API hiccup / mid-refresh)
-    if (!zeroTimerRef.current) {
-      zeroTimerRef.current = setTimeout(() => {
-        lastNonZeroUnreadRef.current = 0;
-        setChatUnread(0);
-        zeroTimerRef.current = null;
-      }, 4500);
-    }
-  };
-
-  // ——— Listen for ChatContainer events ———
-  useEffect(() => {
-    const onUnread = (e) => {
-      const { count = 0, last } = e.detail || {};
-
-      // When chat is open, trust zeros immediately.
-      // When closed, apply hysteresis to avoid flicker.
-      setUnreadStably(count, { force: chatOpen });
-
-      // Notify whenever a meaningful "last" payload arrives and chat is not open
-      if (!chatOpen && last) {
-        handleIncomingChatWhenClosed({ last });
-      }
-    };
-    const onOpened = () => {
-      setChatOpen(true);
-      if (zeroTimerRef.current) {
-        clearTimeout(zeroTimerRef.current);
-        zeroTimerRef.current = null;
-      }
-    };
-    const onClosed = () => {
-      setChatOpen(false);
-      if (lastNonZeroUnreadRef.current > 0) {
-        setChatUnread(lastNonZeroUnreadRef.current);
-      }
-    };
-    const openRequest = () => setChatOpen(true); // local optimism
-
-    window.addEventListener("chat:unread", onUnread);
-    window.addEventListener("chat:opened", onOpened);
-    window.addEventListener("chat:closed", onClosed);
-    window.addEventListener("chat:open-request", openRequest);
-
-    return () => {
-      window.removeEventListener("chat:unread", onUnread);
-      window.removeEventListener("chat:opened", onOpened);
-      window.removeEventListener("chat:closed", onClosed);
-      window.removeEventListener("chat:open-request", openRequest);
-      if (zeroTimerRef.current) clearTimeout(zeroTimerRef.current);
-    };
-  }, [chatOpen]);
 
   const clearAllNotifications = () => {
     setNotifications([]);
     localStorage.removeItem("notifications");
     toast.success("All notifications cleared.");
   };
-
   const removeNotification = (id) => {
     setNotifications((prev) => {
       const next = prev.filter((n) => n.id !== id);
@@ -463,119 +420,58 @@ export default function TeacherDashboard() {
     });
   };
 
-  // ——— Pretty Floating Chat Button (FAB) ———
-  const ChatFAB = () => {
-    return (
-      <button
-        type="button"
-        onClick={() => window.dispatchEvent(new CustomEvent("chat:open-request"))}
-        title={chatOpen ? "Chat open" : "Open chat"}
-        aria-label="Open chat"
-        style={{
-          position: "fixed",
-          right: 20,
-          bottom: 20,
-          zIndex: 1300,
-          width: 56,
-          height: 56,
-          borderRadius: "50%",
-          border: "none",
-          outline: "none",
-          background: chatUnread > 0 ? "linear-gradient(135deg,#6a11cb,#2575fc)" : "#0d6efd",
-          color: "#fff",
-          boxShadow: "0 10px 25px rgba(13,110,253,.35)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          cursor: "pointer",
-          overflow: "visible",
-          isolation: "isolate",
-        }}
-        className={chatUnread > 0 ? "chat-fab-pulse" : ""}
-      >
-        {/* Icon (layer 1) */}
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          width="26"
-          height="26"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          aria-hidden="true"
-          style={{ position: "relative", zIndex: 1 }}
-        >
-          <path d="M21 15a4 4 0 0 1-4 4H7l-4 4V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z" />
-        </svg>
+  // ------- KPIs derived -------
+  const kpi = useMemo(
+    () => ({
+      todaysCount: todayClasses.length,
+      pendingLeave,
+      newCircularsCount,
+      assignmentCount: assignmentsCount,
+    }),
+    [todayClasses.length, pendingLeave, newCircularsCount, assignmentsCount]
+  );
 
-        {/* Unread badge (layer 2 — above icon and pulse) */}
-        {chatUnread > 0 && (
-          <span
-            style={{
-              position: "absolute",
-              top: -2,
-              right: -2,
-              minWidth: 20,
-              height: 20,
-              padding: "0 6px",
-              borderRadius: 10,
-              background: "#dc3545",
-              color: "#fff",
-              fontSize: 12,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              boxShadow: "0 0 0 2px #fff",
-              zIndex: 2,
-            }}
-          >
-            {chatUnread > 99 ? "99+" : chatUnread}
-          </span>
-        )}
-      </button>
-    );
-  };
+  // ------- QUICK ACTIONS (Teacher sidebar → tiles) -------
+  const quickActions = useMemo(
+    () =>
+      !isTeacher
+        ? []
+        : [
+            { label: "Mark Attendance", icon: "bi-check2-square", path: "/mark-attendance", color: "var(--qa-blue)" },
+            { label: "Timetable", icon: "bi-table", path: "/teacher-timetable-display", color: "var(--qa-purple)" },
+            { label: "My Substitutions", icon: "bi-arrow-repeat", path: "/combined-teacher-substitution", color: "var(--qa-teal)" },
+            { label: "Assignments", icon: "bi-clipboard", path: "/assignments", color: "var(--qa-green)" },
+            { label: "Assignment Marking", icon: "bi-pencil-square", path: "/assignment-marking", color: "var(--qa-amber)" },
+            { label: "Circulars", icon: "bi-megaphone", path: "/view-circulars", color: "var(--qa-pink)" },
+            { label: "Lesson Plan", icon: "bi-journal-text", path: "/lesson-plan", color: "var(--qa-indigo)" },
+            { label: "Request Leave", icon: "bi-box-arrow-in-down-left", path: "/employee-leave-request", color: "var(--qa-orange)" },
+            { label: "My Attendance", icon: "bi-calendar2-week", path: "/my-attendance-calendar", color: "var(--qa-cyan)" },
+            { label: "Marks Entry", icon: "bi-pencil-square", path: "/marks-entry", color: "var(--qa-lime)" },
+            { label: "Result Summary", icon: "bi-bar-chart", path: "/reports/classwise-result-summary", color: "var(--qa-rose)" },
+            { label: "Report Cards", icon: "bi-printer", path: "/report-card-generator", color: "var(--qa-slate)" },
+            // NEW: Digital Diary entry point
+            { label: "Digital Diary", icon: "bi-journal-bookmark", path: "/digital-diary", color: "var(--qa-indigo)" },
+          ],
+    [isTeacher]
+  );
 
-  // ——— FAB pulse animation (once on page) ———
-  useEffect(() => {
-    const id = "chat-fab-pulse-style";
-    if (document.getElementById(id)) return;
-    const style = document.createElement("style");
-    style.id = id;
-    style.textContent = `
-      .chat-fab-pulse{ position:relative; }
-      .chat-fab-pulse::after{
-        content:'';
-        position:absolute;
-        inset:0;
-        border-radius:50%;
-        box-shadow:0 0 0 0 rgba(37,117,252,0.6);
-        animation:chatPulse 1.6s infinite;
-        z-index:0;
-        pointer-events:none;
-      }
-      @keyframes chatPulse{
-        0%{ box-shadow:0 0 0 0 rgba(37,117,252,0.6); }
-        70%{ box-shadow:0 0 0 18px rgba(37,117,252,0); }
-        100%{ box-shadow:0 0 0 0 rgba(37,117,252,0); }
-      }
-    `;
-    document.head.appendChild(style);
-    return () => style.remove();
-  }, []);
+  const go = (path) => navigate(path);
 
   return (
     <div className="container-fluid px-3">
-      {/* Page header */}
-      <div className="dashboard-header bg-light px-3 py-2 mb-3 rounded d-flex align-items-center gap-2">
-        <h5 className="mb-0">Teacher Dashboard</h5>
-
-        {/* Roles (if any) */}
+      {/* Header */}
+      <div className="dashboard-header px-3 py-2 mb-3 rounded d-flex align-items-center gap-2">
+        <div>
+          <h5 className="mb-0">
+            Good {moment().hour() < 12 ? "morning" : moment().hour() < 17 ? "afternoon" : "evening"}, Teacher
+          </h5>
+          <small className="text-muted">{moment().format("dddd, Do MMM YYYY")}</small>
+        </div>
         <div className="d-none d-md-flex align-items-center gap-1 ms-3">
           {userRoles.map((r) => (
-            <span key={r} className="badge text-bg-secondary">{r}</span>
+            <span key={r} className="badge text-bg-secondary">
+              {r}
+            </span>
           ))}
         </div>
 
@@ -615,40 +511,241 @@ export default function TeacherDashboard() {
         </button>
       </div>
 
-      {/* Top KPIs (dummy) */}
-      <DummyKpisRow />
+      {/* KPI cards */}
+      <div className="row g-3 mb-3">
+        <KpiCard icon="bi-table" label="Today’s Classes" value={kpi.todaysCount} tone="primary" />
+        <KpiCard icon="bi-inbox" label="Pending Leave" value={kpi.pendingLeave} tone="warning" />
+        <KpiCard icon="bi-megaphone" label="New Circulars" value={kpi.newCircularsCount} tone="info" />
+        <KpiCard icon="bi-clipboard-check" label="Assignments" value={kpi.assignmentCount} tone="success" />
+      </div>
 
-      {/* Two-column cards: Schedule + Performance */}
-      <div className="row g-3 mb-4">
-        <div className="col-12 col-lg-6">
-          <DummySchedule />
+      {/* ===== Quick Actions Tiles (Teacher) ===== */}
+      {isTeacher && (
+        <section className="mb-3">
+          <div className="card shadow-sm">
+            <div className="card-header d-flex align-items-center justify-content-between">
+              <h6 className="mb-0">Quick Actions</h6>
+              <small className="text-muted">Tap to open</small>
+            </div>
+            <div className="card-body p-2">
+              <div className="qa-grid">
+                {quickActions.map((a) => (
+                  <button key={a.path} className="qa-tile" onClick={() => go(a.path)} style={{ background: a.color }}>
+                    <div className="qa-icon">
+                      <i className={`bi ${a.icon}`} />
+                    </div>
+                    <div className="qa-label">{a.label}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* Two-column: timetable + right column */}
+      <div className="row g-3">
+        {/* Today’s timetable */}
+        <div className="col-12 col-xl-6">
+          <div className="card shadow-sm today-card">
+            <div className="card-header d-flex align-items-center justify-content-between">
+              <h6 className="mb-0">Today’s Timetable</h6>
+              <button className="btn btn-sm btn-outline-secondary" onClick={() => go("/teacher-timetable-display")}>
+                View All
+              </button>
+            </div>
+            <div className="card-body p-0">
+              {loading ? (
+                <div className="text-center py-4">
+                  <div className="spinner-border" role="status" />
+                </div>
+              ) : todayClasses.length === 0 ? (
+                <div className="p-3 text-center text-muted">No classes scheduled today.</div>
+              ) : (
+                <div className="table-responsive m-0">
+                  <table className="table table-hover table-sm align-middle mb-0">
+                    <thead className="table-light">
+                      <tr>
+                        <th style={{ width: "24%" }}>Period</th>
+                        <th>Class</th>
+                        <th>Subject</th>
+                        <th style={{ width: "20%" }}>Room</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {todayClasses.map((rec, idx) => (
+                        <tr key={idx} className="border-primary">
+                          <td>{rec?.Period?.name || rec?.Period?.period_name || rec?.periodId || "-"}</td>
+                          <td>{rec?.Class?.class_name || "-"}</td>
+                          <td>{rec?.Subject?.name || "-"}</td>
+                          <td>{rec?.room || rec?.room_no || "-"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
-        <div className="col-12 col-lg-6">
-          <DummyPerformance />
+
+        {/* Right column: Attendance + Substitutions + Recent Digital Diaries */}
+        <div className="col-12 col-xl-6">
+          {/* Attendance Today */}
+          <div className="card shadow-sm">
+            <div className="card-header d-flex align-items-center justify-content-between">
+              <h6 className="mb-0">Attendance (Today)</h6>
+              <button className="btn btn-sm btn-primary" onClick={() => go("/mark-attendance")}>
+                {attendanceTodayMarked ? "Update" : "Mark Now"}
+              </button>
+            </div>
+            <div className="card-body">
+              {attendanceTodayMarked === null ? (
+                <div className="text-muted">Checking attendance status…</div>
+              ) : attendanceTodayMarked ? (
+                <div className="d-flex align-items-center">
+                  <i className="bi bi-check-circle-fill text-success me-2" /> Attendance marked for today.
+                </div>
+              ) : inchargeStudents.length ? (
+                <div className="d-flex align-items-center">
+                  <i className="bi bi-exclamation-triangle-fill text-warning me-2" /> Not marked for today.
+                </div>
+              ) : (
+                <div className="text-muted">You are not an incharge for any class.</div>
+              )}
+            </div>
+          </div>
+
+          {/* Substitutions */}
+          <div className="card shadow-sm mt-3">
+            <div className="card-header d-flex align-items-center justify-content-between">
+              <h6 className="mb-0">My Substitutions (Today)</h6>
+              <button className="btn btn-sm btn-outline-secondary" onClick={() => go("/combined-teacher-substitution")}>
+                View All
+              </button>
+            </div>
+            <div className="card-body">
+              <div className="d-flex flex-wrap gap-2">
+                <Pill text={`Covering: ${subsTook.length}`} />
+                <Pill text={`Freed: ${subsFreed.length}`} />
+              </div>
+              {(subsTook.length > 0 || subsFreed.length > 0) && (
+                <ul className="list-unstyled small mt-2 mb-0">
+                  {subsTook.slice(0, 3).map((s, i) => (
+                    <li key={`t${i}`} className="mb-1">
+                      Covering <strong>{s?.Class?.class_name}</strong> — {s?.Subject?.name}
+                    </li>
+                  ))}
+                  {subsFreed.slice(0, 3).map((s, i) => (
+                    <li key={`f${i}`} className="mb-1">
+                      Freed <strong>{s?.Class?.class_name}</strong> — {s?.Subject?.name}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+
+          {/* NEW: Recent Digital Diaries (scrollable mini-feed) */}
+          <div className="card shadow-sm mt-3">
+            <div className="card-header d-flex align-items-center justify-content-between">
+              <h6 className="mb-0">Recent Digital Diaries</h6>
+              <button className="btn btn-sm btn-outline-secondary" onClick={() => go("/digital-diary")}>
+                Open Digital Diary
+              </button>
+            </div>
+            <div className="card-body p-0">
+              {recentDiariesLoading ? (
+                <div className="p-3 text-center text-muted">
+                  <div className="spinner-border spinner-border-sm me-2" role="status" />
+                  Loading…
+                </div>
+              ) : recentDiaries.length === 0 ? (
+                <div className="p-3 text-center text-muted">No diary notes yet.</div>
+              ) : (
+                <div className="dd-mini-feed">
+                  {recentDiaries.map((d) => (
+                    <button
+                      key={d.id}
+                      className="dd-mini-item list-group-item list-group-item-action text-start"
+                      onClick={() => go("/digital-diary")}
+                      title="Open in Digital Diary"
+                    >
+                      <div className="d-flex justify-content-between align-items-start">
+                        <div className="me-2 flex-grow-1">
+                          <div className="fw-semibold text-truncate">{d.title}</div>
+                          <div className="text-muted small text-truncate-2">{d.content}</div>
+                          {/* class/section chips */}
+                          {Array.isArray(d.targets) && d.targets.length > 0 ? (
+                            <div className="mt-1 d-flex flex-wrap gap-1">
+                              {d.targets.slice(0, 6).map((t, idx) => (
+                                <span key={idx} className="badge bg-light text-dark border small">
+                                  {chipName(t)}
+                                </span>
+                              ))}
+                              {d.targets.length > 6 && (
+                                <span className="badge bg-secondary-subtle text-secondary small">
+                                  +{d.targets.length - 6} more
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="mt-1">
+                              <span className="badge bg-light text-dark border small">
+                                {singleChipName(d)}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                        <div className="text-end small text-nowrap text-muted">
+                          {formatWhen(d.date)}
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Dummy Latest Circulars */}
-      <section className="mb-4">
-        <DummyLatestTeacherCirculars />
-      </section>
+      {/* Recent Circulars */}
+      <div className="card shadow-sm mt-3">
+        <div className="card-header d-flex align-items-center justify-content-between">
+          <h6 className="mb-0">Recent Circulars</h6>
+          <button className="btn btn-sm btn-outline-secondary" onClick={() => go("/view-circulars")}>
+            See All
+          </button>
+        </div>
+        <div className="list-group list-group-flush">
+          {recentCirculars.length === 0 ? (
+            <div className="p-3 text-center text-muted">No circulars yet.</div>
+          ) : (
+            recentCirculars.map((c) => (
+              <button
+                key={c.id}
+                className="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
+                onClick={() => window.open(c.fileUrl || "#", "_blank", "noopener")}
+              >
+                <div>
+                  <div className="fw-semibold">{c.title}</div>
+                  <div className="small text-muted">{new Date(c.createdAt).toLocaleString()}</div>
+                </div>
+                <i className="bi bi-box-arrow-up-right" />
+              </button>
+            ))
+          )}
+        </div>
+      </div>
 
-      {/* Dummy Latest Substitutions */}
-      <section className="mb-5">
-        <DummyLatestTeacherSubstitutions />
-      </section>
-
-      {/* Inline Co-Scholastic Entry (REAL page if exists) */}
+      {/* Co-Scholastic & Remarks (collapsible) */}
       {showCoScholastic && (
-        <section className="mb-5">
+        <section className="mb-4 mt-3">
           <div className="card shadow-sm">
             <div className="card-header d-flex align-items-center">
               <h6 className="mb-0">🧩 Co-Scholastic Entry</h6>
-              <button
-                className="btn btn-sm btn-outline-secondary ms-auto"
-                onClick={() => setShowCoScholastic(false)}
-                title="Collapse"
-              >
+              <button className="btn btn-sm btn-outline-secondary ms-auto" onClick={() => setShowCoScholastic(false)}>
                 ×
               </button>
             </div>
@@ -659,17 +756,12 @@ export default function TeacherDashboard() {
         </section>
       )}
 
-      {/* Inline Student Remarks Entry (REAL page if exists) */}
       {showRemarks && (
-        <section className="mb-5">
+        <section className="mb-4">
           <div className="card shadow-sm">
             <div className="card-header d-flex align-items-center">
               <h6 className="mb-0">📝 Student Remarks Entry</h6>
-              <button
-                className="btn btn-sm btn-outline-secondary ms-auto"
-                onClick={() => setShowRemarks(false)}
-                title="Collapse"
-              >
+              <button className="btn btn-sm btn-outline-secondary ms-auto" onClick={() => setShowRemarks(false)}>
                 ×
               </button>
             </div>
@@ -683,69 +775,33 @@ export default function TeacherDashboard() {
       {/* Notifications Overlay */}
       {showNotifications && (
         <div
-          style={{
-            position: "fixed",
-            top: 70,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            zIndex: 1200,
-            background: "rgba(0,0,0,0.5)",
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "center",
-          }}
+          className="notifications-overlay"
           aria-modal="true"
           role="dialog"
+          onClick={() => setShowNotifications(false)}
         >
-          <div
-            style={{
-              background: "#fff",
-              width: "90%",
-              maxWidth: "600px",
-              maxHeight: "80%",
-              overflowY: "auto",
-              borderRadius: "8px",
-              padding: "16px",
-              position: "relative",
-            }}
-          >
-            <button
-              onClick={() => setShowNotifications(false)}
-              style={{
-                position: "absolute",
-                top: 10,
-                right: 10,
-                fontSize: "1.5rem",
-                border: "none",
-                background: "none",
-              }}
-              aria-label="Close notifications"
-              title="Close"
-            >
-              ×
-            </button>
-
-            <h6 className="mb-3">Notifications</h6>
-
+          <div className="notifications-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="d-flex justify-content-between align-items-center mb-2">
+              <h5 className="mb-0">Notifications</h5>
+              <button className="btn btn-sm btn-light" onClick={() => setShowNotifications(false)}>
+                Close
+              </button>
+            </div>
             {notifications.length === 0 ? (
               <div className="text-muted">No notifications yet.</div>
             ) : (
-              <ul className="list-group">
+              <ul className="list-unstyled mb-0">
                 {notifications.map((n) => (
-                  <li key={n.id} className="list-group-item d-flex align-items-start">
+                  <li key={n.id} className="mb-2 d-flex align-items-start">
                     <div className="me-2">{n.tag === "chat" ? "💬" : "🔔"}</div>
                     <div className="flex-grow-1">
                       <div className="fw-semibold">{n.title}</div>
-                      <div className="small text-muted">
-                        {new Date(n.createdAt).toLocaleString()}
-                      </div>
+                      <small className="text-muted">{new Date(n.createdAt).toLocaleString()}</small>
                       {n.message && <div className="mt-1">{n.message}</div>}
                     </div>
                     <button
                       className="btn btn-sm btn-outline-secondary ms-2"
                       onClick={() => removeNotification(n.id)}
-                      title="Dismiss"
                     >
                       Dismiss
                     </button>
@@ -753,22 +809,259 @@ export default function TeacherDashboard() {
                 ))}
               </ul>
             )}
-
-            <button onClick={clearAllNotifications} className="btn btn-primary mt-3">
+            <button className="btn btn-primary mt-3" onClick={clearAllNotifications}>
               Clear All Notifications
             </button>
           </div>
         </div>
       )}
 
-      {/* Toasts for dashboard actions */}
+      {/* Toasts & Chat */}
       <ToastContainer />
-
-      {/* Floating chat button with badge/pulse */}
-      <ChatFAB />
-
-      {/* 👇 The floating chat lives outside dashboard layout, fixed to screen */}
+      <ChatFAB unread={chatUnread} />
       <ChatContainer />
+
+      {/* Styles */}
+      <style>{`
+        /* Header */
+        .dashboard-header{
+          background: linear-gradient(135deg,#f8f9fa,#eef3ff);
+          border: 1px solid #e9ecef;
+        }
+
+        /* KPI */
+        .kpi-card{ border-radius:12px; }
+        .kpi-icon{ width:44px;height:44px;display:flex;align-items:center;justify-content:center;border-radius:10px;font-size:20px; }
+        .kpi-value{ font-size:22px;line-height:1; }
+        .kpi-label{ font-size:12px;color:#6c757d; }
+
+        /* Quick Actions Grid */
+        :root{
+          --qa-blue: linear-gradient(135deg,#6ea8fe,#1f6feb);
+          --qa-purple: linear-gradient(135deg,#c0b6f2,#845ef7);
+          --qa-teal: linear-gradient(135deg,#63e6be,#12b886);
+          --qa-green: linear-gradient(135deg,#8ce99a,#2f9e44);
+          --qa-amber: linear-gradient(135deg,#ffe066,#fab005);
+          --qa-pink: linear-gradient(135deg,#ffa8c7,#e64980);
+          --qa-indigo: linear-gradient(135deg,#91a7ff,#5c7cfa);
+          --qa-orange: linear-gradient(135deg,#ffc078,#f08c00);
+          --qa-cyan: linear-gradient(135deg,#99e9f2,#0c8599);
+          --qa-lime: linear-gradient(135deg,#a9e34b,#74b816);
+          --qa-rose: linear-gradient(135deg,#ffc9c9,#e03131);
+          --qa-slate: linear-gradient(135deg,#ced4da,#495057);
+        }
+        .qa-grid{
+          display:grid;
+          grid-template-columns: repeat(2, 1fr);
+          gap:12px;
+        }
+        @media(min-width:480px){ .qa-grid{ grid-template-columns: repeat(3, 1fr);} }
+        @media(min-width:992px){ .qa-grid{ grid-template-columns: repeat(6, 1fr);} }
+        .qa-tile{
+          position:relative;
+          border:0;
+          border-radius:14px;
+          color:#fff;
+          padding:16px 12px;
+          text-align:left;
+          min-height:92px;
+          box-shadow: 0 8px 20px rgba(0,0,0,.12);
+          transition: transform .15s ease, box-shadow .15s ease, filter .15s ease;
+          display:flex;
+          flex-direction:column;
+          justify-content:flex-end;
+          cursor:pointer;
+          outline:none;
+        }
+        .qa-tile:active{ transform:scale(.98); filter:brightness(.95); }
+        .qa-tile:hover{ box-shadow: 0 12px 28px rgba(0,0,0,.18); }
+        .qa-icon{
+          position:absolute; top:10px; right:10px;
+          background: rgba(255,255,255,.18);
+          width:36px; height:36px; border-radius:10px;
+          display:flex; align-items:center; justify-content:center;
+          font-size:18px;
+        }
+        .qa-label{ font-weight:600; font-size:14px; line-height:1.2; }
+
+        /* Timetable */
+        .today-card table tfoot{ display:none; }
+        .today-card .card-header{ background:#fff; }
+
+        /* Notifications Modal */
+        .notifications-overlay{ position:fixed; inset:0; background:rgba(0,0,0,.5); display:flex; align-items:center; justify-content:center; z-index:1055; }
+        .notifications-modal{ background:#fff; padding:16px; border-radius:12px; width:min(520px,92vw); box-shadow:0 10px 30px rgba(0,0,0,.25); }
+
+        /* Chat FAB */
+        .chat-fab{ position:fixed; right:16px; bottom:16px; z-index:1050; background:#0d6efd; color:#fff; border:0; border-radius:999px; padding:10px 16px; box-shadow:0 8px 20px rgba(13,110,253,.35); width:56px;height:56px; display:flex; align-items:center; justify-content:center; }
+        .chat-fab.pulse::after{ content:''; position:absolute; inset:0; border-radius:50%; box-shadow:0 0 0 0 rgba(37,117,252,.6); animation:chatPulse 1.6s infinite; z-index:0; pointer-events:none; }
+        @keyframes chatPulse{ 0%{ box-shadow:0 0 0 0 rgba(37,117,252,.6);} 70%{ box-shadow:0 0 0 18px rgba(37,117,252,0);} 100%{ box-shadow:0 0 0 0 rgba(37,117,252,0);} }
+        .chat-fab .badge{ position:absolute; top:-2px; right:-2px; box-shadow:0 0 0 2px #fff; }
+
+        @media (min-width:768px){ .kpi-value{ font-size:26px; } }
+
+        /* NEW: Recent Digital Diaries mini-feed */
+        .dd-mini-feed{
+          max-height: 280px;
+          overflow: auto;
+          padding: 8px;
+        }
+        .dd-mini-item{
+          width: 100%;
+          border: 0;
+          background: transparent;
+          padding: 10px 12px;
+          border-bottom: 1px solid #f1f3f5;
+        }
+        .dd-mini-item:last-child{ border-bottom: 0; }
+        .text-truncate-2{
+          display: -webkit-box;
+          -webkit-line-clamp: 2;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
+        }
+      `}</style>
     </div>
   );
+}
+
+/* ------------------------- Small subcomponents ------------------------- */
+function KpiCard({ icon, label, value, tone = "primary" }){
+  const toneClass = {
+    primary: "bg-primary-subtle text-primary",
+    warning: "bg-warning-subtle text-warning",
+    info: "bg-info-subtle text-info",
+    success: "bg-success-subtle text-success",
+  }[tone] || "bg-light text-dark";
+  return (
+    <div className="col-6 col-md-3">
+      <div className="card shadow-sm h-100 kpi-card">
+        <div className="card-body d-flex align-items-center">
+          <div className={`kpi-icon ${toneClass}`}><i className={`bi ${icon}`} /></div>
+          <div className="ms-3">
+            <div className="kpi-value">{value}</div>
+            <div className="kpi-label">{label}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Pill({ text }){
+  return <span className="badge bg-light text-dark border fw-normal me-1 mb-1">{text}</span>;
+}
+
+function normalizeDay(val){
+  if(!val) return "";
+  const s=String(val).trim().toLowerCase();
+  const map={ sun:"sunday", sunday:"sunday", mon:"monday", monday:"monday", tue:"tuesday", tues:"tuesday", tuesday:"tuesday", wed:"wednesday", weds:"wednesday", wednesday:"wednesday", thu:"thursday", thur:"thursday", thurs:"thursday", thursday:"thursday", fri:"friday", friday:"friday", sat:"saturday", saturday:"saturday" };
+  const norm=map[s]||s; return norm.charAt(0).toUpperCase()+norm.slice(1);
+}
+
+function ChatFAB({ unread }){
+  return (
+    <button
+      type="button"
+      onClick={() => window.dispatchEvent(new CustomEvent("chat:open-request"))}
+      className={`chat-fab ${unread>0? 'pulse':''}`}
+      title={unread>0? `${unread} unread` : 'Open chat'}
+      aria-label="Open chat"
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M21 15a4 4 0 0 1-4 4H7l-4 4V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z" />
+      </svg>
+      {unread>0 && (
+        <span className="badge bg-danger rounded-pill">{unread>99? '99+' : unread}</span>
+      )}
+    </button>
+  );
+}
+
+/* ------------------------- Helpers for Diary mini-feed ------------------------- */
+function normalizeStr(s = "") {
+  return String(s || "").trim().replace(/\s+/g, " ");
+}
+function attachmentsSignature(arr = []) {
+  if (!Array.isArray(arr)) return "";
+  const norm = arr.map(a => ({
+    n: a?.originalName || a?.name || "",
+    u: a?.fileUrl || a?.url || "",
+    m: a?.mimeType || a?.kind || "",
+    z: a?.size || 0,
+  }));
+  return JSON.stringify(norm.sort((a,b)=> (a.n+a.u).localeCompare(b.n+b.u)));
+}
+function groupDiaries(items = []) {
+  const byKey = new Map();
+  for (const d of items) {
+    // If already aggregated by backend with explicit targets, keep as-is
+    if (Array.isArray(d.targets) && d.targets.length) {
+      byKey.set(`targets-${d.id}`, { ...d, _sourceIds: [d.id] });
+      continue;
+    }
+    const key = [
+      (d.date || "").slice(0,10),
+      d.type,
+      normalizeStr(d.title),
+      normalizeStr(d.content),
+      d.subjectId ?? "",
+      attachmentsSignature(d.attachments),
+    ].join("|");
+
+    const entry = byKey.get(key);
+    const classObj = d.class || d.Class || null;
+    const sectionObj = d.section || d.Section || null;
+    const target = {
+      classId: d.classId || classObj?.id,
+      sectionId: d.sectionId || sectionObj?.id,
+      class: classObj || (d.classId ? { id: d.classId } : undefined),
+      section: sectionObj || (d.sectionId ? { id: d.sectionId } : undefined),
+    };
+
+    if (!entry) {
+      byKey.set(key, {
+        ...d,
+        targets: [target],
+        _sourceIds: [d.id],
+        _counts: {
+          views: (d.views?.length ?? d._counts?.views ?? d.seenCount ?? 0),
+          acks:  (d.acknowledgements?.length ?? d._counts?.acks ?? d.ackCount ?? 0),
+        },
+      });
+    } else {
+      const exists = entry.targets.some(t => t.classId === target.classId && t.sectionId === target.sectionId);
+      if (!exists) entry.targets.push(target);
+      entry._sourceIds.push(d.id);
+      entry._counts.views += (d.views?.length ?? d._counts?.views ?? d.seenCount ?? 0);
+      entry._counts.acks  += (d.acknowledgements?.length ?? d._counts?.acks ?? d.ackCount ?? 0);
+    }
+  }
+
+  return Array.from(byKey.values()).map(x => ({
+    ...x,
+    seenCount: x._counts?.views ?? x.seenCount,
+    ackCount:  x._counts?.acks ?? x.ackCount,
+  })).sort((a,b)=> new Date(b.createdAt || b.date) - new Date(a.createdAt || a.date));
+}
+
+function chipName(t){
+  const cls = t.class?.class_name || t.class?.name || t.classId || t.class?.id;
+  const sec = t.section?.section_name || t.section?.name || t.sectionId || t.section?.id;
+  return `Class ${cls} - Sec ${sec}`;
+}
+function singleChipName(d){
+  const cls = d.class?.class_name || d.class?.name || d.classId || d.Class?.class_name || d.Class?.name || d.Class?.id || d.class_id;
+  const sec = d.section?.section_name || d.section?.name || d.sectionId || d.Section?.section_name || d.Section?.name || d.Section?.id || d.section_id;
+  if (!cls && !sec) return "General";
+  return `Class ${cls} - Sec ${sec}`;
+}
+function formatWhen(dateStr){
+  try{
+    const m = moment(dateStr);
+    if (!m.isValid()) return "";
+    const diffH = moment().diff(m, "hours");
+    if (diffH < 24) return m.fromNow(); // e.g., "2 hours ago"
+    return m.format("DD MMM, HH:mm");
+  }catch{ return ""; }
 }

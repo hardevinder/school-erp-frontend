@@ -1,8 +1,11 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import api from "../api"; // Custom Axios instance
 import Swal from "sweetalert2";
 import "./InchargeAssignment.css";
 
+/** =============================
+ *  Utilities
+ *  ============================= */
 /** Safely escape HTML for SweetAlert custom HTML */
 const escapeHtml = (s = "") =>
   String(s)
@@ -36,6 +39,23 @@ const normalizeTeacher = (t) => {
   return id != null ? { id: String(id), name: String(name) } : null;
 };
 
+/** Debounce helper */
+const useDebounced = (value, delay = 250) => {
+  const [v, setV] = useState(value);
+  useEffect(() => {
+    const t = setTimeout(() => setV(value), delay);
+    return () => clearTimeout(t);
+  }, [value, delay]);
+  return v;
+};
+
+/** Pretty error toast */
+const toast = (title, text, icon = "error") =>
+  Swal.fire({ title, text, icon, timer: 2200, showConfirmButton: false });
+
+/** =============================
+ *  Component
+ *  ============================= */
 const InchargeAssignment = () => {
   // Data
   const [assignments, setAssignments] = useState([]);
@@ -43,53 +63,64 @@ const InchargeAssignment = () => {
   const [sections, setSections] = useState([]);
   const [teachers, setTeachers] = useState([]);
 
-  // Search filters
+  // UI state
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  // Search + paging
   const [searchClass, setSearchClass] = useState("");
   const [searchSection, setSearchSection] = useState("");
   const [searchTeacher, setSearchTeacher] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
+  const searchClassDeb = useDebounced(searchClass);
+  const searchSectionDeb = useDebounced(searchSection);
+  const searchTeacherDeb = useDebounced(searchTeacher);
 
   /* ============================
      1) Fetchers
   ============================ */
-  const fetchAssignments = async () => {
+  const fetchAssignments = useCallback(async () => {
     try {
       const res = await api.get("/incharges/all");
-      setAssignments(res.data || []);
-      return res.data || [];
+      const data = res.data || [];
+      setAssignments(Array.isArray(data) ? data : []);
+      return data;
     } catch (error) {
       console.error("Error fetching assignments:", error);
-      Swal.fire("Error", "Failed to fetch incharge assignments.", "error");
+      toast("Error", "Failed to fetch incharge assignments.");
       return [];
     }
-  };
+  }, []);
 
-  const fetchClasses = async () => {
+  const fetchClasses = useCallback(async () => {
     try {
       const res = await api.get("/classes");
       const data = res.data || [];
-      setClasses(data);
+      setClasses(Array.isArray(data) ? data : []);
       return data;
     } catch (error) {
       console.error("Error fetching classes:", error);
-      Swal.fire("Error", "Failed to fetch classes.", "error");
+      toast("Error", "Failed to fetch classes.");
       return [];
     }
-  };
+  }, []);
 
-  const fetchSections = async () => {
+  const fetchSections = useCallback(async () => {
     try {
       const res = await api.get("/sections");
       const data = res.data || [];
-      setSections(data);
+      setSections(Array.isArray(data) ? data : []);
       return data;
     } catch (error) {
       console.error("Error fetching sections:", error);
-      Swal.fire("Error", "Failed to fetch sections.", "error");
+      toast("Error", "Failed to fetch sections.");
       return [];
     }
-  };
+  }, []);
 
-  const fetchTeachers = async () => {
+  const fetchTeachers = useCallback(async () => {
     try {
       const res = await api.get("/teachers");
       const raw = Array.isArray(res.data) ? res.data : res.data?.teachers || [];
@@ -98,11 +129,21 @@ const InchargeAssignment = () => {
       return norm;
     } catch (error) {
       console.error("Error fetching teachers:", error);
-      Swal.fire("Error", "Failed to fetch teachers.", "error");
+      toast("Error", "Failed to fetch teachers.");
       setTeachers([]);
       return [];
     }
-  };
+  }, []);
+
+  const hydrateLists = useCallback(async () => {
+    const [a] = await Promise.all([
+      fetchAssignments(),
+      fetchClasses(),
+      fetchSections(),
+      fetchTeachers(),
+    ]);
+    return a;
+  }, [fetchAssignments, fetchClasses, fetchSections, fetchTeachers]);
 
   /* ============================
      2) CRUD
@@ -113,6 +154,14 @@ const InchargeAssignment = () => {
       fetchSections(),
       fetchTeachers(),
     ]);
+
+    if (!clsList.length || !secList.length || !tchList.length) {
+      return toast(
+        "Can't open form",
+        "Make sure Classes, Sections and Teachers exist first.",
+        "warning"
+      );
+    }
 
     const classOptions = clsList
       .map((c) => `<option value="${c.id}">${escapeHtml(c.class_name)}</option>`)
@@ -129,22 +178,27 @@ const InchargeAssignment = () => {
       width: "600px",
       html: `
         <div class="ia-form">
-          <label>Class:</label>
+          <label>Class</label>
           <select id="classId" class="form-field">${classOptions}</select>
 
-          <label>Section:</label>
+          <label>Section</label>
           <select id="sectionId" class="form-field">${sectionOptions}</select>
 
-          <label>Teacher:</label>
+          <label>Teacher</label>
           <select id="teacherId" class="form-field">${teacherOptions}</select>
         </div>
       `,
       showCancelButton: true,
       confirmButtonText: "Assign",
+      focusConfirm: false,
       preConfirm: () => {
         const classId = document.getElementById("classId").value;
         const sectionId = document.getElementById("sectionId").value;
         const teacherId = document.getElementById("teacherId").value;
+        if (!classId || !sectionId || !teacherId) {
+          Swal.showValidationMessage("All fields are required");
+          return false;
+        }
         return { classId, sectionId, teacherId };
       },
     }).then(async (result) => {
@@ -152,7 +206,7 @@ const InchargeAssignment = () => {
       try {
         await api.post("/incharges/assign", result.value);
         Swal.fire("Assigned!", "Incharge has been assigned successfully.", "success");
-        fetchAssignments();
+        await fetchAssignments();
       } catch (error) {
         if (error?.response?.status === 409) {
           const confirmDup = await Swal.fire({
@@ -167,10 +221,10 @@ const InchargeAssignment = () => {
           if (confirmDup.isConfirmed) {
             await api.post("/incharges/assign", { ...result.value, confirm: true });
             Swal.fire("Assigned!", "Incharge has been assigned successfully.", "success");
-            fetchAssignments();
+            await fetchAssignments();
           }
         } else {
-          Swal.fire("Error", "Failed to assign incharge.", "error");
+          toast("Error", "Failed to assign incharge.");
         }
       }
     });
@@ -183,6 +237,14 @@ const InchargeAssignment = () => {
       fetchTeachers(),
     ]);
 
+    if (!clsList.length || !secList.length || !tchList.length) {
+      return toast(
+        "Can't open form",
+        "Make sure Classes, Sections and Teachers exist first.",
+        "warning"
+      );
+    }
+
     const originalClassId = String(assignment.Class?.id ?? "");
     const originalSectionId = String(assignment.Section?.id ?? "");
     const originalTeacherId = String(
@@ -192,27 +254,27 @@ const InchargeAssignment = () => {
     const classOptions = clsList
       .map(
         (c) =>
-          `<option value="${c.id}" ${
-            String(c.id) === originalClassId ? "selected" : ""
-          }>${escapeHtml(c.class_name)}</option>`
+          `<option value="${c.id}" ${String(c.id) === originalClassId ? "selected" : ""}>${escapeHtml(
+            c.class_name
+          )}</option>`
       )
       .join("");
 
     const sectionOptions = secList
       .map(
         (s) =>
-          `<option value="${s.id}" ${
-            String(s.id) === originalSectionId ? "selected" : ""
-          }>${escapeHtml(s.section_name)}</option>`
+          `<option value="${s.id}" ${String(s.id) === originalSectionId ? "selected" : ""}>${escapeHtml(
+            s.section_name
+          )}</option>`
       )
       .join("");
 
     const teacherOptions = tchList
       .map(
         (t) =>
-          `<option value="${t.id}" ${
-            String(t.id) === originalTeacherId ? "selected" : ""
-          }>${escapeHtml(t.name)}</option>`
+          `<option value="${t.id}" ${String(t.id) === originalTeacherId ? "selected" : ""}>${escapeHtml(
+            t.name
+          )}</option>`
       )
       .join("");
 
@@ -221,13 +283,13 @@ const InchargeAssignment = () => {
       width: "600px",
       html: `
         <div class="ia-form">
-          <label>Class:</label>
+          <label>Class</label>
           <select id="classId" class="form-field">${classOptions}</select>
 
-          <label>Section:</label>
+          <label>Section</label>
           <select id="sectionId" class="form-field">${sectionOptions}</select>
 
-          <label>Teacher:</label>
+          <label>Teacher</label>
           <select id="teacherId" class="form-field">${teacherOptions}</select>
         </div>
       `,
@@ -245,6 +307,10 @@ const InchargeAssignment = () => {
         const classId = document.getElementById("classId").value;
         const sectionId = document.getElementById("sectionId").value;
         const teacherId = document.getElementById("teacherId").value;
+        if (!classId || !sectionId || !teacherId) {
+          Swal.showValidationMessage("All fields are required");
+          return false;
+        }
         return { classId, sectionId, teacherId };
       },
     }).then(async (result) => {
@@ -252,9 +318,9 @@ const InchargeAssignment = () => {
       try {
         await api.put(`/incharges/update/${assignment.id}`, result.value);
         Swal.fire("Updated!", "Incharge assignment has been updated.", "success");
-        fetchAssignments();
+        await fetchAssignments();
       } catch (error) {
-        Swal.fire("Error", "Failed to update incharge assignment.", "error");
+        toast("Error", "Failed to update incharge assignment.");
       }
     });
   };
@@ -273,9 +339,9 @@ const InchargeAssignment = () => {
       try {
         await api.delete(`/incharges/remove/${assignment.id}`);
         Swal.fire("Removed!", "Incharge has been removed successfully.", "success");
-        fetchAssignments();
+        await fetchAssignments();
       } catch (error) {
-        Swal.fire("Error", "Failed to remove incharge.", "error");
+        toast("Error", "Failed to remove incharge.");
       }
     });
   };
@@ -284,168 +350,264 @@ const InchargeAssignment = () => {
      3) Initial load
   ============================ */
   useEffect(() => {
-    fetchAssignments();
-    fetchClasses();
-    fetchSections();
-    fetchTeachers();
-  }, []);
+    (async () => {
+      setLoading(true);
+      await hydrateLists();
+      setLoading(false);
+    })();
+  }, [hydrateLists]);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await hydrateLists();
+    setRefreshing(false);
+  };
 
   /* ============================
-     4) Derived: filtered view
+     4) Derived: filtered + paginated view
   ============================ */
   const filteredAssignments = useMemo(() => {
-    const qClass = searchClass.trim().toLowerCase();
-    const qSection = searchSection.trim().toLowerCase();
-    const qTeacher = searchTeacher.trim().toLowerCase();
+    const qClass = searchClassDeb.trim().toLowerCase();
+    const qSection = searchSectionDeb.trim().toLowerCase();
+    const qTeacher = searchTeacherDeb.trim().toLowerCase();
 
-    return assignments.filter((a) => {
+    const out = assignments.filter((a) => {
       const c = a.Class?.class_name?.toLowerCase() || "";
       const s = a.Section?.section_name?.toLowerCase() || "";
       const t = a.Teacher?.name?.toLowerCase() || "";
       return c.includes(qClass) && s.includes(qSection) && t.includes(qTeacher);
     });
-  }, [assignments, searchClass, searchSection, searchTeacher]);
+
+    // Reset to page 1 if the current page would be empty after filtering
+    const totalPages = Math.max(1, Math.ceil(out.length / pageSize));
+    if (page > totalPages) setPage(1);
+
+    return out;
+  }, [assignments, searchClassDeb, searchSectionDeb, searchTeacherDeb, page, pageSize]);
+
+  const pagedAssignments = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return filteredAssignments.slice(start, start + pageSize);
+  }, [filteredAssignments, page, pageSize]);
+
+  const total = filteredAssignments.length;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   /* ============================
      5) Render (responsive)
   ============================ */
   return (
-    <div className="container mt-4">
-      <h1>Incharge Assignment Management</h1>
+    <div className="container mt-4 incharge-root">
+      <div className="d-flex align-items-center justify-content-between gap-2 flex-wrap mb-3">
+        <div>
+          <h1 className="h4 mb-0">Incharge Assignment</h1>
+          <small className="text-muted">Assign class-section incharges and manage quickly.</small>
+        </div>
+        <div className="d-flex gap-2">
+          <button className="btn btn-outline-secondary" onClick={handleRefresh} disabled={refreshing || loading}>
+            {refreshing ? "Refreshing…" : "Refresh"}
+          </button>
+          <button className="btn btn-success" onClick={handleAdd} disabled={loading}>
+            Assign Incharge
+          </button>
+        </div>
+      </div>
 
       {/* Filters */}
-      <div className="row g-2 mb-3">
-        <div className="col-md-4">
-          <input
-            type="text"
-            className="form-control"
-            placeholder="Search by Class"
-            value={searchClass}
-            onChange={(e) => setSearchClass(e.target.value)}
-            aria-label="Search by Class"
-          />
-        </div>
-        <div className="col-md-4">
-          <input
-            type="text"
-            className="form-control"
-            placeholder="Search by Section"
-            value={searchSection}
-            onChange={(e) => setSearchSection(e.target.value)}
-            aria-label="Search by Section"
-          />
-        </div>
-        <div className="col-md-4">
-          <input
-            type="text"
-            className="form-control"
-            placeholder="Search by Teacher"
-            value={searchTeacher}
-            onChange={(e) => setSearchTeacher(e.target.value)}
-            aria-label="Search by Teacher"
-          />
-        </div>
-      </div>
-
-      <button className="btn btn-success mb-3" onClick={handleAdd}>
-        Assign Incharge
-      </button>
-
-      {/* Desktop/tablet: sticky-header table */}
-      <div className="table-responsive d-none d-md-block">
-        <table className="table table-striped align-middle">
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>Class</th>
-              <th>Section</th>
-              <th className="wrap">Incharge</th>
-              <th style={{ width: 180 }}>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredAssignments.length > 0 ? (
-              filteredAssignments.map((assignment, index) => (
-                <tr key={assignment.id}>
-                  <td>{index + 1}</td>
-                  <td>{assignment.Class?.class_name || "Unknown"}</td>
-                  <td>{assignment.Section?.section_name || "Unknown"}</td>
-                  <td className="wrap">
-                    <span
-                      className="truncate"
-                      title={assignment.Teacher?.name || "Unknown"}
+      <div className="card shadow-sm border-0 mb-3">
+        <div className="card-body">
+          <div className="row g-2 align-items-end">
+            <div className="col-md-3">
+              <label className="form-label">Class</label>
+              <input
+                type="text"
+                className="form-control"
+                placeholder="Search by Class"
+                value={searchClass}
+                onChange={(e) => setSearchClass(e.target.value)}
+                aria-label="Search by Class"
+              />
+            </div>
+            <div className="col-md-3">
+              <label className="form-label">Section</label>
+              <input
+                type="text"
+                className="form-control"
+                placeholder="Search by Section"
+                value={searchSection}
+                onChange={(e) => setSearchSection(e.target.value)}
+                aria-label="Search by Section"
+              />
+            </div>
+            <div className="col-md-3">
+              <label className="form-label">Teacher</label>
+              <input
+                type="text"
+                className="form-control"
+                placeholder="Search by Teacher"
+                value={searchTeacher}
+                onChange={(e) => setSearchTeacher(e.target.value)}
+                aria-label="Search by Teacher"
+              />
+            </div>
+            <div className="col-md-3">
+              <div className="d-flex gap-2">
+                <div className="flex-grow-1">
+                  <label className="form-label">Page Size</label>
+                  <select
+                    className="form-select"
+                    value={pageSize}
+                    onChange={(e) => {
+                      setPageSize(Number(e.target.value));
+                      setPage(1);
+                    }}
+                  >
+                    {[5, 10, 20, 50, 100].map((n) => (
+                      <option key={n} value={n}>{n}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex-grow-1">
+                  <label className="form-label">Page</label>
+                  <div className="d-flex gap-2">
+                    <button
+                      className="btn btn-outline-secondary w-100"
+                      onClick={() => setPage((p) => Math.max(1, p - 1))}
+                      disabled={page === 1}
                     >
-                      {assignment.Teacher?.name || "Unknown"}
-                    </span>
-                  </td>
-                  <td className="actions-cell">
-                    <div className="actions-stack">
-                      <button
-                        className="btn btn-primary btn-sm"
-                        onClick={() => handleEdit(assignment)}
-                      >
-                        Edit
-                      </button>
-                      <button
-                        className="btn btn-danger btn-sm"
-                        onClick={() => handleDelete(assignment)}
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))
-            ) : (
-              <tr>
-                <td colSpan="5" className="text-center">
-                  No incharge assignments found.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Mobile: card list */}
-      <div className="d-md-none">
-        {filteredAssignments.length > 0 ? (
-          filteredAssignments.map((assignment, index) => (
-            <div key={assignment.id} className="ia-card">
-              <p className="index-line">#{index + 1}</p>
-              <div className="kv">
-                <span className="k">Class:</span>
-                <span className="v">{assignment.Class?.class_name || "Unknown"}</span>
-              </div>
-              <div className="kv">
-                <span className="k">Section:</span>
-                <span className="v">{assignment.Section?.section_name || "Unknown"}</span>
-              </div>
-              <div className="kv">
-                <span className="k">Incharge:</span>
-                <span className="v">{assignment.Teacher?.name || "Unknown"}</span>
-              </div>
-
-              <div className="actions-stack mt-2">
-                <button
-                  className="btn btn-primary btn-sm"
-                  onClick={() => handleEdit(assignment)}
-                >
-                  Edit
-                </button>
-                <button
-                  className="btn btn-danger btn-sm"
-                  onClick={() => handleDelete(assignment)}
-                >
-                  Remove
-                </button>
+                      Prev
+                    </button>
+                    <button
+                      className="btn btn-outline-secondary w-100"
+                      onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                      disabled={page === totalPages}
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
-          ))
-        ) : (
-          <p className="text-center">No incharge assignments found.</p>
-        )}
+          </div>
+        </div>
       </div>
+
+      {loading ? (
+        <div className="card border-0 shadow-sm">
+          <div className="card-body">
+            <div className="placeholder-wave">
+              <div className="placeholder col-12 mb-2" style={{ height: 16 }} />
+              <div className="placeholder col-12 mb-2" style={{ height: 16 }} />
+              <div className="placeholder col-10" style={{ height: 16 }} />
+            </div>
+          </div>
+        </div>
+      ) : (
+        <>
+          {/* Desktop/tablet: sticky-header table */}
+          <div className="table-responsive d-none d-md-block">
+            <table className="table table-hover align-middle table-bordered table-striped">
+              <thead className="table-light sticky-top">
+                <tr>
+                  <th style={{ width: 60 }}>#</th>
+                  <th>Class</th>
+                  <th>Section</th>
+                  <th className="wrap">Incharge</th>
+                  <th style={{ width: 200 }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pagedAssignments.length > 0 ? (
+                  pagedAssignments.map((assignment, index) => (
+                    <tr key={assignment.id}>
+                      <td>
+                        <span className="badge bg-secondary">{(page - 1) * pageSize + index + 1}</span>
+                      </td>
+                      <td>
+                        <span className="fw-semibold">{assignment.Class?.class_name || "Unknown"}</span>
+                      </td>
+                      <td>
+                        <span className="badge bg-info-subtle text-info-emphasis border border-info rounded-pill px-3 py-2">
+                          {assignment.Section?.section_name || "Unknown"}
+                        </span>
+                      </td>
+                      <td className="wrap">
+                        <span className="truncate" title={assignment.Teacher?.name || "Unknown"}>
+                          {assignment.Teacher?.name || "Unknown"}
+                        </span>
+                      </td>
+                      <td className="actions-cell">
+                        <div className="d-flex gap-2 flex-wrap">
+                          <button
+                            className="btn btn-primary btn-sm"
+                            onClick={() => handleEdit(assignment)}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            className="btn btn-outline-danger btn-sm"
+                            onClick={() => handleDelete(assignment)}
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan="5" className="text-center py-4 text-muted">
+                      No incharge assignments found.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Mobile: card list */}
+          <div className="d-md-none">
+            {pagedAssignments.length > 0 ? (
+              pagedAssignments.map((assignment, index) => (
+                <div key={assignment.id} className="ia-card">
+                  <p className="index-line">#{(page - 1) * pageSize + index + 1}</p>
+                  <div className="kv">
+                    <span className="k">Class</span>
+                    <span className="v">{assignment.Class?.class_name || "Unknown"}</span>
+                  </div>
+                  <div className="kv">
+                    <span className="k">Section</span>
+                    <span className="v">{assignment.Section?.section_name || "Unknown"}</span>
+                  </div>
+                  <div className="kv">
+                    <span className="k">Incharge</span>
+                    <span className="v">{assignment.Teacher?.name || "Unknown"}</span>
+                  </div>
+
+                  <div className="actions-stack mt-2">
+                    <button className="btn btn-primary btn-sm" onClick={() => handleEdit(assignment)}>
+                      Edit
+                    </button>
+                    <button className="btn btn-outline-danger btn-sm" onClick={() => handleDelete(assignment)}>
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <p className="text-center text-muted">No incharge assignments found.</p>
+            )}
+          </div>
+
+          {/* Footer: results info */}
+          <div className="d-flex justify-content-between align-items-center mt-3">
+            <small className="text-muted">
+              Showing <strong>{pagedAssignments.length}</strong> of <strong>{total}</strong> result{total === 1 ? "" : "s"}
+            </small>
+            <small className="text-muted">Page {page} of {totalPages}</small>
+          </div>
+        </>
+      )}
     </div>
   );
 };

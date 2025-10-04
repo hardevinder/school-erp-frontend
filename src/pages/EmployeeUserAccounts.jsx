@@ -1,4 +1,5 @@
-import React, { useEffect, useState, useMemo } from "react";
+// File: src/pages/EmployeeUserAccounts.jsx
+import React, { useEffect, useMemo, useState, useCallback } from "react";
 import api from "../api";
 import Swal from "sweetalert2";
 import withReactContent from "sweetalert2-react-content";
@@ -23,67 +24,107 @@ const getRoleFlags = () => {
   };
 };
 
+const pageLimitDefault = 10;
+
 const EmployeeUserAccounts = () => {
   const { isAdmin, isSuperadmin, isHR } = getRoleFlags();
 
+  // data
   const [users, setUsers] = useState([]);
   const [departments, setDepartments] = useState([]);
   const [allEmployees, setAllEmployees] = useState([]);
+
+  // ui state
   const [selectedDept, setSelectedDept] = useState("");
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(pageLimitDefault);
   const [totalPages, setTotalPages] = useState(1);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
+  const [loadingFilters, setLoadingFilters] = useState(true);
+  const [loadingUsers, setLoadingUsers] = useState(true);
 
   const existingUsernames = useMemo(
     () => users.map((u) => String(u.username)),
     [users]
   );
 
+  // Debounce search (nice UX)
   useEffect(() => {
-    const loadFiltersAndEmployees = async () => {
-      try {
-        const { data: deptData } = await api.get("/departments");
-        if (Array.isArray(deptData)) {
-          setDepartments(deptData);
-        } else if (Array.isArray(deptData.departments)) {
-          setDepartments(deptData.departments);
-        }
+    const t = setTimeout(() => setDebouncedSearch(search.trim().toLowerCase()), 250);
+    return () => clearTimeout(t);
+  }, [search]);
 
-        const { data: empData } = await api.get("/employees");
-        const filtered = empData.employees?.filter((e) => !e.userAccount) || [];
-        setAllEmployees(filtered);
-      } catch (err) {
-        console.error(err);
-        Swal.fire("Error", "Failed to load filters or employees.", "error");
-      }
-    };
-    loadFiltersAndEmployees();
-  }, []);
+  // Department map for quick lookup
+  const deptById = useMemo(() => {
+    const m = new Map();
+    (departments || []).forEach((d) => m.set(d.id, d));
+    return m;
+  }, [departments]);
 
-  const fetchUsers = async () => {
+  const loadFiltersAndEmployees = useCallback(async () => {
+    setLoadingFilters(true);
     try {
-      const { data } = await api.get("/users/employees", {
-        params: { department_id: selectedDept, page, limit: 10 },
-      });
-      setUsers(
-        (data.employees || []).map((u) => ({
-          ...u,
-          status: u.status || "active",
-          roles: Array.isArray(u.roles) ? u.roles.map((r) => String(r).toLowerCase()) : [],
-        }))
-      );
-      setTotalPages(data.totalPages || 1);
+      // Departments
+      const { data: deptData } = await api.get("/departments");
+      const deptArr = Array.isArray(deptData)
+        ? deptData
+        : Array.isArray(deptData?.departments)
+        ? deptData.departments
+        : [];
+      setDepartments(deptArr);
+
+      // Employees for drop-down (only those without user accounts)
+      const { data: empData } = await api.get("/employees");
+      const employees = Array.isArray(empData?.employees) ? empData.employees : [];
+      const hasAccount = (e) => Boolean(e.user_id || e.userAccount?.id);
+      const filtered = employees
+        .filter((e) => !hasAccount(e))
+        .filter((e) => (e.status ? String(e.status).toLowerCase() !== "disabled" : true))
+        .sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
+      setAllEmployees(filtered);
     } catch (err) {
       console.error(err);
-      Swal.fire("Error", "Failed to fetch employees.", "error");
+      Swal.fire("Error", "Failed to load departments or employees for the drop-down.", "error");
+    } finally {
+      setLoadingFilters(false);
     }
-  };
+  }, []);
 
+  const fetchUsers = useCallback(async () => {
+    setLoadingUsers(true);
+    try {
+      const { data } = await api.get("/users/employees", {
+        params: { department_id: selectedDept, page, limit },
+      });
+
+      const normalized = (data?.employees || []).map((u) => ({
+        ...u,
+        status: u.status || "active",
+        roles: Array.isArray(u.roles) ? u.roles.map((r) => String(r).toLowerCase()) : [],
+      }));
+
+      setUsers(normalized);
+      setTotalPages(Number(data?.totalPages) || 1);
+    } catch (err) {
+      console.error(err);
+      Swal.fire("Error", "Failed to fetch employee user accounts.", "error");
+    } finally {
+      setLoadingUsers(false);
+    }
+  }, [selectedDept, page, limit]);
+
+  // initial load
+  useEffect(() => {
+    loadFiltersAndEmployees();
+  }, [loadFiltersAndEmployees]);
+
+  // users fetch on filters/page/limit change
   useEffect(() => {
     fetchUsers();
-  }, [selectedDept, page]);
+  }, [fetchUsers]);
 
   const handleDisable = async (userId, userName) => {
     const { value: reason } = await MySwal.fire({
@@ -139,8 +180,9 @@ const EmployeeUserAccounts = () => {
       }
 
       const resp = await api.post("/users/register", payload);
-      const backendId = resp.data.user?.id || resp.data.id;
+      const backendId = resp.data?.user?.id || resp.data?.id;
 
+      // Firestore sync (best-effort)
       try {
         await addDoc(collection(firestore, "users"), {
           ...payload,
@@ -183,122 +225,256 @@ const EmployeeUserAccounts = () => {
     }
   };
 
-  const filteredUsers = useMemo(
-    () =>
-      users
-        .filter((u) =>
-          `${u.name} ${u.username} ${u.email}`.toLowerCase().includes(search.toLowerCase())
-        )
-        .sort((a, b) => a.name.localeCompare(b.name)),
-    [users, search]
-  );
+  const filteredUsers = useMemo(() => {
+    const q = debouncedSearch;
+    return users
+      .filter((u) => `${u.name} ${u.username} ${u.email}`.toLowerCase().includes(q))
+      .sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
+  }, [users, debouncedSearch]);
+
+  const canManage = isHR || isAdmin || isSuperadmin;
 
   return (
-    <div className="container mt-4">
-      <div className="d-flex justify-content-between align-items-center mb-3">
-        <h1 className="text-primary">Employee User Accounts</h1>
-        <button
-          className="btn btn-success"
-          onClick={() => {
-            setShowAddModal(true);
-            setEditingUser(null);
-          }}
-          disabled={!isHR && !isAdmin && !isSuperadmin}
-        >
-          + Add Employee
-        </button>
-      </div>
-
-      <div className="d-flex gap-2 mb-3">
-        <select
-          className="form-select"
-          value={selectedDept}
-          onChange={(e) => {
-            setSelectedDept(e.target.value);
-            setPage(1);
-          }}
-        >
-          <option value="">All Departments</option>
-          {departments.map((d) => (
-            <option key={d.id} value={d.id}>{d.name}</option>
-          ))}
-        </select>
-        <input
-          type="text"
-          className="form-control"
-          placeholder="Search employees..."
-          style={{ maxWidth: "300px" }}
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-      </div>
-
-      <table className="table table-hover shadow-sm">
-        <thead className="table-dark">
-          <tr>
-            <th>#</th>
-            <th>Name</th>
-            <th>Username</th>
-            <th>Email</th>
-            <th>Department</th>
-            <th>Status</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {filteredUsers.map((u, idx) => (
-            <tr key={u.id} className={u.status === "disabled" ? "table-warning" : ""}>
-              <td>{(page - 1) * 10 + idx + 1}</td>
-              <td>{u.name}</td>
-              <td>{u.username}</td>
-              <td>{u.email || "N/A"}</td>
-              <td>{departments.find((d) => d.id === u.department_id)?.name || "N/A"}</td>
-              <td>
-                <span className={`badge ${u.status === "active" ? "bg-success" : "bg-warning"}`}>{u.status}</span>
-              </td>
-              <td>
-                <button
-                  className="btn btn-sm btn-primary me-1"
-                  onClick={() => {
-                    setEditingUser(u);
-                    setShowAddModal(true);
-                  }}
-                  disabled={!isHR && !isAdmin && !isSuperadmin}
-                >
-                  <i className="bi bi-pencil"></i> Edit
-                </button>
-
-                {u.status === "active" ? (
-                  <button
-                    className="btn btn-sm btn-warning"
-                    onClick={() => handleDisable(u.id, u.name)}
-                    disabled={!isHR && !isAdmin && !isSuperadmin}
-                  >
-                    <i className="bi bi-lock"></i> Disable
-                  </button>
-                ) : (
-                  <button
-                    className="btn btn-sm btn-success"
-                    onClick={() => handleEnable(u.id, u.name)}
-                    disabled={!isHR && !isAdmin && !isSuperadmin}
-                  >
-                    <i className="bi bi-unlock"></i> Enable
-                  </button>
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-
-      <div className="d-flex justify-content-between align-items-center">
-        <div>
-          <button className="btn btn-sm btn-secondary me-2" disabled={page <= 1} onClick={() => setPage(p => p - 1)}>Prev</button>
-          <button className="btn btn-sm btn-secondary" disabled={page >= totalPages} onClick={() => setPage(p => p + 1)}>Next</button>
+    <div className="container my-4">
+      {/* Header Card */}
+      <div className="card shadow-sm border-0 mb-3">
+        <div className="card-body d-flex flex-wrap justify-content-between align-items-center gap-2">
+          <div>
+            <h2 className="h4 mb-1 d-flex align-items-center gap-2">
+              <i className="bi bi-people-fill"></i>
+              Employee User Accounts
+            </h2>
+            <div className="text-muted small">
+              Manage login access for staff. Create accounts only for employees who don’t already have one.
+            </div>
+          </div>
+          <button
+            className="btn btn-success d-flex align-items-center gap-2"
+            onClick={() => {
+              setShowAddModal(true);
+              setEditingUser(null);
+            }}
+            disabled={!canManage || loadingFilters}
+          >
+            <i className="bi bi-person-plus-fill"></i>
+            Add Employee
+          </button>
         </div>
-        <span>Page {page} of {totalPages}</span>
       </div>
 
+      {/* Toolbar */}
+      <div className="card shadow-sm border-0 mb-3">
+        <div className="card-body d-flex flex-wrap gap-2 align-items-center">
+          <div className="d-flex align-items-center gap-2">
+            <label className="text-muted small mb-0">Department</label>
+            <select
+              className="form-select"
+              value={selectedDept}
+              onChange={(e) => {
+                setSelectedDept(e.target.value);
+                setPage(1);
+              }}
+              style={{ minWidth: 220 }}
+              disabled={loadingFilters}
+            >
+              <option value="">All Departments</option>
+              {departments.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="ms-auto d-flex flex-wrap gap-2">
+            <div className="input-group" style={{ minWidth: 280 }}>
+              <span className="input-group-text border-0 bg-light">
+                <i className="bi bi-search"></i>
+              </span>
+              <input
+                type="text"
+                className="form-control border-0 bg-light"
+                placeholder="Search name, username, email…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+
+            <select
+              className="form-select"
+              value={limit}
+              onChange={(e) => {
+                setLimit(Number(e.target.value) || pageLimitDefault);
+                setPage(1);
+              }}
+              title="Rows per page"
+              style={{ width: 120 }}
+            >
+              {[10, 20, 50].map((n) => (
+                <option key={n} value={n}>
+                  {n} / page
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {/* Table */}
+      <div className="card shadow-sm border-0">
+        <div className="table-responsive" style={{ maxHeight: "62vh" }}>
+          <table className="table align-middle table-hover mb-0">
+            <thead className="table-dark" style={{ position: "sticky", top: 0, zIndex: 1 }}>
+              <tr>
+                <th style={{ width: 60 }}>#</th>
+                <th>Name</th>
+                <th>Username</th>
+                <th>Email</th>
+                <th>Department</th>
+                <th style={{ width: 140 }}>Status</th>
+                <th style={{ width: 220 }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loadingUsers ? (
+                // Loading rows
+                [...Array(5)].map((_, i) => (
+                  <tr key={`skeleton-${i}`}>
+                    <td colSpan={7}>
+                      <div className="placeholder-glow">
+                        <span className="placeholder col-12" style={{ height: 18 }}></span>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              ) : filteredUsers.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="text-center py-5">
+                    <div className="text-muted">
+                      <i className="bi bi-inboxes"></i> No users found for the selected filters.
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                filteredUsers.map((u, idx) => (
+                  <tr key={u.id} className={u.status === "disabled" ? "table-warning" : ""}>
+                    <td>{(page - 1) * limit + idx + 1}</td>
+                    <td>
+                      <div className="d-flex align-items-center gap-2">
+                        <div
+                          className="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center"
+                          style={{ width: 36, height: 36, fontWeight: 600 }}
+                          title={u.name}
+                        >
+                          {String(u.name || "?")
+                            .split(" ")
+                            .map((p) => p[0])
+                            .join("")
+                            .slice(0, 2)
+                            .toUpperCase()}
+                        </div>
+                        <div>
+                          <div className="fw-semibold">{u.name}</div>
+                          {/* roles chip(s) */}
+                          {Array.isArray(u.roles) && u.roles.length > 0 && (
+                            <div className="small">
+                              {u.roles.map((r) => (
+                                <span key={r} className="badge text-bg-light border me-1">
+                                  <i className="bi bi-shield-lock me-1"></i>
+                                  {r}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="text-muted">{u.username}</td>
+                    <td className="text-muted">{u.email || "N/A"}</td>
+                    <td>{deptById.get(u.department_id)?.name || "N/A"}</td>
+                    <td>
+                      <span
+                        className={`badge rounded-pill ${
+                          u.status === "active" ? "text-bg-success" : "text-bg-warning"
+                        }`}
+                      >
+                        {u.status}
+                      </span>
+                    </td>
+                    <td>
+                      <div className="d-flex flex-wrap gap-2">
+                        <button
+                          className="btn btn-sm btn-primary"
+                          onClick={() => {
+                            setEditingUser(u);
+                            setShowAddModal(true);
+                          }}
+                          disabled={!canManage}
+                          title="Edit user"
+                        >
+                          <i className="bi bi-pencil"></i> Edit
+                        </button>
+
+                        {u.status === "active" ? (
+                          <button
+                            className="btn btn-sm btn-outline-warning"
+                            onClick={() => handleDisable(u.id, u.name)}
+                            disabled={!canManage}
+                            title="Disable user"
+                          >
+                            <i className="bi bi-lock"></i> Disable
+                          </button>
+                        ) : (
+                          <button
+                            className="btn btn-sm btn-outline-success"
+                            onClick={() => handleEnable(u.id, u.name)}
+                            disabled={!canManage}
+                            title="Enable user"
+                          >
+                            <i className="bi bi-unlock"></i> Enable
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Footer / Pagination */}
+        <div className="card-footer d-flex flex-wrap justify-content-between align-items-center gap-2">
+          <div className="text-muted small">
+            Showing{" "}
+            {loadingUsers
+              ? "—"
+              : `${(page - 1) * limit + 1}–${Math.min(page * limit, filteredUsers.length + (page - 1) * limit)}`
+            }
+          </div>
+          <div className="d-flex align-items-center gap-2">
+            <button
+              className="btn btn-sm btn-secondary"
+              disabled={page <= 1 || loadingUsers}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+            >
+              <i className="bi bi-chevron-left"></i> Prev
+            </button>
+            <span className="small">
+              Page {page} of {totalPages}
+            </span>
+            <button
+              className="btn btn-sm btn-secondary"
+              disabled={page >= totalPages || loadingUsers}
+              onClick={() => setPage((p) => p + 1)}
+            >
+              Next <i className="bi bi-chevron-right"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Modal */}
       <AddEmployeeModal
         show={showAddModal}
         onHide={() => {

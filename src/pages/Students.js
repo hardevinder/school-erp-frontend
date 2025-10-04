@@ -1,5 +1,5 @@
 // src/pages/Students.js
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import api from "../api";
 import Swal from "sweetalert2";
 import "./Students.css";
@@ -76,6 +76,26 @@ const Students = () => {
   const [concessions, setConcessions] = useState([]);
   const [sessions, setSessions] = useState([]);
   const [transportations, setTransportations] = useState([]);
+
+  // ---- transport helpers (Village — Cost) ----
+  const transportById = useMemo(() => {
+    const m = new Map();
+    transportations.forEach((t) => m.set(String(t.id), t));
+    return m;
+  }, [transportations]);
+
+  const formatTransport = (t) => {
+    if (!t) return "-";
+    const vill = t.Villages || t.village || t.villages || "";
+    const cost = t.Cost ?? t.cost;
+    return vill ? `${vill}${cost ? ` — ₹${cost}` : ""}` : (cost ? `₹${cost}` : "-");
+  };
+
+  const formatTransportById = (id) => {
+    if (!id && id !== 0) return "-";
+    const t = transportById.get(String(id));
+    return formatTransport(t);
+  };
 
   // UI state
   const [search, setSearch] = useState("");
@@ -258,8 +278,13 @@ const Students = () => {
       .map((ss) => `<option value="${ss.id}" ${ss.id === s.session_id ? "selected" : ""}>${ss.name}</option>`)
       .join("")}`;
 
+    // ✨ Transport dropdown now shows "Villages — ₹Cost"
     const transportOptions = `<option value="">No Transport</option>${transportations
-      .map((t) => `<option value="${t.id}" ${t.id === s.route_id ? "selected" : ""}>${(t.RouteName || t.Route || ("Route " + t.id))}${t.Cost ? ` — ₹${t.Cost}` : ""}</option>`)
+      .map((t) => {
+        const label = (t?.Villages || "").replace(/"/g, "&quot;");
+        const cost = t?.Cost ?? "";
+        return `<option value="${t.id}" ${t.id === s.route_id ? "selected" : ""}>${label}${cost ? ` — ₹${cost}` : ""}</option>`;
+      })
       .join("")}`;
 
     const html = `
@@ -380,17 +405,17 @@ const Students = () => {
         </div>
 
         <div>
-          <label>Transport Route / Village</label>
+          <label>Transport (Village — Cost)</label>
           <select id="f_route_id" class="form-field form-select">
             ${transportOptions}
           </select>
-          <small style="color:#666">Select transport route/village (optional). The selected route's id will be saved for the student.</small>
+          <small style="color:#666">Select village/stop (optional). The selected transport's id will be saved.</small>
         </div>
 
         <div>
           <label>Visible</label>
           <select id="f_visible" class="form-field form-select">
-            <option value="1" ${s.visible ? "selected" : ""}>Yes</option>
+            <option value="1" ${s.visible ? "selected" : "selected"}>Yes</option>
             <option value="0" ${!s.visible ? "selected" : ""}>No</option>
           </select>
         </div>
@@ -649,7 +674,7 @@ const Students = () => {
   const handleExport = async () => {
     try {
       const resp = await api.get("/students/export-students", { responseType: "blob" });
-      const blob = new Blob([resp.data], { type: resp.headers["content-type"] || "application/octet-stream" });
+    const blob = new Blob([resp.data], { type: resp.headers["content-type"] || "application/octet-stream" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -913,7 +938,7 @@ const Students = () => {
             <th>Aadhaar</th>
             <th>Type</th>
             {isAdminOrSuperAdmin && <th>Concession</th>}
-            <th>Route</th>
+            <th>Transport (Village — Cost)</th>
             <th>Actions</th>
           </tr>
         </thead>
@@ -981,7 +1006,9 @@ const Students = () => {
                     <td onClick={() => handleView(stu)}>{stu.aadhaar_number || "-"}</td>
                     <td onClick={() => handleView(stu)}>{stu.admission_type}</td>
                     {isAdminOrSuperAdmin && <td onClick={() => handleView(stu)}>{stu.concession_name || "-"}</td>}
-                    <td onClick={() => handleView(stu)}>{stu.route_name || (stu.route_id ? `ID:${stu.route_id}` : "-")}</td>
+                    <td onClick={() => handleView(stu)}>
+                      {formatTransportById(stu.route_id)}
+                    </td>
                     <td onClick={(e) => e.stopPropagation()}>
                       {isAdminOrSuperAdmin && (
                         <>
@@ -1064,7 +1091,8 @@ const Students = () => {
       fields.push({ label: 'Concession', value: student.concession_name || '-' });
     }
 
-    fields.push({ label: 'Transport Route', value: student.route_name || (student.route_id ? `ID:${student.route_id}` : '-') });
+    // ✨ Details popup: show Village — Cost
+    fields.push({ label: 'Transport', value: formatTransportById(student.route_id) });
     fields.push({ label: 'Status', value: student.status || '-' });
     fields.push({ label: 'Address', value: student.address || '-' });
 

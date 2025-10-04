@@ -19,6 +19,33 @@ function useIsMobile() {
   return mobile;
 }
 
+// Enhanced colorful palette
+const palette = [
+  "#ff3b30",
+  "#3b82f6",
+  "#22c55e",
+  "#f59e0b",
+  "#a855f7",
+  "#14b8a6",
+  "#84cc16",
+  "#ec4899",
+  "#10b981",
+  "#f97316",
+  "#8b5cf6",
+  "#06b6d4",
+];
+
+const sidebarGradients = [
+  "linear-gradient(135deg, #6366f1 0%, #3b82f6 100%)",
+  "linear-gradient(135deg, #22c55e 0%, #16a34a 100%)",
+  "linear-gradient(135deg, #f59e0b 0%, #d97706 100%)",
+  "linear-gradient(135deg, #06b6d4 0%, #0891b2 100%)",
+  "linear-gradient(135deg, #ef4444 0%, #dc2626 100%)",
+  "linear-gradient(135deg, #6b7280 0%, #4b5563 100%)",
+  "linear-gradient(135deg, #ec4899 0%, #db2777 100%)",
+  "linear-gradient(135deg, #84cc16 0%, #4d7c0f 100%)",
+];
+
 export default function Sidebar({ headerHeight = 56 }) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -56,6 +83,7 @@ export default function Sidebar({ headerHeight = 56 }) {
   const isTeacher = roleLower === "teacher";
   const isStudent = roleLower === "student";
   const isHR = roleLower === "hr";
+  const isAccounts = roleLower === "accounts" || roleLower === "account"; // ✅ NEW
 
   const hasAccess = (item) => {
     if (!item?.roles || item.roles.length === 0) return true;
@@ -69,6 +97,33 @@ export default function Sidebar({ headerHeight = 56 }) {
   // ===== MENU GROUPS =====
   const menuGroups = useMemo(() => {
     const groups = [];
+
+    // ====== ACCOUNTS-ONLY MENU (Fee focus) ======
+    if (isAccounts) {
+      groups.push({
+        heading: "Main",
+        items: [
+          { key: "accounts-dashboard", label: "Accounts Dashboard", icon: "bi-speedometer2", path: "/accounts-dashboard", roles: ["accounts"] },
+          { key: "combined-circulars", label: "Circulars", icon: "bi-megaphone", path: "/combined-circulars", roles: ["accounts"] },
+        ],
+      });
+      groups.push({
+        heading: "Fee Management",
+        items: [
+          { key: "transactions", label: "Collect Fee", icon: "bi-receipt", path: "/transactions", roles: ["accounts"] },
+          { key: "cancelledTransactions", label: "Cancelled Transactions", icon: "bi-trash3", path: "/cancelled-transactions", roles: ["accounts"] },
+          { key: "dayWiseReport", label: "Day Wise Report", icon: "bi-calendar", path: "/reports/day-wise", roles: ["accounts"] },
+          { key: "dayWiseCategoryReports", label: "Day Wise (By Category)", icon: "bi-calendar-check", path: "/reports/day-wise-category", roles: ["accounts"] },
+          { key: "studentDue", label: "Fee Due Report", icon: "bi-file-earmark-text", path: "/student-due", roles: ["accounts"] },
+          { key: "schoolFeeSummary", label: "Session Summary", icon: "bi-graph-up", path: "/reports/school-fee-summary", roles: ["accounts"] },
+          { key: "vanFeeDetailedReport", label: "Van Fee Report", icon: "bi-truck-front", path: "/reports/van-fee", roles: ["accounts"] },
+          { key: "concessionReport", label: "Concession Report", icon: "bi-journal-check", path: "/reports/concession", roles: ["accounts"] },
+          { key: "feeHeadings", label: "Fee Headings", icon: "bi-bookmark", path: "/fee-headings", roles: ["accounts","admin","superadmin"] },
+          { key: "feeCategory", label: "Fee Category", icon: "bi-tags", path: "/fee-category", roles: ["accounts","admin","superadmin"] },
+        ],
+      });
+      // No Admissions/HR/Exam blocks for Accounts role
+    }
 
     if (isAdmin) {
       groups.push({
@@ -91,28 +146,12 @@ export default function Sidebar({ headerHeight = 56 }) {
           { key: "vanFeeDetailedReport", label: "Van Fee Report", icon: "bi-truck-front", path: "/reports/van-fee" },
           { key: "feeStructure", label: "Fee Structure", icon: "bi-cash-coin", path: "/fee-structure" },
           { key: "transportation", label: "Transportation Cost", icon: "bi-truck", path: "/transportation" },
-          // NEW: transport assignments (student-route mapping)
           { key: "student-transport", label: "Transport Assignments", icon: "bi-truck", path: "/student-transport" },
           { key: "feeHeadings", label: "Fee Headings", icon: "bi-bookmark", path: "/fee-headings" },
           { key: "feeCategory", label: "Fee Category", icon: "bi-tags", path: "/fee-category" },
           { key: "concessions", label: "Concessions", icon: "bi-percent", path: "/concessions" },
-
-          // NEW: Opening Balances (admin/superadmin only)
-          {
-            key: "opening-balances",
-            label: "Opening Balances",
-            icon: "bi-clipboard-data",
-            path: "/opening-balances",
-            roles: ["admin", "superadmin"],
-          },
-
-          // ✅ NEW: Caste/Gender Report
-          {
-            key: "caste-gender-report",
-            label: "Caste/Gender Report",
-            icon: "bi-people-fill",
-            path: "/reports/caste-gender",
-          },
+          { key: "opening-balances", label: "Opening Balances", icon: "bi-clipboard-data", path: "/opening-balances", roles: ["admin", "superadmin"] },
+          { key: "caste-gender-report", label: "Caste/Gender Report", icon: "bi-people-fill", path: "/reports/caste-gender" },
         ],
       });
       groups.push({
@@ -121,7 +160,7 @@ export default function Sidebar({ headerHeight = 56 }) {
           { key: "students", label: "Admissions", icon: "bi-people", path: "/students" },
           { key: "classes", label: "Classes", icon: "bi-list-task", path: "/classes" },
           { key: "sections", label: "Sections", icon: "bi-grid", path: "/sections" },
-          { key: "sessions", label: "Sessions", icon: "bi-calendar4-week", path: "/sessions" }, // sessions
+          { key: "sessions", label: "Sessions", icon: "bi-calendar4-week", path: "/sessions" },
         ],
       });
       groups.push({
@@ -155,17 +194,9 @@ export default function Sidebar({ headerHeight = 56 }) {
           { key: "substitution", label: "Substitutions", icon: "bi-arrow-repeat", path: "/substitution" },
           { key: "substitutionListing", label: "Substitution Listing", icon: "bi-list-ul", path: "/substitution-listing" },
           { key: "studentUserAccounts", label: "Create Student Login", icon: "bi-person-plus", path: "/student-user-accounts" },
-          { key: "sessions", label: "Sessions", icon: "bi-calendar4-week", path: "/sessions" }, // sessions for academic
-          // expose transport assignments to academic coordinators as well
+          { key: "sessions", label: "Sessions", icon: "bi-calendar4-week", path: "/sessions" },
           { key: "student-transport", label: "Transport Assignments", icon: "bi-truck", path: "/student-transport" },
-
-          // ✅ NEW (Academic access): Caste/Gender Report
-          {
-            key: "caste-gender-report",
-            label: "Caste/Gender Report",
-            icon: "bi-people-fill",
-            path: "/reports/caste-gender",
-          },
+          { key: "caste-gender-report", label: "Caste/Gender Report", icon: "bi-people-fill", path: "/reports/caste-gender" },
         ],
       });
       groups.push({
@@ -176,13 +207,7 @@ export default function Sidebar({ headerHeight = 56 }) {
           { key: "exam-schemes", label: "Exam Scheme", icon: "bi-card-checklist", path: "/exam-schemes" },
           { key: "co-scholastic-areas", label: "Co-Scholastic Areas", icon: "bi-easel3", path: "/co-scholastic-areas" },
           { key: "co-scholastic-grades", label: "Co-Scholastic Grades", icon: "bi-star", path: "/co-scholastic-grades" },
-          {
-            key: "class-co-scholastic-mapping",
-            label: "Class Co-Scholastic Mapping",
-            icon: "bi-easel3",
-            path: "/class-co-scholastic-mapping",
-            roles: ["academic_coordinator", "superadmin"],
-          },
+          { key: "class-co-scholastic-mapping", label: "Class Co-Scholastic Mapping", icon: "bi-easel3", path: "/class-co-scholastic-mapping", roles: ["academic_coordinator", "superadmin"] },
           { key: "grade-schemes", label: "Grade Scheme", icon: "bi-ui-checks", path: "/grade-schemes" },
           { key: "term-management", label: "Terms", icon: "bi-calendar3-range", path: "/term-management" },
           { key: "assessment-components", label: "Assessment Components", icon: "bi-diagram-3", path: "/assessment-components" },
@@ -248,7 +273,7 @@ export default function Sidebar({ headerHeight = 56 }) {
         items: [
           { key: "classes", label: "Classes", icon: "bi-list-task", path: "/classes" },
           { key: "subjects", label: "Subjects", icon: "bi-book", path: "/subjects" },
-          { key: "students", label: "Students", icon: "bi-people", path: "/students" },
+          // Students hidden for teacher
         ],
       });
       groups.push({
@@ -265,6 +290,23 @@ export default function Sidebar({ headerHeight = 56 }) {
       });
     }
 
+    // ✅ STUDENT MENU (+ Diary)
+    if (isStudent) {
+      groups.push({
+        heading: "Student",
+        items: [
+          { key: "student-home", label: "Home", icon: "bi-house", path: "/dashboard", roles: ["student"] },
+          { key: "student-attendance", label: "Attendance", icon: "bi-calendar2-check", path: "/student-attendance", roles: ["student"] },
+          { key: "my-assignments", label: "Assignments", icon: "bi-journal-check", path: "/my-assignments", roles: ["student"] },
+          { key: "student-diary", label: "Diary", icon: "bi-journal-text", path: "/student-diary", roles: ["student"] },
+          { key: "student-circulars", label: "Circulars", icon: "bi-megaphone", path: "/student-circulars", roles: ["student"] },
+          { key: "student-timetable-display", label: "Timetable", icon: "bi-clock-history", path: "/student-timetable-display", roles: ["student"] },
+          { key: "student-fee", label: "Fees", icon: "bi-cash-coin", path: "/student-fee", roles: ["student"] },
+          { key: "chat", label: "Chat", icon: "bi-chat-dots", path: "/chat", roles: ["student"] },
+        ],
+      });
+    }
+
     if (isSuperAdmin) {
       groups.splice(1, 0, {
         heading: "User Management",
@@ -274,7 +316,7 @@ export default function Sidebar({ headerHeight = 56 }) {
 
     for (const g of groups) g.items = g.items.filter(hasAccess);
     return groups;
-  }, [isAdmin, isAcademic, isTeacher, isStudent, isHR, isSuperAdmin, roleLower]);
+  }, [isAdmin, isAcademic, isTeacher, isStudent, isHR, isSuperAdmin, isAccounts, roleLower]);
 
   // filter groups by desktop search query (q)
   const filteredGroups = useMemo(() => {
@@ -316,12 +358,13 @@ export default function Sidebar({ headerHeight = 56 }) {
 
   // choose primary by role; else take first 4
   const PRIMARY_BY_ROLE = {
-    admin: ["dashboard", "transactions", "studentDue", "opening-balances"], // added opening-balances
+    admin: ["dashboard", "transactions", "studentDue", "opening-balances"],
     academic_coordinator: ["dashboard", "combined-timetable", "students", "exam-schemes"],
     teacher: ["dashboard", "mark-attendance", "teacher-timetable-display", "marks-entry"],
-    student: ["dashboard", "student-attendance", "student-timetable-display", "my-assignments"],
+    student: ["student-home", "student-diary", "student-attendance", "student-timetable-display"],
     hr: ["dashboard", "employees", "employee-attendance", "hr-leave-requests"],
-    superadmin: ["dashboard", "users", "reports/day-wise", "transactions", "opening-balances"], // added opening-balances
+    superadmin: ["dashboard", "users", "reports/day-wise", "transactions", "opening-balances"],
+    accounts: ["accounts-dashboard", "transactions", "studentDue", "dayWiseReport"], // ✅ NEW
   };
 
   const primaryKeys = PRIMARY_BY_ROLE[roleLower] || allItems.slice(0, 4).map((i) => i.key);
@@ -378,8 +421,9 @@ export default function Sidebar({ headerHeight = 56 }) {
                 <h6 className="group-heading text-uppercase px-3 mt-3 mb-1">{group.heading}</h6>
               )}
               <ul className="nav flex-column">
-                {group.items.map((item) => {
+                {group.items.map((item, ii) => {
                   const active = isPathActive(item.path);
+                  const gradient = sidebarGradients[ii % sidebarGradients.length];
                   return (
                     <li
                       key={item.key}
@@ -391,10 +435,11 @@ export default function Sidebar({ headerHeight = 56 }) {
                       onKeyDown={(e) =>
                         (e.key === "Enter" || e.key === " ") && handleMenuClick(item)
                       }
+                      style={{ "--item-gradient": gradient }}
                     >
                       <span className="active-indicator" />
                       <div className={`item-content ${isExpanded ? "expanded" : "collapsed"}`}>
-                        <i className={`bi ${item.icon} item-icon`} aria-hidden="true" />
+                        <i className={`bi ${item.icon} item-icon`} aria-hidden="true" style={{ color: palette[ii % palette.length] }} />
                         <span className="item-label">{item.label}</span>
                       </div>
                     </li>
@@ -432,13 +477,14 @@ function BottomNav({ items, moreItems, isActive, onClick }) {
   return (
     <>
       <nav className="bottom-nav" role="navigation" aria-label="Primary mobile navigation">
-        {items.map((it) => (
+        {items.map((it, i) => (
           <button
             key={it.key}
             className={`bn-item ${isActive(it.path) ? "active" : ""}`}
             onClick={() => onClick(it)}
             aria-label={it.label}
             title={it.label}
+            style={{ backgroundImage: sidebarGradients[i % sidebarGradients.length], color: palette[i % palette.length] }}
           >
             <i className={`bi ${it.icon}`} />
             <span>{it.label}</span>
@@ -452,6 +498,7 @@ function BottomNav({ items, moreItems, isActive, onClick }) {
           aria-expanded={open}
           aria-label="More"
           title="More"
+          style={{ backgroundImage: sidebarGradients[6] }}
         >
           <i className="bi bi-three-dots" />
           <span>More</span>
@@ -476,7 +523,7 @@ function BottomNav({ items, moreItems, isActive, onClick }) {
               </button>
             </div>
             <div className="bn-list">
-              {filtered.map((it) => (
+              {filtered.map((it, i) => (
                 <button
                   key={it.key}
                   className="bn-list-item"
@@ -484,8 +531,9 @@ function BottomNav({ items, moreItems, isActive, onClick }) {
                     onClick(it);
                     setOpen(false);
                   }}
+                  style={{ "--item-gradient": sidebarGradients[i % sidebarGradients.length] }}
                 >
-                  <i className={`bi ${it.icon}`} />
+                  <i className={`bi ${it.icon}`} style={{ color: palette[i % palette.length] }} />
                   <div className="bn-li-text">
                     <div className="bn-li-title">{it.label}</div>
                     {it.group && <div className="bn-li-sub">{it.group}</div>}
