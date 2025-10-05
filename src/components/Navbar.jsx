@@ -227,27 +227,30 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
           {/* Right cluster */}
           <div className="ms-auto d-flex align-items-center gap-2 me-3" ref={dropdownRef}>
             {/* Quick links strip (only for Admin & Superadmin) */}
-            {isAdmin && (
-              <div className="d-flex align-items-center gap-2 gap-sm-3 me-2 quick-links-strip">
-                {quickLinks.map((q) => {
-                  const active = isActive(q.href);
-                  return (
-                    <Link
-                      key={q.href}
-                      to={q.href}
-                      className={`text-decoration-none text-center small quick-link-icon ${active ? "ql-active" : ""}`}
-                      title={q.label}
-                      aria-label={q.label}
-                    >
-                      <span className="ql-icon-wrap">
-                        <i className={`bi ${q.icon}`} aria-hidden="true" />
-                      </span>
-                      <span className="qlabel">{q.label}</span>
-                    </Link>
-                  );
-                })}
-              </div>
-            )}
+            {/* Quick links strip (only for Admin & Superadmin) */}
+              {/* Quick links strip (for Admin, Superadmin & Accounts) */}
+              {(isAdmin || roleLower === "accounts" || roleLower === "fee_manager") && (
+                <div className="d-flex align-items-center gap-2 gap-sm-3 me-2 quick-links-strip">
+                  {quickLinks.map((q) => {
+                    const active = isActive(q.href);
+                    return (
+                      <Link
+                        key={q.href}
+                        to={q.href}
+                        className={`text-decoration-none text-center small quick-link-icon ${active ? "ql-active" : ""}`}
+                        title={q.label}
+                        aria-label={q.label}
+                      >
+                        <span className="ql-icon-wrap">
+                          <i className={`bi ${q.icon}`} aria-hidden="true" />
+                        </span>
+                        <span className="qlabel">{q.label}</span>
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
+
 
             {/* Notifications */}
             <button
