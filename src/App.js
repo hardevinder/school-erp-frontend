@@ -16,7 +16,7 @@ import Login from "./components/Login";
 import RoleAwareDashboard from "./components/RoleAwareDashboard";
 import EditProfile from "./components/EditProfile";
 import Chat from "./components/Chat";
-import ChatContainer from "./components/ChatContainer";
+import ChatContainer from "./components/chat/ChatContainer";
 
 // Pages
 import Classes from "./pages/Classes";
@@ -109,6 +109,7 @@ import DigitalDiary from "./pages/DigitalDiary"; // ⬅ NEW
 import StudentDiary from "./pages/StudentDiary";   // ⬅️ new
 import DiaryDetail from "./pages/DiaryDetail";     // ⬅️ new
 import AccountsDashboard from "./components/AccountsDashboard";
+import TransportSummary from "./pages/TransportSummary";
 
 
 const RequireRole = ({ roles = [], children }) => {
@@ -145,13 +146,24 @@ function App() {
 
           {/* Profile & Chat */}
           <Route path="/edit-profile" element={<EditProfile />} />
+
+          {/* legacy small chat component (floating or embedded) */}
           <Route
             path="/chat"
             element={<Chat chatId="chat_room_1" currentUserId={currentUserId} />}
           />
+
+          {/* full-page ChatContainer (dedicated route)
+              - /chat-page  => opens chat UI as a page
+              - /chat-page/:contactId  => opens chat and auto-opens that contact/thread
+          */}
           <Route
-            path="/chat-container"
-            element={<ChatContainer currentUserId={currentUserId} />}
+            path="/chat-page"
+            element={<ChatContainer fullPage currentUserId={currentUserId} />}
+          />
+          <Route
+            path="/chat-page/:contactId"
+            element={<ChatContainer fullPage currentUserId={currentUserId} />}
           />
 
           {/* Core / Admissions */}
@@ -174,6 +186,7 @@ function App() {
           <Route path="/reports/school-fee-summary" element={<SchoolFeeSummary />} />
           <Route path="/reports/concession" element={<ConcessionReport />} />
           <Route path="/reports/van-fee" element={<VanFeeDetailedReport />} />
+          <Route path="/reports/transport-summary" element={<TransportSummary />} />
 
           {/* Transactions */}
           <Route path="/transactions" element={<Transactions />} />

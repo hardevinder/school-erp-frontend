@@ -83,7 +83,8 @@ const SchoolFeeSummary = () => {
     setError('');
     try {
       const res = await api.get('/feedue/school-fee-summary');
-      setSummary(res.data || []);
+      const sortedSummary = (res.data || []).sort((a, b) => Number(a.id) - Number(b.id));
+      setSummary(sortedSummary);
     } catch (err) {
       console.error('Error fetching summary:', err);
       setError('Failed to load fee summary. Please try again.');
@@ -95,7 +96,7 @@ const SchoolFeeSummary = () => {
   const fetchSchool = async () => {
     try {
       const res = await api.get('/schools');
-      if (res.data && res.data.length > 0) setSchool(res.data[0]);
+      if (res.data?.schools && res.data.schools.length > 0) setSchool(res.data.schools[0]);
     } catch (error) {
       console.error('Error fetching school:', error);
     }
@@ -176,6 +177,20 @@ const SchoolFeeSummary = () => {
     window.open(url, '_blank');
   };
 
+  /* -------------------- Grand Totals for Main Table -------------------- */
+  const grandTotals = useMemo(() => {
+    return summary.reduce(
+      (acc, item) => ({
+        totalDue: acc.totalDue + (item.totalDue || 0),
+        totalReceived: acc.totalReceived + (item.totalReceived || 0),
+        totalConcession: acc.totalConcession + (item.totalConcession || 0),
+        totalRemainingDue: acc.totalRemainingDue + (item.totalRemainingDue || 0),
+        vanFeeReceived: acc.vanFeeReceived + (item.vanFeeReceived || 0),
+      }),
+      { totalDue: 0, totalReceived: 0, totalConcession: 0, totalRemainingDue: 0, vanFeeReceived: 0 }
+    );
+  }, [summary]);
+
   const handleCountClick = async (feeHeadingId, status, headingName) => {
     setSelectedFeeHeadingId(feeHeadingId);
     setSelectedStatus(status);
@@ -213,7 +228,7 @@ const SchoolFeeSummary = () => {
         feeDetailsCache.set(s._sid, fd || []);
       });
 
-      const allHeads = new Set();
+      const allHeadsData = {};
       const finalData = rawData.map((student) => {
         const sid = student.id ?? student.admissionNumber;
         const eligMap = eligibilityCache.get(sid) || {};
@@ -254,14 +269,18 @@ const SchoolFeeSummary = () => {
           row[`${headName} - Remaining`] = remaining;
           row[`${headName} - Fine`] = fine;
 
-          allHeads.add(headName);
+          if (headId) allHeadsData[String(headId)] = headName;
         });
 
         return row;
       });
 
+      const sortedHeadNames = Object.entries(allHeadsData)
+        .sort((a, b) => Number(a[0]) - Number(b[0]))
+        .map(([, name]) => name);
+
       setStudentDetails(finalData);
-      setHeadNames(Array.from(allHeads));
+      setHeadNames(sortedHeadNames);
     } catch (err) {
       console.error('Error fetching student details:', err);
     } finally {
@@ -290,6 +309,30 @@ const SchoolFeeSummary = () => {
 
   const selectAllHeads = () => setSelectedHeads(new Set(headNames));
   const clearAllHeads = () => setSelectedHeads(new Set());
+
+  // Column totals for footer
+  const columnTotals = useMemo(() => {
+    const totals = {};
+    headNames.forEach((head) => {
+      totals[head] = { remaining: 0, fine: 0 };
+    });
+
+    filteredDetails.forEach((stu) => {
+      headNames.forEach((head) => {
+        totals[head].remaining += Number(stu[`${head} - Remaining`] || 0);
+        totals[head].fine += Number(stu[`${head} - Fine`] || 0);
+      });
+    });
+
+    return totals;
+  }, [filteredDetails, headNames]);
+
+  // Grand total for selected heads
+  const grandTotal = useMemo(() => {
+    return Array.from(selectedHeads).reduce((sum, head) => {
+      return sum + (columnTotals[head]?.remaining || 0) + (columnTotals[head]?.fine || 0);
+    }, 0);
+  }, [columnTotals, selectedHeads]);
 
   const exportToExcel = () => {
     // Export ONLY selected heads + an Overall Total
@@ -520,6 +563,21 @@ const SchoolFeeSummary = () => {
                 );
               })}
             </tbody>
+            {/* Footer for grand totals */}
+            <tfoot>
+              <tr className="table-total-row fw-bold">
+                <td colSpan={2}>Grand Total</td>
+                <td className="text-end">{formatCurrency(grandTotals.totalDue)}</td>
+                <td className="text-end">{formatCurrency(grandTotals.totalReceived)}</td>
+                <td className="text-end">{formatCurrency(grandTotals.totalConcession)}</td>
+                <td className={`text-end ${grandTotals.totalRemainingDue > 0 ? 'text-danger-soft' : 'text-success-soft'}`}>
+                  {formatCurrency(grandTotals.totalRemainingDue)}
+                </td>
+                <td colSpan={4}></td>
+                <td className="text-end">{formatCurrency(grandTotals.vanFeeReceived)}</td>
+                <td></td>
+              </tr>
+            </tfoot>
           </Table>
         </div>
       )}
@@ -617,7 +675,7 @@ const SchoolFeeSummary = () => {
                         const lines = [
                           `*Dear Parent/Guardian of ${s.name},*`,
                           ``,
-                          `This is a kind reminder regarding the pending school fees:`,
+                          `This is a kind reminder from *${school?.name || 'Your School'}* regarding the pending school fees:`,
                           ``,
                           `*Fee Details:*`,
                           ...included.map(
@@ -793,6 +851,24 @@ const SchoolFeeSummary = () => {
                     );
                   })}
                 </tbody>
+                {/* Footer for vertical totals */}
+                <tfoot>
+                  <tr className="table-total-row fw-bold">
+                    <th className="slc slc-1">Total</th>
+                    <th className="slc slc-2"></th>
+                    <th className="slc slc-3"></th>
+                    <th className="slc slc-4"></th>
+                    {headNames.map((head) => (
+                      <React.Fragment key={`total-${head}`}>
+                        <th className="text-end">{formatCurrency(columnTotals[head]?.remaining || 0)}</th>
+                        <th className="text-end">{formatCurrency(columnTotals[head]?.fine || 0)}</th>
+                      </React.Fragment>
+                    ))}
+                    <th className="text-end sticky-overall text-danger fw-bold">
+                      {formatCurrency(grandTotal)}
+                    </th>
+                  </tr>
+                </tfoot>
               </Table>
             </div>
           )}

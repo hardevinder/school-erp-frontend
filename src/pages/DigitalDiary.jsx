@@ -115,12 +115,25 @@ const diaryDelete = (suffix = "", params) =>
 /* ──────────────────────────────────────────────
   Students (for per-student targeting)
 ────────────────────────────────────────────── */
-async function studentsGet(params) {
-  // Backend route from our earlier step: /students?classId=..&sectionId=..&q=&pageSize=..
+/* ──────────────────────────────────────────────
+  Students (for per-student targeting) — strict class+section
+  Uses server: GET /students/searchByClassAndSection?class_id=..&section_id=..&session_id=..&q=..
+────────────────────────────────────────────── */
+async function studentsGet(params = {}) {
+  // map camelCase frontend params -> snake_case server params
+  const p = {};
+  if (params.classId) p.class_id = params.classId;
+  if (params.sectionId) p.section_id = params.sectionId;
+  if (params.sessionId) p.session_id = params.sessionId;
+  if (params.q) p.q = params.q;
+  // some callers pass pageSize — map to limit (server uses page/limit in other handlers)
+  if (params.pageSize) p.limit = params.pageSize;
+  if (params.page) p.page = params.page;
+
   return api.request({
     method: "get",
-    url: "/students",
-    params,
+    url: "/students/searchByClassAndSection",
+    params: p,
     headers: { ...getAuthHeaders() },
   });
 }

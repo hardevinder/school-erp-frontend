@@ -10,6 +10,7 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const dropdownRef = useRef(null);
+  const headerRef = useRef(null);
 
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [profilePhoto, setProfilePhoto] = useState("https://via.placeholder.com/40");
@@ -52,15 +53,11 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
 
       let student = null;
       for (const url of tryEndpoints) {
-        // Using axios directly (same defaults/auth as profile call)
         const resp = await axios.get(url);
         const data = resp.data;
         if (!data) continue;
         if (Array.isArray(data)) {
-          if (data.length) {
-            student = data[0];
-            break;
-          }
+          if (data.length) { student = data[0]; break; }
         } else if (typeof data === "object") {
           student = data;
           break;
@@ -99,7 +96,6 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
         }
       } catch (err) {
         console.error("Failed to fetch profile:", err);
-        // If student and profile failed, still try student photo
         if (isStudent) {
           await trySetStudentPhoto();
         }
@@ -114,9 +110,6 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
     localStorage.removeItem("token");
     localStorage.removeItem("roles");
     localStorage.removeItem("activeRole");
-    // optional: also clear these if you store them
-    // localStorage.removeItem("username");
-    // localStorage.removeItem("userId");
     navigate("/");
   };
 
@@ -166,19 +159,46 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
     { label: "Fee Due", href: "/student-due", icon: "bi-receipt" },
     { label: "Pending", href: "/reports/school-fee-summary", icon: "bi-list-check" },
     { label: "Day", href: "/reports/day-wise", icon: "bi-calendar2-check" },
-    { label: "Transport", href: "/reports/transport-summary", icon: "bi-truck" },
+    { label: "Transport", href: "/reports/van-fee", icon: "bi-truck" },
     { label: "Students", href: "/students", icon: "bi-people" },
   ];
 
   // Brand logo from same location as Login page:
-  const brandLogo = `${process.env.PUBLIC_URL}/images/pts_logo.png`;
+  const brandLogo = `${process.env.PUBLIC_URL}/images/SmartoLogo.png`;
 
   const isActive = (path) =>
     location.pathname === path || location.pathname.startsWith(path + "/");
 
+  /* -----------------------------
+     Header height sync (NEW)
+     - publish --app-header-height on :root
+     - set body padding-top to avoid content under fixed header
+     ------------------------------ */
+  useEffect(() => {
+    const updateHeaderSize = () => {
+      const hdr = headerRef.current;
+      const height = hdr ? hdr.offsetHeight : 56;
+      document.documentElement.style.setProperty("--app-header-height", `${height}px`);
+      // also add body padding top so page content starts below header
+      // (some existing layouts may already do this; we set it to be safe)
+      document.body.style.paddingTop = `${height}px`;
+    };
+
+    updateHeaderSize();
+    window.addEventListener("resize", updateHeaderSize);
+    // If fonts/images load and change layout, run again after a tick
+    const t = setTimeout(updateHeaderSize, 250);
+
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener("resize", updateHeaderSize);
+    };
+  }, []);
+
   return (
     <>
       <nav
+        ref={headerRef}
         className="navbar fixed-top navbar-expand-lg navbar-light bg-white border-bottom app-header shadow-sm"
         role="navigation"
         style={{ zIndex: 3000 }}
@@ -194,11 +214,10 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
               className="rounded"
               style={{ objectFit: "contain" }}
               onError={(e) => {
-                // Hide image if not found — avoids a broken icon
                 e.currentTarget.style.display = "none";
               }}
             />
-            <span className="fw-semibold">Pathseekers International School</span>
+            <span className="fw-semibold">Smarto Experiential School</span>
           </Link>
 
           {/* Role switcher (desktop) */}

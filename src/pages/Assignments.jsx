@@ -1,11 +1,13 @@
+// src/pages/CombinedAssignments.jsx
 import React, { useState, useEffect, useRef } from "react";
 import api from "../api"; // Custom Axios instance
 import Swal from "sweetalert2";
 import { getDoc, doc } from "firebase/firestore";
 import { firestore } from "../firebase/firebaseConfig";
 
-
-// Assignment Management Component (Create, Edit, Delete)
+//
+// ---------- Assignment Management Component (Create, Edit, Delete) ----------
+//
 const Assignments = () => {
   const [assignments, setAssignments] = useState([]);
   const [newAssignment, setNewAssignment] = useState({
@@ -28,8 +30,7 @@ const Assignments = () => {
   const fetchAssignments = async () => {
     try {
       const response = await api.get("/assignments");
-      console.log("Fetched assignments:", response.data.assignments);
-      setAssignments(response.data.assignments);
+      setAssignments(response.data.assignments || []);
     } catch (error) {
       console.error("Error fetching assignments:", error);
     }
@@ -39,20 +40,16 @@ const Assignments = () => {
   const fetchSubjects = async () => {
     try {
       const response = await api.get("/class-subject-teachers/teacher/class-subjects");
-      // Extract subjects from assignments and remove duplicates if needed
-      const subjectsFromAssignments = response.data.assignments.map(item => item.subject);
-      
-      // Optional: remove duplicate subjects (if needed)
+      const subjectsFromAssignments = (response.data.assignments || []).map(item => item.subject).filter(Boolean);
       const uniqueSubjects = Array.from(
         new Map(subjectsFromAssignments.map(subj => [subj.id, subj])).values()
       );
-      
       setSubjects(uniqueSubjects);
     } catch (error) {
       console.error("Error fetching subjects:", error);
+      setSubjects([]);
     }
   };
-  
 
   useEffect(() => {
     fetchAssignments();
@@ -69,6 +66,7 @@ const Assignments = () => {
   // Append additional new files from hidden input
   const handleAdditionalFiles = (e) => {
     setFiles((prevFiles) => [...prevFiles, ...Array.from(e.target.files)]);
+    e.target.value = "";
   };
 
   // Remove a new file by index (small "×" button)
@@ -99,13 +97,6 @@ const Assignments = () => {
       if (editingAssignment) {
         const existingFileIds = existingFiles.map((file) => file.id);
         formData.append("existingFiles", JSON.stringify(existingFileIds));
-      }
-
-      // Debug: log non-file FormData entries
-      for (let pair of formData.entries()) {
-        if (typeof pair[1] === "string") {
-          console.log(pair[0] + ": ", pair[1]);
-        }
       }
 
       if (editingAssignment) {
@@ -158,7 +149,7 @@ const Assignments = () => {
   const handleSearch = () => {
     if (search) {
       return assignments.filter((assignment) =>
-        assignment.title.toLowerCase().includes(search.toLowerCase())
+        (assignment.title || "").toLowerCase().includes(search.toLowerCase())
       );
     }
     return assignments;
@@ -430,18 +421,86 @@ const Assignments = () => {
   );
 };
 
-// Assignment Distribution Component (Assign assignment to students)
+//
+// ---------- Assignment Distribution Component (Assign assignment to students) ----------
+//
 const GiveAssignmentToStudents = () => {
   const [assignments, setAssignments] = useState([]);
   const [selectedAssignmentId, setSelectedAssignmentId] = useState("");
-  const [students, setStudents] = useState([]);
-  const [classFilter, setClassFilter] = useState("");
+  const [students, setStudents] = useState([]); // full teacher-students list (fallback)
+  const [studentsForPicker, setStudentsForPicker] = useState([]); // students shown in modal (server-side or filtered)
+  const [classes, setClasses] = useState([]);
+  const [sections, setSections] = useState([]);
+
+  const [classIdFilter, setClassIdFilter] = useState("");
+  const [sectionIdFilter, setSectionIdFilter] = useState("");
+
   const [selectedStudentIds, setSelectedStudentIds] = useState([]);
   const [markAll, setMarkAll] = useState(false);
   const [assignedList, setAssignedList] = useState([]);
   const [showModal, setShowModal] = useState(false);
+  const [loadingStudentsForPicker, setLoadingStudentsForPicker] = useState(false);
 
-  // Fetch available assignments (with subjects)
+  // ----------------- helpers (robust parsing / derive) -----------------
+  const parseList = (res) => {
+    if (!res) return [];
+    const payload = res.data ?? res;
+    if (Array.isArray(payload)) return payload;
+    if (Array.isArray(payload.data)) return payload.data;
+    if (Array.isArray(payload.items)) return payload.items;
+    if (Array.isArray(payload.classes)) return payload.classes;
+    if (Array.isArray(payload.sections)) return payload.sections;
+    if (Array.isArray(payload.rows)) return payload.rows;
+    if (Array.isArray(payload.result)) return payload.result;
+    for (const k of Object.keys(payload || {})) {
+      if (Array.isArray(payload[k])) return payload[k];
+    }
+    return [];
+  };
+
+  // Normalized derive: always returns { id: string|null, name: string, classId?: string|null }
+  const deriveClassesAndSectionsFromStudents = (studentsArr = []) => {
+    const clsMap = new Map();
+    const secMap = new Map();
+
+    studentsArr.forEach((s) => {
+      // --- class ---
+      const cls = s.Class || s.class || (s.class_name ? { id: null, class_name: s.class_name } : null);
+      if (cls) {
+        const rawId = cls.id ?? cls.class_id ?? cls.classId ?? null;
+        const rawName = cls.class_name ?? cls.name ?? rawId ?? "";
+        const id = rawId !== null && rawId !== undefined ? String(rawId) : null;
+        const name = String(rawName || "").trim();
+        const key = id || name;
+        if (key) clsMap.set(key, { id, name });
+      }
+
+      // --- section ---
+      const sec =
+        s.section ||
+        s.Section ||
+        (s.Class && (s.Class.section_name || s.Class.section)) ||
+        (s.section_name ? { id: null, section_name: s.section_name } : null);
+
+      if (sec) {
+        const rawId = sec.id ?? sec.section_id ?? sec.sectionId ?? null;
+        const rawName = sec.section_name ?? sec.name ?? rawId ?? "";
+        const id = rawId !== null && rawId !== undefined ? String(rawId) : null;
+        const name = String(rawName || "").trim();
+        const classIdRaw = sec.classId ?? sec.class_id ?? sec.class ?? (s.Class && s.Class.id) ?? null;
+        const classId = classIdRaw !== null && classIdRaw !== undefined ? String(classIdRaw) : null;
+        const key = id || (classId ? `${classId}::${name}` : name);
+        if (key) secMap.set(key, { id, name, classId });
+      }
+    });
+
+    return {
+      classes: Array.from(clsMap.values()), // [{id, name}, ...]
+      sections: Array.from(secMap.values()), // [{id, name, classId}, ...]
+    };
+  };
+
+  // ----------------- fetchers -----------------
   const fetchAssignments = async () => {
     try {
       const res = await api.get("/assignments");
@@ -451,45 +510,21 @@ const GiveAssignmentToStudents = () => {
     }
   };
 
-  // Listen for custom event to refresh assignments dropdown
-  useEffect(() => {
-    const refreshAssignments = () => {
-      fetchAssignments();
-    };
-    window.addEventListener("assignmentsUpdated", refreshAssignments);
-    return () => {
-      window.removeEventListener("assignmentsUpdated", refreshAssignments);
-    };
-  }, []);
-
-  // Fetch students from teacher's assigned classes
-  const fetchStudents = async () => {
-    try {
-      const res = await api.get("/teacher-students/students");
-      setStudents(res.data.students || []);
-    } catch (err) {
-      console.error("Error fetching students:", err);
-    }
-  };
-
-  // Fetch assigned assignments with a cache-buster to force fresh data
   const fetchAssignedList = async () => {
     try {
-      const res = await api.get("/student-assignments", {
-        params: { t: new Date().getTime() }
-      });
+      const res = await api.get("/student-assignments", { params: { t: Date.now() } });
       const data = res.data.assignments || [];
       const processedAssignments = data.map((assignment) => {
         if (assignment.StudentAssignments && assignment.StudentAssignments.length > 0) {
-          const seenTimestamps = new Set();
-          const uniqueStudentAssignments = assignment.StudentAssignments.filter((sa) => {
-            if (!seenTimestamps.has(sa.createdAt)) {
-              seenTimestamps.add(sa.createdAt);
+          const seen = new Set();
+          const unique = assignment.StudentAssignments.filter((sa) => {
+            if (!seen.has(sa.createdAt)) {
+              seen.add(sa.createdAt);
               return true;
             }
             return false;
           });
-          return { ...assignment, StudentAssignments: uniqueStudentAssignments };
+          return { ...assignment, StudentAssignments: unique };
         }
         return assignment;
       });
@@ -500,13 +535,223 @@ const GiveAssignmentToStudents = () => {
     }
   };
 
+  // Load classes & sections, fallback to deriving from teacher-students
+  const loadClassesAndSections = async () => {
+    try {
+      const [clsRes, secRes] = await Promise.allSettled([api.get("/classes"), api.get("/sections")]);
+
+      let clsDataRaw = [];
+      let secDataRaw = [];
+
+      if (clsRes.status === "fulfilled") {
+        clsDataRaw = parseList(clsRes.value);
+      } else {
+        console.warn("Failed /classes:", clsRes.reason);
+      }
+
+      if (secRes.status === "fulfilled") {
+        secDataRaw = parseList(secRes.value);
+      } else {
+        console.warn("Failed /sections:", secRes.reason);
+      }
+
+      // If either is empty try to derive from teacher-students
+      if ((!clsDataRaw || clsDataRaw.length === 0) || (!secDataRaw || secDataRaw.length === 0)) {
+        try {
+          const studentsResp = await api.get("/teacher-students/students");
+          const studentsArr = parseList(studentsResp);
+          if (studentsArr && studentsArr.length) {
+            const derived = deriveClassesAndSectionsFromStudents(studentsArr);
+            if ((!clsDataRaw || clsDataRaw.length === 0) && derived.classes.length) {
+              clsDataRaw = derived.classes.map((c) => ({ id: c.id, name: c.name }));
+            }
+            if ((!secDataRaw || secDataRaw.length === 0) && derived.sections.length) {
+              secDataRaw = derived.sections.map((s) => ({ id: s.id, name: s.name, classId: s.classId }));
+            }
+          }
+        } catch (e) {
+          console.warn("Failed derive classes/sections from students:", e);
+        }
+      }
+
+      // Normalize server responses (ensure we convert any shape to {id, name, classId?})
+      const normalizeClass = (c) => {
+        const rawId = c?.id ?? c?.class_id ?? c?.classId ?? null;
+        const rawName = c?.class_name ?? c?.name ?? c?.className ?? rawId ?? "";
+        return { id: rawId !== null && rawId !== undefined ? String(rawId) : null, name: String(rawName || "").trim() };
+      };
+      const normalizeSection = (s) => {
+        const rawId = s?.id ?? s?.section_id ?? s?.sectionId ?? null;
+        const rawName = s?.section_name ?? s?.name ?? s?.sectionName ?? rawId ?? "";
+        const rawClassId = s?.classId ?? s?.class_id ?? s?.class ?? null;
+        return {
+          id: rawId !== null && rawId !== undefined ? String(rawId) : null,
+          name: String(rawName || "").trim(),
+          classId: rawClassId !== null && rawClassId !== undefined ? String(rawClassId) : null,
+        };
+      };
+
+      const clsNormalized = Array.isArray(clsDataRaw) ? clsDataRaw.map(normalizeClass) : [];
+      const secNormalized = Array.isArray(secDataRaw) ? secDataRaw.map(normalizeSection) : [];
+
+      setClasses(clsNormalized);
+      setSections(secNormalized);
+      console.log("GiveAssignmentToStudents: classes", clsNormalized.length, "sections", secNormalized.length);
+    } catch (e) {
+      console.error("Error loading classes/sections:", e);
+      setClasses([]);
+      setSections([]);
+    }
+  };
+
+  // Load teacher-students (fallback dataset & used for client filtering if needed)
+  const fetchTeacherStudents = async () => {
+    try {
+      const res = await api.get("/teacher-students/students");
+      const arr = res.data?.students ?? parseList(res);
+      setStudents(Array.isArray(arr) ? arr : []);
+      console.log("teacher-students count:", (arr || []).length);
+    } catch (err) {
+      console.error("Error fetching teacher-students:", err);
+      setStudents([]);
+    }
+  };
+
+  // Load students for picker: prefer strict server-side endpoint when classId+sectionId present
+  const loadStudentsForPicker = async (cId, sId, q) => {
+    setLoadingStudentsForPicker(true);
+    try {
+      if (cId && sId) {
+        // call strict endpoint like DigitalDiary uses
+        try {
+          const params = { class_id: cId, section_id: sId, pageSize: 500 };
+          if (q && q.trim().length >= 2) params.q = q.trim();
+          const { data } = await api.get("/students/searchByClassAndSection", { params });
+          const list = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : parseList(data);
+          setStudentsForPicker(Array.isArray(list) ? list : []);
+          setSelectedStudentIds((prev) => prev.filter((id) => list.some((s) => s.id === id)));
+          setLoadingStudentsForPicker(false);
+          return;
+        } catch (err) {
+          console.warn("searchByClassAndSection failed - falling back to local filter", err);
+        }
+      }
+
+      // fallback: filter teacher-students list locally by classId/sectionId
+      const filtered = students.filter((st) => {
+        const stClassId = String(st?.Class?.id ?? st?.classId ?? st?.class_id ?? st?.class ?? "").trim();
+        const stSectionId =
+          String(st?.section ?? st?.Section?.id ?? st?.section_id ?? st?.sectionId ?? st?.section ?? "").trim();
+        if (cId && String(cId) !== stClassId) return false;
+        if (sId && String(sId) !== stSectionId) return false;
+        return true;
+      });
+      setStudentsForPicker(filtered);
+      setSelectedStudentIds((prev) => prev.filter((id) => filtered.some((s) => s.id === id)));
+    } catch (err) {
+      console.error("Error loading students for picker:", err);
+      setStudentsForPicker([]);
+    } finally {
+      setLoadingStudentsForPicker(false);
+    }
+  };
+
+  // ----------------- initial load -----------------
   useEffect(() => {
     fetchAssignments();
-    fetchStudents();
     fetchAssignedList();
+    loadClassesAndSections();
+    fetchTeacherStudents();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Delete assigned record by exact datetime.
+  // When modal opens or class/section filters change, refresh students shown for picker
+  useEffect(() => {
+    if (!showModal) return;
+    loadStudentsForPicker(classIdFilter, sectionIdFilter);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showModal, classIdFilter, sectionIdFilter]);
+
+  // ----------------- UI helpers -----------------
+  const visibleStudents = studentsForPicker; // those displayed in modal table
+
+  const handleMarkAll = (e) => {
+    const checked = e.target.checked;
+    setMarkAll(checked);
+    if (checked) {
+      setSelectedStudentIds(visibleStudents.map((s) => s.id));
+    } else {
+      setSelectedStudentIds([]);
+    }
+  };
+
+  const handleStudentCheckbox = (studentId, isChecked) => {
+    if (isChecked) {
+      setSelectedStudentIds((prev) => (prev.includes(studentId) ? prev : [...prev, studentId]));
+    } else {
+      setSelectedStudentIds((prev) => prev.filter((id) => id !== studentId));
+    }
+  };
+
+  const handleAssignmentChange = (e) => {
+    setSelectedAssignmentId(e.target.value);
+  };
+
+  // assign
+  const assignAssignment = async () => {
+    if (!selectedAssignmentId) {
+      Swal.fire("Error", "Please select an assignment", "error");
+      return;
+    }
+    if (selectedStudentIds.length === 0) {
+      Swal.fire("Error", "Please select at least one student", "error");
+      return;
+    }
+    try {
+      await api.post(`/student-assignments/${selectedAssignmentId}/assign`, {
+        studentIds: selectedStudentIds,
+      });
+
+      // notifications (best-effort)
+      try {
+        const assignment = assignments.find((a) => a.id === selectedAssignmentId);
+        const title = assignment?.title || "New Assignment";
+        for (const studentId of selectedStudentIds) {
+          try {
+            const userDoc = await getDoc(doc(firestore, "users", String(studentId)));
+            const fcmToken = userDoc.exists() ? userDoc.data().fcmToken : null;
+            if (fcmToken) {
+              await fetch(`${process.env.REACT_APP_API_URL}/fcm/send-notification`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  fcmToken,
+                  title: "📘 Assignment Assigned",
+                  body: `You've received: ${title}`,
+                }),
+              });
+            }
+          } catch (uErr) {
+            console.warn("Failed pushing notification for", studentId, uErr);
+          }
+        }
+      } catch (notifErr) {
+        console.warn("Notification sending failed:", notifErr);
+      }
+
+      // refresh assigned list after small delay
+      setTimeout(() => fetchAssignedList(), 500);
+      Swal.fire("Success", "Assignment assigned successfully", "success");
+      setShowModal(false);
+      setSelectedAssignmentId("");
+      setSelectedStudentIds([]);
+      setMarkAll(false);
+    } catch (err) {
+      console.error("Error assigning assignment:", err);
+      Swal.fire("Error", "Failed to assign assignment", "error");
+    }
+  };
+
   const deleteAssignedRecord = async (saCreatedAt) => {
     const datetime = encodeURIComponent(new Date(saCreatedAt).toISOString());
     Swal.fire({
@@ -529,91 +774,6 @@ const GiveAssignmentToStudents = () => {
         }
       }
     });
-  };
-
-  // Filter students by class name
-  const filteredStudents = classFilter
-    ? students.filter(
-        (student) =>
-          student.Class &&
-          student.Class.class_name &&
-          student.Class.class_name.toLowerCase().includes(classFilter.toLowerCase())
-      )
-    : students;
-
-  const handleMarkAll = (e) => {
-    const checked = e.target.checked;
-    setMarkAll(checked);
-    if (checked) {
-      setSelectedStudentIds(filteredStudents.map((s) => s.id));
-    } else {
-      setSelectedStudentIds([]);
-    }
-  };
-
-  const handleStudentCheckbox = (studentId, isChecked) => {
-    if (isChecked) {
-      setSelectedStudentIds((prev) => [...prev, studentId]);
-    } else {
-      setSelectedStudentIds((prev) => prev.filter((id) => id !== studentId));
-    }
-  };
-
-  const handleAssignmentChange = (e) => {
-    setSelectedAssignmentId(e.target.value);
-  };
-
-  // Assign assignment to selected students and update UI immediately
-  const assignAssignment = async () => {
-    if (!selectedAssignmentId) {
-      Swal.fire("Error", "Please select an assignment", "error");
-      return;
-    }
-    if (selectedStudentIds.length === 0) {
-      Swal.fire("Error", "Please select at least one student", "error");
-      return;
-    }
-    try {
-      await api.post(`/student-assignments/${selectedAssignmentId}/assign`, {
-        studentIds: selectedStudentIds,
-      });
-      // 🔔 Send notification to assigned students
-      try {
-        const assignment = assignments.find((a) => a.id === selectedAssignmentId);
-        const title = assignment?.title || "New Assignment";
-
-        for (const studentId of selectedStudentIds) {
-          const userDoc = await getDoc(doc(firestore, "users", String(studentId)));
-          const fcmToken = userDoc.exists() ? userDoc.data().fcmToken : null;
-
-          if (fcmToken) {
-            await fetch(`${process.env.REACT_APP_API_URL}/fcm/send-notification`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                fcmToken,
-                title: "📘 Assignment Assigned",
-                body: `You've received: ${title}`,
-              }),
-            });
-          }
-        }
-      } catch (notificationError) {
-        console.warn("❌ Failed to send push notifications:", notificationError);
-      }
-
-      setTimeout(() => {
-        fetchAssignedList();
-      }, 500);
-      Swal.fire("Success", "Assignment assigned successfully", "success");
-      setShowModal(false);
-      setSelectedAssignmentId("");
-      setSelectedStudentIds([]);
-      setMarkAll(false);
-    } catch (err) {
-      console.error("Error assigning assignment:", err);
-      Swal.fire("Error", "Failed to assign assignment", "error");
-    }
   };
 
   const renderAssignedRows = () => {
@@ -646,12 +806,10 @@ const GiveAssignmentToStudents = () => {
     });
   };
 
+  // ----------------- Render -----------------
   return (
     <div className="mb-5">
-      <button
-        className="btn btn-primary mb-3"
-        onClick={() => setShowModal(true)}
-      >
+      <button className="btn btn-primary mb-3" onClick={() => setShowModal(true)}>
         Give Assignment to Students
       </button>
 
@@ -669,99 +827,122 @@ const GiveAssignmentToStudents = () => {
         <tbody>{renderAssignedRows()}</tbody>
       </table>
 
-      {/* Modal for Assignment Distribution */}
       {showModal && (
-        <div
-          className="modal show d-block"
-          style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
-        >
+        <div className="modal show d-block" style={{ backgroundColor: "rgba(0,0,0,0.5)" }}>
           <div className="modal-dialog modal-lg">
             <div className="modal-content">
               <div className="modal-header">
                 <h5 className="modal-title">Assign Assignment to Students</h5>
-                <button
-                  className="btn-close"
-                  onClick={() => setShowModal(false)}
-                ></button>
+                <button className="btn-close" onClick={() => setShowModal(false)}></button>
               </div>
               <div className="modal-body">
                 <div className="mb-3">
                   <label>Select Assignment:</label>
-                  <select
-                    className="form-select"
-                    value={selectedAssignmentId}
-                    onChange={handleAssignmentChange}
-                  >
+                  <select className="form-select" value={selectedAssignmentId} onChange={handleAssignmentChange}>
                     <option value="">-- Select an Assignment --</option>
                     {assignments.map((assignment) => (
                       <option key={assignment.id} value={assignment.id}>
                         {assignment.title}{" "}
-                        {assignment.Subject
-                          ? `(${assignment.Subject.name})`
-                          : assignment.subject
-                          ? `(${assignment.subject.name})`
-                          : ""}
+                        {assignment.Subject ? `(${assignment.Subject.name})` : assignment.subject ? `(${assignment.subject.name})` : ""}
                       </option>
                     ))}
                   </select>
                 </div>
-                <div className="mb-3">
-                  <label>Filter Students by Class Name:</label>
-                  <input
-                    type="text"
-                    className="form-control"
-                    placeholder="Enter class name..."
-                    value={classFilter}
-                    onChange={(e) => setClassFilter(e.target.value)}
-                  />
-                </div>
-                <div className="mb-2">
-                  <input
-                    type="checkbox"
-                    checked={markAll}
-                    onChange={handleMarkAll}
-                  />{" "}
-                  Mark All
-                </div>
-                <div style={{ maxHeight: "300px", overflowY: "auto" }}>
-                  <table className="table table-sm">
-                    <thead>
-                      <tr>
-                        <th>Select</th>
-                        <th>Student Name</th>
-                        <th>Class</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredStudents.map((student) => (
-                        <tr key={student.id}>
-                          <td>
-                            <input
-                              type="checkbox"
-                              checked={selectedStudentIds.includes(student.id)}
-                              onChange={(e) =>
-                                handleStudentCheckbox(student.id, e.target.checked)
-                              }
-                            />
-                          </td>
-                          <td>{student.name}</td>
-                          <td>{student.Class ? student.Class.class_name : "N/A"}</td>
-                        </tr>
+
+                <div className="row g-2 mb-3">
+                  <div className="col-md-6">
+                    <label>Filter by Class:</label>
+                    <select className="form-select" value={classIdFilter} onChange={(e) => setClassIdFilter(e.target.value)}>
+                      <option value="">-- All Classes --</option>
+                      {classes.map((c) => (
+                        <option key={c.id ?? c.name} value={c.id ?? c.name}>
+                          {c.name}
+                        </option>
                       ))}
-                    </tbody>
-                  </table>
+                    </select>
+                  </div>
+                  <div className="col-md-6">
+                    <label>Filter by Section:</label>
+                    <select className="form-select" value={sectionIdFilter} onChange={(e) => setSectionIdFilter(e.target.value)}>
+                      <option value="">-- All Sections --</option>
+                      {sections.map((s) => (
+                        <option key={s.id ?? s.name} value={s.id ?? s.name}>
+                          {s.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="mb-2">
+                  <input type="checkbox" checked={markAll} onChange={handleMarkAll} /> Mark All (visible)
+                </div>
+
+                <div style={{ maxHeight: "300px", overflowY: "auto" }}>
+                  {loadingStudentsForPicker ? (
+                    <div className="text-center py-3">
+                      <div className="spinner-border text-primary" role="status"><span className="visually-hidden">Loading...</span></div>
+                    </div>
+                  ) : (
+                    <table className="table table-sm">
+                      <thead>
+                        <tr>
+                          <th>Select</th>
+                          <th>Student Name</th>
+                          <th>Class</th>
+                          <th>Section</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {visibleStudents.map((student) => {
+                          // safe string extraction for section
+                          const sec = (() => {
+                            const raw =
+                              student?.section ||
+                              student?.Section ||
+                              (student?.Class && (student.Class.section_name || student.Class.section)) ||
+                              student.section_name ||
+                              student.section ||
+                              student.sectionName ||
+                              null;
+                            if (!raw) return "N/A";
+                            if (typeof raw === "string" || typeof raw === "number") return String(raw);
+                            return String(raw.section_name ?? raw.name ?? raw.sectionName ?? raw.id ?? "N/A");
+                          })();
+
+                          const className = student?.Class ? (student.Class.class_name || student.Class.name || "N/A") : (student.class_name || "N/A");
+
+                          return (
+                            <tr key={student.id}>
+                              <td>
+                                <input
+                                  type="checkbox"
+                                  checked={selectedStudentIds.includes(student.id)}
+                                  onChange={(e) => handleStudentCheckbox(student.id, e.target.checked)}
+                                />
+                              </td>
+                              <td>{student.name}</td>
+                              <td>{className}</td>
+                              <td>{sec}</td>
+                            </tr>
+                          );
+                        })}
+
+                        {visibleStudents.length === 0 && (
+                          <tr>
+                            <td colSpan={4} className="text-center">
+                              No students found for the selected Class/Section.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  )}
                 </div>
               </div>
               <div className="modal-footer">
-                <button
-                  className="btn btn-secondary"
-                  onClick={() => setShowModal(false)}
-                >
-                  Close
-                </button>
-                <button className="btn btn-primary" onClick={assignAssignment}>
-                  Assign
-                </button>
+                <button className="btn btn-secondary" onClick={() => setShowModal(false)}>Close</button>
+                <button className="btn btn-primary" onClick={assignAssignment}>Assign</button>
               </div>
             </div>
           </div>
@@ -771,7 +952,9 @@ const GiveAssignmentToStudents = () => {
   );
 };
 
-// Parent component that renders both sections
+//
+// ---------- Parent component that renders both sections ----------
+//
 const CombinedAssignments = () => {
   return (
     <div className="container mt-4">

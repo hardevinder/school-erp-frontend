@@ -1,5 +1,5 @@
 // src/pages/StudentDashboard.jsx
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import api from "../api";
 import Swal from "sweetalert2";
 import { Tabs, Tab } from "react-bootstrap";
@@ -19,18 +19,60 @@ import {
 ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, Title);
 
 const StudentDashboard = () => {
-  // -------- Role + access gates ----------
-  const roles = useMemo(() => {
+  // -------- Role + access gates (robust) ----------
+  const parseJwt = (token) => {
     try {
-      return JSON.parse(localStorage.getItem("roles")) || [];
+      const p = token.split(".")[1];
+      return JSON.parse(atob(p.replace(/-/g, "+").replace(/_/g, "/")));
     } catch {
-      const single = localStorage.getItem("userRole");
-      return single ? [single] : [];
+      return null;
     }
+  };
+  const normalizeRole = (r) => String(r || "").toLowerCase();
+  const normalizeAdmission = (s) => String(s || "").replace(/\//g, "-").trim();
+
+  const roles = useMemo(() => {
+    // 1) try stored array
+    try {
+      const stored = localStorage.getItem("roles");
+      if (stored) return JSON.parse(stored).map(normalizeRole);
+    } catch (e) {
+      // ignore parse errors
+    }
+    // 2) legacy single role
+    const single = localStorage.getItem("userRole");
+    if (single) return [normalizeRole(single)];
+
+    // 3) fallback: decode token payload
+    const token = localStorage.getItem("token");
+    if (token) {
+      const payload = parseJwt(token);
+      if (payload) {
+        if (Array.isArray(payload.roles)) return payload.roles.map(normalizeRole);
+        if (payload.role) return [normalizeRole(payload.role)];
+      }
+    }
+    return [];
   }, []);
-  const isStudent = roles.includes("student");
-  const isAdminish = roles.includes("admin") || roles.includes("superadmin");
+
+  const normalizedRoles = roles.map(normalizeRole);
+  const isStudent = normalizedRoles.includes("student");
+  const isAdminish = normalizedRoles.includes("admin") || normalizedRoles.includes("superadmin");
   const canView = isStudent || isAdminish;
+
+  // -------- Data fetch ----------
+  // username/admissionNumber source: localStorage.username OR token.username OR token.admission_number
+  const username = useMemo(() => {
+    const stored = localStorage.getItem("username");
+    if (stored) return normalizeAdmission(stored);
+    const token = localStorage.getItem("token");
+    if (token) {
+      const payload = parseJwt(token);
+      const adm = (payload && (payload.admission_number || payload.username)) || null;
+      if (adm) return normalizeAdmission(adm);
+    }
+    return null;
+  }, []);
 
   // -------- State ----------
   const [studentDetails, setStudentDetails] = useState(null);
@@ -39,6 +81,16 @@ const StudentDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [activeMainTab, setActiveMainTab] = useState("details");
+
+  // NEW: payment gateway choice (default to Razorpay)
+  // change to 'hdfc' to attempt SmartHDFC flow
+  const [paymentGateway, setPaymentGateway] = useState("razorpay");
+
+  // references for popup & listeners so cleanup works
+  const popupRef = useRef(null);
+  const popupPollRef = useRef(null);
+  const messageListenerRef = useRef(null);
+  const popupTimeoutRef = useRef(null);
 
   // -------- Helpers ----------
   const monthMapping = useMemo(
@@ -80,8 +132,6 @@ const StudentDashboard = () => {
     });
   };
 
-  // -------- Data fetch ----------
-  const username = useMemo(() => localStorage.getItem("username"), []);
   useEffect(() => {
     if (!canView || !username) {
       setError("Access Denied");
@@ -108,6 +158,18 @@ const StudentDashboard = () => {
       return () => clearInterval(id);
     }
   }, [username, canView]);
+
+  // cleanup popup and listeners on unmount
+  useEffect(() => {
+    return () => {
+      if (popupPollRef.current) clearInterval(popupPollRef.current);
+      if (popupTimeoutRef.current) clearTimeout(popupTimeoutRef.current);
+      if (messageListenerRef.current) window.removeEventListener("message", messageListenerRef.current);
+      try {
+        if (popupRef.current && !popupRef.current.closed) popupRef.current.close();
+      } catch (e) {}
+    };
+  }, []);
 
   const fetchStudentDetails = async (admissionNumber) => {
     try {
@@ -155,7 +217,215 @@ const StudentDashboard = () => {
     }
   };
 
-  // -------- Pay handlers ----------
+  // -------- Helper to handle HDFC responses (and other gateway redirects) ----------
+  const handleGatewayResponse = (data, sessionHint = null) => {
+    // check for create-order error returned by backend
+    if (data && data._createOrderError) {
+      Swal.fire({
+        icon: "error",
+        title: "Payment link creation failed",
+        text: "Could not create payment link. Try again.",
+        showCancelButton: true,
+        confirmButtonText: "Retry",
+      }).then((r) => {
+        if (r.isConfirmed) {
+          // naive approach: refresh page to retry or instruct user to retry pay button
+          // better: track last fee in state and re-trigger handler; here we show instruction
+          Swal.fire({ icon: "info", title: "Retry", text: "Click Pay again to retry creating the payment link." });
+        }
+      });
+      return false;
+    }
+
+    // common fields: paymentPageUrl, payment_page_url, paymentUrl, redirectUrl
+    const url =
+      data?.paymentPageUrl ||
+      data?.payment_page_url ||
+      data?.paymentUrl ||
+      data?.redirectUrl ||
+      data?.paymentUrlForClient ||
+      (data && data.session && data.session.paymentPageUrl) ||
+      (data && data.vendorOrderId && (process.env.REACT_APP_HDFC_PAYMENT_PAGE_BASE ? `${process.env.REACT_APP_HDFC_PAYMENT_PAGE_BASE.replace(/\/$/, "")}/${data.vendorOrderId}` : null)) ||
+      (sessionHint && sessionHint.vendorOrderId && (process.env.REACT_APP_HDFC_PAYMENT_PAGE_BASE ? `${process.env.REACT_APP_HDFC_PAYMENT_PAGE_BASE.replace(/\/$/, "")}/${sessionHint.vendorOrderId}` : null));
+
+    if (url) {
+      openPaymentPopup(url);
+      Swal.fire({
+        icon: "info",
+        title: "Redirected to payment page",
+        text: "Payment page opened in a new tab/window. Complete the payment there.",
+        background: "#0f172a",
+        color: "#e2e8f0",
+      });
+      return true;
+    }
+
+    // Some integrations return a form/action and params to POST to provider.
+    if (data && data.action && data.params) {
+      const w = window.open("", "_blank", "noopener");
+      if (!w) {
+        Swal.fire({ icon: "error", title: "Popup blocked", text: "Allow popups to complete payment." });
+        return false;
+      }
+      const formHtml = `
+        <form id="payForm" method="POST" action="${data.action}">
+          ${Object.entries(data.params)
+            .map(([k, v]) => `<input type="hidden" name="${k}" value="${String(v == null ? "" : v)}" />`)
+            .join("\n")}
+        </form>
+        <script>document.getElementById('payForm').submit();</script>
+      `;
+      w.document.write(formHtml);
+      installMessageListener();
+      pollPopupClosed(w);
+      Swal.fire({
+        icon: "info",
+        title: "Payment page opened",
+        text: "A new tab was opened to complete your payment.",
+        background: "#0f172a",
+        color: "#e2e8f0",
+      });
+      return true;
+    }
+
+    console.warn("Unknown gateway response:", data);
+    Swal.fire({
+      icon: "error",
+      title: "Payment initialization failed",
+      text: "Could not start SmartHDFC flow. Please contact support or try Razorpay.",
+    });
+    return false;
+  };
+
+  // open a popup and set up listeners/polling
+  const openPaymentPopup = (url) => {
+    try {
+      const width = 980;
+      const height = 720;
+      const left = window.screenX + (window.innerWidth - width) / 2;
+      const top = window.screenY + (window.innerHeight - height) / 2;
+      const features = `width=${width},height=${height},left=${left},top=${top},noopener`;
+
+      const w = window.open(url, "_blank", features);
+      if (!w) {
+        Swal.fire({ icon: "error", title: "Popup blocked", text: "Please allow popups for this site to complete payment." });
+        return;
+      }
+      popupRef.current = w;
+
+      installMessageListener();
+      pollPopupClosed(w);
+
+      if (popupTimeoutRef.current) clearTimeout(popupTimeoutRef.current);
+      popupTimeoutRef.current = setTimeout(() => {
+        try {
+          if (popupRef.current && !popupRef.current.closed) popupRef.current.close();
+        } catch (e) {}
+        cleanupPopupListeners();
+      }, 1000 * 60 * 15); // 15 minutes
+    } catch (e) {
+      console.error("Failed to open payment popup:", e);
+    }
+  };
+
+  const pollPopupClosed = (w) => {
+    if (popupPollRef.current) clearInterval(popupPollRef.current);
+    popupPollRef.current = setInterval(() => {
+      try {
+        if (!w || w.closed) {
+          clearInterval(popupPollRef.current);
+          popupPollRef.current = null;
+          refreshAfterPayment();
+        }
+      } catch (e) {
+        clearInterval(popupPollRef.current);
+        popupPollRef.current = null;
+        refreshAfterPayment();
+      }
+    }, 800);
+  };
+
+  const installMessageListener = () => {
+    if (messageListenerRef.current) return;
+    const handler = (ev) => {
+      try {
+        const data = ev?.data;
+        if (!data) return;
+        // Expected shapes: { type: 'payment-updated'|'hdfc.payment.updated', admissionNumber, sessionId, status, message }
+        if (data.type === "payment-updated" || data.type === "hdfc.payment.updated") {
+          const admitted = String(data.admissionNumber || data.adm || "").replace(/\//g, "-");
+          if (!username || admitted === String(username)) {
+            refreshAfterPayment();
+            Swal.fire({
+              icon: data.status === "success" ? "success" : "info",
+              title: data.status === "success" ? "Payment Completed" : "Payment Update",
+              text: data.message || "Payment status updated. Fetching latest data...",
+              background: "#052e16",
+              color: "#dcfce7",
+            });
+          }
+          try {
+            if (popupRef.current && !popupRef.current.closed) popupRef.current.close();
+          } catch (e) {}
+        }
+      } catch (err) {
+        console.warn("message handler error:", err);
+      }
+    };
+    messageListenerRef.current = handler;
+    window.addEventListener("message", handler, false);
+  };
+
+  const cleanupPopupListeners = () => {
+    if (messageListenerRef.current) {
+      window.removeEventListener("message", messageListenerRef.current);
+      messageListenerRef.current = null;
+    }
+    if (popupPollRef.current) {
+      clearInterval(popupPollRef.current);
+      popupPollRef.current = null;
+    }
+    if (popupTimeoutRef.current) {
+      clearTimeout(popupTimeoutRef.current);
+      popupTimeoutRef.current = null;
+    }
+    popupRef.current = null;
+  };
+
+  const refreshAfterPayment = async () => {
+    try {
+      if (!username) return;
+      setTimeout(async () => {
+        await Promise.all([fetchStudentDetails(username), fetchTransactionHistory(username), fetchVanFeeByHead()]);
+        cleanupPopupListeners();
+      }, 800);
+    } catch (e) {
+      console.error("refreshAfterPayment failed:", e);
+    }
+  };
+
+  // -------- Pay handlers (updated to open blank window first to avoid popup blockers) ----------
+  const openBlankWindowForPayment = () => {
+    try {
+      const width = 980;
+      const height = 720;
+      const left = window.screenX + (window.innerWidth - width) / 2;
+      const top = window.screenY + (window.innerHeight - height) / 2;
+      const features = `width=${width},height=${height},left=${left},top=${top},noopener`;
+      const w = window.open("", "_blank", features);
+      if (w) {
+        try {
+          w.document.write("<p style='font-family:system-ui;padding:20px'>Preparing payment page…</p>");
+        } catch (e) {
+          // window opened cross-origin or blocked writing; ignore
+        }
+      }
+      return w;
+    } catch (e) {
+      return null;
+    }
+  };
+
   const handlePayFee = async (fee) => {
     const dueAmount = parseFloat(fee.finalAmountDue);
     if (isNaN(dueAmount) || dueAmount <= 0) {
@@ -174,8 +444,9 @@ const StudentDashboard = () => {
     });
     if (!isConfirmed) return;
 
-    const admissionNumber =
-      studentDetails?.admissionNumber || studentDetails?.AdmissionNumber || localStorage.getItem("username");
+    const admissionNumberRaw =
+      studentDetails?.admissionNumber || studentDetails?.AdmissionNumber || localStorage.getItem("username") || username;
+    const admissionNumber = normalizeAdmission(admissionNumberRaw);
     const feeHeadId = fee.fee_heading_id;
 
     if (!admissionNumber || !feeHeadId) {
@@ -186,21 +457,90 @@ const StudentDashboard = () => {
       });
     }
 
+    // open blank window synchronously to avoid popup blockers
+    let paymentWindow = null;
     try {
-      if (!window.Razorpay) {
+      paymentWindow = openBlankWindowForPayment();
+    } catch (e) {
+      paymentWindow = null;
+    }
+
+    try {
+      // If Razorpay is expected in the browser, ensure SDK present. For HDFC we might not need Razorpay SDK.
+      if (paymentGateway === "razorpay" && !window.Razorpay) {
+        if (paymentWindow && !paymentWindow.closed) paymentWindow.close();
         return Swal.fire({
           icon: "error",
           title: "Payment SDK not loaded",
           text: "Please refresh the page and try again.",
         });
       }
+
+      // Debug logs (safe) - remove in production
+      try {
+        console.log("create-order payload:", { admissionNumber, amount: dueAmount, feeHeadId, gateway: paymentGateway });
+        console.log("token present:", !!localStorage.getItem("token"));
+      } catch (e) {}
+
+      // create-order API call
       const orderRes = await api.post("/student-fee/create-order", {
         admissionNumber,
         amount: dueAmount,
         feeHeadId,
+        gateway: paymentGateway,
       });
-      const order = orderRes.data.order || orderRes.data;
 
+      const orderData = orderRes.data || {};
+      const reportedGateway = (orderData && orderData.gateway) || paymentGateway;
+
+      // HDFC flow
+      if (reportedGateway && String(reportedGateway).toLowerCase().includes("hdfc")) {
+        // Determine payment URL (accept multiple shapes)
+        const paymentPageUrl =
+          orderData.paymentPageUrl ||
+          orderData.payment_page_url ||
+          orderData.redirectUrl ||
+          orderData.paymentUrl ||
+          (orderData.vendorOrderId && (process.env.REACT_APP_HDFC_PAYMENT_PAGE_BASE ? `${process.env.REACT_APP_HDFC_PAYMENT_PAGE_BASE.replace(/\/$/, "")}/${orderData.vendorOrderId}` : null)) ||
+          (orderData.session && orderData.session.vendorOrderId && (process.env.REACT_APP_HDFC_PAYMENT_PAGE_BASE ? `${process.env.REACT_APP_HDFC_PAYMENT_PAGE_BASE.replace(/\/$/, "")}/${orderData.session.vendorOrderId}` : null)) ||
+          null;
+
+        if (!paymentPageUrl) {
+          if (paymentWindow && !paymentWindow.closed) paymentWindow.close();
+          // let handleGatewayResponse show more user-friendly messages if possible
+          const handled = handleGatewayResponse(orderData, orderData.session || null);
+          if (!handled) {
+            Swal.fire({ icon: "error", title: "Payment initialization failed", text: "No payment URL returned. Try again." });
+          }
+          return;
+        }
+
+        // navigate the already-opened window to the payment URL (retains user gesture)
+        try {
+          if (paymentWindow && !paymentWindow.closed) {
+            paymentWindow.location.href = paymentPageUrl;
+            popupRef.current = paymentWindow;
+            installMessageListener();
+            pollPopupClosed(paymentWindow);
+          } else {
+            // fallback: open new popup/tab
+            openPaymentPopup(paymentPageUrl);
+          }
+        } catch (e) {
+          // fallback
+          openPaymentPopup(paymentPageUrl);
+        }
+
+        Swal.fire({
+          icon: "info",
+          title: "Payment page opened",
+          text: "Complete the payment in the opened window.",
+        });
+        return;
+      }
+
+      // Default: Razorpay flow (existing)
+      const order = orderData.order || orderData;
       const options = {
         key: process.env.REACT_APP_RAZORPAY_KEY,
         amount: order.amount,
@@ -235,6 +575,7 @@ const StudentDashboard = () => {
       rzp.open();
     } catch (e) {
       console.error("Error initiating payment:", e);
+      if (paymentWindow && !paymentWindow.closed) paymentWindow.close();
       Swal.fire({ icon: "error", title: "Payment Error", text: "Please try again later." });
     }
   };
@@ -263,11 +604,21 @@ const StudentDashboard = () => {
     });
     if (!isConfirmed) return;
 
-    const admissionNumber =
-      studentDetails?.admissionNumber || studentDetails?.AdmissionNumber || localStorage.getItem("username");
+    const admissionNumberRaw =
+      studentDetails?.admissionNumber || studentDetails?.AdmissionNumber || localStorage.getItem("username") || username;
+    const admissionNumber = normalizeAdmission(admissionNumberRaw);
+
+    // open blank window synchronously
+    let paymentWindow = null;
+    try {
+      paymentWindow = openBlankWindowForPayment();
+    } catch (e) {
+      paymentWindow = null;
+    }
 
     try {
-      if (!window.Razorpay) {
+      if (paymentGateway === "razorpay" && !window.Razorpay) {
+        if (paymentWindow && !paymentWindow.closed) paymentWindow.close();
         return Swal.fire({
           icon: "error",
           title: "Payment SDK not loaded",
@@ -275,13 +626,58 @@ const StudentDashboard = () => {
         });
       }
 
+      // create-order for VAN_FEE
       const orderRes = await api.post("/student-fee/create-order", {
         admissionNumber,
         amount: vanDue,
         feeHeadId: "VAN_FEE",
+        gateway: paymentGateway,
       });
-      const order = orderRes.data.order || orderRes.data;
 
+      const orderData = orderRes.data || {};
+      const reportedGateway = (orderData && orderData.gateway) || paymentGateway;
+
+      if (reportedGateway && String(reportedGateway).toLowerCase().includes("hdfc")) {
+        const paymentPageUrl =
+          orderData.paymentPageUrl ||
+          orderData.payment_page_url ||
+          orderData.redirectUrl ||
+          orderData.paymentUrl ||
+          (orderData.vendorOrderId && (process.env.REACT_APP_HDFC_PAYMENT_PAGE_BASE ? `${process.env.REACT_APP_HDFC_PAYMENT_PAGE_BASE.replace(/\/$/, "")}/${orderData.vendorOrderId}` : null)) ||
+          null;
+
+        if (!paymentPageUrl) {
+          if (paymentWindow && !paymentWindow.closed) paymentWindow.close();
+          const handled = handleGatewayResponse(orderData, orderData.session || null);
+          if (!handled) {
+            Swal.fire({ icon: "error", title: "Payment initialization failed", text: "No payment URL returned. Try again." });
+          }
+          return;
+        }
+
+        try {
+          if (paymentWindow && !paymentWindow.closed) {
+            paymentWindow.location.href = paymentPageUrl;
+            popupRef.current = paymentWindow;
+            installMessageListener();
+            pollPopupClosed(paymentWindow);
+          } else {
+            openPaymentPopup(paymentPageUrl);
+          }
+        } catch (e) {
+          openPaymentPopup(paymentPageUrl);
+        }
+
+        Swal.fire({
+          icon: "info",
+          title: "Payment page opened",
+          text: "Complete the payment in the opened window.",
+        });
+        return;
+      }
+
+      // fallback Razorpay flow for van fee
+      const order = orderData.order || orderData;
       const options = {
         key: process.env.REACT_APP_RAZORPAY_KEY,
         amount: order.amount,
@@ -315,6 +711,7 @@ const StudentDashboard = () => {
       rzp.open();
     } catch (e) {
       console.error("Error initiating van fee payment:", e);
+      if (paymentWindow && !paymentWindow.closed) paymentWindow.close();
       Swal.fire({ icon: "error", title: "Payment Error", text: "Please try again later." });
     }
   };
@@ -489,7 +886,21 @@ const StudentDashboard = () => {
               </span>
             )}
 
-            <div className="ms-auto d-flex gap-2">
+            <div className="ms-auto d-flex gap-2 align-items-center">
+              {/* Payment gateway selector (global) */}
+              <div className="d-flex align-items-center">
+                <label className="me-2 small text-white-75 mb-0">Gateway</label>
+                <select
+                  value={paymentGateway}
+                  onChange={(e) => setPaymentGateway(e.target.value)}
+                  className="form-select form-select-sm"
+                  style={{ width: 160 }}
+                >
+                  <option value="razorpay">Razorpay (Default)</option>
+                  <option value="hdfc">SmartHDFC</option>
+                </select>
+              </div>
+
               <button
                 className="btn btn-light btn-sm rounded-pill px-3 action-chip"
                 onClick={() => setActiveMainTab("details")}
