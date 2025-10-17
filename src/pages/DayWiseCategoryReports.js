@@ -37,6 +37,17 @@ const formatTotalValue = (value) => {
   return Number(value) === 0 ? "0" : `₹${Number(value).toLocaleString('en-IN')}`;
 };
 
+// ✅ Normalize /schools API into a single school object
+const normalizeSchool = (raw) => {
+  if (!raw) return null;
+  if (Array.isArray(raw?.schools) && raw.schools.length) return raw.schools[0];
+  if (Array.isArray(raw) && raw.length) return raw[0];
+  if (Array.isArray(raw?.data) && raw.data.length) return raw.data[0];
+  if (raw?.school && typeof raw.school === 'object') return raw.school;
+  if (typeof raw === 'object' && Object.keys(raw).length) return raw;
+  return null;
+};
+
 // Function to pivot the data by Slip_ID so that each slip becomes one row.
 // Modified to separate Van Fee for Tuition Fee records.
 const pivotReportData = (data) => {
@@ -156,15 +167,18 @@ const DayWiseReport = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const recordsPerPage = 500;
 
-  // Fetch school details from API (initial load - optional)
+  // ✅ Fetch school details from API (normalized)
   const fetchSchoolDetails = async () => {
     try {
       const response = await api.get('/schools');
-      if (response.data && response.data.length > 0) {
-        setSchool(response.data[0]);
+      const schoolObj = normalizeSchool(response.data);
+      setSchool(schoolObj || null);
+      if (!schoolObj) {
+        console.warn('No valid school object found in /schools response');
       }
     } catch (err) {
       console.error('Error fetching school details:', err);
+      setSchool(null);
     }
   };
 
@@ -183,8 +197,8 @@ const DayWiseReport = () => {
       const start = formatDate(startDate);  // yyyy-MM-dd for backend
       const end = formatDate(endDate);      // yyyy-MM-dd for backend
       const response = await api.get(`/reports/day-wise?startDate=${start}&endDate=${end}`);
-      setReportData(response.data);
-      console.log('REPORT DATA LENGTH', response.data.length);
+      setReportData(response.data || []);
+      console.log('REPORT DATA LENGTH', (response.data || []).length);
       setCurrentPage(1); // Reset pagination to first page
     } catch (err) {
       if (err.response && err.response.status === 401) {
@@ -266,25 +280,19 @@ const DayWiseReport = () => {
     let schoolData = school;
     try {
       if (!schoolData) {
-        // Fetch school details if not already loaded
-        try {
-          const resp = await api.get('/schools');
-          if (resp.data && resp.data.length > 0) {
-            schoolData = resp.data[0];
-            setSchool(schoolData);
-            console.log('Fetched school data for PDF header');
-          } else {
-            console.warn('No school data returned from /schools');
-          }
-        } catch (err) {
-          console.error('Error fetching school details before PDF generation:', err);
-          // warn user but continue
+        // Fetch school details if not already loaded (normalized)
+        const resp = await api.get('/schools');
+        schoolData = normalizeSchool(resp.data);
+        setSchool(schoolData);
+        if (!schoolData) {
+          console.warn('No school data returned from /schools');
           Swal.fire({
             title: 'Warning',
-            text: 'Could not fetch school details. PDF will be generated without school header.',
+            text: 'Could not fetch school details. PDF will use a default header.',
             icon: 'warning',
             confirmButtonText: 'OK'
           });
+          schoolData = { name: 'Your School', address: '', phone: '', email: '' };
         }
       }
 
@@ -310,6 +318,7 @@ const DayWiseReport = () => {
       const blob = await asPdf.toBlob();
       const url = URL.createObjectURL(blob);
       window.open(url, '_blank');
+      setTimeout(() => URL.revokeObjectURL(url), 60 * 1000);
     } catch (err) {
       console.error('Error generating PDF:', err);
       alert('Error generating PDF. Check console for details.');

@@ -7,14 +7,22 @@ import socket from "../socket"; // ✅ live updates for diary
 
 const API_URL = process.env.REACT_APP_API_URL || "";
 const token = () => localStorage.getItem("token");
-const username = () => localStorage.getItem("username");
 
+// prefer the selected student; fallback to the logged-in username
+const readActiveAdmission = () =>
+  localStorage.getItem("activeStudentAdmission") ||
+  localStorage.getItem("username") ||
+  "";
+
+// formatting helpers
 const fmtINR = (v) =>
   isNaN(v)
     ? v ?? "-"
-    : new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 }).format(
-        Number(v || 0)
-      );
+    : new Intl.NumberFormat("en-IN", {
+        style: "currency",
+        currency: "INR",
+        maximumFractionDigits: 2,
+      }).format(Number(v || 0));
 const fmtDate = (d) => (d ? new Date(d).toLocaleDateString() : "—");
 const isOverdue = (due) => {
   if (!due) return false;
@@ -32,13 +40,30 @@ export default function StudentDashboard() {
   const [studentInfo, setStudentInfo] = useState(null);
 
   // summaries
-  const [attendance, setAttendance] = useState({ present: 0, absent: 0, leave: 0, total: 0 });
-  const [assignSummary, setAssignSummary] = useState({ total: 0, submitted: 0, graded: 0, overdue: 0, next3: [] });
-  const [feeSummary, setFeeSummary] = useState({ totalDue: 0, totalRecv: 0, totalConcession: 0, vanDue: 0, vanRecv: 0 });
+  const [attendance, setAttendance] = useState({
+    present: 0,
+    absent: 0,
+    leave: 0,
+    total: 0,
+  });
+  const [assignSummary, setAssignSummary] = useState({
+    total: 0,
+    submitted: 0,
+    graded: 0,
+    overdue: 0,
+    next3: [],
+  });
+  const [feeSummary, setFeeSummary] = useState({
+    totalDue: 0,
+    totalRecv: 0,
+    totalConcession: 0,
+    vanDue: 0,
+    vanRecv: 0,
+  });
   const [todaySchedule, setTodaySchedule] = useState({ items: [], nextUp: null });
   const [recentCirculars, setRecentCirculars] = useState([]);
 
-  // ✅ new: diary summary widget
+  // ✅ diary summary widget
   const [diarySummary, setDiarySummary] = useState({
     total: 0,
     unack: 0,
@@ -50,6 +75,9 @@ export default function StudentDashboard() {
 
   const abortRef = useRef(null);
 
+  // track active student
+  const [admission, setAdmission] = useState(readActiveAdmission());
+
   // roles (kept from your version)
   const userRoles = useMemo(() => {
     try {
@@ -59,15 +87,43 @@ export default function StudentDashboard() {
       return single ? [single] : [];
     }
   }, []);
-  const canView = userRoles.includes("student") || userRoles.includes("admin") || userRoles.includes("superadmin");
+  const canView =
+    userRoles.includes("student") ||
+    userRoles.includes("admin") ||
+    userRoles.includes("superadmin") ||
+    userRoles.includes("parent"); // allow parent too
 
-  // ---------- Effects ----------
+  // ---------- React to student switch ----------
+  useEffect(() => {
+    const onStudentSwitched = (e) => {
+      const next =
+        e?.detail?.admissionNumber ||
+        localStorage.getItem("activeStudentAdmission") ||
+        "";
+      if (next && next !== admission) setAdmission(next);
+    };
+    const onRoleChanged = () => {
+      // reload admission after role change (useful if user toggles parent<->student)
+      const next = readActiveAdmission();
+      if (next !== admission) setAdmission(next);
+    };
+
+    window.addEventListener("student-switched", onStudentSwitched);
+    window.addEventListener("role-changed", onRoleChanged);
+    return () => {
+      window.removeEventListener("student-switched", onStudentSwitched);
+      window.removeEventListener("role-changed", onRoleChanged);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [admission]);
+
+  // ---------- Notifications (local only) ----------
   useEffect(() => {
     const stored = localStorage.getItem("notifications");
     if (stored) setNotifications(JSON.parse(stored));
   }, []);
 
-  // master loader
+  // ---------- Master loader (re-run when admission changes) ----------
   useEffect(() => {
     if (!API_URL || !token() || !canView) {
       setErr(!canView ? "Access Denied" : "Not configured / not logged in");
@@ -84,7 +140,11 @@ export default function StudentDashboard() {
 
     const fetchStudent = async () => {
       try {
-        const res = await fetch(`${API_URL}/StudentsApp/admission/${username()}/fees`, { headers, signal: ac.signal });
+        // canonical source we already use elsewhere (also returns class/section names)
+        const res = await fetch(
+          `${API_URL}/StudentsApp/admission/${encodeURIComponent(admission)}/fees`,
+          { headers, signal: ac.signal }
+        );
         const data = await res.json();
         setStudentInfo(data || null);
       } catch (e) {
@@ -94,26 +154,65 @@ export default function StudentDashboard() {
 
     const fetchAttendance = async () => {
       try {
-        const res = await fetch(`${API_URL}/attendance/student/me`, { headers, signal: ac.signal });
-        const rows = (await res.json()) || [];
+        // Prefer an admission-aware endpoint if available; else fallback to /me
+        let rows = [];
+        try {
+          const res = await fetch(
+            `${API_URL}/attendance/student/by-admission/${encodeURIComponent(admission)}`,
+            { headers, signal: ac.signal }
+          );
+          if (res.ok) rows = (await res.json()) || [];
+        } catch (_) {}
+        if (!rows || rows.length === 0) {
+          const res = await fetch(`${API_URL}/attendance/student/me`, {
+            headers,
+            signal: ac.signal,
+          });
+          rows = (await res.json()) || [];
+        }
+
         // current month only
         const now = new Date();
-        const m = now.getMonth(), y = now.getFullYear();
+        const m = now.getMonth(),
+          y = now.getFullYear();
         const monthRows = rows.filter((r) => {
           const d = new Date(r.date);
           return d.getMonth() === m && d.getFullYear() === y;
         });
-        const present = monthRows.filter((r) => (r.status || "").toLowerCase() === "present").length;
-        const absent = monthRows.filter((r) => (r.status || "").toLowerCase() === "absent").length;
-        const leave = monthRows.filter((r) => (r.status || "").toLowerCase() === "leave").length;
+        const present = monthRows.filter(
+          (r) => (r.status || "").toLowerCase() === "present"
+        ).length;
+        const absent = monthRows.filter(
+          (r) => (r.status || "").toLowerCase() === "absent"
+        ).length;
+        const leave = monthRows.filter(
+          (r) => (r.status || "").toLowerCase() === "leave"
+        ).length;
         setAttendance({ present, absent, leave, total: monthRows.length });
       } catch (e) {}
     };
 
     const fetchAssignments = async () => {
       try {
-        const res = await fetch(`${API_URL}/student-assignments/student`, { headers, signal: ac.signal });
-        const data = await res.json();
+        // Try with admission param
+        let data;
+        try {
+          const res = await fetch(
+            `${API_URL}/student-assignments/student?admission=${encodeURIComponent(
+              admission
+            )}`,
+            { headers, signal: ac.signal }
+          );
+          if (res.ok) data = await res.json();
+        } catch (_) {}
+        if (!data) {
+          const res = await fetch(`${API_URL}/student-assignments/student`, {
+            headers,
+            signal: ac.signal,
+          });
+          data = await res.json();
+        }
+
         const list = data?.assignments || [];
         let submitted = 0,
           graded = 0,
@@ -124,16 +223,25 @@ export default function StudentDashboard() {
           const status = (sa?.status || "").toLowerCase();
           if (status === "submitted") submitted += 1;
           if (status === "graded") graded += 1;
-          if (!["submitted", "graded"].includes(status) && isOverdue(sa?.dueDate)) overdue += 1;
+          if (!["submitted", "graded"].includes(status) && isOverdue(sa?.dueDate))
+            overdue += 1;
         });
         // next 3 upcoming (not submitted/graded, not overdue)
         list
           .filter((a) => {
             const sa = a?.StudentAssignments?.[0] || {};
             const st = (sa?.status || "").toLowerCase();
-            return !["submitted", "graded"].includes(st) && !!sa?.dueDate && !isOverdue(sa?.dueDate);
+            return (
+              !["submitted", "graded"].includes(st) &&
+              !!sa?.dueDate &&
+              !isOverdue(sa?.dueDate)
+            );
           })
-          .sort((a, b) => new Date(a.StudentAssignments?.[0]?.dueDate || 0) - new Date(b.StudentAssignments?.[0]?.dueDate || 0))
+          .sort(
+            (a, b) =>
+              new Date(a.StudentAssignments?.[0]?.dueDate || 0) -
+              new Date(b.StudentAssignments?.[0]?.dueDate || 0)
+          )
           .slice(0, 3)
           .forEach((a) =>
             next3.push({
@@ -142,13 +250,22 @@ export default function StudentDashboard() {
               due: a.StudentAssignments?.[0]?.dueDate || null,
             })
           );
-        setAssignSummary({ total: list.length, submitted, graded, overdue, next3 });
+        setAssignSummary({
+          total: list.length,
+          submitted,
+          graded,
+          overdue,
+          next3,
+        });
       } catch (e) {}
     };
 
     const fetchCirculars = async () => {
       try {
-        const res = await fetch(`${API_URL}/circulars`, { headers, signal: ac.signal });
+        const res = await fetch(`${API_URL}/circulars`, {
+          headers,
+          signal: ac.signal,
+        });
         const data = await res.json();
         const filtered = (data?.circulars || [])
           .filter((c) => c.audience === "student" || c.audience === "both")
@@ -160,12 +277,24 @@ export default function StudentDashboard() {
 
     const fetchFees = async () => {
       try {
-        const res = await fetch(`${API_URL}/StudentsApp/admission/${username()}/fees`, { headers, signal: ac.signal });
+        const res = await fetch(
+          `${API_URL}/StudentsApp/admission/${encodeURIComponent(admission)}/fees`,
+          { headers, signal: ac.signal }
+        );
         const data = await res.json();
         const fees = data?.feeDetails || [];
-        const totalDue = fees.reduce((s, f) => s + Number(f.finalAmountDue || 0), 0);
-        const totalRecv = fees.reduce((s, f) => s + Number(f.totalFeeReceived || 0), 0);
-        const totalConcession = fees.reduce((s, f) => s + Number(f.totalConcessionReceived || 0), 0);
+        const totalDue = fees.reduce(
+          (s, f) => s + Number(f.finalAmountDue || 0),
+          0
+        );
+        const totalRecv = fees.reduce(
+          (s, f) => s + Number(f.totalFeeReceived || 0),
+          0
+        );
+        const totalConcession = fees.reduce(
+          (s, f) => s + Number(f.totalConcessionReceived || 0),
+          0
+        );
 
         // van summary (overall)
         const vanObj = data?.vanFee || {};
@@ -177,27 +306,52 @@ export default function StudentDashboard() {
       } catch (e) {}
     };
 
-    // ✅ new: compact diary summary fetcher
+    // ✅ compact diary summary fetcher (admission-aware)
     const fetchDiarySummary = async () => {
       try {
-        // 1) latest few items (so we can show a quick glance & total)
-        const latestRes = await fetch(
-          `${API_URL}/diaries/student/feed/list?page=1&pageSize=5&order=date:DESC`,
+        const withAdmission = (base) =>
+          `${base}${base.includes("?") ? "&" : "?"}admission=${encodeURIComponent(
+            admission
+          )}`;
+
+        // 1) latest few items
+        let latestRes = await fetch(
+          withAdmission(
+            `${API_URL}/diaries/student/feed/list?page=1&pageSize=5&order=date:DESC`
+          ),
           { headers, signal: ac.signal }
         );
+
+        // fallback without param if not supported
+        if (!latestRes.ok) {
+          latestRes = await fetch(
+            `${API_URL}/diaries/student/feed/list?page=1&pageSize=5&order=date:DESC`,
+            { headers, signal: ac.signal }
+          );
+        }
+
         const latestJson = await latestRes.json();
         const latestItems = Array.isArray(latestJson?.data) ? latestJson.data : [];
-        const total = Number(latestJson?.pagination?.total || latestItems.length || 0);
+        const total = Number(
+          latestJson?.pagination?.total || latestItems.length || 0
+        );
 
-        // 2) just the count of unacknowledged (fast: request only count via pageSize=1 and onlyUnacknowledged=true)
-        const unackRes = await fetch(
-          `${API_URL}/diaries/student/feed/list?page=1&pageSize=1&order=date:DESC&onlyUnacknowledged=true`,
+        // 2) count of unacknowledged
+        let unackRes = await fetch(
+          withAdmission(
+            `${API_URL}/diaries/student/feed/list?page=1&pageSize=1&order=date:DESC&onlyUnacknowledged=true`
+          ),
           { headers, signal: ac.signal }
         );
+        if (!unackRes.ok) {
+          unackRes = await fetch(
+            `${API_URL}/diaries/student/feed/list?page=1&pageSize=1&order=date:DESC&onlyUnacknowledged=true`,
+            { headers, signal: ac.signal }
+          );
+        }
         const unackJson = await unackRes.json();
         const unack = Number(unackJson?.pagination?.total || 0);
 
-        // map latest minimal info
         const latest = latestItems.map((d) => ({
           id: d.id,
           title: d.title || "Untitled",
@@ -213,16 +367,38 @@ export default function StudentDashboard() {
 
     const fetchTodaySchedule = async () => {
       try {
-        // periods + timetable + substitutions(today)
-        const [pRes, tRes] = await Promise.all([
-          fetch(`${API_URL}/periods`, { headers, signal: ac.signal }),
-          fetch(`${API_URL}/period-class-teacher-subject/student/timetable`, { headers, signal: ac.signal }),
-        ]);
-        const periods = (await pRes.json()) || [];
+        // timetable (admission-aware if supported)
+        let tRes = await fetch(
+          `${API_URL}/period-class-teacher-subject/student/timetable?admission=${encodeURIComponent(
+            admission
+          )}`,
+          { headers, signal: ac.signal }
+        );
+        if (!tRes.ok) {
+          tRes = await fetch(
+            `${API_URL}/period-class-teacher-subject/student/timetable`,
+            { headers, signal: ac.signal }
+          );
+        }
         const ttbRaw = await tRes.json();
         const ttb = Array.isArray(ttbRaw) ? ttbRaw : ttbRaw?.timetable || [];
 
-        const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+        // periods
+        const pRes = await fetch(`${API_URL}/periods`, {
+          headers,
+          signal: ac.signal,
+        });
+        const periods = (await pRes.json()) || [];
+
+        const days = [
+          "Sunday",
+          "Monday",
+          "Tuesday",
+          "Wednesday",
+          "Thursday",
+          "Friday",
+          "Saturday",
+        ];
         const todayIdx = new Date().getDay();
         const todayName = days[todayIdx];
 
@@ -240,7 +416,10 @@ export default function StudentDashboard() {
             return r
               ? {
                   period: p.period_name,
-                  time: p.start_time && p.end_time ? `${p.start_time}–${p.end_time}` : "",
+                  time:
+                    p.start_time && p.end_time
+                      ? `${p.start_time}–${p.end_time}`
+                      : "",
                   subject: r.Subject?.name || r.subjectId || "—",
                   teacher: r.Teacher?.name || "—",
                   startHM: p.start_time || "",
@@ -292,11 +471,14 @@ export default function StudentDashboard() {
       ac.abort();
       socket.off("diaryChanged", onDiaryChanged);
     };
-  }, [canView]);
+    // 👇 IMPORTANT: re-run when selected student changes
+  }, [canView, admission]);
 
   // ---------- UI bits ----------
   const presencePct =
-    attendance.total > 0 ? Math.round((attendance.present / Math.max(attendance.total, 1)) * 100) : 0;
+    attendance.total > 0
+      ? Math.round((attendance.present / Math.max(attendance.total, 1)) * 100)
+      : 0;
 
   const Skeleton = () => (
     <div className="placeholder-glow">
@@ -362,23 +544,33 @@ export default function StudentDashboard() {
           </div>
           <div className="flex-grow-1">
             <h2 className="h4 text-white mb-1 fw-bold">
-              Welcome{studentInfo?.name ? `, ${studentInfo.name}` : ""} 
+              Welcome{studentInfo?.name ? `, ${studentInfo.name}` : ""}
             </h2>
             <div className="d-flex flex-wrap gap-2 mt-1">
               <span className="chip chip-glass animate-slide-in">
                 <i className="bi bi-person-badge me-1"></i>
-                Adm No: <strong className="ms-1">{studentInfo?.admissionNumber || username() || "—"}</strong>
+                Adm No:{" "}
+                <strong className="ms-1">
+                  {studentInfo?.admissionNumber || admission || "—"}
+                </strong>
               </span>
               {studentInfo?.class_name && (
-                <span className="chip chip-glass animate-slide-in" style={{ animationDelay: '0.1s' }}>
+                <span
+                  className="chip chip-glass animate-slide-in"
+                  style={{ animationDelay: "0.1s" }}
+                >
                   <i className="bi bi-mortarboard me-1"></i>
                   Class: <strong className="ms-1">{studentInfo.class_name}</strong>
                 </span>
               )}
               {studentInfo?.section_name && (
-                <span className="chip chip-glass animate-slide-in" style={{ animationDelay: '0.2s' }}>
+                <span
+                  className="chip chip-glass animate-slide-in"
+                  style={{ animationDelay: "0.2s" }}
+                >
                   <i className="bi bi-book me-1"></i>
-                  Section: <strong className="ms-1">{studentInfo.section_name}</strong>
+                  Section:{" "}
+                  <strong className="ms-1">{studentInfo.section_name}</strong>
                 </span>
               )}
             </div>
@@ -400,7 +592,7 @@ export default function StudentDashboard() {
           </button>
         </div>
 
-        {/* KPI strip (scrollable on mobile) */}
+        {/* KPI strip */}
         <div className="row g-2 mt-3 position-relative z-2">
           <StatCard
             title="Attendance"
@@ -423,7 +615,7 @@ export default function StudentDashboard() {
             pillClass="text-bg-danger"
             icon="bi-cash-coin"
           />
-          {/* ✅ New: Diary KPI */}
+          {/* ✅ Diary KPI */}
           <StatCard
             title="Diary"
             value={`${diarySummary.total}`}
@@ -441,42 +633,66 @@ export default function StudentDashboard() {
           icon={<i className="bi bi-calendar2-check text-success"></i>}
           label="Attendance"
           desc="View monthly attendance & holidays"
-          badge={<span className="badge rounded-pill text-bg-success fs-6">{presencePct}%</span>}
+          badge={
+            <span className="badge rounded-pill text-bg-success fs-6">
+              {presencePct}%
+            </span>
+          }
         />
         <QuickLink
           href="/my-assignments"
           icon={<i className="bi bi-journal-check text-primary"></i>}
           label="Assignments"
           desc="All tasks, due dates & grades"
-          badge={<span className="badge rounded-pill text-bg-danger fs-6">{assignSummary.overdue} overdue</span>}
+          badge={
+            <span className="badge rounded-pill text-bg-danger fs-6">
+              {assignSummary.overdue} overdue
+            </span>
+          }
         />
         <QuickLink
-          href="/student-diary"                       // ✅ New quick link
+          href="/student-diary" // ✅ New quick link
           icon={<i className="bi bi-journal-text text-info"></i>}
           label="Diary"
           desc="Class notes & announcements"
-          badge={<span className="badge rounded-pill text-bg-info fs-6">{diarySummary.unack} pending</span>}
+          badge={
+            <span className="badge rounded-pill text-bg-info fs-6">
+              {diarySummary.unack} pending
+            </span>
+          }
         />
         <QuickLink
           href="/student-circulars"
           icon={<i className="bi bi-megaphone text-info"></i>}
           label="Circulars"
           desc="Latest announcements"
-          badge={<span className="badge rounded-pill text-bg-primary fs-6">{recentCirculars.length} new</span>}
+          badge={
+            <span className="badge rounded-pill text-bg-primary fs-6">
+              {recentCirculars.length} new
+            </span>
+          }
         />
         <QuickLink
           href="/student-timetable-display"
           icon={<i className="bi bi-clock-history text-secondary"></i>}
           label="Timetable"
           desc="Today’s periods & substitutions"
-          badge={<span className="badge rounded-pill text-bg-secondary fs-6">{todaySchedule.items.length || 0} periods</span>}
+          badge={
+            <span className="badge rounded-pill text-bg-secondary fs-6">
+              {todaySchedule.items.length || 0} periods
+            </span>
+          }
         />
         <QuickLink
           href="/student-fee"
           icon={<i className="bi bi-cash-coin text-warning"></i>}
           label="Fees"
           desc="Dues, concessions & payments"
-          badge={<span className="badge rounded-pill text-bg-warning text-dark fs-6">{fmtINR(feeSummary.vanDue)} van due</span>}
+          badge={
+            <span className="badge rounded-pill text-bg-warning text-dark fs-6">
+              {fmtINR(feeSummary.vanDue)} van due
+            </span>
+          }
         />
         <QuickLink
           href="/chat"
@@ -487,10 +703,13 @@ export default function StudentDashboard() {
         />
       </div>
 
-      {/* Two-up content: Upcoming Assignments + Recent Circulars (stack on mobile) */}
+      {/* Two-up content: Upcoming Assignments + Recent Circulars */}
       <div className="row g-3">
         <div className="col-12 col-lg-6">
-          <div className="card border-0 shadow-lg rounded-4 h-100 fade-in-up" style={{ animationDelay: '0.1s' }}>
+          <div
+            className="card border-0 shadow-lg rounded-4 h-100 fade-in-up"
+            style={{ animationDelay: "0.1s" }}
+          >
             <div className="card-header bg-gradient-primary text-white rounded-top-4 d-flex align-items-center gap-2">
               <i className="bi bi-clipboard-check fs-5"></i>
               Upcoming Assignments
@@ -505,15 +724,27 @@ export default function StudentDashboard() {
                 </div>
               ) : (
                 <ul className="list-group list-group-flush rounded-bottom-4">
-                  {assignSummary.next3.map((a, idx) => (
-                    <li key={a.id} className="list-group-item px-4 py-3 d-flex justify-content-between align-items-center border-0 hover-light">
+                  {assignSummary.next3.map((a) => (
+                    <li
+                      key={a.id}
+                      className="list-group-item px-4 py-3 d-flex justify-content-between align-items-center border-0 hover-light"
+                    >
                       <div className="me-2">
-                        <div className="fw-bold text-truncate" style={{ maxWidth: 220 }}>{a.title}</div>
+                        <div
+                          className="fw-bold text-truncate"
+                          style={{ maxWidth: 220 }}
+                        >
+                          {a.title}
+                        </div>
                         <div className="small text-muted mt-1">
-                          <i className="bi bi-calendar-event me-1"></i>Due: {fmtDate(a.due)}
+                          <i className="bi bi-calendar-event me-1"></i>Due:{" "}
+                          {fmtDate(a.due)}
                         </div>
                       </div>
-                      <a className="btn btn-sm btn-outline-primary rounded-pill px-3" href="/my-assignments">
+                      <a
+                        className="btn btn-sm btn-outline-primary rounded-pill px-3"
+                        href="/my-assignments"
+                      >
                         <i className="bi bi-box-arrow-up-right"></i> Open
                       </a>
                     </li>
@@ -525,7 +756,10 @@ export default function StudentDashboard() {
         </div>
 
         <div className="col-12 col-lg-6">
-          <div className="card border-0 shadow-lg rounded-4 h-100 fade-in-up" style={{ animationDelay: '0.2s' }}>
+          <div
+            className="card border-0 shadow-lg rounded-4 h-100 fade-in-up"
+            style={{ animationDelay: "0.2s" }}
+          >
             <div className="card-header bg-gradient-info text-white rounded-top-4 d-flex align-items-center gap-2">
               <i className="bi bi-newspaper fs-5"></i>
               Recent Circulars
@@ -541,16 +775,26 @@ export default function StudentDashboard() {
               ) : (
                 <ul className="list-group list-group-flush rounded-bottom-4">
                   {recentCirculars.map((c) => (
-                    <li key={c.id} className="list-group-item px-4 py-3 d-flex justify-content-between align-items-start border-0 hover-light">
+                    <li
+                      key={c.id}
+                      className="list-group-item px-4 py-3 d-flex justify-content-between align-items-start border-0 hover-light"
+                    >
                       <div className="me-2 flex-grow-1">
-                        <div className="fw-bold text-truncate" style={{ maxWidth: 260 }}>
+                        <div
+                          className="fw-bold text-truncate"
+                          style={{ maxWidth: 260 }}
+                        >
                           {c.title || "Untitled"}
                         </div>
                         <div className="small text-muted mt-1">
-                          <i className="bi bi-clock-history me-1"></i>{fmtDate(c.createdAt)}
+                          <i className="bi bi-clock-history me-1"></i>
+                          {fmtDate(c.createdAt)}
                         </div>
                       </div>
-                      <a className="btn btn-sm btn-outline-info rounded-pill px-3 ms-2" href="/student-circulars">
+                      <a
+                        className="btn btn-sm btn-outline-info rounded-pill px-3 ms-2"
+                        href="/student-circulars"
+                      >
                         <i className="bi bi-eye"></i> View
                       </a>
                     </li>
@@ -563,7 +807,10 @@ export default function StudentDashboard() {
       </div>
 
       {/* Today’s timetable (compact) */}
-      <div className="card border-0 shadow-lg rounded-4 mt-3 fade-in-up" style={{ animationDelay: '0.3s' }}>
+      <div
+        className="card border-0 shadow-lg rounded-4 mt-3 fade-in-up"
+        style={{ animationDelay: "0.3s" }}
+      >
         <div className="card-header bg-gradient-secondary text-white rounded-top-4 d-flex align-items-center gap-2">
           <i className="bi bi-table fs-5"></i>
           Today’s Timetable
@@ -581,20 +828,42 @@ export default function StudentDashboard() {
               <table className="table table-sm align-middle mb-0">
                 <thead className="table-dark">
                   <tr>
-                    <th scope="col"><i className="bi bi-hash me-1"></i>Period</th>
-                    <th scope="col"><i className="bi bi-clock me-1"></i>Time</th>
-                    <th scope="col"><i className="bi bi-book me-1"></i>Subject</th>
-                    <th scope="col"><i className="bi bi-person me-1"></i>Teacher</th>
+                    <th scope="col">
+                      <i className="bi bi-hash me-1"></i>Period
+                    </th>
+                    <th scope="col">
+                      <i className="bi bi-clock me-1"></i>Time
+                    </th>
+                    <th scope="col">
+                      <i className="bi bi-book me-1"></i>Subject
+                    </th>
+                    <th scope="col">
+                      <i className="bi bi-person me-1"></i>Teacher
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   {todaySchedule.items.map((it, idx) => (
-                    <tr key={idx} className={`hover-row ${todaySchedule.nextUp?.period === it.period ? "table-info" : ""}`}>
+                    <tr
+                      key={idx}
+                      className={`hover-row ${
+                        todaySchedule.nextUp?.period === it.period
+                          ? "table-info"
+                          : ""
+                      }`}
+                    >
                       <td className="fw-semibold">
-                        <i className={`bi bi-circle-fill text-primary me-2 opacity-75`} style={{ fontSize: '0.6em' }}></i>
+                        <i
+                          className={`bi bi-circle-fill text-primary me-2 opacity-75`}
+                          style={{ fontSize: "0.6em" }}
+                        ></i>
                         {it.period}
                       </td>
-                      <td><span className="badge bg-light text-dark rounded-pill px-2 py-1">{it.time}</span></td>
+                      <td>
+                        <span className="badge bg-light text-dark rounded-pill px-2 py-1">
+                          {it.time}
+                        </span>
+                      </td>
                       <td className="fw-medium">{it.subject}</td>
                       <td className="text-muted small">{it.teacher}</td>
                     </tr>
@@ -604,7 +873,10 @@ export default function StudentDashboard() {
             </div>
           )}
           <div className="text-end mt-3 pt-2 border-top">
-            <a className="btn btn-outline-secondary btn-sm rounded-pill px-4" href="/student-timetable-display">
+            <a
+              className="btn btn-outline-secondary btn-sm rounded-pill px-4"
+              href="/student-timetable-display"
+            >
               <i className="bi bi-arrow-right me-1"></i>Full Timetable
             </a>
           </div>
@@ -618,11 +890,16 @@ export default function StudentDashboard() {
           aria-modal="true"
           role="dialog"
           onClick={(e) => {
-            if (e.target.classList.contains("overlay")) setShowNotifications(false);
+            if (e.target.classList.contains("overlay"))
+              setShowNotifications(false);
           }}
         >
           <div className="sheet fade-in">
-            <button className="btn-close position-absolute top-0 end-0 m-3" onClick={() => setShowNotifications(false)} aria-label="Close"></button>
+            <button
+              className="btn-close position-absolute top-0 end-0 m-3"
+              onClick={() => setShowNotifications(false)}
+              aria-label="Close"
+            ></button>
             <h5 className="mb-3 d-flex align-items-center gap-2">
               <i className="bi bi-bell"></i>Notifications
             </h5>
@@ -636,7 +913,10 @@ export default function StudentDashboard() {
                 {notifications.map((n, i) => (
                   <li key={i} className="list-group-item border-0 px-0 py-3">
                     <div className="d-flex align-items-start gap-3">
-                      <div className="bg-primary rounded-circle d-flex align-items-center justify-content-center" style={{ width: '40px', height: '40px' }}>
+                      <div
+                        className="bg-primary rounded-circle d-flex align-items-center justify-content-center"
+                        style={{ width: "40px", height: "40px" }}
+                      >
                         <i className="bi bi-info-circle text-white fs-6"></i>
                       </div>
                       <div className="flex-grow-1">
@@ -649,7 +929,10 @@ export default function StudentDashboard() {
               </ul>
             )}
             {notifications.length > 0 && (
-              <button onClick={clearAllNotifications} className="btn btn-primary mt-3 rounded-pill w-100">
+              <button
+                onClick={clearAllNotifications}
+                className="btn btn-primary mt-3 rounded-pill w-100"
+              >
                 <i className="bi bi-trash me-2"></i>Clear All
               </button>
             )}
@@ -743,7 +1026,6 @@ export default function StudentDashboard() {
         }
         .icon-badge:hover { transform: scale(1.1); box-shadow: 0 4px 12px rgba(59, 130, 246, .3); }
 
-        /* Animations */
         @keyframes fade-in-up {
           from { opacity: 0; transform: translateY(20px); }
           to { opacity: 1; transform: translateY(0); }
@@ -795,9 +1077,7 @@ export default function StudentDashboard() {
           from { opacity: 0; transform: translateY(-20px); }
           to { opacity: 1; transform: translateY(0); }
         }
-        .fade-in {
-          animation: fade-in-up 0.3s ease-out;
-        }
+        .fade-in { animation: fade-in-up 0.3s ease-out; }
 
         .bg-gradient-primary { background: var(--grad-primary); }
         .bg-gradient-info { background: var(--grad-info); }

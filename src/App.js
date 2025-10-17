@@ -6,10 +6,11 @@ import {
   Route,
   Navigate,
 } from "react-router-dom";
+import axios from "axios";
 import { onMessage } from "firebase/messaging";
 import { messaging } from "./firebase/firebaseConfig";
 
-import AppLayout from "./layouts/AppLayout"; // ⟵ FIXED PATH
+import AppLayout from "./layouts/AppLayout";
 
 // Auth / common
 import Login from "./components/Login";
@@ -20,7 +21,7 @@ import ChatContainer from "./components/chat/ChatContainer";
 
 // Pages
 import Classes from "./pages/Classes";
-import Sessions from "./pages/Sessions"; // <-- ADDED
+import Sessions from "./pages/Sessions";
 import Subjects from "./pages/Subjects";
 import Student from "./pages/Students";
 import FeeStructure from "./pages/FeeStructure";
@@ -101,25 +102,134 @@ import ReportCardFormats from "./pages/ReportCardFormats";
 import AssignReportCardFormat from "./pages/AssignReportCardFormat";
 import ReportCardGenerator from "./pages/ReportCardGenerator";
 import StudentRemarksEntry from "./pages/StudentRemarksEntry";
-// Pages (add near other pages)
 import StudentTransport from "./pages/StudentTransport";
 import OpeningBalances from "./pages/OpeningBalances";
-import CasteGenderReport from "./pages/CasteGenderReport"; // ⬅ NEW
-import DigitalDiary from "./pages/DigitalDiary"; // ⬅ NEW
-import StudentDiary from "./pages/StudentDiary";   // ⬅️ new
-import DiaryDetail from "./pages/DiaryDetail";     // ⬅️ new
+import CasteGenderReport from "./pages/CasteGenderReport";
+import DigitalDiary from "./pages/DigitalDiary";
+import StudentDiary from "./pages/StudentDiary";
+import DiaryDetail from "./pages/DiaryDetail";
 import AccountsDashboard from "./components/AccountsDashboard";
 import TransportSummary from "./pages/TransportSummary";
+import UserTracking from "./pages/UserTracking";
 
+// ✅ admission-aware hook for remount key
+import useActiveStudent from "./hooks/useActiveStudent";
 
+// ---------- auth guard ----------
 const RequireRole = ({ roles = [], children }) => {
   const stored = JSON.parse(localStorage.getItem("roles") || "[]");
   const userRoles = stored.map((r) => (r || "").toLowerCase());
-  const allowed = roles.length === 0 || roles.some((r) => userRoles.includes(r.toLowerCase()));
+  const allowed =
+    roles.length === 0 || roles.some((r) => userRoles.includes(r.toLowerCase()));
   return allowed ? children : <Navigate to="/dashboard" replace />;
 };
 
+// ---------- install global API shims (axios + fetch) ----------
+function installGlobalApiShims() {
+  const API_BASE = (process.env.REACT_APP_API_URL || "").replace(/\/+$/, "");
+
+  const getActiveAdmission = () =>
+    localStorage.getItem("activeStudentAdmission") ||
+    localStorage.getItem("username") ||
+    "";
+
+  // ---------- URL Rewriter ----------
+  const rewriteUrlString = (urlString) => {
+    const admission = getActiveAdmission();
+    if (!admission) return urlString;
+
+    let urlObj;
+    try {
+      // absolute
+      urlObj = new URL(urlString);
+    } catch {
+      try {
+        // relative
+        const base = API_BASE || window.location.origin;
+        urlObj = new URL(urlString.replace(/^\//, ""), base + "/");
+      } catch {
+        return urlString;
+      }
+    }
+
+    // only touch your API URLs
+    if (API_BASE && !urlObj.href.startsWith(API_BASE)) {
+      return urlString;
+    }
+
+    // 1️⃣ Replace any `/admission/<something>` with `/admission/<activeAdmission>`
+    urlObj.pathname = urlObj.pathname.replace(
+      /\/admission\/[^/]+/i,
+      `/admission/${encodeURIComponent(admission)}`
+    );
+
+    // 2️⃣ Add or override admission parameter
+    if (!urlObj.searchParams.has("admission")) {
+      urlObj.searchParams.set("admission", admission);
+    }
+
+    // 3️⃣ Override username/admission_number params if they exist
+    urlObj.searchParams.set("username", admission);
+    urlObj.searchParams.set("admission_number", admission);
+
+    return urlObj.href;
+  };
+
+  // ---------- Axios interceptor ----------
+  axios.interceptors.request.use((config) => {
+    const t = localStorage.getItem("token") || sessionStorage.getItem("token");
+    if (t && !config.headers?.Authorization) {
+      config.headers = { ...(config.headers || {}), Authorization: `Bearer ${t}` };
+    }
+
+    const admission = getActiveAdmission();
+    if (admission) {
+      config.headers = { ...(config.headers || {}), "X-Active-Student": admission };
+    }
+
+    if (config.url) {
+      config.url = rewriteUrlString(config.url);
+    }
+
+    return config;
+  });
+
+  // ---------- Fetch wrapper ----------
+  if (!window.__FETCH_STUDENT_SHIM_INSTALLED__) {
+    const originalFetch = window.fetch.bind(window);
+    window.fetch = async (input, init = {}) => {
+      const headers = new Headers(init.headers || {});
+      const t = localStorage.getItem("token") || sessionStorage.getItem("token");
+      const admission = getActiveAdmission();
+
+      // Normalize URL string
+      let urlString = typeof input === "string" ? input : input?.url || "";
+      urlString = rewriteUrlString(urlString);
+
+      if (t && !headers.has("Authorization")) {
+        headers.set("Authorization", `Bearer ${t}`);
+      }
+      if (admission && !headers.has("X-Active-Student")) {
+        headers.set("X-Active-Student", admission);
+      }
+
+      if (input instanceof Request) {
+        return originalFetch(new Request(urlString, { ...init, headers }), init);
+      }
+      return originalFetch(urlString, { ...init, headers });
+    };
+    window.__FETCH_STUDENT_SHIM_INSTALLED__ = true;
+  }
+}
+
+
 function App() {
+  // ✅ run once: install API shims
+  useEffect(() => {
+    installGlobalApiShims();
+  }, []);
+
+  // ✅ Firebase foreground notifications (unchanged)
   useEffect(() => {
     const unsubscribe = onMessage(messaging, (payload) => {
       if (payload.notification) {
@@ -129,6 +239,9 @@ function App() {
     });
     return () => unsubscribe();
   }, []);
+
+  // ✅ force protected app to remount when student changes
+  const activeAdmission = useActiveStudent();
 
   const currentUserId = localStorage.getItem("userId");
 
@@ -140,23 +253,21 @@ function App() {
         <Route path="/login" element={<Login />} />
 
         {/* Protected App: header + sidebar + content push */}
-        <Route element={<AppLayout />}>
+        {/* The key={activeAdmission} is the trick: it remounts the whole app shell on switch */}
+        <Route element={<AppLayout key={activeAdmission} />}>
           {/* Dashboard landing */}
           <Route path="/dashboard" element={<RoleAwareDashboard />} />
 
           {/* Profile & Chat */}
           <Route path="/edit-profile" element={<EditProfile />} />
 
-          {/* legacy small chat component (floating or embedded) */}
+          {/* legacy small chat component */}
           <Route
             path="/chat"
             element={<Chat chatId="chat_room_1" currentUserId={currentUserId} />}
           />
 
-          {/* full-page ChatContainer (dedicated route)
-              - /chat-page  => opens chat UI as a page
-              - /chat-page/:contactId  => opens chat and auto-opens that contact/thread
-          */}
+          {/* full-page ChatContainer */}
           <Route
             path="/chat-page"
             element={<ChatContainer fullPage currentUserId={currentUserId} />}
@@ -203,7 +314,7 @@ function App() {
 
           {/* Users */}
           <Route path="/users" element={<UserManagement />} />
-          <Route path="/student-user-accounts" element={<StudentUserAccounts />} /> 
+          <Route path="/student-user-accounts" element={<StudentUserAccounts />} />
 
           {/* Departments / Employees */}
           <Route path="/departments" element={<Departments />} />
@@ -276,7 +387,7 @@ function App() {
             element={<CombinedExamSchemeManagement />}
           />
           <Route path="/term-management" element={<TermManagement />} />
-          <Route path="/assessment-components" element={<AssessmentComponentManagement />} /> 
+          <Route path="/assessment-components" element={<AssessmentComponentManagement />} />
           <Route
             path="/reports/final-result-summary"
             element={<FinalResultSummary />}
@@ -303,11 +414,9 @@ function App() {
           {/* Reports */}
           <Route path="/reports/caste-gender" element={<CasteGenderReport />} />
 
-          {/* Digital Diary (NEW) */}
+          {/* Digital Diary */}
           <Route path="/digital-diary" element={<DigitalDiary />} />
-          {/* Optional alias to the same page */}
           <Route path="/diary-feed" element={<DigitalDiary />} />
-
           <Route path="/student-diary" element={<StudentDiary />} />
           <Route path="/diary/:id" element={<DiaryDetail />} />
 
@@ -321,6 +430,15 @@ function App() {
             }
           />
 
+          {/* Users tracking */}
+          <Route
+            path="/users-tracking"
+            element={
+              <RequireRole roles={["admin", "superadmin"]}>
+                <UserTracking />
+              </RequireRole>
+            }
+          />
 
           {/* Catch-all (inside app) */}
           <Route path="*" element={<h1 className="container py-4">404: Page Not Found</h1>} />

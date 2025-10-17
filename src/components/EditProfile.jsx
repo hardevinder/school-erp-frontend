@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import Navbar from './Navbar'; // Import the Navbar component
+import Navbar from './Navbar.jsx'; // Import the Navbar component
 
 const EditProfile = () => {
   const navigate = useNavigate();

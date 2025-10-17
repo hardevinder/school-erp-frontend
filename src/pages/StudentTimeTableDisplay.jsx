@@ -2,7 +2,12 @@
 import React, { useState, useEffect, useMemo } from "react";
 import "bootstrap/dist/css/bootstrap.min.css";
 
+const API_URL = process.env.REACT_APP_API_URL || "";
 const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+/* Helpers */
+const normalizeAdmission = (s) => String(s || "").replace(/\//g, "-").trim();
+const normalizeRole = (r) => String(r || "").toLowerCase();
 
 const StudentTimetableDisplay = () => {
   const [periods, setPeriods] = useState([]);
@@ -15,7 +20,94 @@ const StudentTimetableDisplay = () => {
   // NEW: which accordion is open on mobile
   const [mobileOpenIdx, setMobileOpenIdx] = useState(0);
 
+  // NEW: roles + switcher state (parity with Diary/Navbar)
   const token = localStorage.getItem("token");
+  const parseJwt = (tkn) => {
+    try {
+      const p = tkn.split(".")[1];
+      return JSON.parse(atob(p.replace(/-/g, "+").replace(/_/g, "/")));
+    } catch {
+      return null;
+    }
+  };
+
+  const roles = useMemo(() => {
+    try {
+      const stored = localStorage.getItem("roles");
+      if (stored) return JSON.parse(stored).map(normalizeRole);
+    } catch {}
+    const single = localStorage.getItem("userRole");
+    if (single) return [normalizeRole(single)];
+    const payload = token ? parseJwt(token) : null;
+    if (payload) {
+      if (Array.isArray(payload.roles)) return payload.roles.map(normalizeRole);
+      if (payload.role) return [normalizeRole(payload.role)];
+    }
+    return [];
+  }, [token]);
+
+  const isStudent = roles.includes("student");
+  const isParent = roles.includes("parent");
+  const canSeeStudentSwitcher = isStudent || isParent;
+
+  // Family + active student selection
+  const [family, setFamily] = useState(null);
+  const [activeStudentAdmission, setActiveStudentAdmission] = useState(
+    () => localStorage.getItem("activeStudentAdmission") || localStorage.getItem("username") || ""
+  );
+
+  const studentsList = useMemo(() => {
+    if (!family) return [];
+    const list = [];
+    if (family.student) list.push({ ...family.student, isSelf: true });
+    (family.siblings || []).forEach((s) => list.push({ ...s, isSelf: false }));
+    return list;
+  }, [family]);
+
+  useEffect(() => {
+    const load = () => {
+      try {
+        const raw = localStorage.getItem("family");
+        setFamily(raw ? JSON.parse(raw) : null);
+        const stored =
+          localStorage.getItem("activeStudentAdmission") || localStorage.getItem("username") || "";
+        setActiveStudentAdmission(stored);
+      } catch {
+        setFamily(null);
+      }
+    };
+    load();
+
+    const onFamilyUpdated = () => load();
+    const onStudentSwitched = () => {
+      load();
+      // refetch for new student
+      fetchTimetable({ admissionOverride: localStorage.getItem("activeStudentAdmission") });
+      fetchSubstitutionsForWeek(); // keep subs in sync (uses student context endpoint)
+    };
+
+    window.addEventListener("family-updated", onFamilyUpdated);
+    window.addEventListener("student-switched", onStudentSwitched);
+    return () => {
+      window.removeEventListener("family-updated", onFamilyUpdated);
+      window.removeEventListener("student-switched", onStudentSwitched);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleStudentSwitch = (admissionNumber) => {
+    const norm = normalizeAdmission(admissionNumber);
+    if (!norm || norm === activeStudentAdmission) return;
+    try {
+      localStorage.setItem("activeStudentAdmission", norm);
+      setActiveStudentAdmission(norm);
+      window.dispatchEvent(new CustomEvent("student-switched", { detail: { admissionNumber: norm } }));
+      fetchTimetable({ admissionOverride: norm });
+      fetchSubstitutionsForWeek();
+    } catch (e) {
+      console.warn("Failed to switch student", e);
+    }
+  };
 
   // Utils
   const formatDate = (date) => {
@@ -52,9 +144,41 @@ const StudentTimetableDisplay = () => {
     return idx; // -1 if not found
   }, [weekDates, currentDateStr]);
 
-  // Data: periods
+  // Determine which admission we should query for
+  const admissionForQuery = useMemo(() => {
+    const storedActive = localStorage.getItem("activeStudentAdmission");
+    if (storedActive) return normalizeAdmission(storedActive);
+    const stored = localStorage.getItem("username");
+    if (stored) return normalizeAdmission(stored);
+    const payload = token ? parseJwt(token) : null;
+    const adm = (payload && (payload.admission_number || payload.username)) || "";
+    return normalizeAdmission(adm);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeStudentAdmission]);
+
+  // Admission tied to the logged-in token
+  const loggedInAdmission = useMemo(() => {
+    const stored = localStorage.getItem("username");
+    if (stored) return normalizeAdmission(stored);
+    const payload = token ? parseJwt(token) : null;
+    const adm = (payload && (payload.admission_number || payload.username)) || "";
+    return normalizeAdmission(adm);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
+
+  // If not a student, or the active admission differs from logged-in → use by-admission endpoint
+  const shouldUseByAdmission = useMemo(() => {
+    const active = normalizeAdmission(
+      (localStorage.getItem("activeStudentAdmission") || activeStudentAdmission || "").trim()
+    );
+    return !isStudent || (active && active !== loggedInAdmission);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isStudent, activeStudentAdmission, loggedInAdmission]);
+
+  /* Data: periods */
   useEffect(() => {
-    fetch("http://localhost:3000/periods", {
+    if (!API_URL) return;
+    fetch(`${API_URL}/periods`, {
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
     })
       .then((res) => res.json())
@@ -62,27 +186,42 @@ const StudentTimetableDisplay = () => {
       .catch((err) => console.error("Error fetching periods:", err));
   }, [token]);
 
-  // Data: timetable
-  useEffect(() => {
-    fetch("http://localhost:3000/period-class-teacher-subject/student/timetable", {
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-    })
-      .then((res) => res.json())
-      .then((data) => {
-        if (Array.isArray(data)) setTimetable(data);
-        else if (data && Array.isArray(data.timetable)) setTimetable(data.timetable);
-        else setTimetable([]);
-        setIsLoading(false);
-      })
-      .catch((err) => {
-        console.error("Error fetching timetable:", err);
-        setIsLoading(false);
-      });
-  }, [token]);
+  /* Data: timetable (supports switcher) */
+  const fetchTimetable = async (opts = { admissionOverride: null }) => {
+    if (!API_URL) return;
+    setIsLoading(true);
+    try {
+      let url = `${API_URL}/period-class-teacher-subject/student/timetable`;
+      if (shouldUseByAdmission) {
+        const adm = normalizeAdmission(opts.admissionOverride || admissionForQuery);
+        if (!adm) throw new Error("No active student selected.");
+        url = `${API_URL}/period-class-teacher-subject/timetable/by-admission/${encodeURIComponent(adm)}`;
+      }
 
-  // Data: holidays
+      const res = await fetch(url, {
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (Array.isArray(data)) setTimetable(data);
+      else if (data && Array.isArray(data.timetable)) setTimetable(data.timetable);
+      else setTimetable([]);
+    } catch (err) {
+      console.error("Error fetching timetable:", err);
+      setTimetable([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   useEffect(() => {
-    fetch("http://localhost:3000/holidays", {
+    fetchTimetable();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, shouldUseByAdmission, admissionForQuery]);
+
+  /* Data: holidays */
+  useEffect(() => {
+    if (!API_URL) return;
+    fetch(`${API_URL}/holidays`, {
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
     })
       .then((res) => res.json())
@@ -90,21 +229,21 @@ const StudentTimetableDisplay = () => {
       .catch((err) => console.error("Error fetching holidays:", err));
   }, [token]);
 
-  // Build grid
+  /* Build grid */
   useEffect(() => {
     if (!Array.isArray(timetable)) return;
 
     const newGrid = {};
     days.forEach((day) => {
       newGrid[day] = {};
-      periods.forEach((period) => {
+      (periods || []).forEach((period) => {
         newGrid[day][period.id] = [];
       });
     });
 
     timetable.forEach((record) => {
-      const { day, periodId } = record;
-      if (newGrid[day] && newGrid[day][periodId] !== undefined) {
+      const { day, periodId } = record || {};
+      if (day && periodId != null && newGrid[day] && newGrid[day][periodId] !== undefined) {
         newGrid[day][periodId].push(record);
       }
     });
@@ -112,38 +251,43 @@ const StudentTimetableDisplay = () => {
     setGrid(newGrid);
   }, [timetable, periods]);
 
-  // Data: substitutions per date of current week
+  /* Data: substitutions per date of current week
+     NOTE: This still uses the student-context endpoint:
+           /substitutions/by-date/student?date=YYYY-MM-DD
+     If you later add a by-admission variant for substitutions too,
+     you can mirror the same shouldUseByAdmission logic here. */
+  const fetchSubstitutionsForWeek = async () => {
+    if (!API_URL) return;
+    const subs = {};
+    const dates = days.map((_, i) => {
+      const d = new Date(currentMonday);
+      d.setDate(currentMonday.getDate() + i);
+      return formatDate(d);
+    });
+
+    await Promise.all(
+      dates.map(async (date) => {
+        try {
+          const res = await fetch(`${API_URL}/substitutions/by-date/student?date=${date}`, {
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          });
+          const data = await res.json();
+          subs[date] = data;
+        } catch (err) {
+          console.error(`Error fetching substitutions for ${date}:`, err);
+          subs[date] = [];
+        }
+      })
+    );
+    setStudentSubs(subs);
+  };
+
   useEffect(() => {
-    const fetchSubs = async () => {
-      const subs = {};
-      const dates = days.map((_, i) => {
-        const d = new Date(currentMonday);
-        d.setDate(currentMonday.getDate() + i);
-        return formatDate(d);
-      });
-
-      await Promise.all(
-        dates.map(async (date) => {
-          try {
-            const res = await fetch(
-              `http://localhost:3000/substitutions/by-date/student?date=${date}`,
-              { headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` } }
-            );
-            const data = await res.json();
-            subs[date] = data;
-          } catch (err) {
-            console.error(`Error fetching substitutions for ${date}:`, err);
-            subs[date] = [];
-          }
-        })
-      );
-      setStudentSubs(subs);
-    };
-
-    fetchSubs();
+    fetchSubstitutionsForWeek();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, currentMonday]);
 
-  // Week nav
+  /* Week nav */
   const handlePrevWeek = () => {
     const prevMonday = new Date(currentMonday);
     prevMonday.setDate(currentMonday.getDate() - 7);
@@ -222,6 +366,55 @@ const StudentTimetableDisplay = () => {
               </button>
             </div>
           </div>
+
+          {/* Student switcher UI (Desktop pills + Mobile select), placed in header for visibility */}
+          {canSeeStudentSwitcher && studentsList.length > 0 && (
+            <div className="mt-3">
+              {/* Desktop pills */}
+              <div className="d-none d-lg-flex align-items-center gap-1" role="tablist" aria-label="Switch student">
+                {studentsList.map((s) => {
+                  const isActive = s.admission_number === activeStudentAdmission;
+                  return (
+                    <button
+                      key={s.admission_number}
+                      type="button"
+                      role="tab"
+                      aria-selected={isActive}
+                      className={`btn btn-sm ${isActive ? "btn-warning" : "btn-outline-light"} rounded-pill px-3`}
+                      onClick={() => handleStudentSwitch(s.admission_number)}
+                      title={`${s.name} (${s.class?.name || "—"}-${s.section?.name || "—"})`}
+                      style={{ maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                    >
+                      {s.isSelf ? "Me" : s.name}
+                      <span className="ms-1" style={{ opacity: 0.85 }}>
+                        {s.class?.name ? ` · ${s.class.name}-${s.section?.name || "—"}` : ""}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Mobile select */}
+              <div className="d-lg-none mt-2">
+                <label htmlFor="studentSwitcherMobileTT" className="visually-hidden">
+                  Switch student
+                </label>
+                <select
+                  id="studentSwitcherMobileTT"
+                  className="form-select form-select-sm bg-light border-0"
+                  value={activeStudentAdmission}
+                  onChange={(e) => handleStudentSwitch(e.target.value)}
+                >
+                  {studentsList.map((s) => (
+                    <option key={s.admission_number} value={s.admission_number}>
+                      {(s.isSelf ? "Me: " : "") + s.name}{" "}
+                      {s.class?.name ? `(${s.class.name}-${s.section?.name || "—"})` : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="card-body">

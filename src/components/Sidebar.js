@@ -309,10 +309,13 @@ export default function Sidebar({ headerHeight = 56 }) {
       });
     }
 
-    if (isSuperAdmin) {
+    if (isAdmin) {
       groups.splice(1, 0, {
         heading: "User Management",
-        items: [{ key: "users", label: "Users", icon: "bi-person", path: "/users" }],
+        items: [
+          { key: "users", label: "Users", icon: "bi-person", path: "/users", roles: ["superadmin"] },
+          { key: "users-tracking", label: "User Tracking", icon: "bi-activity", path: "/users-tracking", roles: ["admin", "superadmin"] }
+        ],
       });
     }
 

@@ -2,7 +2,7 @@ import React, { useLayoutEffect, useState } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import "../components/Sidebar.css";
-import Navbar from "../components/Navbar";
+import Navbar from "../components/Navbar.jsx";
 
 export default function AppLayout() {
   const [headerHeight, setHeaderHeight] = useState(56);

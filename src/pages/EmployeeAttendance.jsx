@@ -10,7 +10,8 @@ export default function EmployeeAttendance() {
   const [selectedDept, setSelectedDept] = useState("all");
 
   const [date, setDate] = useState(() => new Date().toISOString().split("T")[0]);
-  const [attendance, setAttendance] = useState({}); // { [empId]: {status, remarks, in_time, out_time} }
+  // { [empId]: {status, remarks, in_time, out_time} }
+  const [attendance, setAttendance] = useState({});
   const [attendanceOptions, setAttendanceOptions] = useState([]);
 
   // Bulk time controls
@@ -27,6 +28,41 @@ export default function EmployeeAttendance() {
   const [calRecords, setCalRecords] = useState([]); // [{date,status,remarks,in_time,out_time}]
   const [calSummary, setCalSummary] = useState(null); // { counts, meta, derived, ui }
 
+  // ---- Default/known options (mirrors DB enum) ----
+  // Order here defines how they appear in UI counters and radio buttons.
+  const DEFAULT_OPTIONS = [
+    { value: "present",                label: "Present",             abbr: "P",  color: "#28a745" },
+    { value: "absent",                 label: "Absent",              abbr: "A",  color: "#dc3545" },
+    { value: "first_half_day_leave",   label: "1st Half Leave",      abbr: "H1", color: "#0d6efd" },
+    { value: "second_half_day_leave",  label: "2nd Half Leave",      abbr: "H2", color: "#0b5ed7" },
+    { value: "half_day_without_pay",   label: "Half-day (No Pay)",   abbr: "HNP",color: "#6f42c1" },
+    { value: "short_leave",            label: "Short Leave",         abbr: "SL", color: "#ffc107" },
+    { value: "full_day_leave",         label: "Full Day Leave",      abbr: "FD", color: "#20c997" },
+    { value: "leave",                  label: "Leave",               abbr: "L",  color: "#17a2b8" },
+    { value: "medical_leave",          label: "Medical Leave",       abbr: "ML", color: "#343a40" },
+  ];
+
+  // Utility: merge API-provided leave types into DEFAULT_OPTIONS (by value)
+  const mergeOptions = (apiTypes) => {
+    const byVal = new Map(DEFAULT_OPTIONS.map(o => [o.value, { ...o }]));
+    for (const t of apiTypes) {
+      const value = String(t?.name || "").toLowerCase().replace(/\s+/g, "_").trim();
+      if (!value) continue;
+      const existing = byVal.get(value) || {};
+      byVal.set(value, {
+        value,
+        label: t?.name || existing.label || value.replace(/_/g, " "),
+        abbr: t?.abbreviation || existing.abbr || (t?.name ? t.name.replace(/[a-z]/g, "").slice(0,3).toUpperCase() : value.slice(0,2).toUpperCase()),
+        color: existing.color || "#6c757d",
+      });
+    }
+    // Return in DEFAULT_OPTIONS order first, then any extras from API
+    const knownSet = new Set(DEFAULT_OPTIONS.map(o => o.value));
+    const known = DEFAULT_OPTIONS.map(o => byVal.get(o.value)).filter(Boolean);
+    const extras = [...byVal.values()].filter(o => !knownSet.has(o.value));
+    return [...known, ...extras];
+  };
+
   useEffect(() => {
     fetchEmployees();
   }, []);
@@ -42,10 +78,15 @@ export default function EmployeeAttendance() {
   const fetchEmployees = async () => {
     try {
       const res = await api.get("/employees");
-      const all = res.data.employees || [];
-      setEmployees(all);
-      setFiltered(all);
-      const uniqueDepts = [...new Set(all.map((e) => e.department?.name).filter(Boolean))];
+      const all = res?.data?.employees || [];
+      // 🔒 Exclude disabled employees globally
+      const active = all.filter((e) => (e?.status || "enabled").toLowerCase() !== "disabled");
+      setEmployees(active);
+      setFiltered(active);
+
+      const uniqueDepts = [
+        ...new Set(active.map((e) => e?.department?.name).filter(Boolean)),
+      ];
       setDepartments(uniqueDepts);
     } catch {
       Swal.fire("Error", "Failed to fetch employees", "error");
@@ -55,29 +96,25 @@ export default function EmployeeAttendance() {
   const fetchAttendanceOptions = async () => {
     try {
       const res = await api.get("/employee-leave-types");
-      const formatted = (res.data.data || []).map((type) => ({
-        value: type.name.toLowerCase().replace(/\s+/g, "_"),
-        label: type.name,
-        abbr: type.abbreviation || type.name.slice(0, 2).toUpperCase(),
-        color: "#6c757d",
-      }));
-      formatted.unshift({ value: "present", label: "Present", abbr: "P", color: "#28a745" });
-      formatted.unshift({ value: "absent", label: "Absent", abbr: "A", color: "#dc3545" });
-      setAttendanceOptions(formatted);
+      const apiTypes = Array.isArray(res?.data?.data) ? res.data.data : [];
+      const merged = mergeOptions(apiTypes);
+      setAttendanceOptions(merged);
     } catch {
-      Swal.fire("Error", "Failed to fetch attendance types", "error");
+      // Fallback to defaults if API fails
+      setAttendanceOptions(DEFAULT_OPTIONS);
+      Swal.fire("Error", "Failed to fetch attendance types. Using defaults.", "error");
     }
   };
 
   const fetchMarkedAttendance = async (selectedDate) => {
     try {
       const res = await api.get(`/employee-attendance?date=${selectedDate}`);
-      const existing = res.data.records || [];
+      const existing = res?.data?.records || [];
       const mapped = {};
       for (const entry of existing) {
         mapped[entry.employee_id] = {
-          status: entry.status,
-          remarks: entry.remarks,
+          status: entry.status || "",
+          remarks: entry.remarks || "",
           in_time: entry.in_time || "",
           out_time: entry.out_time || "",
         };
@@ -117,16 +154,23 @@ export default function EmployeeAttendance() {
 
   const handleDeptFilter = (dept) => {
     setSelectedDept(dept);
-    setFiltered(dept === "all" ? employees : employees.filter((e) => e.department?.name === dept));
+    const base = employees; // already active-only
+    setFiltered(dept === "all" ? base : base.filter((e) => e?.department?.name === dept));
   };
 
-  const markAllPresent = () => {
+  // ---- Quick actions ----
+  const markAll = (statusValue) => {
     const updated = { ...attendance };
     filtered.forEach((emp) => {
-      updated[emp.id] = { ...(updated[emp.id] || {}), status: "present" };
+      updated[emp.id] = { ...(updated[emp.id] || {}), status: statusValue };
     });
     setAttendance(updated);
   };
+  const markAllPresent = () => markAll("present");
+  const markAllAbsent = () => markAll("absent");
+  const markAllFirstHalf = () => markAll("first_half_day_leave");
+  const markAllSecondHalf = () => markAll("second_half_day_leave");
+  const markAllShortLeave = () => markAll("short_leave");
 
   const applyBulkTimes = () => {
     if (!bulkInTime && !bulkOutTime) {
@@ -159,6 +203,22 @@ export default function EmployeeAttendance() {
   };
 
   const handleSubmit = async () => {
+    // Optional soft validation: warn if present but times empty
+    const missingTimesForPresent = filtered.some((e) => {
+      const rec = attendance[e.id];
+      return rec?.status === "present" && (!rec.in_time || !rec.out_time);
+    });
+    if (missingTimesForPresent) {
+      const { isConfirmed } = await Swal.fire({
+        icon: "question",
+        title: "Submit without In/Out for some 'Present'?",
+        text: "Some present entries are missing In/Out time. Continue?",
+        showCancelButton: true,
+        confirmButtonText: "Yes, submit",
+      });
+      if (!isConfirmed) return;
+    }
+
     const payload = {
       date,
       attendances: Object.entries(attendance).map(([employee_id, info]) => ({
@@ -171,13 +231,19 @@ export default function EmployeeAttendance() {
     };
     try {
       const res = await api.post("/employee-attendance/mark", payload);
-      Swal.fire("Success", res.data.message, "success");
+      Swal.fire("Success", res?.data?.message || "Attendance saved", "success");
+      // Refresh after save (optional)
+      fetchMarkedAttendance(date);
     } catch (err) {
-      Swal.fire("Error", err.response?.data?.message || "Failed to mark attendance", "error");
+      Swal.fire("Error", err?.response?.data?.message || "Failed to mark attendance", "error");
     }
   };
 
-  const counts = Object.values(attendance).reduce((acc, { status }) => {
+  // ✅ Counters should reflect only currently visible employees
+  const visibleIds = new Set(filtered.map((e) => e.id));
+  const counts = Object.entries(attendance).reduce((acc, [id, rec]) => {
+    if (!visibleIds.has(Number(id))) return acc;
+    const status = rec?.status;
     if (!status) return acc;
     acc[status] = (acc[status] || 0) + 1;
     return acc;
@@ -197,16 +263,15 @@ export default function EmployeeAttendance() {
       if (!showCal || !calEmployee?.id || !calMonth) return;
       try {
         const res = await api.get(`/employee-attendance/summary/${calEmployee.id}?month=${calMonth}`);
-        const rows = (res.data.records || []).map((r) => ({
+        const rows = (res?.data?.records || []).map((r) => ({
           ...r,
           status: typeof r.status === "string" ? r.status.replace(/_/g, "-") : r.status,
         }));
         setCalRecords(rows);
 
-        // Build a robust summary that works with either shape
-        const apiCounts = res.data.counts || res.data.summary || {};
-        const apiMeta = res.data.meta || {};
-        const apiDerived = res.data.derived || {};
+        const apiCounts = res?.data?.counts || res?.data?.summary || {};
+        const apiMeta = res?.data?.meta || {};
+        const apiDerived = res?.data?.derived || {};
         const [yearStr, monStr] = calMonth.split("-");
         const year = parseInt(yearStr, 10);
         const monIdx = parseInt(monStr, 10) - 1;
@@ -334,6 +399,18 @@ export default function EmployeeAttendance() {
           <button className="btn btn-success" onClick={markAllPresent}>
             Mark All Present
           </button>
+          <button className="btn btn-outline-danger" onClick={markAllAbsent}>
+            Mark All Absent
+          </button>
+          <button className="btn btn-outline-primary" onClick={markAllFirstHalf}>
+            All 1st Half
+          </button>
+          <button className="btn btn-outline-primary" onClick={markAllSecondHalf}>
+            All 2nd Half
+          </button>
+          <button className="btn btn-outline-warning" onClick={markAllShortLeave}>
+            All Short Leave
+          </button>
           <button className="btn btn-outline-primary" onClick={applyBulkTimes}>
             Apply Bulk Times
           </button>
@@ -347,9 +424,9 @@ export default function EmployeeAttendance() {
       <div className="row mb-3 g-2">
         {attendanceOptions.map((opt) => (
           <div key={opt.value} className="col-6 col-md-3">
-            <div className="card text-white shadow-sm" style={{ backgroundColor: opt.color }}>
+            <div className="card text-white shadow-sm" style={{ backgroundColor: opt.color || "#6c757d" }}>
               <div className="card-body py-2 d-flex justify-content-between align-items-center">
-                <span>{opt.label}</span>
+                <span>{opt.label || opt.value.replace(/_/g, " ")}</span>
                 <span className="fw-bold fs-5">{counts[opt.value] || 0}</span>
               </div>
             </div>
@@ -365,7 +442,7 @@ export default function EmployeeAttendance() {
               <th style={{ width: 56 }}>#</th>
               <th style={{ minWidth: 220 }}>Name</th>
               <th style={{ minWidth: 160 }}>Department</th>
-              <th style={{ minWidth: 240 }}>Status</th>
+              <th style={{ minWidth: 280 }}>Status</th>
               <th style={{ minWidth: 160 }}>In</th>
               <th style={{ minWidth: 160 }}>Out</th>
               <th style={{ minWidth: 240 }}>Remarks</th>
@@ -386,11 +463,12 @@ export default function EmployeeAttendance() {
                       onClick={() => openCalendar(emp)}
                       title="View monthly attendance"
                     >
-                      {emp.name}
+                      {emp?.name || "-"}
                     </button>
                   </td>
 
-                  <td>{emp.department?.name || "-"}</td>
+                  <td>{emp?.department?.name || "-"}</td>
+
                   <td>
                     <div className="d-flex flex-wrap gap-2">
                       {attendanceOptions.map((opt) => (
@@ -403,11 +481,14 @@ export default function EmployeeAttendance() {
                             checked={rec.status === opt.value}
                             onChange={() => handleChange(emp.id, "status", opt.value)}
                           />
-                          <label className="form-check-label">{opt.abbr}</label>
+                          <label className="form-check-label" title={opt.label}>
+                            {opt.abbr || (opt.label ? opt.label.slice(0, 2).toUpperCase() : opt.value.slice(0,2).toUpperCase())}
+                          </label>
                         </div>
                       ))}
                     </div>
                   </td>
+
                   <td>
                     <input
                       type="time"
@@ -462,9 +543,8 @@ export default function EmployeeAttendance() {
   );
 }
 
-/* ---------- Modal Component (inline for convenience) ---------- */
+/* ---------- Modal Component (unchanged except for props passed) ---------- */
 function CalendarModal({ onClose, employee, month, onMonthChange, records, summary }) {
-  // Build a quick date → record map
   const recMap = new Map();
   for (const r of records) if (r?.date) recMap.set(r.date, r);
 
@@ -472,7 +552,6 @@ function CalendarModal({ onClose, employee, month, onMonthChange, records, summa
   const firstDay = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
   const start = new Date(firstDay);
   start.setDate(start.getDate() - start.getDay()); // Sunday start
-  const cells = 42; // 6 weeks
 
   const colorFor = (status) => {
     const map = {
@@ -483,7 +562,8 @@ function CalendarModal({ onClose, employee, month, onMonthChange, records, summa
       "short-leave": "#2196F3",
       "first-half-day-leave": "#009688",
       "second-half-day-leave": "#00BCD4",
-      "full-day-leave": "#9E9E9E",
+      "full-day-leave": "#20c997",
+      "medical-leave": "#343a40",
       unmarked: "#BDBDBD",
     };
     return map[status] || "#BDBDBD";
@@ -521,7 +601,6 @@ function CalendarModal({ onClose, employee, month, onMonthChange, records, summa
             </div>
 
             <div className="modal-body">
-              {/* Month controls */}
               <div className="d-flex flex-wrap align-items-center justify-content-between mb-3">
                 <div className="d-flex align-items-center gap-2">
                   <button className="btn btn-outline-primary" onClick={() => changeMonth(-1)}>‹</button>
@@ -537,7 +616,6 @@ function CalendarModal({ onClose, employee, month, onMonthChange, records, summa
                 />
               </div>
 
-              {/* Roll-up cards */}
               <div className="row g-3 mb-3">
                 <div className="col-6 col-md-3">
                   <div className="card border-0 shadow-sm">
@@ -591,7 +669,6 @@ function CalendarModal({ onClose, employee, month, onMonthChange, records, summa
                 </div>
               </div>
 
-              {/* Raw status chips */}
               <div className="d-flex flex-wrap gap-2 mb-3 small">
                 {Object.entries(counts).map(([k, v]) => (
                   <span key={k} className="badge rounded-pill" style={{ background: colorFor(k.replace(/_/g, "-")), color: "#fff" }}>
@@ -600,12 +677,11 @@ function CalendarModal({ onClose, employee, month, onMonthChange, records, summa
                 ))}
               </div>
 
-              {/* Calendar grid */}
               <div className="mini-cal-grid border rounded">
                 {["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map((d) => (
                   <div key={d} className="mini-cal-head text-center fw-semibold">{d}</div>
                 ))}
-                {Array.from({ length: cells }).map((_, i) => {
+                {Array.from({ length: 42 }).map((_, i) => {
                   const d = new Date(start);
                   d.setDate(start.getDate() + i);
                   const inMonth = d.getMonth() === monthDate.getMonth();

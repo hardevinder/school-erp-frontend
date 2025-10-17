@@ -47,21 +47,8 @@ const isOwnerOfDiary = (d) => {
 };
 
 /* ──────────────────────────────────────────────
-  Diary networking aligned to /diaries (no /api)
+  Diary networking aligned to /diaries (relative)
 ────────────────────────────────────────────── */
-const DIARY_BASE_CACHE_KEY = "diary_base_selected";
-const ENV_API = (process.env.REACT_APP_API_URL || process.env.NEXT_PUBLIC_API_URL || "")
-  .trim()
-  .replace(/\/+$/, "");
-
-const buildDiaryCandidates = () => {
-  const out = [];
-  if (ENV_API) out.push(`${ENV_API}/diaries`);
-  out.push("/diaries");
-  out.push("diaries");
-  return out;
-};
-
 const getAuthHeaders = () => {
   const token =
     localStorage.getItem("token") ||
@@ -70,38 +57,23 @@ const getAuthHeaders = () => {
   return token ? { Authorization: `Bearer ${token}` } : {};
 };
 
-async function diaryRequest({ method = "get", suffix = "", params, data, headers = {} }) {
-  const cached = localStorage.getItem(DIARY_BASE_CACHE_KEY);
-  const candidates = buildDiaryCandidates();
-  const list = cached ? [cached, ...candidates.filter((p) => p !== cached)] : candidates;
-
-  const join = (base, suf) => {
-    if (!suf) return base;
-    const b = base.endsWith("/") ? base.slice(0, -1) : base;
-    const s = suf.startsWith("/") ? suf : `/${suf}`;
-    return `${b}${s}`;
-  };
-
-  let lastErr = null;
-  for (const base of list) {
-    const url = join(base, suffix);
-    try {
-      const res = await api.request({
-        method,
-        url,
-        params,
-        data,
-        headers: { ...getAuthHeaders(), ...headers },
-      });
-      if (cached !== base) localStorage.setItem(DIARY_BASE_CACHE_KEY, base);
-      return res;
-    } catch (e) {
-      if (e?.response?.status === 401) throw e;
-      lastErr = e;
-    }
-  }
-  throw lastErr || new Error("Diary request failed");
+// Always hit /diaries relative to the shared axios baseURL (.env)
+function joinDiaryPath(suffix = "") {
+  const base = "/diaries";
+  const s = String(suffix || "");
+  return s ? `${base}${s.startsWith("/") ? s : `/${s}`}` : base;
 }
+
+async function diaryRequest({ method = "get", suffix = "", params, data, headers = {} }) {
+  return api.request({
+    method,
+    url: joinDiaryPath(suffix),
+    params,
+    data,
+    headers: { ...getAuthHeaders(), ...headers },
+  });
+}
+
 
 const diaryGet = (suffix = "", params) =>
   diaryRequest({ method: "get", suffix, params });
@@ -1725,7 +1697,7 @@ function ManageDiaries() {
                     </select>
                   </div>
                   <div className="col-12">
-                    <label className="form-label fw-semibold text-muted">Title</label>
+                    <label className="form-label fw-semibold text-danger">Title (Mendatory) <span className="text-danger">*</span></label>
                     <input
                       className="form-control rounded-pill px-4 py-2 shadow-sm fs-5"
                       value={form.title}
@@ -1734,7 +1706,7 @@ function ManageDiaries() {
                     />
                   </div>
                   <div className="col-12">
-                    <label className="form-label fw-semibold text-muted">Content</label>
+                    <label className="form-label fw-semibold text-danger">Content (Mendatory) <span className="text-danger">*</span></label>
                     <textarea
                       rows={5}
                       className="form-control rounded-4 shadow-sm"

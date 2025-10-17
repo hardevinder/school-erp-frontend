@@ -130,6 +130,18 @@ const classNames = {
   19: "XII",
 };
 
+// helpers for roles/admission
+const normalizeRole = (r) => String(r || "").toLowerCase();
+const normalizeAdmission = (s) => String(s || "").replace(/\//g, "-").trim();
+const parseJwt = (token) => {
+  try {
+    const p = token.split(".")[1];
+    return JSON.parse(atob(p.replace(/-/g, "+").replace(/_/g, "/")));
+  } catch {
+    return null;
+  }
+};
+
 /* ========================================================
    Summary tiles
    ======================================================== */
@@ -154,14 +166,6 @@ const AttendanceSummaryCards = ({ attendanceRecords, currentMonth, studentName, 
   const leaveCount   = monthlyRecords.filter((r) => (r.status || "").toLowerCase() === "leave").length;
   const total = monthlyRecords.length;
   const percentPresence = total > 0 ? Math.round((presentCount / total) * 100) : 0;
-
-  // if (total === 0) {
-  //   return (
-  //     <div className="alert alert-warning text-center mt-4 shadow-sm">
-  //       Attendance not marked for {currentMonth.format("MMMM YYYY")} (Student: {studentName || "-"}, Class: {studentClassName || "-"}).
-  //     </div>
-  //   );
-  // }
 
   return (
     <div className="row g-3 align-items-stretch mb-2">
@@ -208,7 +212,7 @@ const AttendanceSummaryChart = ({ attendanceRecords, currentMonth }) => {
 };
 
 /* ========================================================
-   📅 Student Calendar (with holiday fallback)
+   📅 Student Calendar (with student switcher & new API)
    ======================================================== */
 const StudentCalendar = () => {
   const [currentMonth, setCurrentMonth] = useState(moment());
@@ -217,28 +221,146 @@ const StudentCalendar = () => {
   const [selectedDate, setSelectedDate] = useState(null);
   const [studentClassId, setStudentClassId] = useState(null);
   const [studentName, setStudentName] = useState("");
+
   const token = localStorage.getItem("token");
   const API_URL = process.env.REACT_APP_API_URL;
 
-  // Pull attendance + infer student's class & name
-  const fetchAttendanceRecords = () => {
-    if (!token) return;
-    axios
-      .get(`${API_URL}/attendance/student/me`, { headers: { Authorization: `Bearer ${token}` } })
-      .then((res) => {
-        const records = res.data || [];
-        setAttendanceRecords(records);
-        if (records.length > 0) {
-          setStudentClassId(records[0]?.student?.class_id ?? null);
-          setStudentName(records[0]?.student?.name || "");
-        }
-      })
-      .catch((error) => {
-        console.error("Error fetching attendance:", error);
-        Swal.fire("Error", "Could not fetch attendance records", "error");
-      });
+  // ---------- Roles + switcher (same parity as Diary/Navbar) ----------
+  const roles = useMemo(() => {
+    try {
+      const stored = localStorage.getItem("roles");
+      if (stored) return JSON.parse(stored).map(normalizeRole);
+    } catch {}
+    const single = localStorage.getItem("userRole");
+    if (single) return [normalizeRole(single)];
+    const payload = token ? parseJwt(token) : null;
+    if (payload) {
+      if (Array.isArray(payload.roles)) return payload.roles.map(normalizeRole);
+      if (payload.role) return [normalizeRole(payload.role)];
+    }
+    return [];
+  }, [token]);
+
+  const isStudent = roles.includes("student");
+  const isParent = roles.includes("parent");
+
+  const [family, setFamily] = useState(null);
+  const [activeStudentAdmission, setActiveStudentAdmission] = useState(
+    () => localStorage.getItem("activeStudentAdmission") || localStorage.getItem("username") || ""
+  );
+
+  const studentsList = useMemo(() => {
+    if (!family) return [];
+    const list = [];
+    if (family.student) list.push({ ...family.student, isSelf: true });
+    (family.siblings || []).forEach((s) => list.push({ ...s, isSelf: false }));
+    return list;
+  }, [family]);
+
+  useEffect(() => {
+    const load = () => {
+      try {
+        const raw = localStorage.getItem("family");
+        setFamily(raw ? JSON.parse(raw) : null);
+        const stored = localStorage.getItem("activeStudentAdmission") || localStorage.getItem("username") || "";
+        setActiveStudentAdmission(stored);
+      } catch {
+        setFamily(null);
+      }
+    };
+    load();
+
+    const onFamilyUpdated = () => load();
+    const onStudentSwitched = () => {
+      load();
+      fetchAttendanceRecords({ admissionOverride: localStorage.getItem("activeStudentAdmission") });
+    };
+
+    window.addEventListener("family-updated", onFamilyUpdated);
+    window.addEventListener("student-switched", onStudentSwitched);
+    return () => {
+      window.removeEventListener("family-updated", onFamilyUpdated);
+      window.removeEventListener("student-switched", onStudentSwitched);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleStudentSwitch = (admissionNumber) => {
+    const norm = normalizeAdmission(admissionNumber);
+    if (!norm || norm === activeStudentAdmission) return;
+    try {
+      localStorage.setItem("activeStudentAdmission", norm);
+      setActiveStudentAdmission(norm);
+      window.dispatchEvent(new CustomEvent("student-switched", { detail: { admissionNumber: norm } }));
+      fetchAttendanceRecords({ admissionOverride: norm });
+    } catch (e) {
+      console.warn("Failed to switch student", e);
+    }
   };
-  useEffect(() => { fetchAttendanceRecords(); }, [token]);
+
+  // admission to query (prefer active)
+  const admissionForQuery = useMemo(() => {
+    const storedActive = localStorage.getItem("activeStudentAdmission");
+    if (storedActive) return normalizeAdmission(storedActive);
+    const stored = localStorage.getItem("username");
+    if (stored) return normalizeAdmission(stored);
+    const payload = token ? parseJwt(token) : null;
+    const adm = (payload && (payload.admission_number || payload.username)) || "";
+    return normalizeAdmission(adm);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeStudentAdmission]);
+
+  // Pull attendance + infer student's class & name
+  const fetchAttendanceRecords = async (opts = { admissionOverride: null }) => {
+    if (!token) return;
+    try {
+      const finalAdm = normalizeAdmission(opts.admissionOverride || admissionForQuery || "");
+      let url = "";
+
+      if (isParent) {
+        // Parent must use by-admission (backend allows parent/admin/staff)
+        if (!finalAdm) {
+          setAttendanceRecords([]);
+          setStudentClassId(null);
+          setStudentName("");
+          return;
+        }
+        url = `${API_URL}/attendance/by-admission/${finalAdm}`;
+      } else if (isStudent) {
+        // Students are only allowed to fetch their own
+        url = `${API_URL}/attendance/student/me`;
+      } else {
+        // default safe fallback
+        url = `${API_URL}/attendance/student/me`;
+      }
+
+      const res = await axios.get(url, { headers: { Authorization: `Bearer ${token}` } });
+      const records = Array.isArray(res.data) ? res.data : [];
+      setAttendanceRecords(records);
+      if (records.length > 0) {
+        setStudentClassId(records[0]?.student?.class_id ?? null);
+        setStudentName(records[0]?.student?.name || "");
+      } else {
+        // If parent switched to a student with no attendance yet, still try to show name/class from family
+        const pick = studentsList.find((s) => normalizeAdmission(s.admission_number) === finalAdm);
+        if (pick) {
+          setStudentClassId(pick.class_id ?? pick.class?.id ?? null);
+          setStudentName(pick.name || "");
+        } else {
+          // fallback to token user
+          const uname = localStorage.getItem("username") || "";
+          if (uname) {
+            setStudentName(uname);
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching attendance:", error);
+      Swal.fire("Error", "Could not fetch attendance records", "error");
+    }
+  };
+
+  useEffect(() => { fetchAttendanceRecords({}); /* initial */ }, [token]); // eslint-disable-line
 
   // Pull holidays
   useEffect(() => {
@@ -247,12 +369,9 @@ const StudentCalendar = () => {
       .get(`${API_URL}/holidays`, { headers: { Authorization: `Bearer ${token}` } })
       .then((response) => setHolidaysRaw(response.data || []))
       .catch((error) => console.error("Error fetching holidays:", error));
-  }, [token]);
+  }, [token, API_URL]);
 
-  // Normalize / index holidays:
-  // - Keyed by date (YYYY-MM-DD)
-  // - Map of classId -> holiday object (keeps creator & description)
-  // - Also a distinct list of descriptions for the "date"
+  // Normalize / index holidays
   const holidays = useMemo(() => {
     const idx = {};
     (Array.isArray(holidaysRaw) ? holidaysRaw : []).forEach((h) => {
@@ -273,13 +392,14 @@ const StudentCalendar = () => {
 
   // Socket live updates
   useEffect(() => {
-    const handleAttendanceChange = () => fetchAttendanceRecords();
+    const handleAttendanceChange = () => fetchAttendanceRecords({});
     socket.on("attendanceCreated", handleAttendanceChange);
     socket.on("attendanceUpdated", handleAttendanceChange);
     return () => {
       socket.off("attendanceCreated", handleAttendanceChange);
       socket.off("attendanceUpdated", handleAttendanceChange);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Calendar grid
@@ -297,8 +417,7 @@ const StudentCalendar = () => {
   // Helpers (with fallback)
   const getHolidayPayload = (dateStr) => holidays[dateStr] || null;
 
-  /** Prefer exact class match; otherwise fall back to any holiday that day,
-   * returning a row with merged descriptions so the day still shows as Holiday. */
+  /** Prefer exact class match; otherwise fall back to any holiday that day */
   const getHolidayForDisplay = (dateStr, classId) => {
     const h = getHolidayPayload(dateStr);
     if (!h) return null;
@@ -308,7 +427,6 @@ const StudentCalendar = () => {
       if (direct) return direct;
     }
 
-    // Fallback: use first row but merge descriptions for clarity
     const first = h.rows[0];
     return first
       ? {
@@ -353,7 +471,7 @@ const StudentCalendar = () => {
     />
   );
 
-  // Monthly holiday list (unique by date; allow fallback when no exact class match)
+  // Monthly holiday list
   const monthlyHolidayList = useMemo(() => {
     const start = currentMonth.clone().startOf("month");
     const end   = currentMonth.clone().endOf("month");
@@ -373,7 +491,6 @@ const StudentCalendar = () => {
               .filter(Boolean),
           });
         } else if (payload.rows.length > 0) {
-          // Fallback: show as date-level holiday with merged description
           out.push({
             date: dateStr,
             descriptions: Array.from(payload.descriptions),
@@ -386,7 +503,6 @@ const StudentCalendar = () => {
     return out.sort((a,b) => a.date.localeCompare(b.date));
   }, [holidays, currentMonth, studentClassId]);
 
-  // Next upcoming holiday chip: prefer exact class, else any date with holiday rows
   const nextHoliday = useMemo(() => {
     const today = moment().format("YYYY-MM-DD");
     const candidates = Object.entries(holidays)
@@ -400,11 +516,10 @@ const StudentCalendar = () => {
     return candidates.find(c => c.exact) || candidates.find(c => c.any) || null;
   }, [holidays, studentClassId]);
 
+  // --- UI ---
   return (
     <div className="container-fluid p-0">
-      <Styles />
-
-      <div className="hero mb-4">
+      <div className="hero mb-3">
         <div className="d-flex flex-wrap align-items-center justify-content-between gap-2">
           <div className="d-flex flex-column">
             <h2 className="mb-1 fw-bold">Attendance Calendar</h2>
@@ -418,7 +533,57 @@ const StudentCalendar = () => {
                 </span>
               )}
             </div>
+
+            {/* Student switcher (desktop pills + mobile select) */}
+            {(isParent || isStudent) && studentsList.length > 0 && (
+              <>
+                {/* Desktop pills */}
+                <div className="d-none d-lg-flex align-items-center gap-1 mt-3" role="tablist" aria-label="Switch student">
+                  {studentsList.map((s) => {
+                    const isActive = s.admission_number === activeStudentAdmission;
+                    return (
+                      <button
+                        key={s.admission_number}
+                        type="button"
+                        role="tab"
+                        aria-selected={isActive}
+                        className={`btn btn-sm ${isActive ? "btn-warning" : "btn-outline-light"} rounded-pill px-3`}
+                        onClick={() => handleStudentSwitch(s.admission_number)}
+                        title={`${s.name} (${s.class?.name || "—"}-${s.section?.name || "—"})`}
+                        style={{ maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                      >
+                        {s.isSelf ? "Me" : s.name}
+                        <span className="ms-1" style={{ opacity: 0.85 }}>
+                          {s.class?.name ? ` · ${s.class.name}-${s.section?.name || "—"}` : ""}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Mobile select */}
+                <div className="d-lg-none mt-3">
+                  <label htmlFor="studentSwitcherMobileAttendance" className="visually-hidden">
+                    Switch student
+                  </label>
+                  <select
+                    id="studentSwitcherMobileAttendance"
+                    className="form-select form-select-sm bg-light border-0"
+                    value={activeStudentAdmission}
+                    onChange={(e) => handleStudentSwitch(e.target.value)}
+                  >
+                    {studentsList.map((s) => (
+                      <option key={s.admission_number} value={s.admission_number}>
+                        {(s.isSelf ? "Me: " : "") + s.name}{" "}
+                        {s.class?.name ? `(${s.class.name}-${s.section?.name || "—"})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </>
+            )}
           </div>
+
           <div className="d-flex align-items-center gap-2">
             <button className="btn btn-ghost btn-round" onClick={() => setCurrentMonth(currentMonth.clone().subtract(1, "month"))}>◀ Prev</button>
             {monthPicker}
@@ -439,7 +604,7 @@ const StudentCalendar = () => {
           <div className="col-12 col-lg-8">
             <div className="bg-white p-2 p-sm-3 rounded-4 shadow-sm">
               <div className="calendar-grid">
-                {dayHeader.map((d) => (
+                {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
                   <div key={d} className="text-center fw-semibold p-2 bg-light rounded-3 border">{d}</div>
                 ))}
                 {calendarCells.map((cell, index) => {
@@ -538,7 +703,7 @@ const StudentCalendar = () => {
 };
 
 /* ========================================================
-   📝 Student Leave Management (JS-safe preConfirm)
+   📝 Student Leave Management (unchanged)
    ======================================================== */
 const StudentLeaveManagement = () => {
   const [leaveRequests, setLeaveRequests] = useState([]);

@@ -350,8 +350,15 @@ const Transactions = () => {
   }, []);
 
   const isCancelled = (txn) => txn.status === "cancelled";
-  const canCancel = () => userRole === "admin" || userRole === "superadmin";
-  const canDelete = (txn) => userRole === "superadmin" && isCancelled(txn);
+  const canCancel = () => {
+    const role = (userRole || "").toLowerCase();
+    return ["admin", "superadmin", "account", "accounts", "accountant"].includes(role);
+  };
+
+  const canDelete = (txn) => {
+    const role = (userRole || "").toLowerCase();
+    return role === "superadmin" && isCancelled(txn);
+  };
 
   const [transactions, setTransactions] = useState([]);
   const [classes, setClasses] = useState([]);

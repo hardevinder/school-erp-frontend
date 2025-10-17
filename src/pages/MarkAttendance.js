@@ -1,39 +1,57 @@
-import React, { useState, useEffect } from "react";
-import moment from "moment"; // Ensure moment is imported
-import api from "../api"; // Custom Axios instance with auth
+// src/pages/MarkAttendance.jsx
+import React, { useState, useEffect, useMemo, useCallback } from "react";
+import moment from "moment";
+import api from "../api";
 import Swal from "sweetalert2";
-import "./Attendance.css"; // Custom styles as needed
+import "./Attendance.css";
 
-const statuses = ["present", "absent", "late", "leave"]; // available statuses
+const statuses = ["present", "absent", "late", "leave", "halfday"]; // ✅ added halfday
+
+// --- URL helpers ---
+const getApiBase = () =>
+  (process.env.REACT_APP_API_URL || api?.defaults?.baseURL || "").replace(/\/+$/, "");
+
+const getUploadBase = () => getApiBase().replace(/\/api(?:\/v\d+)?$/, "");
+
+const buildPhotoURL = (photo) => {
+  if (!photo) return null;
+  if (/^https?:\/\//i.test(photo)) return photo;
+  const base = getUploadBase();
+  return `${base}/uploads/photoes/students/${photo}`;
+};
 
 const MarkAttendance = () => {
   const [students, setStudents] = useState([]);
-  // attendance maps student id to status ("present", "absent", "late", "leave")
   const [attendance, setAttendance] = useState({});
-  // recordIds maps student id to an existing attendance record id (if any)
   const [recordIds, setRecordIds] = useState({});
-  const [selectedDate, setSelectedDate] = useState(
-    new Date().toISOString().split("T")[0]
-  );
-  const [mode, setMode] = useState("create"); // "create" if no records exist, otherwise "edit"
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split("T")[0]);
+  const [mode, setMode] = useState("create"); // "create" or "edit"
   const [loading, setLoading] = useState(false);
 
-  // Teacher's class id (assumed from the first student)
   const [teacherClassId, setTeacherClassId] = useState(null);
-  // Holidays fetched from the API
   const [holidays, setHolidays] = useState([]);
+  const [query, setQuery] = useState("");
 
   // Fetch students for the incharge
   const fetchStudents = async () => {
     try {
       const { data } = await api.get("/incharges/students");
-      const fetchedStudents = data.students;
+      const fetchedStudents = Array.isArray(data?.students) ? data.students : [];
+
+      fetchedStudents.sort((a, b) => {
+        const byName = (a.name || "").localeCompare(b.name || "", undefined, { sensitivity: "base" });
+        if (byName !== 0) return byName;
+        return (a.admission_number || "").localeCompare(b.admission_number || "", undefined, {
+          numeric: true,
+        });
+      });
+
       setStudents(fetchedStudents);
-      // Set teacher's class id from first student (assumes all students are in same class)
+
       if (fetchedStudents.length > 0) {
-        setTeacherClassId(fetchedStudents[0].class_id);
+        setTeacherClassId(fetchedStudents[0].class_id || null);
       }
-      // Initialize default attendance state with "present" for all students
+
       const initialAttendance = {};
       fetchedStudents.forEach((student) => {
         initialAttendance[student.id] = "present";
@@ -55,23 +73,32 @@ const MarkAttendance = () => {
     }
   };
 
-  // Fetch attendance records for a given date
-  const fetchAttendanceForDate = async (date) => {
-    try {
-      const { data } = await api.get(`/attendance/date/${date}`);
-      if (data && data.length > 0) {
-        // If records exist, switch to edit mode and pre-fill attendance state
-        setMode("edit");
-        const attendanceMap = {};
-        const recordIdMap = {};
-        data.forEach((record) => {
-          attendanceMap[record.studentId] = record.status;
-          recordIdMap[record.studentId] = record.id;
-        });
-        setAttendance(attendanceMap);
-        setRecordIds(recordIdMap);
-      } else {
-        // No records: switch to create mode and reset defaults
+  // Fetch attendance records for a given date (memoized for hook deps)
+  const fetchAttendanceForDate = useCallback(
+    async (date) => {
+      try {
+        const { data } = await api.get(`/attendance/date/${date}`);
+        if (Array.isArray(data) && data.length > 0) {
+          setMode("edit");
+          const attendanceMap = {};
+          const recordIdMap = {};
+          data.forEach((record) => {
+            attendanceMap[record.studentId] = record.status;
+            recordIdMap[record.studentId] = record.id;
+          });
+          setAttendance(attendanceMap);
+          setRecordIds(recordIdMap);
+        } else {
+          setMode("create");
+          const initialAttendance = {};
+          students.forEach((student) => {
+            initialAttendance[student.id] = "present";
+          });
+          setAttendance(initialAttendance);
+          setRecordIds({});
+        }
+      } catch (error) {
+        console.error("Error fetching attendance for date:", error);
         setMode("create");
         const initialAttendance = {};
         students.forEach((student) => {
@@ -80,43 +107,25 @@ const MarkAttendance = () => {
         setAttendance(initialAttendance);
         setRecordIds({});
       }
-    } catch (error) {
-      console.error("Error fetching attendance for date:", error);
-      // On error, assume no records exist
-      setMode("create");
-      const initialAttendance = {};
-      students.forEach((student) => {
-        initialAttendance[student.id] = "present";
-      });
-      setAttendance(initialAttendance);
-      setRecordIds({});
-    }
-  };
+    },
+    [students]
+  );
 
-  // Fetch students and holidays on component mount
   useEffect(() => {
     fetchStudents();
     fetchHolidays();
   }, []);
 
-  // When selectedDate or students change, fetch attendance records for that date
   useEffect(() => {
     if (students.length) {
       fetchAttendanceForDate(selectedDate);
     }
-  }, [selectedDate, students]);
+  }, [selectedDate, students, fetchAttendanceForDate]);
 
-  // Handle radio button changes for a student
   const handleAttendanceChange = (studentId, status) => {
     setAttendance((prev) => ({ ...prev, [studentId]: status }));
   };
 
-  // Handle date picker change
-  const handleDateChange = (e) => {
-    setSelectedDate(e.target.value);
-  };
-
-  // Mark all students with a given status
   const handleMarkAll = (status) => {
     const updatedAttendance = {};
     students.forEach((student) => {
@@ -125,72 +134,29 @@ const MarkAttendance = () => {
     setAttendance(updatedAttendance);
   };
 
-  // Compute summary counts for each status
-  const summaryCounts = statuses.reduce((acc, status) => {
-    acc[status] = 0;
+  const summaryCounts = useMemo(() => {
+    const acc = { present: 0, absent: 0, late: 0, leave: 0, halfday: 0 }; // ✅ include halfday
+    students.forEach((student) => {
+      const status = attendance[student.id];
+      if (status && Object.prototype.hasOwnProperty.call(acc, status)) {
+        acc[status] += 1;
+      }
+    });
     return acc;
-  }, {});
-  students.forEach((student) => {
-    const status = attendance[student.id];
-    if (status && summaryCounts.hasOwnProperty(status)) {
-      summaryCounts[status] += 1;
-    }
-  });
+  }, [students, attendance]);
+
   const totalStudents = students.length;
 
-  // Submit attendance (create or update records)
-  const handleSubmit = async () => {
-    try {
-      setLoading(true);
-      if (mode === "create") {
-        const records = students.map((student) => ({
-          studentId: student.id,
-          status: attendance[student.id],
-          remarks: "",
-          date: selectedDate,
-        }));
-        await Promise.all(records.map((record) => api.post("/attendance", record)));
-        Swal.fire("Success", "Attendance has been marked successfully.", "success");
-        setMode("edit");
-        await fetchAttendanceForDate(selectedDate);
-      } else {
-        await Promise.all(
-          students.map((student) => {
-            const recordId = recordIds[student.id];
-            if (recordId) {
-              return api.put(`/attendance/${recordId}`, {
-                studentId: student.id,
-                status: attendance[student.id],
-                remarks: "",
-                date: selectedDate,
-              });
-            } else {
-              return api.post("/attendance", {
-                studentId: student.id,
-                status: attendance[student.id],
-                remarks: "",
-                date: selectedDate,
-              });
-            }
-          })
-        );
-        Swal.fire("Success", "Attendance has been updated successfully.", "success");
-      }
-      // Dispatch custom event after successful attendance submission
-      window.dispatchEvent(new Event("attendanceUpdated"));
-    } catch (error) {
-      console.error("Error submitting attendance:", error);
-      Swal.fire(
-        "Error",
-        error.response?.data?.error || "Failed to submit attendance.",
-        "error"
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
+  const filteredStudents = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return students;
+    return students.filter(
+      (s) =>
+        (s.name || "").toLowerCase().includes(q) ||
+        (s.admission_number || "").toLowerCase().includes(q)
+    );
+  }, [students, query]);
 
-  // Determine the CSS class for each row based on attendance status
   const getRowClass = (status) => {
     switch (status) {
       case "absent":
@@ -199,64 +165,131 @@ const MarkAttendance = () => {
         return "table-warning";
       case "leave":
         return "table-info";
+      case "halfday": // ✅ visual hint for halfday
+        return "table-primary";
       default:
         return "";
     }
   };
 
-  // Check the selected date using moment
+  const classLabel = useMemo(() => {
+    const first = students[0];
+    const cn = first?.class_name || first?.Class?.class_name;
+    const sn = first?.section_name || first?.Section?.section_name;
+    if (!cn && !sn) return null;
+    return `${cn || "Class"}${sn ? ` - ${sn}` : ""}`;
+  }, [students]);
+
   const selectedMoment = moment(selectedDate, "YYYY-MM-DD");
   const today = moment().startOf("day");
 
-  // Prevent marking attendance for future dates
+  // ---- Submit handler (CREATE/UPDATE with bulk + fallback) ----
+  const handleSubmit = async () => {
+    setLoading(true);
+    try {
+      const allRecords = students.map((s) => ({
+        studentId: s.id,
+        status: attendance[s.id] || "present",
+        date: selectedDate,
+        id: recordIds[s.id] || null,
+      }));
+
+      if (mode === "create") {
+        const newRecords = allRecords.map(({ studentId, status }) => ({ studentId, status }));
+        try {
+          await api.post("/attendance/bulk", { date: selectedDate, records: newRecords });
+        } catch (bulkErr) {
+          for (const rec of newRecords) {
+            // eslint-disable-next-line no-await-in-loop
+            await api.post("/attendance", { ...rec, date: selectedDate });
+          }
+        }
+        Swal.fire("Success", "Attendance submitted.", "success");
+      } else {
+        const toUpdate = allRecords.filter((r) => !!r.id);
+        const toCreate = allRecords.filter((r) => !r.id);
+
+        if (toUpdate.length) {
+          try {
+            await api.put("/attendance/bulk", {
+              date: selectedDate,
+              records: toUpdate.map((r) => ({ id: r.id, status: r.status })),
+            });
+          } catch (bulkUpdateErr) {
+            for (const r of toUpdate) {
+              // eslint-disable-next-line no-await-in-loop
+              await api.put(`/attendance/${r.id}`, { status: r.status });
+            }
+          }
+        }
+
+        if (toCreate.length) {
+          try {
+            await api.post("/attendance/bulk", {
+              date: selectedDate,
+              records: toCreate.map((r) => ({ studentId: r.studentId, status: r.status })),
+            });
+          } catch (bulkCreateErr) {
+            for (const r of toCreate) {
+              // eslint-disable-next-line no-await-in-loop
+              await api.post("/attendance", { studentId: r.studentId, status: r.status, date: selectedDate });
+            }
+          }
+        }
+
+        Swal.fire("Saved", "Attendance updated.", "success");
+      }
+
+      await fetchAttendanceForDate(selectedDate);
+    } catch (err) {
+      console.error("Save attendance failed:", err);
+      Swal.fire("Error", "Failed to save attendance.", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ---- Early returns for invalid dates/holidays ----
   if (selectedMoment.isAfter(today)) {
     return (
       <div className="container mt-4">
-        <h1>Mark Attendance</h1>
-        <div className="alert alert-info">
-          Attendance cannot be marked for future dates.
-        </div>
-        <div className="mb-3">
-          <label htmlFor="attendanceDate" className="form-label">
-            Select Date:
-          </label>
-          <input
-            type="date"
-            id="attendanceDate"
-            className="form-control"
-            value={selectedDate}
-            onChange={handleDateChange}
-          />
-        </div>
+        <header className="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+          <h1 className="h3 m-0">Mark Attendance</h1>
+          <div>
+            <input
+              type="date"
+              id="attendanceDate"
+              className="form-control"
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+            />
+          </div>
+        </header>
+        <div className="alert alert-info">Attendance cannot be marked for future dates.</div>
       </div>
     );
   }
 
-  // If the selected date is Sunday, display a message
   if (selectedMoment.day() === 0) {
     return (
       <div className="container mt-4">
-        <h1>Mark Attendance</h1>
-        <div className="alert alert-info">
-          {selectedMoment.format("LL")} is Sunday. No attendance required.
-        </div>
-        <div className="mb-3">
-          <label htmlFor="attendanceDate" className="form-label">
-            Select Date:
-          </label>
-          <input
-            type="date"
-            id="attendanceDate"
-            className="form-control"
-            value={selectedDate}
-            onChange={handleDateChange}
-          />
-        </div>
+        <header className="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+          <h1 className="h3 m-0">Mark Attendance</h1>
+          <div>
+            <input
+              type="date"
+              id="attendanceDate"
+              className="form-control"
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+            />
+          </div>
+        </header>
+        <div className="alert alert-info">{selectedMoment.format("LL")} is Sunday. No attendance required.</div>
       </div>
     );
   }
 
-  // Check if the selected date is a holiday for this class
   const holidayForDate = holidays.find(
     (holiday) =>
       holiday.date === selectedDate &&
@@ -267,167 +300,212 @@ const MarkAttendance = () => {
   if (holidayForDate) {
     return (
       <div className="container mt-4">
-        <h1>Mark Attendance</h1>
+        <header className="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+          <h1 className="h3 m-0">Mark Attendance</h1>
+          <div>
+            <input
+              type="date"
+              id="attendanceDate"
+              className="form-control"
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+            />
+          </div>
+        </header>
         <div className="alert alert-info">
-          {selectedMoment.format("LL")} is a holiday:{" "}
-          <strong>{holidayForDate.description}</strong>
-        </div>
-        <div className="mb-3">
-          <label htmlFor="attendanceDate" className="form-label">
-            Select Date:
-          </label>
-          <input
-            type="date"
-            id="attendanceDate"
-            className="form-control"
-            value={selectedDate}
-            onChange={handleDateChange}
-          />
+          {selectedMoment.format("LL")} is a holiday: <strong>{holidayForDate.description}</strong>
         </div>
       </div>
     );
   }
 
-  // Render the attendance marking form
+  // ---- UI ----
   return (
     <div className="container mt-4">
-      <h1>Mark Attendance</h1>
-
-      {/* Date Picker */}
-      <div className="mb-3">
-        <label htmlFor="attendanceDate" className="form-label">
-          Select Date:
-        </label>
-        <input
-          type="date"
-          id="attendanceDate"
-          className="form-control"
-          value={selectedDate}
-          onChange={handleDateChange}
-        />
-      </div>
+      {/* Header Bar */}
+      <header className="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+        <div>
+          <h1 className="h3 m-0">Mark Attendance</h1>
+          {classLabel && <div className="text-muted small">{classLabel} • {moment(selectedDate).format("LL")}</div>}
+        </div>
+        <div className="d-flex gap-2">
+          <input
+            type="date"
+            id="attendanceDate"
+            className="form-control"
+            value={selectedDate}
+            onChange={(e) => setSelectedDate(e.target.value)}
+          />
+          <input
+            type="text"
+            className="form-control"
+            placeholder="Search by name or admission no..."
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </div>
+      </header>
 
       {/* Summary Cards */}
-      <div className="row mb-3">
-        <div className="col">
-          <div className="card text-white bg-primary mb-3">
+      <div className="row g-3 mb-2">
+        <div className="col-6 col-md-3">
+          <div className="card shadow-sm">
             <div className="card-body">
-              <h5 className="card-title">Total Students</h5>
-              <p className="card-text">{totalStudents}</p>
+              <div className="text-muted small">Total Students</div>
+              <div className="fs-4 fw-semibold">{totalStudents}</div>
             </div>
           </div>
         </div>
         {statuses.map((status) => (
-          <div className="col" key={status}>
-            <div
-              className={`card text-white bg-${
-                status === "absent"
-                  ? "danger"
-                  : status === "late"
-                  ? "warning"
-                  : status === "leave"
-                  ? "info"
-                  : "success"
-              } mb-3`}
-            >
+          <div className="col-6 col-md-3" key={status}>
+            <div className="card shadow-sm border-0">
               <div className="card-body">
-                <h5 className="card-title">
-                  {status.charAt(0).toUpperCase() + status.slice(1)}
-                </h5>
-                <p className="card-text">{summaryCounts[status]}</p>
+                <div className="d-flex align-items-center justify-content-between">
+                  <div className="text-muted small text-capitalize">{status}</div>
+                  <span
+                    className={`badge rounded-pill ${
+                      status === "absent" ? "bg-danger" :
+                      status === "late" ? "bg-warning" :
+                      status === "leave" ? "bg-info" :
+                      status === "halfday" ? "bg-primary" :
+                      "bg-success"
+                    }`}
+                  >
+                    {summaryCounts[status]}
+                  </span>
+                </div>
               </div>
             </div>
           </div>
         ))}
       </div>
 
-      {/* Mark All Buttons */}
-      <div className="mb-3">
-        <div className="btn-group" role="group" aria-label="Mark all">
-          {statuses.map((status) => (
-            <button
-              key={status}
-              className="btn btn-outline-secondary"
-              onClick={() => handleMarkAll(status)}
-            >
-              Mark All {status.charAt(0).toUpperCase() + status.slice(1)}
-            </button>
-          ))}
+      {/* Compact Actions near cards */}
+      <div className="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+        <div className="btn-group btn-group-sm" role="group" aria-label="Quick actions">
+          <button className="btn btn-outline-success" onClick={() => handleMarkAll("present")}>
+            All Present
+          </button>
+          <button className="btn btn-outline-danger" onClick={() => handleMarkAll("absent")}>
+            All Absent
+          </button>
+          <button className="btn btn-outline-primary" onClick={() => handleMarkAll("halfday")}>
+            All Halfday
+          </button>
+        </div>
+
+        <div className="d-flex align-items-center gap-2">
+          {mode === "edit" && (
+            <span className="badge text-bg-info">
+              Editing existing records
+            </span>
+          )}
+          <button className="btn btn-primary btn-sm" onClick={handleSubmit} disabled={loading}>
+            {loading ? "Submitting..." : mode === "create" ? "Submit" : "Update"}
+          </button>
         </div>
       </div>
 
-      {/* Alert if in edit mode */}
-      {mode === "edit" && (
-        <div className="alert alert-info">
-          Attendance for this date is already filled. You can update the records
-          below.
-        </div>
-      )}
-
       {/* Attendance Table */}
-      <table className="table table-striped">
-        <thead>
-          <tr>
-            <th>#</th>
-            <th>Name</th>
-            <th>Attendance</th>
-          </tr>
-        </thead>
-        <tbody>
-          {students.length ? (
-            students.map((student, index) => (
-              <tr
-                key={student.id}
-                className={getRowClass(attendance[student.id])}
-              >
-                <td>{index + 1}</td>
-                <td>{student.name}</td>
-                <td>
-                  <div className="d-flex flex-wrap">
-                    {statuses.map((status) => (
-                      <label
-                        key={status}
-                        className="form-check form-check-inline"
-                      >
-                        <input
-                          type="radio"
-                          name={`attendance-${student.id}`}
-                          value={status}
-                          checked={attendance[student.id] === status}
-                          onChange={(e) =>
-                            handleAttendanceChange(student.id, e.target.value)
-                          }
-                          className="form-check-input"
-                        />
-                        <span className="form-check-label text-capitalize">
-                          {status}
-                        </span>
-                      </label>
-                    ))}
-                  </div>
-                </td>
-              </tr>
-            ))
-          ) : (
+      <div className="table-responsive">
+        <table className="table align-middle table-striped">
+          <thead className="table-light" style={{ position: "sticky", top: 0, zIndex: 1 }}>
             <tr>
-              <td colSpan="3" className="text-center">
-                No students found.
-              </td>
+              <th style={{ width: 56 }}>#</th>
+              <th>Admission No.</th>
+              <th>Name</th>
+              <th>Attendance</th>
             </tr>
-          )}
-        </tbody>
-      </table>
-      <button
-        className="btn btn-primary"
-        onClick={handleSubmit}
-        disabled={loading}
+          </thead>
+          <tbody>
+            {filteredStudents.length ? (
+              filteredStudents.map((s, index) => (
+                <tr key={s.id} className={getRowClass(attendance[s.id])}>
+                  <td>{index + 1}</td>
+                  <td>
+                    <span className="badge bg-secondary-subtle text-dark border" title="Admission Number">
+                      {s.admission_number || "—"}
+                    </span>
+                  </td>
+                  <td>
+                    <div className="d-flex align-items-center gap-2">
+                      {(() => {
+                        const photoUrl = buildPhotoURL(s.photo);
+                        return photoUrl ? (
+                          <img
+                            src={photoUrl}
+                            alt={s.name}
+                            width={32}
+                            height={32}
+                            className="rounded-circle object-fit-cover border"
+                          />
+                        ) : (
+                          <div
+                            className="rounded-circle bg-light border d-inline-flex align-items-center justify-content-center"
+                            style={{ width: 32, height: 32 }}
+                          >
+                            <span className="small text-muted">N/A</span>
+                          </div>
+                        );
+                      })()}
+                      <div>
+                        <div className="fw-semibold">{s.name}</div>
+                        <div className="text-muted small">Roll: {s.roll_number ?? "—"}</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td>
+                    <div className="d-flex flex-wrap gap-3">
+                      {statuses.map((status) => (
+                        <label key={status} className="form-check form-check-inline m-0">
+                          <input
+                            type="radio"
+                            name={`attendance-${s.id}`}
+                            value={status}
+                            checked={attendance[s.id] === status}
+                            onChange={(e) => handleAttendanceChange(s.id, e.target.value)}
+                            className="form-check-input"
+                          />
+                          <span className="form-check-label text-capitalize">{status}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan="4" className="text-center text-muted">No students found.</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Mobile Fixed Action Bar */}
+      <div
+        className="d-sm-none fixed-bottom bg-white border-top shadow-sm px-3 py-2"
+        style={{
+          paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 8px)",
+        }}
       >
-        {loading
-          ? "Submitting..."
-          : mode === "create"
-          ? "Submit Attendance"
-          : "Update Attendance"}
-      </button>
+        <div className="d-flex align-items-center justify-content-between gap-2">
+          <div className="btn-group btn-group-sm" role="group" aria-label="Quick actions mobile">
+            <button className="btn btn-outline-success" onClick={() => handleMarkAll("present")}>
+              All Present
+            </button>
+            <button className="btn btn-outline-danger" onClick={() => handleMarkAll("absent")}>
+              All Absent
+            </button>
+            <button className="btn btn-outline-primary" onClick={() => handleMarkAll("halfday")}>
+              All Halfday
+            </button>
+          </div>
+          <button className="btn btn-primary btn-sm" onClick={handleSubmit} disabled={loading}>
+            {loading ? "Submitting..." : mode === "create" ? "Submit" : "Update"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 };

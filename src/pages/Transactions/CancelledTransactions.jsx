@@ -9,8 +9,16 @@ const DEFAULT_PAGE_SIZE = 20;
 
 const CancelledTransactions = () => {
   const { roles } = useRoles();
-  const canRestore = roles.includes("admin") || roles.includes("superadmin");
-  const canDeleteForever = roles.includes("superadmin");
+
+  // ✅ Allow accounts to restore (in addition to admin/superadmin)
+  const canRestore = useMemo(
+    () => roles.some((r) => ["admin", "superadmin", "accounts"].includes(r)),
+    [roles]
+  );
+  const canDeleteForever = useMemo(
+    () => roles.includes("superadmin"),
+    [roles]
+  );
 
   const [rows, setRows] = useState([]);
   const [total, setTotal] = useState(0);
@@ -44,7 +52,6 @@ const CancelledTransactions = () => {
     setLoading(true);
     try {
       const { data } = await api.get("/transactions/cancelled", { params: queryParams });
-      console.log("CANCELLED RESPONSE SAMPLE:", data.rows?.[0]); // debug
       setRows(data.rows || []);
       setTotal(data.total || 0);
     } catch (err) {

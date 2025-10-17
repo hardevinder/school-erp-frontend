@@ -33,16 +33,15 @@ const truncate = (text, max = 180) => {
   return t.slice(0, max - 1) + "…";
 };
 
-// badges per diary type
+const normalizeAdmission = (s) => String(s || "").replace(/\//g, "-").trim();
+const normalizeRole = (r) => String(r || "").toLowerCase();
+
 const TYPE_BADGE = {
   HOMEWORK: "primary",
   REMARK: "warning",
   ANNOUNCEMENT: "info",
 };
 
-/* ──────────────────────────────────────────────
-  Skeleton (loading cards)
-────────────────────────────────────────────── */
 const SkeletonCard = () => (
   <div className="col-md-6 col-lg-4 mb-4">
     <div className="card shadow-sm h-100">
@@ -62,6 +61,98 @@ const SkeletonCard = () => (
   Component
 ────────────────────────────────────────────── */
 const StudentDiary = () => {
+  // -------- Roles (for showing switcher to student/parent) ----------
+  const parseJwt = (token) => {
+    try {
+      const p = token.split(".")[1];
+      return JSON.parse(atob(p.replace(/-/g, "+").replace(/_/g, "/")));
+    } catch {
+      return null;
+    }
+  };
+
+  const roles = useMemo(() => {
+    try {
+      const stored = localStorage.getItem("roles");
+      if (stored) return JSON.parse(stored).map(normalizeRole);
+    } catch {}
+    const single = localStorage.getItem("userRole");
+    if (single) return [normalizeRole(single)];
+    const token = localStorage.getItem("token");
+    if (token) {
+      const payload = parseJwt(token);
+      if (payload) {
+        if (Array.isArray(payload.roles)) return payload.roles.map(normalizeRole);
+        if (payload.role) return [normalizeRole(payload.role)];
+      }
+    }
+    return [];
+  }, []);
+
+  const isStudent = roles.includes("student");
+  const isParent = roles.includes("parent");
+  const canSeeStudentSwitcher = isStudent || isParent;
+
+  // -------- Family + active student (sibling switcher parity) ----------
+  const [family, setFamily] = useState(null);
+  const [activeStudentAdmission, setActiveStudentAdmission] = useState(
+    () => localStorage.getItem("activeStudentAdmission") || localStorage.getItem("username") || ""
+  );
+
+  const studentsList = useMemo(() => {
+    if (!family) return [];
+    const list = [];
+    if (family.student) list.push({ ...family.student, isSelf: true });
+    (family.siblings || []).forEach((s) => list.push({ ...s, isSelf: false }));
+    return list;
+  }, [family]);
+
+  useEffect(() => {
+    const load = () => {
+      try {
+        const raw = localStorage.getItem("family");
+        setFamily(raw ? JSON.parse(raw) : null);
+        const stored =
+          localStorage.getItem("activeStudentAdmission") || localStorage.getItem("username") || "";
+        setActiveStudentAdmission(stored);
+      } catch {
+        setFamily(null);
+      }
+    };
+    load();
+
+    const onFamilyUpdated = () => load();
+    const onStudentSwitched = () => {
+      load();
+      // refetch for new student
+      fetchDiaries({ keepLoading: true, admissionOverride: localStorage.getItem("activeStudentAdmission") });
+    };
+
+    window.addEventListener("family-updated", onFamilyUpdated);
+    window.addEventListener("student-switched", onStudentSwitched);
+    return () => {
+      window.removeEventListener("family-updated", onFamilyUpdated);
+      window.removeEventListener("student-switched", onStudentSwitched);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleStudentSwitch = (admissionNumber) => {
+    const norm = normalizeAdmission(admissionNumber);
+    if (!norm || norm === activeStudentAdmission) return;
+    try {
+      localStorage.setItem("activeStudentAdmission", norm);
+      setActiveStudentAdmission(norm);
+      // notify app (Navbar, other pages listen to this)
+      window.dispatchEvent(new CustomEvent("student-switched", { detail: { admissionNumber: norm } }));
+      // this page: refetch immediately
+      fetchDiaries({ keepLoading: true, admissionOverride: norm });
+    } catch (e) {
+      console.warn("Failed to switch student", e);
+    }
+  };
+
+  // -------- Filters & state ----------
   const [items, setItems] = useState([]);
   const [pagination, setPagination] = useState({ page: 1, pageSize: 20, totalPages: 1 });
   const [loading, setLoading] = useState(true);
@@ -69,7 +160,6 @@ const StudentDiary = () => {
   const [error, setError] = useState(null);
   const [lastSyncedAt, setLastSyncedAt] = useState(null);
 
-  // Filters
   const [searchText, setSearchText] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
   const [onlyUnack, setOnlyUnack] = useState(false);
@@ -79,6 +169,37 @@ const StudentDiary = () => {
 
   const token = localStorage.getItem("token");
   const abortRef = useRef(null);
+
+  // Prefer active student admission for API
+  const admissionForQuery = useMemo(() => {
+    const storedActive = localStorage.getItem("activeStudentAdmission");
+    if (storedActive) return normalizeAdmission(storedActive);
+    const stored = localStorage.getItem("username");
+    if (stored) return normalizeAdmission(stored);
+    const payload = token ? parseJwt(token) : null;
+    const adm = (payload && (payload.admission_number || payload.username)) || "";
+    return normalizeAdmission(adm);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeStudentAdmission]);
+
+  // Admission from logged-in token (not the switcher)
+  const loggedInAdmission = useMemo(() => {
+    const stored = localStorage.getItem("username");
+    if (stored) return normalizeAdmission(stored);
+    const payload = token ? parseJwt(token) : null;
+    const adm = (payload && (payload.admission_number || payload.username)) || "";
+    return normalizeAdmission(adm);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
+
+  // If not a student, or the active admission differs from logged-in admission → use by-admission endpoint
+  const shouldUseByAdmission = useMemo(() => {
+    const active = normalizeAdmission(
+      (localStorage.getItem("activeStudentAdmission") || activeStudentAdmission || "").trim()
+    );
+    return !isStudent || (active && active !== loggedInAdmission);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isStudent, activeStudentAdmission, loggedInAdmission]);
 
   const params = useMemo(() => {
     const p = {
@@ -94,10 +215,24 @@ const StudentDiary = () => {
     const s = searchText.trim();
     if (s.length >= 2) p.q = s;
 
-    return p;
-  }, [pagination.page, pagination.pageSize, sortDir, typeFilter, onlyUnack, dateFrom, dateTo, searchText]);
+    // Keep for convenience; removed from query when we put it into path
+    if (admissionForQuery) p.admissionNumber = admissionForQuery;
 
-  const fetchDiaries = async (opts = { keepLoading: false }) => {
+    return p;
+  }, [
+    pagination.page,
+    pagination.pageSize,
+    sortDir,
+    typeFilter,
+    onlyUnack,
+    dateFrom,
+    dateTo,
+    searchText,
+    admissionForQuery,
+  ]);
+
+  // -------- Fetch diaries ----------
+  const fetchDiaries = async (opts = { keepLoading: false, admissionOverride: null }) => {
     if (!API_URL) {
       setError("API URL is not configured. Please set REACT_APP_API_URL.");
       setLoading(false);
@@ -117,9 +252,32 @@ const StudentDiary = () => {
       if (!opts.keepLoading) {
         if (!loading) setIsRefreshing(true);
       }
-      const res = await axios.get(`${API_URL}/diaries/student/feed/list`, {
+
+      // Build params (allow override admission for immediate switch)
+      const finalParams = { ...params };
+      if (opts.admissionOverride) finalParams.admissionNumber = normalizeAdmission(opts.admissionOverride);
+
+      // Decide endpoint:
+      // - Default: legacy (scoped by token)
+      // - If shouldUseByAdmission: new by-admission route with admission in path
+      let url = `${API_URL}/diaries/student/feed/list`;
+      if (shouldUseByAdmission) {
+        const adm = normalizeAdmission(finalParams.admissionNumber || admissionForQuery);
+        if (!adm) {
+          setError("No active student selected.");
+          setItems([]);
+          setLoading(false);
+          setIsRefreshing(false);
+          return;
+        }
+        url = `${API_URL}/diaries/by-admission/${encodeURIComponent(adm)}`;
+        // remove admissionNumber from query when it's in the path
+        delete finalParams.admissionNumber;
+      }
+
+      const res = await axios.get(url, {
         headers: { Authorization: `Bearer ${token}` },
-        params,
+        params: finalParams,
         signal: abortRef.current.signal,
       });
 
@@ -151,7 +309,7 @@ const StudentDiary = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
-  // Refetch when params change (debounce search)
+  // Refetch when params or switching mode changes (debounce search)
   const [debouncedParams, setDebouncedParams] = useState(params);
   useEffect(() => {
     const t = setTimeout(() => setDebouncedParams(params), 250);
@@ -159,16 +317,14 @@ const StudentDiary = () => {
   }, [params]);
 
   useEffect(() => {
-    // avoid showing skeleton again during filter changes
     fetchDiaries({ keepLoading: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedParams]);
+  }, [debouncedParams, shouldUseByAdmission, admissionForQuery]);
 
   // Live updates via socket
   useEffect(() => {
-    const onChanged = (payload) => {
-      // payload: { diaryId, type, title, date, classId, sectionId, subjectId, verb }
-      // simple strategy: refetch
+    const onChanged = () => {
+      // simple strategy: refetch on any change
       fetchDiaries({ keepLoading: true });
     };
     socket.on("diaryChanged", onChanged);
@@ -185,8 +341,6 @@ const StudentDiary = () => {
       if (t === "REMARK") s.remark += 1;
       if (t === "ANNOUNCEMENT") s.announcement += 1;
       if (Array.isArray(d?.attachments) && d.attachments.length) s.withAttachments += 1;
-
-      // if acknowledgements array is present, count unack when empty
       if (Array.isArray(d?.acknowledgements) && d.acknowledgements.length === 0) s.unack += 1;
     });
     return s;
@@ -198,12 +352,9 @@ const StudentDiary = () => {
       await axios.post(`${API_URL}/diaries/${id}/ack`, null, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      // soft update client-side: remove from unack-only view, or refresh
       if (onlyUnack) {
         setItems((prev) =>
-          prev.map((d) =>
-            d.id === id ? { ...d, acknowledgements: [{ id: "temp" }] } : d
-          )
+          prev.map((d) => (d.id === id ? { ...d, acknowledgements: [{ id: "temp" }] } : d))
         );
       } else {
         fetchDiaries({ keepLoading: true });
@@ -222,7 +373,7 @@ const StudentDiary = () => {
     <div className="container py-4">
       {/* Header */}
       <div
-        className="rounded-3 p-4 mb-4 text-white"
+        className="rounded-3 p-4 mb-3 text-white"
         style={{
           background:
             "linear-gradient(135deg, rgba(6,95,212,1) 0%, rgba(12,119,214,1) 50%, rgba(22,82,240,1) 100%)",
@@ -235,6 +386,8 @@ const StudentDiary = () => {
               {lastSyncedAt ? `Last synced: ${lastSyncedAt.toLocaleTimeString()}` : "Syncing…"}
             </div>
           </div>
+
+          {/* Stats */}
           <div className="d-flex gap-2 flex-wrap">
             <span className="badge bg-light text-dark">Total: {stats.total}</span>
             <span className="badge bg-primary">Homework: {stats.homework}</span>
@@ -250,6 +403,53 @@ const StudentDiary = () => {
             </button>
           </div>
         </div>
+
+        {/* Student switcher UI (Desktop pills + Mobile select) */}
+        {canSeeStudentSwitcher && studentsList.length > 0 && (
+          <>
+            <div className="d-none d-lg-flex align-items-center gap-1 mt-3" role="tablist" aria-label="Switch student">
+              {studentsList.map((s) => {
+                const isActive = s.admission_number === activeStudentAdmission;
+                return (
+                  <button
+                    key={s.admission_number}
+                    type="button"
+                    role="tab"
+                    aria-selected={isActive}
+                    className={`btn btn-sm ${isActive ? "btn-warning" : "btn-outline-light"} rounded-pill px-3`}
+                    onClick={() => handleStudentSwitch(s.admission_number)}
+                    title={`${s.name} (${s.class?.name || "—"}-${s.section?.name || "—"})`}
+                    style={{ maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                  >
+                    {s.isSelf ? "Me" : s.name}
+                    <span className="ms-1" style={{ opacity: 0.85 }}>
+                      {s.class?.name ? ` · ${s.class.name}-${s.section?.name || "—"}` : ""}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="d-lg-none mt-3">
+              <label htmlFor="studentSwitcherMobileDiary" className="visually-hidden">
+                Switch student
+              </label>
+              <select
+                id="studentSwitcherMobileDiary"
+                className="form-select form-select-sm bg-light border-0"
+                value={activeStudentAdmission}
+                onChange={(e) => handleStudentSwitch(e.target.value)}
+              >
+                {studentsList.map((s) => (
+                  <option key={s.admission_number} value={s.admission_number}>
+                    {(s.isSelf ? "Me: " : "") + s.name}{" "}
+                    {s.class?.name ? `(${s.class.name}-${s.section?.name || "—"})` : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </>
+        )}
       </div>
 
       {/* Controls */}
@@ -292,7 +492,7 @@ const StudentDiary = () => {
           </div>
         </div>
 
-        <div className="col-6 col-md-3 d-flex gap-2">
+        <div className="col-12 col-md-3 d-flex gap-2">
           <input
             type="date"
             className="form-control"
@@ -353,7 +553,6 @@ const StudentDiary = () => {
             content,
             date,
             type,
-            createdAt,
             updatedAt,
             class: cls,
             section,
@@ -388,9 +587,7 @@ const StudentDiary = () => {
                     {section?.section_name && (
                       <span className="badge bg-light text-dark">Sec {section.section_name}</span>
                     )}
-                    {subject?.name && (
-                      <span className="badge bg-light text-dark">{subject.name}</span>
-                    )}
+                    {subject?.name && <span className="badge bg-light text-dark">{subject.name}</span>}
                     {isAcknowledged ? (
                       <span className="badge bg-success">Acknowledged</span>
                     ) : (
@@ -409,12 +606,7 @@ const StudentDiary = () => {
                       <ul className="list-unstyled mb-0">
                         {attachments.map((a) => (
                           <li key={a?.id || a?.url} className="mb-1">
-                            <a
-                              href={a?.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="link-primary"
-                            >
+                            <a href={a?.url} target="_blank" rel="noopener noreferrer" className="link-primary">
                               {a?.name || a?.url || "Download"}
                             </a>
                           </li>
@@ -465,6 +657,14 @@ const StudentDiary = () => {
           </button>
         </div>
       )}
+
+      {/* Local style helpers to match the rest of your app */}
+      <style>{`
+        .placeholder-glow .placeholder { display: inline-block; background-color: rgba(0,0,0,.08); }
+        .fancy-chip-row { scrollbar-width: thin; }
+        .fancy-chip-row::-webkit-scrollbar { height: 8px; }
+        .fancy-chip-row::-webkit-scrollbar-thumb { background: rgba(0,0,0,.15); border-radius: 8px; }
+      `}</style>
     </div>
   );
 };
