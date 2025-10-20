@@ -80,6 +80,7 @@ const StudentFeePage = () => {
         fetchStudentDetails(n);
         fetchTransactionHistory(n);
         fetchVanFeeByHead();
+        fetchOpeningBalanceOutstandingForMe(); // refresh OB on switch
       }
     };
 
@@ -95,6 +96,7 @@ const StudentFeePage = () => {
   const canSeeStudentSwitcher = isStudent || isParent;
 
   // ------------- Admission source: prefer activeStudentAdmission -------------
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const username = useMemo(() => {
     const storedActive = localStorage.getItem("activeStudentAdmission");
     if (storedActive) return normalizeAdmission(storedActive);
@@ -124,6 +126,11 @@ const StudentFeePage = () => {
   const messageListenerRef = useRef(null);
   const popupTimeoutRef = useRef(null);
 
+  // ---------- NEW: Opening Balance (Previous Balance) state ----------
+  const [prevBalanceHeadId, setPrevBalanceHeadId] = useState(null);
+  const [prevBalanceDue, setPrevBalanceDue] = useState(0);
+  const [activeSessionId, setActiveSessionId] = useState(null);
+
   // ------------- Helpers -------------
   const formatINR = (v) =>
     isNaN(v)
@@ -143,6 +150,110 @@ const StudentFeePage = () => {
     });
   };
 
+  // Fine totals from server (any shape)
+  const getFineTotal = (fee) =>
+    Number(
+      fee?.fineAmount ?? fee?.fine_due ?? fee?.lateFee ?? fee?.LateFee ?? fee?.Fine ?? fee?.FineAmount ?? 0
+    );
+  const getFinePaid = (fee) =>
+    Number(
+      fee?.fineReceived ?? fee?.totalFineReceived ?? fee?.Fine_Amount ?? fee?.FineReceived ?? 0
+    );
+  const getFineDue = (fee) => Math.max(0, getFineTotal(fee) - getFinePaid(fee));
+
+  // --------- NEW: Session + OB helpers (parity with Transactions.js) ----------
+  const fetchActiveSessionId = async () => {
+    try {
+      const res = await api.get("/sessions");
+      const list = Array.isArray(res.data) ? res.data : (res.data?.data || []);
+      let active = list.find((s) => s.is_active === true) || list[0] || null;
+      if (active) setActiveSessionId(Number(active.id));
+      else setActiveSessionId(null);
+    } catch (e) {
+      console.warn("fetchActiveSessionId failed:", e?.message || e);
+      setActiveSessionId(null);
+    }
+  };
+
+  const ensurePrevBalanceHeadId = async () => {
+    if (prevBalanceHeadId) return prevBalanceHeadId;
+    try {
+      const res = await api.get("/fee-headings");
+      const list = Array.isArray(res.data) ? res.data : (res.data?.data || []);
+      const hit = list.find((h) => String(h.fee_heading).toLowerCase() === "previous balance");
+      if (hit) {
+        setPrevBalanceHeadId(hit.id);
+        return hit.id;
+      }
+    } catch (e) {
+      console.warn("fee-headings fetch failed:", e?.message || e);
+    }
+    return null;
+  };
+
+  const fetchOpeningBalanceOutstandingForMe = async () => {
+    try {
+      const sid =
+        Number(studentDetails?.student_id) ||
+        Number(studentDetails?.id) ||
+        Number(studentDetails?.Student_ID) ||
+        null;
+
+      if (!sid || !activeSessionId) {
+        setPrevBalanceDue(0);
+        return 0;
+      }
+
+      // Preferred server endpoint
+      try {
+        const try1 = await api.get(`/opening-balances/outstanding`, {
+          params: { student_id: sid, session_id: activeSessionId },
+        });
+        const val1 = Number(
+          try1?.data?.outstanding ??
+          try1?.data?.data?.outstanding ??
+          try1?.data?.totalOutstanding
+        );
+        if (!Number.isNaN(val1) && val1 > 0) {
+          setPrevBalanceDue(val1);
+          return val1;
+        }
+      } catch (_) {}
+
+      // Fallback: list and sum
+      try {
+        const res = await api.get(`/opening-balances`, {
+          params: { student_id: sid, session_id: activeSessionId },
+        });
+        const rows = Array.isArray(res.data?.rows) ? res.data.rows : (Array.isArray(res.data) ? res.data : []);
+        if (!rows.length) {
+          setPrevBalanceDue(0);
+          return 0;
+        }
+        const providedTotal = Number(
+          res.data?.outstanding ||
+          res.data?.totalOutstanding ||
+          res.data?.totals?.outstanding
+        );
+        const total = !Number.isNaN(providedTotal)
+          ? providedTotal
+          : rows.reduce((sum, r) => sum + Number(r.amount || 0), 0);
+
+        const final = Math.max(0, total);
+        setPrevBalanceDue(final);
+        return final;
+      } catch (e) {
+        console.warn("opening balance fallback failed:", e?.message || e);
+        setPrevBalanceDue(0);
+        return 0;
+      }
+    } catch (e) {
+      console.warn("OB fetch failed:", e?.message || e);
+      setPrevBalanceDue(0);
+      return 0;
+    }
+  };
+
   // ------------- Data fetch -------------
   useEffect(() => {
     if (!canView || !username) {
@@ -159,6 +270,23 @@ const StudentFeePage = () => {
     load();
   }, [canView, username]);
 
+  // NEW: on mount, resolve session & OB head id
+  useEffect(() => {
+    fetchActiveSessionId();
+    ensurePrevBalanceHeadId();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // When basic data loads or keys change, refresh Opening Balance
+  useEffect(() => {
+    if (canView && username) {
+      (async () => {
+        await fetchOpeningBalanceOutstandingForMe();
+      })();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canView, username, studentDetails, activeSessionId]);
+
   // Optional polling (keeps current selection in sync)
   useEffect(() => {
     if (username && canView) {
@@ -166,6 +294,7 @@ const StudentFeePage = () => {
         fetchStudentDetails(username);
         fetchTransactionHistory(username);
         fetchVanFeeByHead();
+        fetchOpeningBalanceOutstandingForMe(); // keep OB fresh
       }, 15000);
       return () => clearInterval(id);
     }
@@ -185,7 +314,7 @@ const StudentFeePage = () => {
   const fetchTransactionHistory = async (admissionNumber) => {
     try {
       const res = await api.get(`/StudentsApp/feehistory/${admissionNumber}`);
-      if (res.data && res.data.success) {
+    if (res.data && res.data.success) {
         setTransactionHistory(res.data.data || []);
       } else {
         setTransactionHistory([]);
@@ -308,6 +437,7 @@ const StudentFeePage = () => {
       const top = window.screenY + (window.innerHeight - height) / 2;
       const features = `width=${width},height=${height},left=${left},top=${top},noopener`;
 
+      // eslint-disable-next-line no-restricted-globals
       const w = window.open(url, "_blank", features);
       if (!w) {
         Swal.fire({
@@ -401,16 +531,14 @@ const StudentFeePage = () => {
   };
 
   const refreshAfterPayment = () => {
-    // Let other parts (and this page) know; your list screens can listen to this
     window.dispatchEvent(new Event("student-fee:refresh"));
-    // Soft refresh after a short delay (backend needs time to finalize)
     setTimeout(() => {
       try {
-        // If you have local fetchers, call them here; otherwise fall back to reload:
         if (username) {
           fetchStudentDetails(username);
           fetchTransactionHistory(username);
           fetchVanFeeByHead();
+          fetchOpeningBalanceOutstandingForMe();
         } else {
           window.location.reload();
         }
@@ -430,21 +558,151 @@ const StudentFeePage = () => {
     };
   }, []);
 
-  // ------------- Payment handlers (MISSING earlier) -------------
-  const handlePayFee = async (fee) => {
-    const dueAmount = parseFloat(fee?.finalAmountDue);
-    if (isNaN(dueAmount) || dueAmount <= 0) {
-      return Swal.fire({ icon: "error", title: "Invalid Fee Amount", text: "Cannot initiate payment." });
+  // ------------- UI helpers (Transport) -------------
+  const getVanForHeadFromMap = (feeHeadId) => {
+    const v = vanByHead[Number(feeHeadId)];
+    if (!v) return null;
+    const received = Number(v.totalVanFeeReceived || 0);
+    const concession = Number(v.totalVanFeeConcession || 0);
+    const cost = Number(v.transportCost || 0);
+    const pending = Math.max(cost - (received + concession), 0);
+    return { cost, received, concession, pending, due: cost };
+  };
+
+  const getTransportBreakdown = (fee) => {
+    if (fee?.transportApplicable && fee?.transport) {
+      const t = fee.transport;
+      return {
+        cost: Number(t.transportDue || 0) + Number(t.transportReceived || 0) + Number(t.transportConcession || 0),
+        due: Number(t.transportDue || 0),
+        received: Number(t.transportReceived || 0),
+        concession: Number(t.transportConcession || 0),
+        pending: Number(t.transportPending || 0),
+        source: "api",
+      };
+    }
+    const fallback = getVanForHeadFromMap(fee?.fee_heading_id);
+    return fallback ? { ...fallback, source: "map" } : null;
+  };
+
+  // ======== NEW: Previous slabs auto-inclusion ========
+  const computePreviousSlabsTotals = (untilIndex) => {
+    // Sum all dues from heads strictly before 'untilIndex'
+    const feesList = studentDetails?.feeDetails || [];
+    let prevAcademic = 0, prevFine = 0, prevVan = 0;
+    const items = [];
+
+    for (let i = 0; i < untilIndex; i++) {
+      const f = feesList[i];
+      if (!f) continue;
+      const acadDue = Number(f?.finalAmountDue || 0);
+      const fineDue = getFineDue(f);
+      const t = getTransportBreakdown(f);
+      const vanDue = Number(t?.pending || 0);
+      const headDue = acadDue + fineDue + vanDue;
+      if (headDue > 0) {
+        prevAcademic += acadDue;
+        prevFine += fineDue;
+        prevVan += vanDue;
+        items.push({
+          feeHeading: f.fee_heading,
+          feeHeadId: f.fee_heading_id,
+          academicDue: acadDue,
+          fineDue,
+          vanDue,
+          total: headDue,
+        });
+      }
     }
 
+    return {
+      items,
+      totalAcademic: prevAcademic,
+      totalFine: prevFine,
+      totalVan: prevVan,
+      total: prevAcademic + prevFine + prevVan,
+      count: items.length,
+    };
+  };
+
+  // ------------- Totals for Summary -------------
+  let totalOriginal = 0,
+    totalEffective = 0,
+    totalDue = 0,
+    totalReceived = 0,
+    totalConcession = 0,
+    totalFineRemaining = 0;
+
+  const fees = studentDetails?.feeDetails || [];
+  fees.forEach((f) => {
+    totalOriginal += Number(f.originalFeeDue || 0);
+    totalEffective += Number(f.effectiveFeeDue || 0);
+    totalDue += Number(f.finalAmountDue || 0);
+    totalReceived += Number(f.totalFeeReceived || 0);
+    totalConcession += Number(f.totalConcessionReceived || 0);
+    totalFineRemaining += getFineDue(f); // show remaining fine, not original
+  });
+
+  // Van (overall)
+  const van = studentDetails?.vanFee || {
+    transportCost: 0,
+    totalVanFeeReceived: 0,
+    totalVanFeeConcession: 0,
+    vanFeeBalance: 0,
+    perHeadTotalDue: 0,
+  };
+  const vanCost = Number(van.perHeadTotalDue || van.transportCost || 0);
+  const vanReceived = Number(van.totalVanFeeReceived || 0);
+  const vanConcession = Number(van.totalVanFeeConcession || 0);
+  const vanDue = Math.max(vanCost - (vanReceived + vanConcession), 0);
+
+  // ------------- Payment handlers (UPDATED: include Fine Due + Van Pending + Previous Balance + Previous Slabs) -------------
+  const handlePayFee = async (fee, feeIndex) => {
+    const academicDue = Number(fee?.finalAmountDue || 0);
+    const fineDue = getFineDue(fee);
+    const vanBreak = getTransportBreakdown(fee);
+    const vanDueHead = Number(vanBreak?.pending || 0);
+
+    // previous slabs (heads before this one)
+    const prev = computePreviousSlabsTotals(feeIndex);
+
+    // Opening Balance
+    const openingBalanceDue = Number(prevBalanceDue || 0);
+
+    // GRAND total for this payment
+    const dueAmount = academicDue + fineDue + vanDueHead + openingBalanceDue + prev.total;
+
+    if (isNaN(dueAmount) || dueAmount <= 0) {
+      return Swal.fire({ icon: "error", title: "Invalid Amount", text: "Nothing due to pay." });
+    }
+
+    const breakupHtml = `
+      <div style="text-align:left;font-size:.95rem">
+        <div><strong>Breakup</strong></div>
+        <div>Academic (this head): <strong>${formatINR(academicDue)}</strong></div>
+        <div>Fine (remaining, this head): <strong>${formatINR(fineDue)}</strong></div>
+        <div>Transport (this head): <strong>${formatINR(vanDueHead)}</strong></div>
+        ${prev.count > 0 ? `
+          <hr/>
+          <div><strong>Previous Heads (${prev.count})</strong></div>
+          <div>Academic (prev): <strong>${formatINR(prev.totalAcademic)}</strong></div>
+          <div>Fine (prev): <strong>${formatINR(prev.totalFine)}</strong></div>
+          <div>Transport (prev): <strong>${formatINR(prev.totalVan)}</strong></div>
+        ` : ""}
+        ${openingBalanceDue > 0 ? `<hr/><div>Previous Balance: <strong>${formatINR(openingBalanceDue)}</strong></div>` : ""}
+      </div>
+    `;
+
     const { isConfirmed } = await Swal.fire({
-      title: `Proceed to pay ₹ ${Number(dueAmount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}?`,
+      title: `Proceed to pay ${formatINR(dueAmount)}?`,
+      html: breakupHtml,
       icon: "question",
       showCancelButton: true,
       confirmButtonColor: "#4f46e5",
       cancelButtonColor: "#94a3b8",
       confirmButtonText: "Yes, pay now!",
       cancelButtonText: "Cancel",
+      width: 560,
     });
     if (!isConfirmed) return;
 
@@ -485,6 +743,33 @@ const StudentFeePage = () => {
         amount: dueAmount,
         feeHeadId,
         gateway: paymentGateway,
+
+        // per-head breakdown (this head)
+        fineAmount: fineDue,
+        vanFeeAmount: vanDueHead,
+
+        // Opening balance
+        openingBalanceAmount: openingBalanceDue,
+        openingBalanceHeadId: prevBalanceHeadId || undefined,
+
+        // Previous slabs breakdown
+        previousSlabs: prev.items,                    // array of { feeHeadId, academicDue, fineDue, vanDue, total }
+        previousSlabsTotal: prev.total,
+
+        breakdown: {
+          academicDue,
+          fineDue,
+          vanDueHead,
+          openingBalanceDue,
+          previous: {
+            total: prev.total,
+            academic: prev.totalAcademic,
+            fine: prev.totalFine,
+            van: prev.totalVan,
+            count: prev.count,
+            items: prev.items,
+          },
+        },
       });
 
       const orderData = orderRes.data || {};
@@ -511,11 +796,7 @@ const StudentFeePage = () => {
           if (paymentWindow && !paymentWindow.closed) paymentWindow.close();
           const handled = handleGatewayResponse(orderData, orderData.session || null);
           if (!handled) {
-            Swal.fire({
-              icon: "error",
-              title: "Payment initialization failed",
-              text: "No payment URL returned. Try again.",
-            });
+            Swal.fire({ icon: "error", title: "Payment initialization failed", text: "No payment URL returned. Try again." });
           }
           return;
         }
@@ -533,11 +814,7 @@ const StudentFeePage = () => {
           openPaymentPopup(paymentPageUrl);
         }
 
-        Swal.fire({
-          icon: "info",
-          title: "Payment page opened",
-          text: "Complete the payment in the opened window.",
-        });
+        Swal.fire({ icon: "info", title: "Payment page opened", text: "Complete the payment in the opened window." });
         return;
       }
 
@@ -559,6 +836,14 @@ const StudentFeePage = () => {
               admissionNumber,
               amount: dueAmount,
               feeHeadId,
+
+              // same breakdown on verify
+              fineAmount: fineDue,
+              vanFeeAmount: vanDueHead,
+              openingBalanceAmount: openingBalanceDue,
+              openingBalanceHeadId: prevBalanceHeadId || undefined,
+              previousSlabs: prev.items,
+              previousSlabsTotal: prev.total,
             });
             Swal.fire({ icon: "success", title: "Payment Successful!" });
             refreshAfterPayment();
@@ -567,7 +852,14 @@ const StudentFeePage = () => {
             Swal.fire({ icon: "error", title: "Payment Verification Failed", text: "Please try again." });
           }
         },
-        notes: { admissionNumber, feeHeadId },
+        notes: {
+          admissionNumber,
+          feeHeadId,
+          fineAmount: fineDue,
+          vanFeeAmount: vanDueHead,
+          openingBalanceAmount: openingBalanceDue,
+          previousSlabsTotal: prev.total,
+        },
         theme: { color: "#22c55e" },
       };
       const rzp = new window.Razorpay(options);
@@ -585,14 +877,24 @@ const StudentFeePage = () => {
     const vanCost = Number(van.perHeadTotalDue || van.transportCost || 0);
     const vanReceived = Number(van.totalVanFeeReceived || 0);
     const vanConcession = Number(van.totalVanFeeConcession || 0);
-    const vanDue = Math.max(vanCost - (vanReceived + vanConcession), 0);
+    const vanDueOnly = Math.max(vanCost - (vanReceived + vanConcession), 0);
 
-    if (vanDue <= 0) {
-      return Swal.fire({ icon: "info", title: "No Van Fee Due", text: "You're all clear on Van Fee." });
+    const openingBalanceDue = Number(prevBalanceDue || 0); // include OB with van-only pay
+    const totalToPay = vanDueOnly + openingBalanceDue;
+
+    if (totalToPay <= 0) {
+      return Swal.fire({ icon: "info", title: "No Dues", text: "You're all clear on Van Fee and Previous Balance." });
     }
 
     const { isConfirmed } = await Swal.fire({
-      title: `Pay Van Fee ₹ ${Number(vanDue).toLocaleString("en-IN", { minimumFractionDigits: 2 })}?`,
+      title: `Pay ${formatINR(totalToPay)}?`,
+      html: `
+        <div style="text-align:left;font-size:.95rem">
+          <div><strong>Breakup</strong></div>
+          <div>Van Fee: <strong>${formatINR(vanDueOnly)}</strong></div>
+          ${openingBalanceDue > 0 ? `<div>Previous Balance: <strong>${formatINR(openingBalanceDue)}</strong></div>` : ""}
+        </div>
+      `,
       icon: "question",
       showCancelButton: true,
       confirmButtonText: "Pay Now",
@@ -624,9 +926,12 @@ const StudentFeePage = () => {
 
       const orderRes = await api.post("/student-fee/create-order", {
         admissionNumber,
-        amount: vanDue,
+        amount: totalToPay,
         feeHeadId: "VAN_FEE",
         gateway: paymentGateway,
+        openingBalanceAmount: openingBalanceDue,
+        openingBalanceHeadId: prevBalanceHeadId || undefined,
+        breakdown: { vanDue: vanDueOnly, openingBalanceDue },
       });
 
       const orderData = orderRes.data || {};
@@ -694,17 +999,19 @@ const StudentFeePage = () => {
               razorpay_payment_id: resp.razorpay_payment_id,
               razorpay_signature: resp.razorpay_signature,
               admissionNumber,
-              amount: vanDue,
+              amount: totalToPay,
               feeHeadId: "VAN_FEE",
+              openingBalanceAmount: openingBalanceDue,
+              openingBalanceHeadId: prevBalanceHeadId || undefined,
             });
-            Swal.fire({ icon: "success", title: "Van Fee Paid!" });
+            Swal.fire({ icon: "success", title: "Payment Successful!" });
             refreshAfterPayment();
           } catch (e) {
             console.error("Verification failed:", e);
             Swal.fire({ icon: "error", title: "Verification Failed", text: "Please try again." });
           }
         },
-        notes: { admissionNumber, feeHeadId: "VAN_FEE" },
+        notes: { admissionNumber, feeHeadId: "VAN_FEE", openingBalanceAmount: openingBalanceDue },
         theme: { color: "#16a34a" },
       };
       const rzp = new window.Razorpay(options);
@@ -716,33 +1023,7 @@ const StudentFeePage = () => {
     }
   };
 
-  // ------------- UI helpers -------------
-  const getVanForHeadFromMap = (feeHeadId) => {
-    const v = vanByHead[Number(feeHeadId)];
-    if (!v) return null;
-    const received = Number(v.totalVanFeeReceived || 0);
-    const concession = Number(v.totalVanFeeConcession || 0);
-    const cost = Number(v.transportCost || 0);
-    const pending = Math.max(cost - (received + concession), 0);
-    return { cost, received, concession, pending, due: cost };
-  };
-
-  const getTransportBreakdown = (fee) => {
-    if (fee?.transportApplicable && fee?.transport) {
-      const t = fee.transport;
-      return {
-        cost: Number(t.transportDue || 0) + Number(t.transportReceived || 0) + Number(t.transportConcession || 0),
-        due: Number(t.transportDue || 0),
-        received: Number(t.transportReceived || 0),
-        concession: Number(t.transportConcession || 0),
-        pending: Number(t.transportPending || 0),
-        source: "api",
-      };
-    }
-    const fallback = getVanForHeadFromMap(fee?.fee_heading_id);
-    return fallback ? { ...fallback, source: "map" } : null;
-  };
-
+  // ------------- Student switch handler (re-added to fix no-undef) -------------
   const handleStudentSwitch = (admissionNumber) => {
     const norm = normalizeAdmission(admissionNumber);
     if (!norm || norm === activeStudentAdmission) return;
@@ -754,40 +1035,11 @@ const StudentFeePage = () => {
       fetchStudentDetails(norm);
       fetchTransactionHistory(norm);
       fetchVanFeeByHead();
+      fetchOpeningBalanceOutstandingForMe();
     } catch (e) {
       console.warn("Failed to switch student", e);
     }
   };
-
-  if (!canView) return <h2 className="text-center mt-5">Access Denied</h2>;
-
-  // Totals (fee heads only — van handled separately)
-  let totalOriginal = 0,
-    totalEffective = 0,
-    totalDue = 0,
-    totalReceived = 0,
-    totalConcession = 0;
-  const fees = studentDetails?.feeDetails || [];
-  fees.forEach((f) => {
-    totalOriginal += Number(f.originalFeeDue || 0);
-    totalEffective += Number(f.effectiveFeeDue || 0);
-    totalDue += Number(f.finalAmountDue || 0);
-    totalReceived += Number(f.totalFeeReceived || 0);
-    totalConcession += Number(f.totalConcessionReceived || 0);
-  });
-
-  // Van (overall)
-  const van = studentDetails?.vanFee || {
-    transportCost: 0,
-    totalVanFeeReceived: 0,
-    totalVanFeeConcession: 0,
-    vanFeeBalance: 0,
-    perHeadTotalDue: 0,
-  };
-  const vanCost = Number(van.perHeadTotalDue || van.transportCost || 0);
-  const vanReceived = Number(van.totalVanFeeReceived || 0);
-  const vanConcession = Number(van.totalVanFeeConcession || 0);
-  const vanDue = Math.max(vanCost - (vanReceived + vanConcession), 0);
 
   return (
     <div className="container-fluid px-2 px-md-3" style={{ marginTop: 72 }}>
@@ -893,7 +1145,7 @@ const StudentFeePage = () => {
             </>
           )}
 
-          {/* Transport chips */}
+          {/* Transport + OB chips */}
           <div className="d-flex gap-2 mt-3 overflow-auto pb-1 fancy-chip-row">
             <div className="chip chip-amber">
               <i className="bi bi-truck me-1" />
@@ -912,7 +1164,11 @@ const StudentFeePage = () => {
               Van Due:
               <strong className="ms-1">{formatINR(vanDue)}</strong>
             </div>
-            <button className="btn btn-success btn-sm ms-auto shrink-0" disabled={vanDue <= 0} onClick={handlePayVanFee}>
+            <div className={`chip ${prevBalanceDue > 0 ? "chip-red" : "chip-green"}`}>
+              <i className="bi bi-exclamation-octagon me-1" />
+              Previous Balance: <strong className="ms-1">{formatINR(prevBalanceDue)}</strong>
+            </div>
+            <button className="btn btn-success btn-sm ms-auto shrink-0" disabled={vanDue + prevBalanceDue <= 0} onClick={handlePayVanFee}>
               <i className="bi bi-credit-card-2-front me-1" /> Pay Van Fee
             </button>
           </div>
@@ -939,7 +1195,8 @@ const StudentFeePage = () => {
                     studentDetails.feeDetails.map((fee, idx) => {
                       const t = getTransportBreakdown(fee);
                       const academicDue = Number(fee.finalAmountDue || 0);
-                      const totalInclVan = academicDue + Number(t?.pending || 0);
+                      const fineDue = getFineDue(fee); // remaining fine (not original)
+                      const totalInclVan = academicDue + Number(t?.pending || 0) + fineDue;
 
                       const paidPct =
                         ((Number(fee.totalFeeReceived || 0) + Number(fee.totalConcessionReceived || 0)) /
@@ -950,6 +1207,8 @@ const StudentFeePage = () => {
                         t && t.cost > 0
                           ? ((Number(t.received || 0) + Number(t.concession || 0)) / (Number(t.cost || 0) || 1)) * 100
                           : 0;
+
+                      const prev = computePreviousSlabsTotals(idx);
 
                       return (
                         <div key={idx} className="col-12 col-sm-6 col-lg-4">
@@ -984,10 +1243,32 @@ const StudentFeePage = () => {
                                 <span>Received</span>
                                 <span className="fw-semibold">{formatINR(fee.totalFeeReceived)}</span>
                               </div>
-                              <div className="d-flex justify-content-between small mb-2">
+                              <div className="d-flex justify-content-between small mb-1">
                                 <span>Concession</span>
                                 <span className="fw-semibold">{formatINR(fee.totalConcessionReceived)}</span>
                               </div>
+                              <div className="d-flex justify-content-between small mb-2">
+                                <span>Fine (remaining)</span>
+                                <span className="fw-semibold">{formatINR(fineDue)}</span>
+                              </div>
+
+                              {prev.count > 0 && (
+                                <div className="alert alert-warning py-2 px-3 small mb-2">
+                                  <div className="fw-semibold mb-1">Previous heads pending</div>
+                                  <div className="d-flex justify-content-between tiny-row">
+                                    <span>Prev Academic</span>
+                                    <span className="fw-semibold">{formatINR(prev.totalAcademic)}</span>
+                                  </div>
+                                  <div className="d-flex justify-content-between tiny-row">
+                                    <span>Prev Fine</span>
+                                    <span className="fw-semibold">{formatINR(prev.totalFine)}</span>
+                                  </div>
+                                  <div className="d-flex justify-content-between tiny-row">
+                                    <span>Prev Transport</span>
+                                    <span className="fw-semibold">{formatINR(prev.totalVan)}</span>
+                                  </div>
+                                </div>
+                              )}
 
                               <div className="mb-2">
                                 <div className="progress progress-thin">
@@ -1069,24 +1350,31 @@ const StudentFeePage = () => {
                                     </span>
                                   </div>
                                   <div className="d-flex justify-content-between mt-1">
-                                    <span className="fw-semibold">Total Due (incl. Transport)</span>
+                                    <span className="fw-semibold">Total Due (incl. Fine + TR)</span>
                                     <span className={`fw-bold ${totalInclVan > 0 ? "text-danger" : "text-success"}`}>
                                       {formatINR(totalInclVan)}
                                     </span>
                                   </div>
                                 </>
-                              ) : null}
+                              ) : (
+                                <div className="d-flex justify-content-between mt-1">
+                                  <span className="fw-semibold">Total Due (incl. Fine)</span>
+                                  <span className={`fw-bold ${totalInclVan > 0 ? "text-danger" : "text-success"}`}>
+                                    {formatINR(totalInclVan)}
+                                  </span>
+                                </div>
+                              )}
                             </div>
 
                             <div className="card-footer bg-transparent">
-                              {Number(fee.finalAmountDue) > 0 ? (
-                                <button className="btn btn-primary w-100 soft-shadow" onClick={() => handlePayFee(fee)}>
+                              {Number(fee.finalAmountDue) > 0 || getFineDue(fee) > 0 || (t && t.pending > 0) || prev.count > 0 || prevBalanceDue > 0 ? (
+                                <button className="btn btn-primary w-100 soft-shadow" onClick={() => handlePayFee(fee, idx)}>
                                   <i className="bi bi-currency-rupee me-1" /> Pay
+                                  {t && t.pending > 0 ? " (Acad + Fine + TR" : " (Acad + Fine"}
+                                  {prev.count > 0 ? " + Prev Heads" : ""}
+                                  {prevBalanceDue > 0 ? " + OB" : ""}
+                                  )
                                 </button>
-                              ) : t && t.pending > 0 ? (
-                                <div className="text-warning text-center fw-semibold">
-                                  Academic Paid • Transport Pending
-                                </div>
                               ) : (
                                 <div className="text-success text-center fw-semibold">Paid</div>
                               )}
@@ -1129,8 +1417,16 @@ const StudentFeePage = () => {
                                 <th>Total Concession</th>
                                 <td className="text-end">{formatINR(totalConcession)}</td>
                               </tr>
+                              <tr className="table-light">
+                                <th>Total Fine (remaining)</th>
+                                <td className="text-end">{formatINR(totalFineRemaining)}</td>
+                              </tr>
+                              <tr className={prevBalanceDue > 0 ? "table-danger" : "table-success"}>
+                                <th>Previous Balance</th>
+                                <td className="text-end fw-semibold">{formatINR(prevBalanceDue)}</td>
+                              </tr>
                               <tr className="table-warning">
-                                <th>Total Due</th>
+                                <th>Total Due (Academic)</th>
                                 <td className="text-end fw-semibold">{formatINR(totalDue)}</td>
                               </tr>
                               <tr className="table-success">
@@ -1167,8 +1463,8 @@ const StudentFeePage = () => {
                             </div>
                           </div>
                           <div className="ms-auto">
-                            <button className="btn btn-success btn-sm" onClick={handlePayVanFee} disabled={vanDue <= 0}>
-                              Pay Van Fee
+                            <button className="btn btn-success btn-sm" onClick={handlePayVanFee} disabled={vanDue + prevBalanceDue <= 0}>
+                              Pay Van Fee {prevBalanceDue > 0 ? "(incl. OB)" : ""}
                             </button>
                           </div>
                         </div>
@@ -1230,6 +1526,7 @@ const StudentFeePage = () => {
                               <th>Payment Mode</th>
                               <th>Fee Received</th>
                               <th>Concession</th>
+                              <th>Fine</th>
                               <th>Van Fee</th>
                             </tr>
                           </thead>
@@ -1251,6 +1548,7 @@ const StudentFeePage = () => {
                                 </td>
                                 <td>{formatINR(txn.Fee_Recieved)}</td>
                                 <td>{formatINR(txn.Concession)}</td>
+                                <td>{formatINR(txn.Fine ?? txn.LateFee ?? txn.FineAmount ?? 0)}</td>
                                 <td>{formatINR(txn.VanFee || 0)}</td>
                               </tr>
                             ))}
@@ -1311,7 +1609,7 @@ const StudentFeePage = () => {
         .progress-thin{ height: .45rem; border-radius: 999px; }
         .transport-panel{
           background: linear-gradient(135deg, rgba(59,130,246,.10), rgba(16,185,129,.10));
-          border: 1px dashed rgba(15,23,42,.15);
+          border: 1 dashed rgba(15,23,42,.15);
           border-radius: 12px;
           padding: .6rem .7rem;
         }
