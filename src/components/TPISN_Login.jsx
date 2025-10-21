@@ -1,4 +1,4 @@
-// Login.js
+// src/pages/Login.js
 import React, { useEffect, useRef, useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
@@ -7,10 +7,18 @@ import { auth, provider, signInWithPopup } from "../firebase/firebaseConfig";
 import socket from "../socket";
 import "./login.css";
 
-// 👇 Added "accounts" (placed after admin, before hr)
-const ROLE_ORDER = ["superadmin", "admin", "accounts", "hr", "academic_coordinator", "teacher", "student"];
+// 👇 Role preference ordering
+const ROLE_ORDER = [
+  "superadmin",
+  "admin",
+  "accounts",
+  "hr",
+  "academic_coordinator",
+  "teacher",
+  "student",
+];
 
-// --- Background resolver (Smarto images) ---
+// Background candidates (keeps prior choices)
 const BG_CANDIDATES = [
   `${process.env.PUBLIC_URL}/images/SchooBackground.jpeg`,
   `${process.env.PUBLIC_URL}/images/SchooBackground.jpeg`,
@@ -40,8 +48,8 @@ function resolveFirstExistingImage(candidates) {
     });
   });
 }
-// -----------------------------------------------------
 
+// Join socket rooms depending on roles
 const joinRooms = (user, roles = []) => {
   const rl = roles.map((r) => (r || "").toLowerCase());
 
@@ -84,19 +92,27 @@ const Login = () => {
   const userInputRef = useRef(null);
   const apiBase = useMemo(() => process.env.REACT_APP_API_URL?.replace(/\/+$/, ""), []);
 
+  // Focus first input
   useEffect(() => {
     userInputRef.current?.focus();
+  }, []);
+
+  // fetch school info
+  useEffect(() => {
+    if (!apiBase) return;
     axios
       .get(`${apiBase}/schools`)
       .then((res) => res.data?.length && setSchool(res.data[0]))
       .catch(() => {});
   }, [apiBase]);
 
+  // Apply stored token from either storage on mount
   useEffect(() => {
-    const token = localStorage.getItem("token");
+    const token = localStorage.getItem("token") || sessionStorage.getItem("token");
     if (token) axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
   }, []);
 
+  // Resolve background image
   useEffect(() => {
     (async () => {
       const found = await resolveFirstExistingImage(BG_CANDIDATES);
@@ -104,43 +120,126 @@ const Login = () => {
     })();
   }, []);
 
-  const afterAuth = (data) => {
+  // Global axios interceptor to handle 401 => navigate to login & cleanup
+  useEffect(() => {
+    const interceptor = axios.interceptors.response.use(
+      (res) => res,
+      (err) => {
+        const status = err?.response?.status;
+        if (status === 401) {
+          // cleanup and redirect to login
+          delete axios.defaults.headers.common["Authorization"];
+          localStorage.removeItem("token");
+          localStorage.removeItem("roles");
+          localStorage.removeItem("username");
+          localStorage.removeItem("userId");
+          localStorage.removeItem("name");
+          localStorage.removeItem("activeRole");
+          localStorage.removeItem("family");                 // NEW
+          localStorage.removeItem("activeStudentAdmission"); // NEW
+          sessionStorage.removeItem("token");
+          sessionStorage.removeItem("roles");
+          window.dispatchEvent(new Event("user-logged-out"));
+          navigate("/login", { replace: true });
+        }
+        return Promise.reject(err);
+      }
+    );
+    return () => axios.interceptors.response.eject(interceptor);
+  }, [navigate]);
+
+  const afterAuth = async (data) => {
     const { token, user, roles } = data;
     const roleArr = Array.isArray(roles) ? roles : roles ? [roles] : [];
     const roleArrLower = roleArr.map((r) => (r || "").toLowerCase());
 
-    if (remember) {
-      localStorage.setItem("token", token);
-      localStorage.setItem("roles", JSON.stringify(roleArr));
-      localStorage.setItem("username", user.username);
-      localStorage.setItem("userId", user.id);
-      localStorage.setItem("name", user.name);
-    } else {
-      localStorage.setItem("token", token);
-      localStorage.setItem("roles", JSON.stringify(roleArr));
-      localStorage.setItem("username", user.username);
-      localStorage.setItem("userId", user.id);
-      localStorage.setItem("name", user.name);
-      window.addEventListener("beforeunload", () => {
-        localStorage.removeItem("token");
-        localStorage.removeItem("roles");
-        localStorage.removeItem("username");
-        localStorage.removeItem("userId");
-        localStorage.removeItem("name");
-        localStorage.removeItem("activeRole");
-      });
+    // store token & user info based on remember flag
+    try {
+      if (remember) {
+        localStorage.setItem("token", token);
+        localStorage.setItem("roles", JSON.stringify(roleArr));
+        localStorage.setItem("username", user.username);
+        localStorage.setItem("userId", user.id);
+        localStorage.setItem("name", user.name);
+      } else {
+        sessionStorage.setItem("token", token);
+        sessionStorage.setItem("roles", JSON.stringify(roleArr));
+        sessionStorage.setItem("username", user.username);
+        sessionStorage.setItem("userId", user.id);
+        sessionStorage.setItem("name", user.name);
+      }
+      // set a canonical place so other parts can read (used in your app)
+      // also set axios auth header
+      axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
+    } catch (e) {
+      console.warn("Storage failed", e);
     }
 
-    localStorage.removeItem("userRole");
+    // --- NEW: persist family for navbar/student switcher ---
+    try {
+      if (data.family) {
+        localStorage.setItem("family", JSON.stringify(data.family));
+        // default active student is the logged in student; fallback to username
+        localStorage.setItem(
+          "activeStudentAdmission",
+          data.family?.student?.admission_number || user.username
+        );
+      } else {
+        localStorage.removeItem("family");
+        localStorage.removeItem("activeStudentAdmission");
+      }
+      window.dispatchEvent(new Event("family-updated"));
+    } catch (e) {
+      console.warn("Failed to store family", e);
+    }
+    // --- END NEW ---
+
+    localStorage.removeItem("userRole"); // existing cleanup intent
     const defaultActive =
       ROLE_ORDER.find((r) => roleArrLower.includes(r)) || (roleArrLower[0] || "");
+    // persist activeRole to localStorage (persist UI choice)
     localStorage.setItem("activeRole", defaultActive);
 
-    axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
+    // If you have FCM token available on window, save it on server
+    try {
+      const fcm = window.FCMTOKEN;
+      if (fcm) {
+        // prefer axios default header for token auth which is set above
+        axios.post(`${apiBase}/users/save-token`, {
+          username: user.username,
+          token: fcm,
+        }).catch((e) => {
+          console.warn("save-token failed", e?.response?.data || e.message);
+        });
+      }
+    } catch (e) {
+      console.warn("save-token call error", e);
+    }
+
+    // Setup socket auth: attach token to socket and (re)connect
+    try {
+      if (token) {
+        socket.auth = { token };
+        if (socket.connected) {
+          socket.disconnect();
+        }
+        socket.connect();
+      }
+    } catch (e) {
+      console.warn("socket auth setup failed", e);
+    }
+
+    // Join relevant rooms for notifications
+    try {
+      joinRooms(user, roleArrLower);
+    } catch (e) {
+      console.warn("joinRooms failed", e);
+    }
+
+    // dispatch event for other parts of app to read updated user state
     window.dispatchEvent(new Event("role-changed"));
 
-    joinRooms(user, roleArrLower);
-
+    // redirect depending on role (accounts -> accounts dashboard)
     const redirectPath = defaultActive === "accounts" ? "/accounts-dashboard" : "/dashboard";
     navigate(redirectPath, { replace: true });
   };
@@ -150,10 +249,17 @@ const Login = () => {
     setError("");
     setLoading(true);
     try {
-      const { data } = await axios.post(`${apiBase}/users/login`, { login, password });
-      afterAuth(data);
+      const device = navigator.userAgent || "web";
+      const { data } = await axios.post(`${apiBase}/users/login`, { login, password, device });
+      await afterAuth(data);
     } catch (err) {
-      setError(err.response?.data?.error || "Invalid credentials");
+      const msg =
+        err.response?.data?.message ||
+        err.response?.data?.error ||
+        err.message ||
+        "Invalid credentials";
+      setError(msg);
+      console.error("login error", err);
     } finally {
       setLoading(false);
     }
@@ -165,27 +271,67 @@ const Login = () => {
     try {
       const result = await signInWithPopup(auth, provider);
       const googleUser = result.user;
+      const device = navigator.userAgent || "web";
       const { data } = await axios.post(`${apiBase}/users/login`, {
         google_id: googleUser.uid,
         google_email: googleUser.email,
         google_name: googleUser.displayName,
         google_username: googleUser.email,
+        device,
       });
-      afterAuth(data);
+      await afterAuth(data);
     } catch (err) {
-      setError(err.response?.data?.error || "Google login failed");
-      console.error(err);
+      const msg =
+        err.response?.data?.message ||
+        err.response?.data?.error ||
+        err.message ||
+        "Google login failed";
+      setError(msg);
+      console.error("Google login error", err);
     } finally {
       setLoading(false);
     }
   };
 
-  const schoolLogoSrc = school?.logo
-    ? `${apiBase}${school.logo}`
-    : `${process.env.PUBLIC_URL}/images/pts_logo.png`; // ✅ New Smarto Logo
+  // Optional logout helper (can be moved to Auth context)
+  const logout = async () => {
+    try {
+      const token = localStorage.getItem("token") || sessionStorage.getItem("token");
+      if (token) {
+        try {
+          await axios.post(
+            `${apiBase}/users/logout`,
+            {},
+            { headers: { Authorization: `Bearer ${token}` } }
+          );
+        } catch (e) {
+          // ignore server errors here, proceed to cleanup
+        }
+      }
+    } finally {
+      delete axios.defaults.headers.common["Authorization"];
+      localStorage.removeItem("token");
+      localStorage.removeItem("roles");
+      localStorage.removeItem("username");
+      localStorage.removeItem("userId");
+      localStorage.removeItem("name");
+      localStorage.removeItem("activeRole");
+      localStorage.removeItem("family");                 // NEW
+      localStorage.removeItem("activeStudentAdmission"); // NEW
+      sessionStorage.removeItem("token");
+      sessionStorage.removeItem("roles");
+      try {
+        socket.disconnect();
+      } catch (e) {}
+      window.dispatchEvent(new Event("user-logged-out"));
+      navigate("/login", { replace: true });
+    }
+  };
 
+  // School logo + fallback logic
+  const schoolLogoSrc = school?.logo ? `${apiBase}${school.logo}` : `${process.env.PUBLIC_URL}/images/pts_logo.png`;
   const schoolName = school?.name || "Pathseekers International School";
-  const fallbackLogo = `${process.env.PUBLIC_URL}/images/pts_logo.png`; // ✅ Fallback updated
+  const fallbackLogo = `${process.env.PUBLIC_URL}/images/pts_logo.png`;
 
   return (
     <div

@@ -712,7 +712,9 @@ const StudentFeePage = () => {
       localStorage.getItem("activeStudentAdmission") ||
       localStorage.getItem("username");
     const admissionNumber = normalizeAdmission(admissionNumberRaw);
-    const feeHeadId = fee?.fee_heading_id;
+    const feeHeadId = Number(fee?.fee_heading_id) || fee?.fee_heading_id || null;
+    console.log("💳 Sending create-order with:", { admissionNumber, feeHeadId, dueAmount });
+
 
     if (!admissionNumber || !feeHeadId) {
       return Swal.fire({
