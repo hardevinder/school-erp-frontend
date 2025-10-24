@@ -1,5 +1,5 @@
 // File: src/components/Navbar.jsx
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate, Link, useLocation } from "react-router-dom";
 import axios from "axios";
 import "bootstrap/dist/css/bootstrap.min.css";
@@ -15,6 +15,12 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
   const [profilePhoto, setProfilePhoto] = useState("https://via.placeholder.com/40");
   const [userName, setUserName] = useState("");
 
+  // NEW: family + active student admission for switcher
+  const [family, setFamily] = useState(null);
+  const [activeStudentAdmission, setActiveStudentAdmission] = useState(
+    () => localStorage.getItem("activeStudentAdmission") || localStorage.getItem("username") || ""
+  );
+
   const { roles = [], activeRole, changeRole } = useRoles();
 
   // --- role helpers ---
@@ -22,8 +28,12 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
   const isSuperAdmin = roleLower === "superadmin" || roleLower === "super_admin";
   const isAdmin = isSuperAdmin || roleLower === "admin";
   const isStudent = roleLower === "student";
+  const isParent = roleLower === "parent";
 
-  // --- api base + helpers (match Students.js) ---
+  // show switcher for student or parent roles
+  const canSeeStudentSwitcher = isStudent || isParent;
+
+  // --- api base + helpers ---
   const API_BASE = (process.env.REACT_APP_API_URL || "").replace(/\/+$/, "");
   const buildStudentPhotoURL = (fileName) =>
     fileName ? `${API_BASE}/uploads/photoes/students/${encodeURIComponent(fileName)}` : "";
@@ -38,22 +48,40 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
        </svg>`
     );
 
-  // Try to resolve the student's photo when user is a student (fallback if user.profilePhoto is empty)
+  // Build list: current student first, then siblings
+  const studentsList = useMemo(() => {
+    if (!family) return [];
+    const list = [];
+    if (family.student) list.push({ ...family.student, isSelf: true });
+    (family.siblings || []).forEach((s) => list.push({ ...s, isSelf: false }));
+    return list;
+  }, [family]);
+
+  // Try to resolve the student's photo (prefer active student's photo)
   const trySetStudentPhoto = async () => {
     try {
-      const userId = localStorage.getItem("userId");      // set during login
-      const username = localStorage.getItem("username");  // often admission #
+      const token = localStorage.getItem("token");
+      if (!token) return setProfilePhoto(NO_STUDENT_PHOTO_SVG);
+
+      const admission = localStorage.getItem("activeStudentAdmission") || localStorage.getItem("username");
+      const userId = localStorage.getItem("userId");
+      const username = admission || localStorage.getItem("username");
+
       const tryEndpoints = [
+        // if you expose an endpoint by admission number:
+        username ? `${API_BASE}/students?admission_number=${encodeURIComponent(username)}` : null,
+        // fallback by username param:
+        username ? `${API_BASE}/students?username=${encodeURIComponent(username)}` : null,
+        // by current user:
         `${API_BASE}/students/me`,
         userId ? `${API_BASE}/students/by-user/${encodeURIComponent(userId)}` : null,
-        username ? `${API_BASE}/students?username=${encodeURIComponent(username)}` : null,
-        username ? `${API_BASE}/students?admission_number=${encodeURIComponent(username)}` : null,
       ].filter(Boolean);
 
       let student = null;
+      const headers = { Authorization: `Bearer ${token}` };
+
       for (const url of tryEndpoints) {
-        // Using axios directly (same defaults/auth as profile call)
-        const resp = await axios.get(url);
+        const resp = await axios.get(url, { headers });
         const data = resp.data;
         if (!data) continue;
         if (Array.isArray(data)) {
@@ -74,6 +102,33 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
     }
   };
 
+  // Load family from storage, keep active admission in sync
+  useEffect(() => {
+    const load = () => {
+      try {
+        const raw = localStorage.getItem("family");
+        setFamily(raw ? JSON.parse(raw) : null);
+        const stored =
+          localStorage.getItem("activeStudentAdmission") || localStorage.getItem("username") || "";
+        setActiveStudentAdmission(stored);
+      } catch {
+        setFamily(null);
+      }
+    };
+    load();
+
+    const onFamilyUpdated = () => load();
+    const onStudentSwitched = () => load();
+
+    window.addEventListener("family-updated", onFamilyUpdated);
+    window.addEventListener("student-switched", onStudentSwitched);
+    return () => {
+      window.removeEventListener("family-updated", onFamilyUpdated);
+      window.removeEventListener("student-switched", onStudentSwitched);
+    };
+  }, []);
+
+  // Fetch profile (name/photo). If student/parent, prefer active student's photo.
   useEffect(() => {
     const fetchProfile = async () => {
       try {
@@ -87,34 +142,38 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
         const user = data?.user || {};
         if (user.name) setUserName(user.name);
 
-        // If user has an explicit profilePhoto, honor it (absolute or relative).
-        if (user.profilePhoto) {
+        if ((isStudent || isParent) && localStorage.getItem("activeStudentAdmission")) {
+          // Show active student's photo if available
+          await trySetStudentPhoto();
+        } else if (user.profilePhoto) {
           const full = user.profilePhoto.startsWith("http")
             ? user.profilePhoto
             : `${API_BASE}${user.profilePhoto}`;
           setProfilePhoto(full);
         } else if (isStudent) {
-          // Fallback to student's uploaded photo
           await trySetStudentPhoto();
+        } else {
+          setProfilePhoto(NO_STUDENT_PHOTO_SVG);
         }
       } catch (err) {
         console.error("Failed to fetch profile:", err);
-        // If student and profile failed, still try student photo
-        if (isStudent) {
+        if (isStudent || isParent) {
           await trySetStudentPhoto();
+        } else {
+          setProfilePhoto(NO_STUDENT_PHOTO_SVG);
         }
       }
     };
     fetchProfile();
-    // run again if role changes at runtime
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isStudent]);
+  }, [isStudent, isParent, activeStudentAdmission]);
 
   const handleLogout = () => {
     localStorage.removeItem("token");
     localStorage.removeItem("roles");
     localStorage.removeItem("activeRole");
-    // optional: also clear these if you store them
+    localStorage.removeItem("family");                 // ensure cleanup
+    localStorage.removeItem("activeStudentAdmission"); // ensure cleanup
     // localStorage.removeItem("username");
     // localStorage.removeItem("userId");
     navigate("/");
@@ -140,11 +199,9 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
 
   const handleRoleChange = (newRole) => {
     if (!newRole || newRole === activeRole) return;
-
     changeRole(newRole);
     localStorage.setItem("activeRole", newRole);
     window.dispatchEvent(new Event("role-changed"));
-
     setDropdownOpen(false);
     navigate("/dashboard", { replace: true });
   };
@@ -160,21 +217,119 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
     onBellClick();
   };
 
-  // Small quick links (icon on top, tiny text below)
-  const quickLinks = [
-    { label: "Collect", href: "/transactions", icon: "bi-cash-stack" },
-    { label: "Fee Due", href: "/student-due", icon: "bi-receipt" },
-    { label: "Pending", href: "/reports/school-fee-summary", icon: "bi-list-check" },
-    { label: "Day", href: "/reports/day-wise", icon: "bi-calendar2-check" },
-    { label: "Transport", href: "/reports/transport-summary", icon: "bi-truck" },
-    { label: "Students", href: "/students", icon: "bi-people" },
-  ];
-
-  // Brand logo from same location as Login page:
-  const brandLogo = `${process.env.PUBLIC_URL}/images/SmartoLogo.png`;
-
   const isActive = (path) =>
     location.pathname === path || location.pathname.startsWith(path + "/");
+
+  // Handle student switch (admission number)
+  const handleStudentSwitch = (admissionNumber) => {
+    if (!admissionNumber || admissionNumber === activeStudentAdmission) return;
+    try {
+      localStorage.setItem("activeStudentAdmission", admissionNumber);
+      setActiveStudentAdmission(admissionNumber);
+
+      // Update header photo to the selected student's
+      trySetStudentPhoto();
+
+      // Notify app to refetch student-bound data (attendance, fees, diary, etc.)
+      window.dispatchEvent(
+        new CustomEvent("student-switched", { detail: { admissionNumber } })
+      );
+
+      // Optional UX: navigate to dashboard
+      if (isStudent || isParent) {
+        navigate("/dashboard", { replace: true });
+      }
+    } catch (e) {
+      console.warn("Failed to switch student", e);
+    }
+  };
+
+  // ---------- ROLE-BASED QUICK LINKS ----------
+  const QUICK_LINKS_BY_ROLE = {
+    // Admin & Superadmin
+    admin: [
+      { label: "Collect", href: "/transactions", icon: "bi-cash-stack" },
+      { label: "Fee Due", href: "/student-due", icon: "bi-receipt" },
+      { label: "Pending", href: "/reports/school-fee-summary", icon: "bi-list-check" },
+      { label: "Day", href: "/reports/day-wise", icon: "bi-calendar2-check" },
+      { label: "Transport", href: "/reports/transport-summary", icon: "bi-truck" },
+      { label: "Students", href: "/students", icon: "bi-people" },
+      { label: "Tracking", href: "/users-tracking", icon: "bi-activity" },
+    ],
+    superadmin: [
+      { label: "Collect", href: "/transactions", icon: "bi-cash-stack" },
+      { label: "Fee Due", href: "/student-due", icon: "bi-receipt" },
+      { label: "Pending", href: "/reports/school-fee-summary", icon: "bi-list-check" },
+      { label: "Day", href: "/reports/day-wise", icon: "bi-calendar2-check" },
+      { label: "Transport", href: "/reports/transport-summary", icon: "bi-truck" },
+      { label: "Students", href: "/students", icon: "bi-people" },
+      { label: "Tracking", href: "/users-tracking", icon: "bi-activity" },
+    ],
+    // Accounts
+    accounts: [
+      { label: "Collect", href: "/transactions", icon: "bi-cash-stack" },
+      { label: "Fee Due", href: "/student-due", icon: "bi-receipt" },
+      { label: "Day", href: "/reports/day-wise", icon: "bi-calendar2-check" },
+      { label: "Summary", href: "/reports/school-fee-summary", icon: "bi-graph-up" },
+      { label: "Cancel", href: "/cancelled-transactions", icon: "bi-trash3" },
+    ],
+    account: [
+      { label: "Collect", href: "/transactions", icon: "bi-cash-stack" },
+      { label: "Fee Due", href: "/student-due", icon: "bi-receipt" },
+      { label: "Day", href: "/reports/day-wise", icon: "bi-calendar2-check" },
+      { label: "Summary", href: "/reports/school-fee-summary", icon: "bi-graph-up" },
+      { label: "Cancel", href: "/cancelled-transactions", icon: "bi-trash3" },
+    ],
+    fee_manager: [
+      { label: "Collect", href: "/transactions", icon: "bi-cash-stack" },
+      { label: "Fee Due", href: "/student-due", icon: "bi-receipt" },
+      { label: "Day", href: "/reports/day-wise", icon: "bi-calendar2-check" },
+      { label: "Summary", href: "/reports/school-fee-summary", icon: "bi-graph-up" },
+      { label: "Cancel", href: "/cancelled-transactions", icon: "bi-trash3" },
+    ],
+    // Academic Coordinator
+    academic_coordinator: [
+      { label: "TT", href: "/combined-timetable", icon: "bi-table" },
+      { label: "Students", href: "/students", icon: "bi-people" },
+      { label: "Assign", href: "/teacher-assignment", icon: "bi-person-check" },
+      { label: "Subs", href: "/substitution", icon: "bi-arrow-repeat" },
+      { label: "Exams", href: "/exams", icon: "bi-journal-bookmark" },
+    ],
+    // Teacher
+    teacher: [
+      { label: "Mark Att.", href: "/mark-attendance", icon: "bi-check2-square" },
+      { label: "TT", href: "/teacher-timetable-display", icon: "bi-table" },
+      { label: "Marks", href: "/marks-entry", icon: "bi-pencil-square" },
+      { label: "Subs", href: "/combined-teacher-substitution", icon: "bi-arrow-repeat" },
+      { label: "Assign", href: "/assignments", icon: "bi-clipboard" },
+    ],
+    // HR
+    hr: [
+      { label: "Employees", href: "/employees", icon: "bi-person-badge" },
+      { label: "Att.", href: "/employee-attendance", icon: "bi-person-check-fill" },
+      { label: "Summary", href: "/employee-attendance-summary", icon: "bi-calendar-range" },
+      { label: "Leave Req", href: "/hr-leave-requests", icon: "bi-clipboard-check" },
+      { label: "Balances", href: "/employee-leave-balances", icon: "bi-calendar-check" },
+    ],
+    // Student
+    student: [
+      { label: "Home", href: "/dashboard", icon: "bi-house" },
+      { label: "Attend.", href: "/student-attendance", icon: "bi-calendar2-check" },
+      { label: "Diary", href: "/student-diary", icon: "bi-journal-text" },
+      { label: "Assign", href: "/my-assignments", icon: "bi-journal-check" },
+      { label: "Fees", href: "/student-fee", icon: "bi-cash-coin" },
+    ],
+    // Parent (optional quick links – adjust to your app)
+    parent: [
+      { label: "Home", href: "/dashboard", icon: "bi-house" },
+      { label: "Attend.", href: "/student-attendance", icon: "bi-calendar2-check" },
+      { label: "Diary", href: "/student-diary", icon: "bi-journal-text" },
+      { label: "Fees", href: "/student-fee", icon: "bi-cash-coin" },
+    ],
+  };
+
+  const quickLinks = QUICK_LINKS_BY_ROLE[roleLower] || [];
+  const brandLogo = `${process.env.PUBLIC_URL}/images/SmartoLogo.png`;
 
   return (
     <>
@@ -188,18 +343,43 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
           <Link to="/dashboard" className="navbar-brand d-flex align-items-center gap-2 ms-2">
             <img
               src={brandLogo}
-              alt="Pathseekers International School logo"
+              alt="Smarto Experiential Schoo logo"
               width={34}
               height={34}
               className="rounded"
               style={{ objectFit: "contain" }}
               onError={(e) => {
-                // Hide image if not found — avoids a broken icon
                 e.currentTarget.style.display = "none";
               }}
             />
             <span className="fw-semibold">Smarto Experiential Schoo</span>
           </Link>
+
+          {/* Student switcher (desktop pills) */}
+          {canSeeStudentSwitcher && studentsList.length > 0 && (
+            <div className="ms-3 d-none d-lg-flex align-items-center gap-1" role="tablist" aria-label="Switch student">
+              {studentsList.map((s) => {
+                const isActive = s.admission_number === activeStudentAdmission;
+                return (
+                  <button
+                    key={s.admission_number}
+                    type="button"
+                    role="tab"
+                    aria-selected={isActive}
+                    className={`btn btn-sm ${isActive ? "btn-primary" : "btn-outline-primary"} rounded-pill px-3`}
+                    onClick={() => handleStudentSwitch(s.admission_number)}
+                    title={`${s.name} (${s.class?.name || "—"}-${s.section?.name || "—"})`}
+                    style={{ maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                  >
+                    {s.isSelf ? "Me" : s.name}
+                    <span className="ms-1 text-white-50">
+                      {s.class?.name ? ` · ${s.class.name}-${s.section?.name || "—"}` : ""}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
 
           {/* Role switcher (desktop) */}
           {roles.length > 0 && (
@@ -226,8 +406,8 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
 
           {/* Right cluster */}
           <div className="ms-auto d-flex align-items-center gap-2 me-3" ref={dropdownRef}>
-            {/* Quick links strip (for Admin, Superadmin & Accounts) */}
-            {(isAdmin || roleLower === "accounts" || roleLower === "fee_manager") && (
+            {/* Quick links strip */}
+            {quickLinks.length > 0 && (
               <div className="d-flex align-items-center gap-2 gap-sm-3 me-2 quick-links-strip">
                 {quickLinks.map((q) => {
                   const active = isActive(q.href);
@@ -315,27 +495,47 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
               </ul>
             </div>
 
-            {/* Mobile role switcher */}
-            {roles.length > 0 && (
-              <div className="ms-2 d-md-none">
-                <label htmlFor="roleSwitcherMobile" className="visually-hidden">
-                  Switch role
-                </label>
-                <select
-                  id="roleSwitcherMobile"
-                  aria-label="Switch role"
-                  className="form-select form-select-sm bg-light border-0"
-                  value={activeRole}
-                  onChange={(e) => handleRoleChange(e.target.value)}
-                >
-                  {roles.map((r) => (
-                    <option key={r} value={r}>
-                      {r.replace(/_/g, " ").toUpperCase()}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
+            {/* Mobile role + student switchers */}
+            <div className="ms-2 d-md-none d-flex align-items-center gap-2">
+              {roles.length > 0 && (
+                <div>
+                  <label htmlFor="roleSwitcherMobile" className="visually-hidden">
+                    Switch role
+                  </label>
+                  <select
+                    id="roleSwitcherMobile"
+                    aria-label="Switch role"
+                    className="form-select form-select-sm bg-light border-0"
+                    value={activeRole}
+                    onChange={(e) => handleRoleChange(e.target.value)}
+                  >
+                    {roles.map((r) => (
+                      <option key={r} value={r}>
+                        {r.replace(/_/g, " ").toUpperCase()}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {canSeeStudentSwitcher && studentsList.length > 0 && (
+                <div className="w-100">
+                  <label htmlFor="studentSwitcherMobile" className="visually-hidden">Switch student</label>
+                  <select
+                    id="studentSwitcherMobile"
+                    className="form-select form-select-sm bg-light border-0"
+                    value={activeStudentAdmission}
+                    onChange={(e) => handleStudentSwitch(e.target.value)}
+                  >
+                    {studentsList.map((s) => (
+                      <option key={s.admission_number} value={s.admission_number}>
+                        {(s.isSelf ? "Me: " : "") + s.name} {s.class?.name ? `(${s.class.name}-${s.section?.name || "—"})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </nav>
@@ -400,6 +600,11 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
           background: linear-gradient(145deg, #e0edff, #cfe2ff);
           border-color: #91c3ff;
           box-shadow: 0 0 0 3px rgba(13,110,253,.2), 0 4px 10px rgba(13,110,253,.25);
+        }
+
+        /* Tighten pill buttons a bit */
+        @media (min-width: 992px) {
+          .btn.rounded-pill { line-height: 1.1; }
         }
 
         /* Dark mode tweaks */

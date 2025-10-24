@@ -1,29 +1,54 @@
 import React, { useState, useEffect } from "react";
-import api from "../api"; // Your custom Axios instance
+import api from "../api";
 import Swal from "sweetalert2";
 
-const AssignmentDetails = () => {
+const AssignmentGrading = () => {
   const [assignments, setAssignments] = useState([]);
-  // Holds any changes for each student assignment, keyed by its id
+  const [selectedAssignmentId, setSelectedAssignmentId] = useState("");
+  const [students, setStudents] = useState([]);
   const [updateFields, setUpdateFields] = useState({});
+  const [page, setPage] = useState(1);
+  const pageSize = 10;
 
-  // Filter states
-  const [studentNameFilter, setStudentNameFilter] = useState("");
-  const [classFilter, setClassFilter] = useState("");
-  const [dateFilter, setDateFilter] = useState("");
-
-  // Options for class and date filters (computed from data)
-  const [availableClasses, setAvailableClasses] = useState([]);
-  const [availableDates, setAvailableDates] = useState([]);
-
-  // Fetch assignments with their student assignments and files
+  // ==========================================================
+  // 🔹 Fetch all assignments for dropdown (teacher only)
+  // ==========================================================
   const fetchAssignments = async () => {
     try {
       const res = await api.get("/student-assignments");
-      // Assuming the API returns { assignments: [...] }
-      setAssignments(res.data.assignments || []);
+      const list = res.data.assignments || [];
+
+      // ✅ Extract unique assignments from StudentAssignments
+      const uniqueAssignments = [];
+      const seen = new Set();
+
+      list.forEach((sa) => {
+        const a = sa.Assignment;
+        if (a && !seen.has(a.id)) {
+          seen.add(a.id);
+          uniqueAssignments.push(a);
+        }
+      });
+
+      setAssignments(uniqueAssignments);
     } catch (err) {
       console.error("Error fetching assignments:", err);
+      Swal.fire("Error", "Failed to load assignments", "error");
+    }
+  };
+
+  // ==========================================================
+  // 🔹 Fetch students assigned to a specific assignment
+  // ==========================================================
+  const fetchStudents = async (assignmentId) => {
+    try {
+      const res = await api.get(`/student-assignments/${assignmentId}`);
+      setStudents(res.data.students || []);
+      setPage(1);
+      setUpdateFields({});
+    } catch (err) {
+      console.error("Error fetching students:", err);
+      Swal.fire("Error", "Failed to load students", "error");
     }
   };
 
@@ -31,298 +56,236 @@ const AssignmentDetails = () => {
     fetchAssignments();
   }, []);
 
-  // Whenever assignments change, compute distinct class names and dates
-  useEffect(() => {
-    const classesSet = new Set();
-    const datesSet = new Set();
-    assignments.forEach((assignment) => {
-      assignment.StudentAssignments.forEach((sa) => {
-        if (sa.Student && sa.Student.Class) {
-          classesSet.add(sa.Student.Class.class_name);
-        }
-        if (sa.createdAt) {
-          datesSet.add(new Date(sa.createdAt).toISOString().substring(0, 10));
-        }
-      });
-    });
-    setAvailableClasses(Array.from(classesSet));
-    setAvailableDates(Array.from(datesSet));
-  }, [assignments]);
-
-  // Handle field changes for a given student assignment record
-  const handleFieldChange = (studentAssignmentId, field, value) => {
+  // ==========================================================
+  // 🔹 Handle field changes (local updates before saving)
+  // ==========================================================
+  const handleFieldChange = (id, field, value) => {
     setUpdateFields((prev) => ({
       ...prev,
-      [studentAssignmentId]: {
-        ...prev[studentAssignmentId],
-        [field]: value,
-      },
+      [id]: { ...prev[id], [field]: value },
     }));
   };
 
-  // Update a specific student assignment using the API
-  const updateStudentAssignment = async (studentAssignmentId) => {
-    const fields = updateFields[studentAssignmentId] || {};
+  // ==========================================================
+  // 🔹 Update one student record
+  // ==========================================================
+  const updateStudentAssignment = async (id) => {
+    const fields = updateFields[id] || {};
     try {
-      await api.put(`/student-assignments/${studentAssignmentId}`, fields);
-      Swal.fire("Success", "Student assignment updated successfully", "success");
-      fetchAssignments();
+      await api.put(`/student-assignments/${id}`, fields);
+      Swal.fire("✅ Success", "Student assignment updated", "success");
+      fetchStudents(selectedAssignmentId);
     } catch (err) {
       console.error("Error updating student assignment:", err);
-      Swal.fire("Error", "Failed to update student assignment", "error");
+      Swal.fire("Error", "Failed to update assignment", "error");
     }
   };
 
-  // Filter function for each student assignment record based on the provided filters
-  const filterStudentAssignment = (sa) => {
-    let matches = true;
-    if (studentNameFilter) {
-      matches =
-        matches &&
-        sa.Student &&
-        sa.Student.name.toLowerCase().includes(studentNameFilter.toLowerCase());
+  // ==========================================================
+  // 🔹 Bulk update all students (grading, marking, etc.)
+  // ==========================================================
+  const bulkUpdate = async (fields) => {
+    const ids = students.map((s) => s.id);
+    if (!ids.length) return;
+    try {
+      await api.put("/student-assignments/bulk-update", { ids, fields });
+      Swal.fire("✅ Success", "Bulk update applied", "success");
+      fetchStudents(selectedAssignmentId);
+    } catch (err) {
+      console.error("Error in bulk update:", err);
+      Swal.fire("Error", "Bulk update failed", "error");
     }
-    if (classFilter) {
-      matches =
-        matches &&
-        sa.Student &&
-        sa.Student.Class &&
-        sa.Student.Class.class_name === classFilter;
-    }
-    if (dateFilter) {
-      // Compare the createdAt date (formatted as YYYY-MM-DD) with the filter value
-      const saDate = new Date(sa.createdAt).toISOString().substring(0, 10);
-      matches = matches && saDate === dateFilter;
-    }
-    return matches;
   };
+
+  // ==========================================================
+  // 🔹 Pagination Controls
+  // ==========================================================
+  const startIndex = (page - 1) * pageSize;
+  const currentStudents = students.slice(startIndex, startIndex + pageSize);
+  const totalPages = Math.ceil(students.length / pageSize);
 
   return (
-    <div className="container mt-4">
-      <h1 className="mb-4">Assignment Details</h1>
+    <div className="container mt-4 mb-5">
+      <h2 className="fw-bold mb-4">📘 Assignment Grading Panel</h2>
 
-      {/* Filter Section */}
+      {/* Assignment Dropdown */}
       <div className="card mb-4 shadow-sm">
         <div className="card-body">
-          <h5 className="card-title">Filter Student Assignments</h5>
-          <div className="row">
-            <div className="col-md-4 mb-2">
-              <input
-                type="text"
-                className="form-control"
-                placeholder="Filter by Student Name"
-                value={studentNameFilter}
-                onChange={(e) => setStudentNameFilter(e.target.value)}
-              />
-            </div>
-            <div className="col-md-4 mb-2">
-              <select
-                className="form-select"
-                value={classFilter}
-                onChange={(e) => setClassFilter(e.target.value)}
-              >
-                <option value="">All Classes</option>
-                {availableClasses.map((cls, idx) => (
-                  <option key={idx} value={cls}>
-                    {cls}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="col-md-4 mb-2">
-              <select
-                className="form-select"
-                value={dateFilter}
-                onChange={(e) => setDateFilter(e.target.value)}
-              >
-                <option value="">All Dates</option>
-                {availableDates.map((date, idx) => (
-                  <option key={idx} value={date}>
-                    {date}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
+          <label className="form-label fw-semibold">Select Assignment:</label>
+          <select
+            className="form-select"
+            value={selectedAssignmentId}
+            onChange={(e) => {
+              setSelectedAssignmentId(e.target.value);
+              if (e.target.value) fetchStudents(e.target.value);
+              else setStudents([]);
+            }}
+          >
+            <option value="">-- Select Assignment --</option>
+            {assignments.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.title}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
 
-      {/* Assignment Cards */}
-      {assignments.length === 0 ? (
-        <p>No assignments found.</p>
-      ) : (
-        assignments.map((assignment) => (
-          <div key={assignment.id} className="card mb-5 shadow">
-            <div className="card-header bg-primary text-white">
-              <h2 className="card-title mb-0">{assignment.title}</h2>
-            </div>
-            <div className="card-body">
-              <p>
-                <strong>Content:</strong> {assignment.content}
-              </p>
-              {assignment.youtubeUrl && (
-                <p>
-                  <strong>Video:</strong>{" "}
-                  <a
-                    href={assignment.youtubeUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    Watch Video
-                  </a>
-                </p>
-              )}
-              {assignment.AssignmentFiles &&
-                assignment.AssignmentFiles.length > 0 && (
-                  <div className="mb-3">
-                    <h5>Files:</h5>
-                    <ul className="list-group">
-                      {assignment.AssignmentFiles.map((file) => (
-                        <li key={file.id} className="list-group-item">
-                          <a
-                            href={file.filePath}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                          >
-                            {file.fileName}
-                          </a>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              <h3 className="mt-4">Assigned Students</h3>
-              {assignment.StudentAssignments.length === 0 ? (
-                <p>No students assigned.</p>
-              ) : (
-                <div className="table-responsive">
-                  <table className="table table-bordered table-hover">
-                    <thead className="table-light">
-                      <tr>
-                        <th>Student Name</th>
-                        <th>Class</th>
-                        <th>Status</th>
-                        <th>Grade</th>
-                        <th>Due Date</th>
-                        <th>Remarks</th>
-                        <th>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {assignment.StudentAssignments.filter(filterStudentAssignment).map(
-                        (studentAssignment) => (
-                          <tr key={studentAssignment.id}>
-                            <td>
-                              {studentAssignment.Student
-                                ? studentAssignment.Student.name
-                                : studentAssignment.studentId}
-                            </td>
-                            <td>
-                              {studentAssignment.Student &&
-                              studentAssignment.Student.Class
-                                ? studentAssignment.Student.Class.class_name
-                                : "N/A"}
-                            </td>
-                            <td>
-                              <select
-                                className="form-select"
-                                value={
-                                  updateFields[studentAssignment.id]?.status ||
-                                  studentAssignment.status
-                                }
-                                onChange={(e) =>
-                                  handleFieldChange(
-                                    studentAssignment.id,
-                                    "status",
-                                    e.target.value
-                                  )
-                                }
-                              >
-                                <option value="pending">Pending</option>
-                                <option value="submitted">Submitted</option>
-                                <option value="graded">Graded</option>
-                              </select>
-                            </td>
-                            <td>
-                              <input
-                                type="text"
-                                className="form-control"
-                                value={
-                                  updateFields[studentAssignment.id]?.grade ||
-                                  studentAssignment.grade ||
-                                  ""
-                                }
-                                onChange={(e) =>
-                                  handleFieldChange(
-                                    studentAssignment.id,
-                                    "grade",
-                                    e.target.value
-                                  )
-                                }
-                                placeholder="Enter grade"
-                              />
-                            </td>
-                            <td>
-                              <input
-                                type="date"
-                                className="form-control"
-                                value={
-                                  updateFields[studentAssignment.id]?.dueDate ||
-                                  (studentAssignment.dueDate
-                                    ? studentAssignment.dueDate.substring(0, 10)
-                                    : "")
-                                }
-                                onChange={(e) =>
-                                  handleFieldChange(
-                                    studentAssignment.id,
-                                    "dueDate",
-                                    e.target.value
-                                  )
-                                }
-                              />
-                            </td>
-                            <td>
-                              <input
-                                type="text"
-                                className="form-control"
-                                value={
-                                  updateFields[studentAssignment.id]?.remarks ||
-                                  studentAssignment.remarks ||
-                                  ""
-                                }
-                                onChange={(e) =>
-                                  handleFieldChange(
-                                    studentAssignment.id,
-                                    "remarks",
-                                    e.target.value
-                                  )
-                                }
-                                placeholder="Enter remarks"
-                              />
-                            </td>
-                            <td>
-                              <button
-                                className="btn btn-primary btn-sm"
-                                onClick={() =>
-                                  updateStudentAssignment(studentAssignment.id)
-                                }
-                              >
-                                Update
-                              </button>
-                            </td>
-                          </tr>
-                        )
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+      {/* Student List */}
+      {selectedAssignmentId && (
+        <div className="card shadow-lg border-0">
+          <div className="card-header bg-primary text-white sticky-top d-flex justify-content-between align-items-center">
+            <h5 className="mb-0">
+              Assigned Students ({students.length || 0})
+            </h5>
+            <div>
+              <button
+                className="btn btn-light btn-sm me-2"
+                onClick={() => bulkUpdate({ status: "graded" })}
+              >
+                ✅ Mark All Graded
+              </button>
+              <button
+                className="btn btn-warning btn-sm"
+                onClick={() => bulkUpdate({ remarks: "Reviewed" })}
+              >
+                💬 Add Remark (All)
+              </button>
             </div>
           </div>
-        ))
+
+          <div
+            className="card-body p-0"
+            style={{
+              maxHeight: "480px",
+              overflowY: "auto",
+              position: "relative",
+            }}
+          >
+            <table className="table table-striped align-middle mb-0">
+              <thead className="table-light sticky-top" style={{ top: 0 }}>
+                <tr>
+                  <th>#</th>
+                  <th>Student Name</th>
+                  <th>Class</th>
+                  <th>Status</th>
+                  <th>Grade</th>
+                  <th>Due Date</th>
+                  <th>Remarks</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {currentStudents.length > 0 ? (
+                  currentStudents.map((sa, i) => (
+                    <tr key={sa.id}>
+                      <td>{startIndex + i + 1}</td>
+                      <td>{sa.Student?.name || "—"}</td>
+                      <td>
+                        {sa.Student?.Class?.class_name}{" "}
+                        {sa.Student?.Section?.section_name
+                          ? `(${sa.Student.Section.section_name})`
+                          : ""}
+                      </td>
+                      <td>
+                        <select
+                          className="form-select form-select-sm"
+                          value={
+                            updateFields[sa.id]?.status || sa.status || "pending"
+                          }
+                          onChange={(e) =>
+                            handleFieldChange(sa.id, "status", e.target.value)
+                          }
+                        >
+                          <option value="pending">Pending</option>
+                          <option value="submitted">Submitted</option>
+                          <option value="graded">Graded</option>
+                        </select>
+                      </td>
+                      <td>
+                        <input
+                          type="text"
+                          className="form-control form-control-sm"
+                          value={updateFields[sa.id]?.grade || sa.grade || ""}
+                          onChange={(e) =>
+                            handleFieldChange(sa.id, "grade", e.target.value)
+                          }
+                          placeholder="Enter grade"
+                        />
+                      </td>
+                      <td>
+                        <input
+                          type="date"
+                          className="form-control form-control-sm"
+                          value={
+                            updateFields[sa.id]?.dueDate ||
+                            (sa.dueDate ? sa.dueDate.slice(0, 10) : "")
+                          }
+                          onChange={(e) =>
+                            handleFieldChange(sa.id, "dueDate", e.target.value)
+                          }
+                        />
+                      </td>
+                      <td>
+                        <input
+                          type="text"
+                          className="form-control form-control-sm"
+                          value={
+                            updateFields[sa.id]?.remarks || sa.remarks || ""
+                          }
+                          onChange={(e) =>
+                            handleFieldChange(sa.id, "remarks", e.target.value)
+                          }
+                          placeholder="Remarks"
+                        />
+                      </td>
+                      <td>
+                        <button
+                          className="btn btn-primary btn-sm"
+                          onClick={() => updateStudentAssignment(sa.id)}
+                        >
+                          💾 Save
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan="8" className="text-center text-muted py-4">
+                      No students found for this assignment.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Footer with Pagination */}
+          <div className="card-footer bg-light sticky-bottom d-flex justify-content-between align-items-center">
+            <span className="text-muted small">
+              Page {page} of {totalPages || 1}
+            </span>
+            <div>
+              <button
+                className="btn btn-outline-secondary btn-sm me-2"
+                disabled={page <= 1}
+                onClick={() => setPage(page - 1)}
+              >
+                ◀ Prev
+              </button>
+              <button
+                className="btn btn-outline-secondary btn-sm"
+                disabled={page >= totalPages}
+                onClick={() => setPage(page + 1)}
+              >
+                Next ▶
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
 };
 
-export default AssignmentDetails;
+export default AssignmentGrading;
