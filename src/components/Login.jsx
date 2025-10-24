@@ -20,10 +20,10 @@ const ROLE_ORDER = [
 
 // Background candidates (keeps prior choices)
 const BG_CANDIDATES = [
-  `${process.env.PUBLIC_URL}/images/SchooBackground.jpeg`,
-  `${process.env.PUBLIC_URL}/images/SchooBackground.jpeg`,
-  `${process.env.PUBLIC_URL}/image/SchooBackground.jpeg`,
-  `${process.env.PUBLIC_URL}/image/SchooBackground.jpeg`,
+  `${process.env.PUBLIC_URL}/images/Smarto.png`,
+  `${process.env.PUBLIC_URL}/images/Smarto.png`,
+  `${process.env.PUBLIC_URL}/image/Smarto.png`,
+  `${process.env.PUBLIC_URL}/image/Smarto.png`,
 ];
 
 function resolveFirstExistingImage(candidates) {
@@ -329,9 +329,9 @@ const Login = () => {
   };
 
   // School logo + fallback logic
-  const schoolLogoSrc = school?.logo ? `${apiBase}${school.logo}` : `${process.env.PUBLIC_URL}/images/pts_logo.png`;
-  const schoolName = school?.name || "Pathseekers International School";
-  const fallbackLogo = `${process.env.PUBLIC_URL}/images/pts_logo.png`;
+  const schoolLogoSrc = school?.logo ? `${apiBase}${school.logo}` : `${process.env.PUBLIC_URL}/images/SmartoLogo.png`;
+  const schoolName = school?.name || "Smarto Experiential School";
+  const fallbackLogo = `${process.env.PUBLIC_URL}/images/SmartoLogo.png`;
 
   return (
     <div

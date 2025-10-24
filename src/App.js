@@ -111,6 +111,8 @@ import DiaryDetail from "./pages/DiaryDetail";
 import AccountsDashboard from "./components/AccountsDashboard";
 import TransportSummary from "./pages/TransportSummary";
 import UserTracking from "./pages/UserTracking";
+import Houses from "./pages/Houses";
+
 
 // ✅ admission-aware hook for remount key
 import useActiveStudent from "./hooks/useActiveStudent";
@@ -279,6 +281,7 @@ function App() {
 
           {/* Core / Admissions */}
           <Route path="/classes" element={<Classes />} />
+          <Route path="/houses" element={<Houses />} /> {/* ✅ NEW */}
           <Route path="/sessions" element={<Sessions />} />
           <Route path="/subjects" element={<Subjects />} />
           <Route path="/students" element={<Student />} />

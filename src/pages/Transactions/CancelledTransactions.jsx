@@ -10,13 +10,14 @@ const DEFAULT_PAGE_SIZE = 20;
 const CancelledTransactions = () => {
   const { roles } = useRoles();
 
-  // ✅ Allow accounts to restore (in addition to admin/superadmin)
+  // ✅ Allow admin, superadmin, and accounts to restore or delete
   const canRestore = useMemo(
     () => roles.some((r) => ["admin", "superadmin", "accounts"].includes(r)),
     [roles]
   );
+
   const canDeleteForever = useMemo(
-    () => roles.includes("superadmin"),
+    () => roles.some((r) => ["superadmin", "accounts"].includes(r)),
     [roles]
   );
 
@@ -321,7 +322,7 @@ const CancelledTransactions = () => {
           </button>
           <button
             className="btn btn-outline-secondary btn-sm"
-            disabled={page >= totalPages}
+            disabled={page >= total / DEFAULT_PAGE_SIZE}
             onClick={() => setPage((p) => p + 1)}
           >
             Next ›
@@ -331,9 +332,14 @@ const CancelledTransactions = () => {
 
       {/* Detail Offcanvas */}
       {showDetail && activeTxn && (
-        <div className="offcanvas offcanvas-end show" style={{ visibility: "visible", width: 420, background: "#fff" }}>
+        <div
+          className="offcanvas offcanvas-end show"
+          style={{ visibility: "visible", width: 420, background: "#fff" }}
+        >
           <div className="offcanvas-header">
-            <h5 className="offcanvas-title">Txn #{activeTxn.receipt_no || activeTxn.id}</h5>
+            <h5 className="offcanvas-title">
+              Txn #{activeTxn.receipt_no || activeTxn.id}
+            </h5>
           </div>
           <div className="offcanvas-body small">
             <dl className="row">
@@ -344,11 +350,15 @@ const CancelledTransactions = () => {
               <dd className="col-7">{activeTxn.admission_number}</dd>
 
               <dt className="col-5">Amount</dt>
-              <dd className="col-7">₹{Number(activeTxn.amount || 0).toLocaleString("en-IN")}</dd>
+              <dd className="col-7">
+                ₹{Number(activeTxn.amount || 0).toLocaleString("en-IN")}
+              </dd>
 
               <dt className="col-5">Paid On</dt>
               <dd className="col-7">
-                {activeTxn.paid_at ? dayjs(activeTxn.paid_at).format("DD MMM YYYY HH:mm") : "-"}
+                {activeTxn.paid_at
+                  ? dayjs(activeTxn.paid_at).format("DD MMM YYYY HH:mm")
+                  : "-"}
               </dd>
 
               <dt className="col-5">Cancelled On</dt>
@@ -369,25 +379,39 @@ const CancelledTransactions = () => {
             <h6>Fee Heads</h6>
             <ul className="list-group list-group-flush mb-3">
               {(activeTxn.items || []).map((it) => (
-                <li key={it.id} className="list-group-item d-flex justify-content-between">
+                <li
+                  key={it.id}
+                  className="list-group-item d-flex justify-content-between"
+                >
                   <span>{it.fee_heading_name}</span>
-                  <span>₹{Number(it.amount || 0).toLocaleString("en-IN")}</span>
+                  <span>
+                    ₹{Number(it.amount || 0).toLocaleString("en-IN")}
+                  </span>
                 </li>
               ))}
             </ul>
 
             <div className="d-flex gap-2">
               {canRestore && (
-                <button className="btn btn-success btn-sm flex-fill" onClick={() => restoreTxn(activeTxn)}>
+                <button
+                  className="btn btn-success btn-sm flex-fill"
+                  onClick={() => restoreTxn(activeTxn)}
+                >
                   Restore
                 </button>
               )}
               {canDeleteForever && (
-                <button className="btn btn-danger btn-sm flex-fill" onClick={() => deleteForever(activeTxn)}>
+                <button
+                  className="btn btn-danger btn-sm flex-fill"
+                  onClick={() => deleteForever(activeTxn)}
+                >
                   Delete
                 </button>
               )}
-              <button className="btn btn-outline-secondary btn-sm flex-fill" onClick={closeDetail}>
+              <button
+                className="btn btn-outline-secondary btn-sm flex-fill"
+                onClick={closeDetail}
+              >
                 Close
               </button>
             </div>
@@ -397,7 +421,11 @@ const CancelledTransactions = () => {
 
       {/* Backdrop */}
       {showDetail && (
-        <div className="offcanvas-backdrop fade show" onClick={closeDetail} style={{ cursor: "pointer" }} />
+        <div
+          className="offcanvas-backdrop fade show"
+          onClick={closeDetail}
+          style={{ cursor: "pointer" }}
+        />
       )}
     </div>
   );

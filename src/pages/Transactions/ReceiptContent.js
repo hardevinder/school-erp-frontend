@@ -1,18 +1,8 @@
-// src/pages/Transactions/ReceiptContent.js
 import React, { useState, useEffect } from "react";
 import { Table, Row, Col } from "react-bootstrap";
 import normalizeUploadedUrl from "../../utils/normalizeUploadedUrl";
 import api from "../../api";
 
-/**
- * ReceiptContent - robustified to handle malformed logo URLs
- *
- * Props:
- *  - school: object (name, description/address, phone, email, logo)
- *  - receipt: array of transaction lines
- *  - slipId: string|number
- *  - student: object
- */
 const placeholderDataUrl =
   "data:image/svg+xml;utf8," +
   encodeURIComponent(
@@ -38,7 +28,6 @@ const buildAbsoluteFromRelative = (relativePath) => {
   }
 };
 
-// try to extract the last absolute url substring in a string that may contain multiple http(s) occurrences
 const extractLastAbsoluteUrl = (s) => {
   if (!s) return null;
   const str = String(s);
@@ -53,45 +42,23 @@ const SafeLogo = ({ src, alt, style }) => {
   const [imgSrc, setImgSrc] = useState(placeholderDataUrl);
 
   useEffect(() => {
-    if (!src) {
-      setImgSrc(placeholderDataUrl);
-      return;
-    }
+    if (!src) return setImgSrc(placeholderDataUrl);
 
     try {
-      // 1) If the string contains multiple http(s) urls, pick the last one
       const lastAbs = extractLastAbsoluteUrl(src);
-      if (lastAbs) {
-        // debug
-        // console.debug("SafeLogo: raw src (multiple):", src, " -> using lastAbs:", lastAbs);
-        setImgSrc(lastAbs);
-        return;
-      }
+      if (lastAbs) return setImgSrc(lastAbs);
 
-      // 2) normalize using shared util
       const normalized = normalizeUploadedUrl(src);
-
-      // 3) If normalized is relative (starts with '/'), build absolute using API base
-      if (normalized && (normalized.startsWith("/") || normalized.startsWith("./") || normalized.startsWith("../"))) {
-        const abs = buildAbsoluteFromRelative(normalized);
-        // console.debug("SafeLogo: raw src:", src, " normalized:", normalized, " -> abs:", abs);
-        setImgSrc(abs || placeholderDataUrl);
+      if (normalized?.startsWith("/") || normalized?.startsWith("./") || normalized?.startsWith("../")) {
+        setImgSrc(buildAbsoluteFromRelative(normalized) || placeholderDataUrl);
         return;
       }
-
-      // 4) If normalized looks absolute already
-      if (normalized && (normalized.startsWith("http://") || normalized.startsWith("https://"))) {
-        // console.debug("SafeLogo: raw src:", src, " normalized absolute:", normalized);
+      if (normalized?.startsWith("http://") || normalized?.startsWith("https://")) {
         setImgSrc(normalized);
         return;
       }
-
-      // 5) fallback: build from original
-      const fallback = buildAbsoluteFromRelative(src);
-      // console.debug("SafeLogo fallback: raw src:", src, " -> fallback:", fallback);
-      setImgSrc(fallback || placeholderDataUrl);
-    } catch (e) {
-      // console.error("SafeLogo normalization error:", e);
+      setImgSrc(buildAbsoluteFromRelative(src) || placeholderDataUrl);
+    } catch {
       setImgSrc(placeholderDataUrl);
     }
   }, [src]);
@@ -101,15 +68,12 @@ const SafeLogo = ({ src, alt, style }) => {
       src={imgSrc}
       alt={alt || "School Logo"}
       style={style}
-      onError={() => {
-        if (imgSrc !== placeholderDataUrl) setImgSrc(placeholderDataUrl);
-      }}
+      onError={() => setImgSrc(placeholderDataUrl)}
     />
   );
 };
 
 const ReceiptContent = ({ school = {}, receipt = [], slipId = "—", student = {} }) => {
-  // numberToWords (slightly updated)
   const numberToWords = (num) => {
     const ones = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine"];
     const teens = ["Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"];
@@ -121,21 +85,16 @@ const ReceiptContent = ({ school = {}, receipt = [], slipId = "—", student = {
         word += ones[Math.floor(n / 100)] + " Hundred ";
         n %= 100;
       }
-      if (n > 9 && n < 20) {
-        word += teens[n - 10] + " ";
-      } else if (n >= 20) {
+      if (n > 9 && n < 20) word += teens[n - 10] + " ";
+      else if (n >= 20) {
         word += tens[Math.floor(n / 10)] + " ";
-        if (n % 10) {
-          word += ones[n % 10] + " ";
-        }
-      } else if (n > 0) {
-        word += ones[n] + " ";
-      }
+        if (n % 10) word += ones[n % 10] + " ";
+      } else if (n > 0) word += ones[n] + " ";
       return word.trim();
     };
 
-    if (!num && num !== 0) return "";
     if (num === 0) return "Zero";
+    if (!num && num !== 0) return "";
 
     let word = "";
     if (num >= 1000000) {
@@ -146,46 +105,41 @@ const ReceiptContent = ({ school = {}, receipt = [], slipId = "—", student = {
       word += convertHundred(Math.floor(num / 1000)) + " Thousand ";
       num %= 1000;
     }
-    if (num > 0) {
-      word += convertHundred(num);
-    }
+    if (num > 0) word += convertHundred(num);
     return word.trim();
   };
 
-  // safety: ensure receipt is array
   const items = Array.isArray(receipt) ? receipt : [];
 
-  const totalAcademicReceived = items.reduce((sum, trx) => sum + (Number(trx.Fee_Recieved || 0)), 0);
-  const totalAcademicConcession = items.reduce((sum, trx) => sum + (Number(trx.Concession || 0)), 0);
-  const totalAcademicBalance = items.reduce((sum, trx) => sum + (Number(trx.feeBalance || 0)), 0);
-  const totalTransportFee = items.reduce((sum, trx) => sum + (Number(trx.VanFee || 0)), 0);
-  const totalFine = items.reduce((sum, trx) => sum + (Number(trx.Fine_Amount || 0)), 0);
+  // Totals
+  const totalReceived = items.reduce((s, t) => s + Number(t.Fee_Recieved || 0), 0);
+  const totalFine = items.reduce((s, t) => s + Number(t.Fine_Amount || 0), 0);
+  const totalConcession = items.reduce((s, t) => s + Number(t.Concession || 0), 0);
+  const totalBalance = items.reduce((s, t) => s + Number(t.feeBalance || 0), 0);
+  const totalVan = items.reduce((s, t) => s + Number(t.VanFee || 0), 0);
 
-  const grandTotalReceived = totalAcademicReceived + totalTransportFee + totalFine;
-  const grandTotalInWords = numberToWords(Math.round(grandTotalReceived));
+  // ✅ Grand Total = Fee Received + Fine + Van Fee
+  const grandTotal = totalReceived + totalFine + totalVan;
+  const grandTotalInWords = numberToWords(Math.round(grandTotal));
 
   const showFineColumn = totalFine > 0;
-
-  // debug raw logo
-  // console.debug("ReceiptContent raw school.logo:", school?.logo);
+  const showConcessionColumn = totalConcession > 0;
 
   return (
     <div style={{ paddingLeft: "20px", paddingRight: "20px" }}>
-      {/* Top: School Header */}
+      {/* Header */}
       <Table borderless className="mb-4">
         <tbody>
           <tr>
             <td style={{ width: "25%", textAlign: "left" }}>
               <SafeLogo
                 src={school?.logo}
-                alt={school?.name || "School Logo"}
+                alt={school?.name}
                 style={{ width: "90px", height: "90px", objectFit: "contain" }}
               />
             </td>
             <td style={{ textAlign: "center" }}>
-              <h2 className="fw-bold text-dark" style={{ letterSpacing: "1px" }}>
-                {school?.name || ""}
-              </h2>
+              <h2 className="fw-bold">{school?.name || ""}</h2>
               <p className="text-muted">{school?.description || ""}</p>
               <p className="fw-semibold">
                 📞 {school?.phone || ""} | ✉️ {school?.email || ""}
@@ -195,7 +149,6 @@ const ReceiptContent = ({ school = {}, receipt = [], slipId = "—", student = {
         </tbody>
       </Table>
 
-      {/* Title */}
       <h5 className="text-center fw-bold text-dark">
         Session: {items[0]?.session || "—"}
         <br />
@@ -223,69 +176,74 @@ const ReceiptContent = ({ school = {}, receipt = [], slipId = "—", student = {
         </tbody>
       </Table>
 
+      {/* Fee Table */}
       <Table bordered hover className="text-center">
         <thead>
           <tr className="bg-light fw-bold">
             <th>Sr. No.</th>
-            <th>Particular</th>
-            <th>Received (₹)</th>
+            <th>Fee Head</th>
+            {showConcessionColumn && <th>Concession (₹)</th>}
             {showFineColumn && <th>Fine (₹)</th>}
-            <th>Concession (₹)</th>
+            <th>Received (₹)</th>
             <th>Balance (₹)</th>
             <th>Van Fee (₹)</th>
           </tr>
         </thead>
         <tbody>
-          {items.map((trx, index) => (
-            <tr key={index}>
-              <td>{index + 1}</td>
-              <td>{trx?.FeeHeading?.fee_heading || trx?.Fee_Heading || trx?.Particular || "—"}</td>
-              <td>₹{Number(trx?.Fee_Recieved || 0).toFixed(2)}</td>
-              {showFineColumn && <td>₹{Number(trx?.Fine_Amount || 0).toFixed(2)}</td>}
-              <td>₹{Number(trx?.Concession || 0).toFixed(2)}</td>
-              <td>{trx?.feeBalance !== undefined ? `₹${Number(trx.feeBalance).toFixed(2)}` : "N/A"}</td>
-              <td>₹{Number(trx?.VanFee || 0).toFixed(2)}</td>
+          {items.map((trx, i) => (
+            <tr key={i}>
+              <td>{i + 1}</td>
+              <td>{trx?.FeeHeading?.fee_heading || trx?.Fee_Heading || "—"}</td>
+              {showConcessionColumn && <td>₹{Number(trx.Concession || 0).toFixed(2)}</td>}
+              {showFineColumn && <td>₹{Number(trx.Fine_Amount || 0).toFixed(2)}</td>}
+              <td><strong>₹{Number(trx.Fee_Recieved || 0).toFixed(2)}</strong></td>
+              <td>₹{Number(trx.feeBalance || 0).toFixed(2)}</td>
+              <td>₹{Number(trx.VanFee || 0).toFixed(2)}</td>
             </tr>
           ))}
         </tbody>
         <tfoot>
           <tr className="fw-bold">
             <td colSpan="2">Total</td>
-            <td>₹{totalAcademicReceived.toFixed(2)}</td>
+            {showConcessionColumn && <td>₹{totalConcession.toFixed(2)}</td>}
             {showFineColumn && <td>₹{totalFine.toFixed(2)}</td>}
-            <td>₹{totalAcademicConcession.toFixed(2)}</td>
-            <td>₹{totalAcademicBalance.toFixed(2)}</td>
-            <td>₹{totalTransportFee.toFixed(2)}</td>
+            <td><strong>₹{totalReceived.toFixed(2)}</strong></td>
+            <td>₹{totalBalance.toFixed(2)}</td>
+            <td>₹{totalVan.toFixed(2)}</td>
           </tr>
         </tfoot>
       </Table>
 
-      {/* Overall Total and In Words */}
+      {/* Overall Totals */}
       <div className="text-end mt-3">
-        <h5>Overall Total Received: ₹{grandTotalReceived.toFixed(2)}</h5>
+        <h5>
+          Overall Total Received: <strong>₹{grandTotal.toFixed(2)}</strong>
+        </h5>
+        <p style={{ fontSize: "0.9rem", color: "#555" }}>
+          (Fee Received ₹{totalReceived.toFixed(2)}
+          {showFineColumn ? ` + Fine ₹${totalFine.toFixed(2)}` : ""}
+          {totalVan > 0 ? ` + Van Fee ₹${totalVan.toFixed(2)}` : ""}
+          = <strong>₹{grandTotal.toFixed(2)}</strong>)
+        </p>
         <p className="fst-italic">
           (In words: {grandTotalInWords} Rupees Only)
         </p>
       </div>
 
-      {/* Mode of Transaction / Transaction ID */}
+      {/* Mode & Notes */}
       <div className="mt-3">
         <p><strong>Mode of Transaction:</strong> {items[0]?.PaymentMode || "—"}</p>
         <p><strong>Transaction ID:</strong> {items[0]?.Transaction_ID || "N/A"}</p>
       </div>
 
-      {/* Note */}
       <Row className="mt-4">
         <Col>
           <p style={{ fontSize: "0.9rem" }}>
-            <em>
-              Note: Please keep this receipt for any future reference. Fees once paid are non-refundable.
-            </em>
+            <em>Note: Please keep this receipt for any future reference. Fees once paid are non-refundable.</em>
           </p>
         </Col>
       </Row>
 
-      {/* Signature */}
       <Row className="mt-4">
         <Col className="text-end">
           <p

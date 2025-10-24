@@ -107,6 +107,7 @@ const Students = () => {
   const [concessions, setConcessions] = useState([]);
   const [sessions, setSessions] = useState([]);
   const [transportations, setTransportations] = useState([]);
+  const [houses, setHouses] = useState([]);
 
   // ---- transport helpers (Village — Cost) ----
   const transportById = useMemo(() => {
@@ -126,6 +127,15 @@ const Students = () => {
     if (!id && id !== 0) return "-";
     const t = transportById.get(String(id));
     return formatTransport(t);
+  };
+  const fetchHouses = async () => {
+    try {
+      const { data } = await api.get("/houses");
+      setHouses(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error("fetchHouses:", err);
+      setHouses([]);
+    }
   };
 
   // UI state
@@ -199,6 +209,8 @@ const Students = () => {
     fetchSections();
     fetchSessions();
     fetchTransportations();
+    fetchHouses();
+
     if (isAdminOrSuperAdmin) fetchConcessions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAdminOrSuperAdmin]);
@@ -479,6 +491,22 @@ const Students = () => {
               <label class="form-label">Session</label>
               <select id="f_session_id" class="form-field">${sessionOptions}</select>
             </div>
+
+            <div>
+                <label class="form-label">House</label>
+                <select id="f_house_id" class="form-field">
+                  <option value="">Select House</option>
+                  ${houses
+                    .map(
+                      (h) => `
+                      <option value="${h.id}" ${
+                        h.id === s.house_id ? "selected" : ""
+                      }>${h.house_name}${h.color ? ` (${h.color})` : ""}</option>`
+                    )
+                    .join("")}
+                </select>
+              </div>
+
 
             <div>
               <label class="form-label">Admission Type</label>
@@ -779,6 +807,8 @@ const Students = () => {
           bus_service: document.getElementById("f_bus_service").value || "0",
           route_id: routeVal,
           concession_id: document.getElementById("f_concession_id")?.value || null,
+          house_id: document.getElementById("f_house_id")?.value || null,
+
 
           // Previous School (✨ new)
           prev_school_name: document.getElementById("f_prev_school_name")?.value || null,
@@ -1294,6 +1324,7 @@ const Students = () => {
                   <th className="border-0 py-3">Father's Name</th>
                   <th className="border-0 py-3">Class</th>
                   <th className="border-0 py-3">Section</th>
+                  <th className="border-0 py-3">House</th>
                   <th className="border-0 py-3">Session</th>
                   <th className="border-0 py-3">Aadhaar</th>
                   <th className="border-0 py-3">Type</th>
@@ -1366,6 +1397,23 @@ const Students = () => {
                           <td className="py-3" onClick={() => handleView(stu)}>
                             <span className="badge bg-secondary">{stu.section_name || "-"}</span>
                           </td>
+                          <td className="py-3" onClick={() => handleView(stu)}>
+                            {stu.house_name ? (
+                              <span
+                                className="badge"
+                                style={{
+                                  backgroundColor: stu.house_color || "#6c757d",
+                                  color: "#fff",
+                                  fontSize: "0.8rem",
+                                }}
+                              >
+                                {stu.house_name}
+                              </span>
+                            ) : (
+                              "-"
+                            )}
+                          </td>
+
                           <td className="py-3" onClick={() => handleView(stu)}>
                             {stu.session_name || (stu.session_id ? "Assigned" : "-")}
                           </td>
@@ -1466,6 +1514,7 @@ const Students = () => {
       { label: "Mother's Name", value: student.mother_name || "-" },
       { label: "Class", value: student.class_name || "-" },
       { label: "Section", value: student.section_name || "-" },
+      { label: "House", value: student.house_name || "-" },
       { label: "Session", value: student.session_name || "-" },
       { label: "Roll Number", value: student.roll_number || "-" },
       { label: "Date of Birth", value: student.Date_Of_Birth || "-" },

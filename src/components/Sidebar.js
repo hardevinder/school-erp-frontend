@@ -126,54 +126,58 @@ export default function Sidebar({ headerHeight = 56 }) {
       // No Admissions/HR/Exam blocks for Accounts role
     }
 
-    if (isAdmin) {
-      groups.push({
-        heading: "Main",
-        items: [
-          { key: "dashboard", label: "Dashboard", icon: "bi-speedometer2", path: "/dashboard" },
-          { key: "combined-circulars", label: "Circulars", icon: "bi-megaphone", path: "/combined-circulars" },
-        ],
-      });
-      groups.push({
-        heading: "Fee Management",
-        items: [
-          { key: "transactions", label: "Collect Fee", icon: "bi-receipt", path: "/transactions" },
-          { key: "cancelledTransactions", label: "Cancelled Transactions", icon: "bi-trash3", path: "/cancelled-transactions" },
-          { key: "dayWiseReport", label: "Fee Report", icon: "bi-calendar", path: "/reports/day-wise" },
-          { key: "dayWiseCategoryReports", label: "Fee Report (New)", icon: "bi-calendar-check", path: "/reports/day-wise-category" },
-          { key: "studentDue", label: "Fee Due Report", icon: "bi-file-earmark-text", path: "/student-due" },
-          { key: "schoolFeeSummary", label: "Fee Summary(New)", icon: "bi-graph-up", path: "/reports/school-fee-summary" },
-          { key: "transportSummary", label: "Transport Summary", icon: "bi-truck-front", path: "/reports/transport-summary" },
-          { key: "concessionReport", label: "Concession Report", icon: "bi-journal-check", path: "/reports/concession" },
-          { key: "vanFeeDetailedReport", label: "Van Fee Report", icon: "bi-truck-front", path: "/reports/van-fee" },
-          { key: "feeStructure", label: "Fee Structure", icon: "bi-cash-coin", path: "/fee-structure" },
-          { key: "transportation", label: "Transportation Cost", icon: "bi-truck", path: "/transportation" },
-          { key: "student-transport", label: "Transport Assignments", icon: "bi-truck", path: "/student-transport" },
-          { key: "feeHeadings", label: "Fee Headings", icon: "bi-bookmark", path: "/fee-headings" },
-          { key: "feeCategory", label: "Fee Category", icon: "bi-tags", path: "/fee-category" },
-          { key: "concessions", label: "Concessions", icon: "bi-percent", path: "/concessions" },
-          { key: "opening-balances", label: "Opening Balances", icon: "bi-clipboard-data", path: "/opening-balances", roles: ["admin", "superadmin"] },
-          { key: "caste-gender-report", label: "Caste/Gender Report", icon: "bi-people-fill", path: "/reports/caste-gender" },
-        ],
-      });
-      groups.push({
-        heading: "Admissions",
-        items: [
-          { key: "students", label: "Admissions", icon: "bi-people", path: "/students" },
-          { key: "classes", label: "Classes", icon: "bi-list-task", path: "/classes" },
-          { key: "sections", label: "Sections", icon: "bi-grid", path: "/sections" },
-          { key: "sessions", label: "Sessions", icon: "bi-calendar4-week", path: "/sessions" },
-        ],
-      });
-      groups.push({
-        heading: "School Info",
-        items: [{ key: "schools", label: "Schools", icon: "bi-building", path: "/schools" }],
-      });
-      groups.push({
-        heading: "Leave",
-        items: [{ key: "employee-leave-request", label: "Leave Request", icon: "bi-box-arrow-in-down-left", path: "/employee-leave-request" }],
-      });
-    }
+   if (isAdmin) {
+  groups.push({
+    heading: "Main",
+    items: [
+      { key: "dashboard", label: "Dashboard", icon: "bi-speedometer2", path: "/dashboard" },
+      { key: "combined-circulars", label: "Circulars", icon: "bi-megaphone", path: "/combined-circulars" },
+    ],
+  });
+  groups.push({
+    heading: "Fee Management",
+    items: [
+      { key: "transactions", label: "Collect Fee", icon: "bi-receipt", path: "/transactions" },
+      { key: "cancelledTransactions", label: "Cancelled Transactions", icon: "bi-trash3", path: "/cancelled-transactions" },
+      { key: "dayWiseReport", label: "Fee Report", icon: "bi-calendar", path: "/reports/day-wise" },
+      { key: "dayWiseCategoryReports", label: "Fee Report (New)", icon: "bi-calendar-check", path: "/reports/day-wise-category" },
+      { key: "studentDue", label: "Fee Due Report", icon: "bi-file-earmark-text", path: "/student-due" },
+      { key: "schoolFeeSummary", label: "Fee Summary(New)", icon: "bi-graph-up", path: "/reports/school-fee-summary" },
+      { key: "transportSummary", label: "Transport Summary", icon: "bi-truck-front", path: "/reports/transport-summary" },
+      { key: "concessionReport", label: "Concession Report", icon: "bi-journal-check", path: "/reports/concession" },
+      { key: "vanFeeDetailedReport", label: "Van Fee Report", icon: "bi-truck-front", path: "/reports/van-fee" },
+      { key: "feeStructure", label: "Fee Structure", icon: "bi-cash-coin", path: "/fee-structure" },
+      { key: "transportation", label: "Transportation Cost", icon: "bi-truck", path: "/transportation" },
+      { key: "student-transport", label: "Transport Assignments", icon: "bi-truck", path: "/student-transport" },
+      { key: "feeHeadings", label: "Fee Headings", icon: "bi-bookmark", path: "/fee-headings" },
+      { key: "feeCategory", label: "Fee Category", icon: "bi-tags", path: "/fee-category" },
+      { key: "concessions", label: "Concessions", icon: "bi-percent", path: "/concessions" },
+      { key: "opening-balances", label: "Opening Balances", icon: "bi-clipboard-data", path: "/opening-balances", roles: ["admin", "superadmin"] },
+      { key: "caste-gender-report", label: "Caste/Gender Report", icon: "bi-people-fill", path: "/reports/caste-gender" },
+    ],
+  });
+  groups.push({
+    heading: "Admissions",
+    items: [
+      { key: "students", label: "Admissions", icon: "bi-people", path: "/students" },
+      { key: "classes", label: "Classes", icon: "bi-list-task", path: "/classes" },
+      { key: "sections", label: "Sections", icon: "bi-grid", path: "/sections" },
+      { key: "sessions", label: "Sessions", icon: "bi-calendar4-week", path: "/sessions" },
+    ],
+  });
+  groups.push({
+    heading: "School Info",
+    items: [
+      { key: "schools", label: "Schools", icon: "bi-building", path: "/schools" },
+      { key: "houses", label: "Houses", icon: "bi-house-door", path: "/houses", roles: ["admin", "superadmin"] },
+    ],
+  });
+  groups.push({
+    heading: "Leave",
+    items: [{ key: "employee-leave-request", label: "Leave Request", icon: "bi-box-arrow-in-down-left", path: "/employee-leave-request" }],
+  });
+}
+
 
     if (isAcademic) {
       groups.push({

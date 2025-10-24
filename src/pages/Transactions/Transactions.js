@@ -1256,12 +1256,15 @@ const fetchFeeHeadsForStudent = async (_classId, studentId, baseStudentFromAdmis
       }
 
       // 2) Fine for this head (if applicable)
-      const fineNeed = getFineRemaining(row);
-      if (fineNeed > 0 && remaining > 0) {
-        const takeFine = Math.min(remaining, fineNeed);
-        row.Fine_Amount = (row.Fine_Amount || 0) + takeFine;
-        remaining -= takeFine;
-      }
+        const fineNeed = getFineRemaining(row);
+
+        // ✅ skip if user already touched Fine_Amount manually
+        if (!row.isFineEdited && fineNeed > 0 && remaining > 0) {
+          const takeFine = Math.min(remaining, fineNeed);
+          row.Fine_Amount = (row.Fine_Amount || 0) + takeFine;
+          remaining -= takeFine;
+        }
+
 
       // 3) Van fee (NEW) - allocate to van due if transport applicable
       const vanNeed = getVanRemaining(row);
@@ -2369,19 +2372,19 @@ useEffect(() => {
                               </td>
 
                               <td>
-                                <Form.Control
+                            <Form.Control
                                   type="number"
-                                  value={feeDetail.Fine_Amount || ""}
+                                  value={feeDetail.Fine_Amount === 0 && !feeDetail.isFineEdited ? "" : feeDetail.Fine_Amount}
                                   onChange={(e) => {
                                     const updated = [...newTransactionDetails];
-                                    const value = parseInt(e.target.value, 10) || 0;
-                                    const next = Math.min(value, feeDetail.fineAmount || 0);
-                                    updated[index].Fine_Amount = Math.max(0, next);
+                                    const value = parseInt(e.target.value, 10);
+                                    updated[index].Fine_Amount = isNaN(value) ? 0 : Math.max(0, Math.min(value, feeDetail.fineAmount || 0));
+                                    updated[index].isFineEdited = true; // ✅ mark as manually edited
                                     setNewTransactionDetails(updated);
                                   }}
                                   disabled={!feeDetail.isFineApplicable || feeDetail.isOpeningBalance}
-
                                 />
+
                               </td>
                             </tr>
                           ))}

@@ -271,22 +271,28 @@ const ReceiptModal = (props) => {
     }
 
     // You had these totals in the previous file — keep them (safe-guarded)
-    const totalAcademicReceived = sum(receipt, "Fee_Recieved");
-    const totalAcademicConcession = sum(receipt, "Concession");
-    const totalAcademicBalance = sum(receipt, "feeBalance");
-    const totalTransportFee = sum(receipt, "VanFee");
-    const totalTransportBalance = sum(receipt, "vanFeeBalance");
-    const grandTotalReceived = totalAcademicReceived + totalTransportFee;
+   // You had these totals in the previous file — keep them (safe-guarded)
+  const totalAcademicReceived = sum(receipt, "Fee_Recieved");
+  const totalAcademicConcession = sum(receipt, "Concession");
+  const totalAcademicBalance = sum(receipt, "feeBalance");
+  const totalTransportFee = sum(receipt, "VanFee");
+  const totalTransportBalance = sum(receipt, "vanFeeBalance");
+  const grandTotalReceived = totalAcademicReceived + totalTransportFee;
+
+// 🆕 New total: Amount including concession
+const totalAcademicGross =
+  totalAcademicBalance + totalAcademicReceived + totalAcademicConcession;
+
 
     return (
       <>
         <div id="receipt-content" ref={printableRef}>
-          <ReceiptContent
+       <ReceiptContent
             school={school}
             receipt={receipt}
             slipId={slipId}
             student={student}
-            // pass totals if ReceiptContent expects them (it can also compute)
+            totalAcademicGross={totalAcademicGross} // 🆕 added for new column
             totalAcademicReceived={totalAcademicReceived}
             totalAcademicConcession={totalAcademicConcession}
             totalAcademicBalance={totalAcademicBalance}
@@ -294,6 +300,7 @@ const ReceiptModal = (props) => {
             totalTransportBalance={totalTransportBalance}
             grandTotalReceived={grandTotalReceived}
           />
+
         </div>
       </>
     );
