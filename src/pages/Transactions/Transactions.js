@@ -374,6 +374,7 @@ const Transactions = () => {
   const [activeTab, setActiveTab] = useState("admissionNumber");
   const [paymentMode, setPaymentMode] = useState("Cash");
   const [transactionID, setTransactionID] = useState("");
+  const [remarks, setRemarks] = useState("");
   const [daySummary, setDaySummary] = useState({ data: [], grandTotal: 0 });
   const [searchAdmissionNumber, setSearchAdmissionNumber] = useState("");
   const [selectedAdmissionStudent, setSelectedAdmissionStudent] = useState(null);
@@ -1315,6 +1316,7 @@ const fetchFeeHeadsForStudent = async (_classId, studentId, baseStudentFromAdmis
               ? editingTransaction.Transaction_ID
               : null,
           session_id: editingTransaction.session_id ?? null,
+          Remarks: editingTransaction.Remarks || null,
         };
 
         const response = await api.put(
@@ -1373,6 +1375,8 @@ const fetchFeeHeadsForStudent = async (_classId, studentId, baseStudentFromAdmis
           Fine_Amount: (details.isFineApplicable && !details.isOpeningBalance) ? (details.Fine_Amount || 0) : 0,
 
           session_id: selectedSession,
+          Remarks: remarks || null,
+
         }));
 
 
@@ -1422,6 +1426,7 @@ const fetchFeeHeadsForStudent = async (_classId, studentId, baseStudentFromAdmis
     setTransactionID("");
     setQuickAmount("");
     setModalError(null);
+    setRemarks("");
   };
 
   const cancelTransaction = async (id) => {
@@ -1662,6 +1667,7 @@ useEffect(() => {
               <th>Fine</th>
               <th>Mode</th>
               <th>Status</th>
+              <th>Remarks</th>
               <th>Actions</th>
               <th>Receipt</th>
             </tr>
@@ -1696,6 +1702,8 @@ useEffect(() => {
                       </td>
                       <td>{t.PaymentMode}</td>
                       <td><Badge bg="success">Active</Badge></td>
+                      <td>{t.Remarks || "—"}</td>
+
                       <td className="text-nowrap">
                         <Button
                           variant="primary"
@@ -1845,6 +1853,7 @@ useEffect(() => {
                           onSelect={(tab) => {
                             setActiveTab(tab);
                             setModalError(null);
+
                             if (tab === "admissionNumber") {
                               setSearchAdmissionNumber("");
                               setSelectedAdmissionStudent(null);
@@ -2508,6 +2517,20 @@ useEffect(() => {
                         ))}
                       </Form.Select>
                     </td>
+                    <td style={{ minWidth: 200 }}>
+                        <Form.Control
+                          type="text"
+                          placeholder="Enter remarks"
+                          value={editingTransaction?.Remarks || ""}
+                          onChange={(e) =>
+                            setEditingTransaction((prev) => ({
+                              ...prev,
+                              Remarks: e.target.value,
+                            }))
+                          }
+                        />
+                      </td>
+
                   </tr>
                 </tbody>
               </table>
@@ -2595,6 +2618,16 @@ useEffect(() => {
                     />
                   </Form.Group>
                 )}
+                <Form.Group className="mt-2">
+                  <Form.Label>Remarks (optional)</Form.Label>
+                  <Form.Control
+                    type="text"
+                    placeholder="Enter remarks (e.g. Paid via UPI, verified)"
+                    value={remarks}
+                    onChange={(e) => setRemarks(e.target.value)}
+                  />
+                </Form.Group>
+
               </div>
             ) : (
               <div className="p-3 rounded border bg-light" style={{ flex: 1, minWidth: 320 }}>

@@ -330,7 +330,7 @@ const Login = () => {
 
   // School logo + fallback logic
   const schoolLogoSrc = school?.logo ? `${apiBase}${school.logo}` : `${process.env.PUBLIC_URL}/images/SmartoLogo.png`;
-  const schoolName = school?.name || "Pathseekers International School";
+  const schoolName = school?.name || "Smarto Experiential School";
   const fallbackLogo = `${process.env.PUBLIC_URL}/images/SmartoLogo.png`;
 
   return (

@@ -745,7 +745,6 @@ const SchoolFeeSummary = () => {
                 <th>Unpaid</th>
                 <th>Total Students</th>
                 <th>Van Fee Received</th>
-                <th>Van Fee Due</th>
                 <th>Van Students</th>
               </tr>
             </thead>
@@ -797,9 +796,6 @@ const SchoolFeeSummary = () => {
                     </td>
                     <td>{totalStudents}</td>
                     <td>{formatCurrency(item.vanFeeReceived || 0)}</td>
-                    <td className="text-danger">
-                      {formatCurrency(item.vanFeeDue || 0)}
-                    </td>
                     <td>{item.vanStudents || "—"}</td>
                   </tr>
                 );
@@ -816,7 +812,6 @@ const SchoolFeeSummary = () => {
                 <td></td>
                 <td></td>
                 <td>{formatCurrency(grandTotals.vanFeeReceived)}</td>
-                <td>{formatCurrency(grandTotals.vanFeeDue)}</td>
                 <td></td>
               </tr>
             </tfoot>

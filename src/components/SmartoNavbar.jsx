@@ -343,7 +343,7 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
           <Link to="/dashboard" className="navbar-brand d-flex align-items-center gap-2 ms-2">
             <img
               src={brandLogo}
-              alt="Smarto Experiential Schoo logo"
+              alt="Smarto Experiential School logo"
               width={34}
               height={34}
               className="rounded"
@@ -352,7 +352,7 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
                 e.currentTarget.style.display = "none";
               }}
             />
-            <span className="fw-semibold">Smarto Experiential Schoo</span>
+            <span className="fw-semibold">Smarto Experiential School</span>
           </Link>
 
           {/* Student switcher (desktop pills) */}
