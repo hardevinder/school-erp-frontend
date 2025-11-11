@@ -23,7 +23,9 @@ const apiBase = (() => {
 })();
 
 const buildPhotoURL = (fileName) =>
-  fileName ? `${apiBase}/uploads/photoes/students/${encodeURIComponent(fileName)}` : "";
+  fileName
+    ? `${apiBase}/uploads/photoes/students/${encodeURIComponent(fileName)}`
+    : "";
 
 // Small neutral "no photo" SVG placeholder
 const NO_PHOTO_SVG =
@@ -61,7 +63,7 @@ const STATES = [
   "Gujarat",
   "Haryana",
   "Himachal Pradesh",
-  "Jammu & Kashmir (J&K)", // ✨ added
+  "Jammu & Kashmir (J&K)",
   "Jharkhand",
   "Karnataka",
   "Kerala",
@@ -86,14 +88,22 @@ const STATES = [
   "Other",
 ];
 const CATEGORIES = ["General", "OBC", "SC", "ST", "EWS", "Other"];
-const RELIGIONS = ["Hindu", "Muslim", "Sikh", "Christian", "Buddhist", "Jain", "Other"];
+const RELIGIONS = [
+  "Hindu",
+  "Muslim",
+  "Sikh",
+  "Christian",
+  "Buddhist",
+  "Jain",
+  "Other",
+];
 
-// colors for sibling badges (darker backgrounds with white text for better contrast)
+// colors for sibling badges
 const SIBLING_COLORS = [
-  { bg: "#2196f3", text: "#fff" },
-  { bg: "#4caf50", text: "#fff" },
-  { bg: "#ff9800", text: "#fff" },
-  { bg: "#f44336", text: "#fff" },
+  { bg: "#6366f1", text: "#fff" },
+  { bg: "#0ea5e9", text: "#fff" },
+  { bg: "#22c55e", text: "#fff" },
+  { bg: "#f97316", text: "#fff" },
 ];
 
 const Students = () => {
@@ -109,7 +119,7 @@ const Students = () => {
   const [transportations, setTransportations] = useState([]);
   const [houses, setHouses] = useState([]);
 
-  // ---- transport helpers (Village — Cost) ----
+  // transport helpers
   const transportById = useMemo(() => {
     const m = new Map();
     transportations.forEach((t) => m.set(String(t.id), t));
@@ -128,6 +138,7 @@ const Students = () => {
     const t = transportById.get(String(id));
     return formatTransport(t);
   };
+
   const fetchHouses = async () => {
     try {
       const { data } = await api.get("/houses");
@@ -210,7 +221,6 @@ const Students = () => {
     fetchSessions();
     fetchTransportations();
     fetchHouses();
-
     if (isAdminOrSuperAdmin) fetchConcessions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAdminOrSuperAdmin]);
@@ -236,7 +246,11 @@ const Students = () => {
       fetchStudents();
     } catch (err) {
       console.error("toggleStudentStatus:", err);
-      Swal.fire("Error", err.response?.data?.error || "Failed to update status", "error");
+      Swal.fire(
+        "Error",
+        err.response?.data?.error || "Failed to update status",
+        "error"
+      );
     }
   };
 
@@ -274,26 +288,39 @@ const Students = () => {
 
       const fd = new FormData();
       fd.append("photo", file);
-      if (student.admission_number) fd.append("admission_number", student.admission_number);
+      if (student.admission_number)
+        fd.append("admission_number", student.admission_number);
 
       try {
         Swal.showLoading();
-        const { data } = await api.post(`/students/${student.id}/photo`, fd, {
-          headers: { "Content-Type": "multipart/form-data" },
-        });
+        const { data } = await api.post(
+          `/students/${student.id}/photo`,
+          fd,
+          {
+            headers: { "Content-Type": "multipart/form-data" },
+          }
+        );
         Swal.close();
-        await Swal.fire("Success", data?.message || "Photo uploaded successfully", "success");
+        await Swal.fire(
+          "Success",
+          data?.message || "Photo uploaded successfully",
+          "success"
+        );
         fetchStudents();
       } catch (err) {
         console.error("upload photo error:", err);
         Swal.close();
-        Swal.fire("Error", err.response?.data?.message || "Failed to upload photo", "error");
+        Swal.fire(
+          "Error",
+          err.response?.data?.message || "Failed to upload photo",
+          "error"
+        );
       }
     };
     input.click();
   };
 
-  // ---------------- ADD / EDIT with TABS + previous school ----------------
+  // ---------------- ADD / EDIT WITH CONCESSION IN BASIC INFO ----------------
   const showStudentForm = async (mode = "add", student = null) => {
     await fetchClasses();
     await fetchSections();
@@ -313,7 +340,9 @@ const Students = () => {
     const classOptions = `<option value="">Select Class</option>${classes
       .map(
         (c) =>
-          `<option value="${c.id}" ${c.id === s.class_id ? "selected" : ""}>${c.class_name}</option>`
+          `<option value="${c.id}" ${
+            c.id === s.class_id ? "selected" : ""
+          }>${c.class_name}</option>`
       )
       .join("")}`;
 
@@ -341,7 +370,7 @@ const Students = () => {
       )
       .join("")}`;
 
-    // ✨ Transport dropdown now shows "Villages — ₹Cost"
+    // Transport dropdown
     const transportOptions = `<option value="">No Transport</option>${transportations
       .map((t) => {
         const label = (t?.Villages || "").replace(/"/g, "&quot;");
@@ -352,119 +381,121 @@ const Students = () => {
       })
       .join("")}`;
 
-    // ---------- TABS HTML (improved professional styling) ----------
+    // ---------- TABS HTML (colorful) ----------
     const html = `
       <style>
         .swal2-popup { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
-        .tabbar { 
-          display: flex; 
-          gap: 4px; 
-          margin-bottom: 20px; 
-          border-bottom: 2px solid #e9ecef; 
-          padding-bottom: 8px; 
+        .tabbar {
+          display: flex;
+          gap: 6px;
+          margin-bottom: 20px;
+          border-bottom: 2px solid #eef2ff;
+          padding-bottom: 8px;
+          background: linear-gradient(90deg,#eef2ff 0%,#fef9c3 100%);
+          border-radius: 10px;
+          padding: 8px 8px 0 8px;
         }
-        .tabbtn { 
-          padding: 10px 16px; 
-          border: none; 
-          background: none; 
-          cursor: pointer; 
-          font-weight: 500; 
-          color: #6c757d; 
-          border-bottom: 2px solid transparent; 
-          transition: all 0.2s ease; 
-          border-radius: 0; 
+        .tabbtn {
+          padding: 8px 13px;
+          border: none;
+          background: rgba(255,255,255,0.6);
+          cursor: pointer;
+          font-weight: 500;
+          color: #6366f1;
+          border-bottom: 2px solid transparent;
+          transition: all 0.15s ease;
+          border-top-left-radius: 8px;
+          border-top-right-radius: 8px;
         }
-        .tabbtn:hover { color: #0d6efd; }
-        .tabbtn.active { 
-          color: #0d6efd; 
-          border-bottom-color: #0d6efd; 
-          font-weight: 600; 
+        .tabbtn:hover { background: #fff; }
+        .tabbtn.active {
+          background: #fff;
+          border-bottom-color: #6366f1;
+          color: #111827;
         }
         .tabpane { display: none; }
         .tabpane.active { display: block; }
-        .form-container { 
-          display: grid; 
-          grid-template-columns: repeat(2, minmax(0, 1fr)); 
-          gap: 16px; 
-          background: #fafbfc; 
-          padding: 20px; 
-          border-radius: 8px; 
-          border: 1px solid #e9ecef; 
+        .form-container {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 16px;
+          background: #fafbfc;
+          padding: 20px;
+          border-radius: 8px;
+          border: 1px solid #e9ecef;
         }
         .full-row { grid-column: 1 / -1; }
-        .form-field { 
-          width: 100%; 
-          padding: 8px 12px; 
-          border: 1px solid #ced4da; 
-          border-radius: 6px; 
-          font-size: 14px; 
-          transition: border-color 0.15s ease; 
+        .form-field {
+          width: 100%;
+          padding: 8px 12px;
+          border: 1px solid #ced4da;
+          border-radius: 6px;
+          font-size: 14px;
+          transition: border-color 0.15s ease;
         }
-        .form-field:focus { 
-          border-color: #0d6efd; 
-          outline: 0; 
-          box-shadow: 0 0 0 0.2rem rgba(13,110,253,.25); 
+        .form-field:focus {
+          border-color: #6366f1;
+          outline: 0;
+          box-shadow: 0 0 0 0.15rem rgba(99,102,241,.2);
         }
-        .form-label { 
-          font-weight: 600; 
-          color: #495057; 
-          margin-bottom: 4px; 
-          display: block; 
-          font-size: 14px; 
+        .form-label {
+          font-weight: 600;
+          color: #374151;
+          margin-bottom: 4px;
+          display: block;
+          font-size: 14px;
         }
-        .required { color: #dc3545; }
-        .hint { 
-          color: #6c757d; 
-          font-size: 12px; 
-          margin-top: 4px; 
-          font-style: italic; 
+        .required { color: #dc2626; }
+        .hint {
+          color: #6b7280;
+          font-size: 12px;
+          margin-top: 4px;
+          font-style: italic;
         }
-        .sibling-block { 
-          border: 1px solid #e9ecef; 
-          padding: 16px; 
-          border-radius: 8px; 
-          margin-bottom: 16px; 
-          background: #fff; 
-          box-shadow: 0 1px 3px rgba(0,0,0,0.05); 
+        .sibling-block {
+          border: 1px solid #e9ecef;
+          padding: 16px;
+          border-radius: 8px;
+          margin-bottom: 16px;
+          background: #fff;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.03);
         }
-        .sibling-block label { 
-          font-weight: 700; 
-          margin-bottom: 12px; 
-          display: block; 
-          color: #212529; 
+        .sibling-row {
+          display: flex;
+          gap: 12px;
+          flex-wrap: wrap;
+          align-items: end;
         }
-        .sibling-row { 
-          display: flex; 
-          gap: 12px; 
-          flex-wrap: wrap; 
-          align-items: end; 
-        }
-        .sibling-row select { min-width: 180px; }
       </style>
 
       <div style="height: 70vh; overflow-y: auto;">
         <div class="tabbar">
           <button class="tabbtn active" data-tab="mandatory">Basic Info</button>
-          <button class="tabbtn" data-tab="personal">Personal Details</button>
-          <button class="tabbtn" data-tab="contact">Contact Info</button>
+          <button class="tabbtn" data-tab="personal">Personal</button>
+          <button class="tabbtn" data-tab="contact">Contact</button>
           <button class="tabbtn" data-tab="transport">Transport</button>
           <button class="tabbtn" data-tab="siblings">Siblings</button>
           <button class="tabbtn" data-tab="prevschool">Previous School</button>
         </div>
 
-        <!-- Mandatory -->
+        <!-- Basic Info -->
         <div class="tabpane active" id="pane-mandatory">
           <div class="form-container">
             <div>
               <label class="form-label">Full Name <span class="required">*</span></label>
-              <input id="f_name" class="form-field" value="${(s.name || "").replace(/"/g, "&quot;")}" required />
+              <input id="f_name" class="form-field" value="${(s.name || "")
+                .replace(/"/g, "&quot;")}" required />
             </div>
 
             <div>
               <label class="form-label">Admission Number</label>
               <input id="f_admission_number" class="form-field"
-                    value="${isEdit ? (s.admission_number || "") : (s.admission_number || nextSuggestion || "")}" />
-              <div class="hint">Leave empty for auto-generation.</div>
+                value="${
+                  isEdit
+                    ? s.admission_number || ""
+                    : s.admission_number || nextSuggestion || ""
+                }" />
+              <div class="hint">Leave empty for auto-generation</div>
             </div>
 
             <div>
@@ -493,32 +524,50 @@ const Students = () => {
             </div>
 
             <div>
-                <label class="form-label">House</label>
-                <select id="f_house_id" class="form-field">
-                  <option value="">Select House</option>
-                  ${houses
-                    .map(
-                      (h) => `
-                      <option value="${h.id}" ${
+              <label class="form-label">House</label>
+              <select id="f_house_id" class="form-field">
+                <option value="">Select House</option>
+                ${houses
+                  .map(
+                    (h) =>
+                      `<option value="${h.id}" ${
                         h.id === s.house_id ? "selected" : ""
-                      }>${h.house_name}${h.color ? ` (${h.color})` : ""}</option>`
-                    )
-                    .join("")}
-                </select>
-              </div>
+                      }>${h.house_name}${
+                        h.color ? ` (${h.color})` : ""
+                      }</option>`
+                  )
+                  .join("")}
+              </select>
+            </div>
 
+            ${
+              isAdminOrSuperAdmin
+                ? `<div class="full-row">
+                    <label class="form-label">Concession Type</label>
+                    <select id="f_concession_id" class="form-field">
+                      ${concessionOptions}
+                    </select>
+                  </div>`
+                : ""
+            }
 
             <div>
               <label class="form-label">Admission Type</label>
               <select id="f_admission_type" class="form-field">
-                <option value="New" ${s.admission_type === "New" ? "selected" : ""}>New Admission</option>
-                <option value="Old" ${s.admission_type === "Old" ? "selected" : ""}>Transfer/Old</option>
+                <option value="New" ${
+                  s.admission_type === "New" ? "selected" : ""
+                }>New Admission</option>
+                <option value="Old" ${
+                  s.admission_type === "Old" ? "selected" : ""
+                }>Transfer/Old</option>
               </select>
             </div>
 
             <div>
               <label class="form-label">Roll Number</label>
-              <input id="f_roll_number" class="form-field" value="${s.roll_number || ""}" type="number" min="1" />
+              <input id="f_roll_number" class="form-field" value="${
+                s.roll_number || ""
+              }" type="number" min="1" />
             </div>
           </div>
         </div>
@@ -528,47 +577,59 @@ const Students = () => {
           <div class="form-container">
             <div>
               <label class="form-label">Father's Name</label>
-              <input id="f_father_name" class="form-field" value="${(s.father_name || "").replace(/"/g, "&quot;")}" />
+              <input id="f_father_name" class="form-field" value="${(
+                s.father_name || ""
+              ).replace(/"/g, "&quot;")}" />
             </div>
 
             <div>
               <label class="form-label">Mother's Name</label>
-              <input id="f_mother_name" class="form-field" value="${(s.mother_name || "").replace(/"/g, "&quot;")}" />
+              <input id="f_mother_name" class="form-field" value="${(
+                s.mother_name || ""
+              ).replace(/"/g, "&quot;")}" />
             </div>
 
             <div>
               <label class="form-label">Date of Birth</label>
-              <input id="f_DOB" class="form-field" value="${s.Date_Of_Birth || ""}" type="date" />
+              <input id="f_DOB" class="form-field" value="${
+                s.Date_Of_Birth || ""
+              }" type="date" />
             </div>
 
             <div>
               <label class="form-label">Blood Group</label>
               <select id="f_b_group" class="form-field">
                 <option value="">Select Blood Group</option>
-                <option value="A+" ${s.b_group === "A+" ? "selected" : ""}>A+</option>
-                <option value="A-" ${s.b_group === "A-" ? "selected" : ""}>A-</option>
-                <option value="B+" ${s.b_group === "B+" ? "selected" : ""}>B+</option>
-                <option value="B-" ${s.b_group === "B-" ? "selected" : ""}>B-</option>
-                <option value="AB+" ${s.b_group === "AB+" ? "selected" : ""}>AB+</option>
-                <option value="AB-" ${s.b_group === "AB-" ? "selected" : ""}>AB-</option>
-                <option value="O+" ${s.b_group === "O+" ? "selected" : ""}>O+</option>
-                <option value="O-" ${s.b_group === "O-" ? "selected" : ""}>O-</option>
+                ${["A+","A-","B+","B-","AB+","AB-","O+","O-"]
+                  .map(
+                    (bg) =>
+                      `<option value="${bg}" ${
+                        s.b_group === bg ? "selected" : ""
+                      }>${bg}</option>`
+                  )
+                  .join("")}
               </select>
             </div>
 
             <div>
               <label class="form-label">Date of Admission</label>
-              <input id="f_date_of_admission" class="form-field" value="${s.date_of_admission || ""}" type="date" />
+              <input id="f_date_of_admission" class="form-field" value="${
+                s.date_of_admission || ""
+              }" type="date" />
             </div>
 
             <div>
               <label class="form-label">Date of Withdrawal</label>
-              <input id="f_date_of_withdraw" class="form-field" value="${s.date_of_withdraw || ""}" type="date" />
+              <input id="f_date_of_withdraw" class="form-field" value="${
+                s.date_of_withdraw || ""
+              }" type="date" />
             </div>
 
             <div>
               <label class="form-label">PEN Number</label>
-              <input id="f_pen_number" class="form-field" value="${s.pen_number || ""}" />
+              <input id="f_pen_number" class="form-field" value="${
+                s.pen_number || ""
+              }" />
             </div>
 
             <div>
@@ -577,7 +638,9 @@ const Students = () => {
                 <option value="">Select State</option>
                 ${STATES.map(
                   (st) =>
-                    `<option value="${st}" ${st === (s.state || "") ? "selected" : ""}>${st}</option>`
+                    `<option value="${st}" ${
+                      st === (s.state || "") ? "selected" : ""
+                    }>${st}</option>`
                 ).join("")}
               </select>
             </div>
@@ -588,7 +651,9 @@ const Students = () => {
                 <option value="">Select Category</option>
                 ${CATEGORIES.map(
                   (c) =>
-                    `<option value="${c}" ${c === (s.category || "") ? "selected" : ""}>${c}</option>`
+                    `<option value="${c}" ${
+                      c === (s.category || "") ? "selected" : ""
+                    }>${c}</option>`
                 ).join("")}
               </select>
             </div>
@@ -599,14 +664,18 @@ const Students = () => {
                 <option value="">Select Religion</option>
                 ${RELIGIONS.map(
                   (r) =>
-                    `<option value="${r}" ${r === (s.religion || "") ? "selected" : ""}>${r}</option>`
+                    `<option value="${r}" ${
+                      r === (s.religion || "") ? "selected" : ""
+                    }>${r}</option>`
                 ).join("")}
               </select>
             </div>
 
             <div class="full-row">
               <label class="form-label">Residential Address</label>
-              <textarea id="f_address" class="form-field" rows="3">${(s.address || "").replace(/"/g, "&quot;")}</textarea>
+              <textarea id="f_address" class="form-field" rows="3">${(
+                s.address || ""
+              ).replace(/"/g, "&quot;")}</textarea>
             </div>
           </div>
         </div>
@@ -616,15 +685,21 @@ const Students = () => {
           <div class="form-container">
             <div>
               <label class="form-label">Father's Phone</label>
-              <input id="f_father_phone" class="form-field" value="${s.father_phone || ""}" type="tel" maxlength="15" />
+              <input id="f_father_phone" class="form-field" value="${
+                s.father_phone || ""
+              }" type="tel" maxlength="15" />
             </div>
             <div>
               <label class="form-label">Mother's Phone</label>
-              <input id="f_mother_phone" class="form-field" value="${s.mother_phone || ""}" type="tel" maxlength="15" />
+              <input id="f_mother_phone" class="form-field" value="${
+                s.mother_phone || ""
+              }" type="tel" maxlength="15" />
             </div>
             <div>
               <label class="form-label">Aadhaar Number</label>
-              <input id="f_aadhaar" class="form-field" value="${s.aadhaar_number || ""}" type="text" maxlength="12" />
+              <input id="f_aadhaar" class="form-field" value="${
+                s.aadhaar_number || ""
+              }" type="text" maxlength="12" />
             </div>
             <div>
               <label class="form-label">Public Visibility</label>
@@ -636,12 +711,14 @@ const Students = () => {
           </div>
         </div>
 
-        <!-- Transport -->
+        <!-- Transport (now without concession) -->
         <div class="tabpane" id="pane-transport">
           <div class="form-container">
             <div>
               <label class="form-label">Bus Service Fee (₹)</label>
-              <input id="f_bus_service" class="form-field" value="${s.bus_service || ""}" type="number" min="0" />
+              <input id="f_bus_service" class="form-field" value="${
+                s.bus_service || ""
+              }" type="number" min="0" />
             </div>
 
             <div>
@@ -649,24 +726,15 @@ const Students = () => {
               <select id="f_route_id" class="form-field">
                 ${transportOptions}
               </select>
-              <div class="hint">Optional: Select a transport route for the student.</div>
+              <div class="hint">Optional: Select a transport route</div>
             </div>
-
-            ${
-              isAdminOrSuperAdmin
-                ? `<div class="full-row">
-                    <label class="form-label">Concession Type</label>
-                    <select id="f_concession_id" class="form-field">${concessionOptions}</select>
-                  </div>`
-                : ""
-            }
           </div>
         </div>
 
         <!-- Siblings -->
         <div class="tabpane" id="pane-siblings">
           <div class="form-container">
-            ${[1,2,3,4]
+            ${[1, 2, 3, 4]
               .map(
                 (slot) => `
               <div class="full-row sibling-block" data-slot="${slot}">
@@ -676,14 +744,12 @@ const Students = () => {
                     <option value="">Select Class</option>
                     ${classes
                       .map(
-                        (c) => `
-                      <option value="${c.id}" ${
-                          c.id === (s["sibling_class_" + slot] || "")
-                            ? "selected"
-                            : ""
-                        }>
-                        ${c.class_name}
-                      </option>`
+                        (c) =>
+                          `<option value="${c.id}" ${
+                            c.id === (s["sibling_class_" + slot] || "")
+                              ? "selected"
+                              : ""
+                          }>${c.class_name}</option>`
                       )
                       .join("")}
                   </select>
@@ -692,14 +758,14 @@ const Students = () => {
                     <option value="">All Sections</option>
                     ${sections
                       .map(
-                        (sec) => `
-                      <option value="${sec.id}" data-class="${sec.class_id}" ${
-                          sec.id === (s["sibling_section_" + slot] || "")
-                            ? "selected"
-                            : ""
-                        }>
-                        ${sec.section_name}
-                      </option>`
+                        (sec) =>
+                          `<option value="${sec.id}" data-class="${
+                            sec.class_id
+                          }" ${
+                            sec.id === (s["sibling_section_" + slot] || "")
+                              ? "selected"
+                              : ""
+                          }>${sec.section_name}</option>`
                       )
                       .join("")}
                   </select>
@@ -708,14 +774,18 @@ const Students = () => {
                     <option value="">Select Student</option>
                     ${
                       s["sibling_id_" + slot]
-                        ? `<option value="${s["sibling_id_" + slot]}" selected>
-                            ${(s["sibling_name_" + slot] || "Selected").replace(/"/g, "&quot;")}
-                            ${
-                              s["sibling_id_" + slot]
-                                ? ` (ID:${s["sibling_id_" + slot]})`
-                                : ""
-                            }
-                          </option>`
+                        ? `<option value="${
+                            s["sibling_id_" + slot]
+                          }" selected>${
+                            (s["sibling_name_" + slot] || "Selected").replace(
+                              /"/g,
+                              "&quot;"
+                            )
+                          }${
+                            s["sibling_id_" + slot]
+                              ? ` (ID:${s["sibling_id_" + slot]})`
+                              : ""
+                          }</option>`
                         : ""
                     }
                   </select>
@@ -726,7 +796,6 @@ const Students = () => {
                     s["sibling_name_" + slot] || ""
                   ).replace(/"/g, "&quot;")}" />
                 </div>
-                <div class="hint">Select class, then section (optional), then student. Only name and Admission Number are saved.</div>
               </div>
             `
               )
@@ -739,19 +808,27 @@ const Students = () => {
           <div class="form-container">
             <div class="full-row">
               <label class="form-label">Previous School Name</label>
-              <input id="f_prev_school_name" class="form-field" value="${(s.prev_school_name || "").replace(/"/g, "&quot;")}" />
+              <input id="f_prev_school_name" class="form-field" value="${(
+                s.prev_school_name || ""
+              ).replace(/"/g, "&quot;")}" />
             </div>
             <div class="full-row">
               <label class="form-label">Previous School Address</label>
-              <textarea id="f_prev_school_address" class="form-field" rows="3">${(s.prev_school_address || "").replace(/</g,"&lt;")}</textarea>
+              <textarea id="f_prev_school_address" class="form-field" rows="3">${(
+                s.prev_school_address || ""
+              ).replace(/</g, "&lt;")}</textarea>
             </div>
             <div>
               <label class="form-label">Previous Class</label>
-              <input id="f_prev_class" class="form-field" value="${(s.prev_class || "").replace(/"/g, "&quot;")}" />
+              <input id="f_prev_class" class="form-field" value="${(
+                s.prev_class || ""
+              ).replace(/"/g, "&quot;")}" />
             </div>
             <div>
               <label class="form-label">Previous Admission No.</label>
-              <input id="f_prev_admission_no" class="form-field" value="${(s.prev_admission_no || "").replace(/"/g, "&quot;")}" />
+              <input id="f_prev_admission_no" class="form-field" value="${(
+                s.prev_admission_no || ""
+              ).replace(/"/g, "&quot;")}" />
             </div>
           </div>
         </div>
@@ -760,7 +837,7 @@ const Students = () => {
 
     const popup = await Swal.fire({
       title: isEdit ? "Edit Student Record" : "Add New Student",
-      icon: isEdit ? "edit" : "user-plus",
+      icon: isEdit ? "info" : "question",
       width: "1100px",
       html,
       showCancelButton: true,
@@ -775,21 +852,35 @@ const Students = () => {
         const payload = {
           // Mandatory
           name: document.getElementById("f_name").value.trim(),
-          admission_number: document.getElementById("f_admission_number").value.trim() || null,
+          admission_number:
+            document.getElementById("f_admission_number").value.trim() || null,
           class_id: document.getElementById("f_class_id").value || null,
           section_id: document.getElementById("f_section_id").value || null,
           session_id: document.getElementById("f_session_id").value || null,
+          house_id: document.getElementById("f_house_id")?.value || null,
+          concession_id:
+            document.getElementById("f_concession_id")?.value || null,
           admission_type: document.getElementById("f_admission_type").value,
           roll_number: document.getElementById("f_roll_number").value
-            ? parseInt(document.getElementById("f_roll_number").value, 10)
+            ? parseInt(
+                document.getElementById("f_roll_number").value,
+                10
+              )
             : null,
 
           // Personal
-          father_name: document.getElementById("f_father_name").value.trim(),
-          mother_name: document.getElementById("f_mother_name").value.trim(),
-          Date_Of_Birth: document.getElementById("f_DOB").value || null,
-          date_of_admission: document.getElementById("f_date_of_admission").value || null,
-          date_of_withdraw: document.getElementById("f_date_of_withdraw").value || null,
+          father_name: document
+            .getElementById("f_father_name")
+            .value.trim(),
+          mother_name: document
+            .getElementById("f_mother_name")
+            .value.trim(),
+          Date_Of_Birth:
+            document.getElementById("f_DOB").value || null,
+          date_of_admission:
+            document.getElementById("f_date_of_admission").value || null,
+          date_of_withdraw:
+            document.getElementById("f_date_of_withdraw").value || null,
           pen_number: document.getElementById("f_pen_number").value || null,
           b_group: document.getElementById("f_b_group").value || null,
           state: document.getElementById("f_state").value || null,
@@ -798,47 +889,58 @@ const Students = () => {
           address: document.getElementById("f_address").value || null,
 
           // Contact
-          father_phone: document.getElementById("f_father_phone").value || null,
-          mother_phone: document.getElementById("f_mother_phone").value || null,
-          aadhaar_number: document.getElementById("f_aadhaar").value || null,
+          father_phone:
+            document.getElementById("f_father_phone").value || null,
+          mother_phone:
+            document.getElementById("f_mother_phone").value || null,
+          aadhaar_number:
+            document.getElementById("f_aadhaar").value || null,
           visible: document.getElementById("f_visible")?.value === "1",
 
           // Transport
-          bus_service: document.getElementById("f_bus_service").value || "0",
+          bus_service:
+            document.getElementById("f_bus_service").value || "0",
           route_id: routeVal,
-          concession_id: document.getElementById("f_concession_id")?.value || null,
-          house_id: document.getElementById("f_house_id")?.value || null,
 
-
-          // Previous School (✨ new)
-          prev_school_name: document.getElementById("f_prev_school_name")?.value || null,
-          prev_school_address: document.getElementById("f_prev_school_address")?.value || null,
-          prev_class: document.getElementById("f_prev_class")?.value || null,
-          prev_admission_no: document.getElementById("f_prev_admission_no")?.value || null,
+          // Previous School
+          prev_school_name:
+            document.getElementById("f_prev_school_name")?.value || null,
+          prev_school_address:
+            document.getElementById("f_prev_school_address")?.value || null,
+          prev_class:
+            document.getElementById("f_prev_class")?.value || null,
+          prev_admission_no:
+            document.getElementById("f_prev_admission_no")?.value || null,
         };
 
         // Siblings
         [1, 2, 3, 4].forEach((slot) => {
-          const rawId = document.getElementById(`f_sibling_id_${slot}`)?.value ?? "";
-          const rawName = document.getElementById(`f_sibling_name_${slot}`)?.value ?? "";
+          const rawId =
+            document.getElementById(`f_sibling_id_${slot}`)?.value ?? "";
+          const rawName =
+            document.getElementById(`f_sibling_name_${slot}`)?.value ?? "";
 
-          const cleanedId = rawId ? String(rawId).replace(/^ID:\s*/i, "").trim() : null;
+          const cleanedId = rawId
+            ? String(rawId).replace(/^ID:\s*/i, "").trim()
+            : null;
           const cleanedName = rawName ? String(rawName).trim() : null;
 
-          payload[`sibling_id_${slot}`] = cleanedId || null;   // AN if present, else plain numeric id
+          payload[`sibling_id_${slot}`] = cleanedId || null;
           payload[`sibling_name_${slot}`] = cleanedName || null;
         });
 
-
-        // validations (Mandatory tab)
-        if (!payload.name) Swal.showValidationMessage("Full name is required");
-        if (!payload.class_id) Swal.showValidationMessage("Class selection is required");
-        if (!payload.section_id) Swal.showValidationMessage("Section selection is required");
+        // validations
+        if (!payload.name)
+          Swal.showValidationMessage("Full name is required");
+        if (!payload.class_id)
+          Swal.showValidationMessage("Class selection is required");
+        if (!payload.section_id)
+          Swal.showValidationMessage("Section selection is required");
 
         return payload;
       },
       didOpen: () => {
-        // Tabs wire-up (improved)
+        // Tabs wire-up
         const btns = document.querySelectorAll(".tabbtn");
         const panes = {
           mandatory: document.getElementById("pane-mandatory"),
@@ -858,7 +960,7 @@ const Students = () => {
           })
         );
 
-        // Sibling pickers (unchanged logic, but styles improved above)
+        // Sibling pickers
         [1, 2, 3, 4].forEach((slot) => {
           const clsSel = document.getElementById(`sib_class_${slot}`);
           const secSel = document.getElementById(`sib_section_${slot}`);
@@ -873,9 +975,7 @@ const Students = () => {
             sectionOptionsAll.forEach((sec) => {
               if (!classId || String(sec.class_id) === String(classId)) {
                 options.push(
-                  `<option value="${sec.id}" ${
-                    sec.id === (s.section_id || "") ? "selected" : ""
-                  }>${sec.name}</option>`
+                  `<option value="${sec.id}">${sec.name}</option>`
                 );
               }
             });
@@ -899,18 +999,22 @@ const Students = () => {
                 hiddenName.value = "";
                 return;
               }
-            const opts = [`<option value="">Select Student</option>`].concat(
-              data.map((st) => {
-                const token = st.admission_number || String(st.id); // save AN if present, else id
-                return `<option value="${token}"
-                          data-name="${(st.name || "").replace(/"/g, "&quot;")}"
+              const opts = [`<option value="">Select Student</option>`].concat(
+                data.map((st) => {
+                  const token = st.admission_number || String(st.id);
+                  return `<option value="${token}"
+                          data-name="${(st.name || "").replace(
+                            /"/g,
+                            "&quot;"
+                          )}"
                           data-pk="${st.id}"
-                          data-an="${st.admission_number || ""}"
-                          ${String(token) === String(hiddenId.value) ? "selected" : ""}>
-                          ${st.name}${st.admission_number ? ` (AN:${st.admission_number})` : ""}
+                          data-an="${st.admission_number || ""}">
+                          ${st.name}${
+                    st.admission_number ? ` (AN:${st.admission_number})` : ""
+                  }
                         </option>`;
-              })
-            );
+                })
+              );
 
               stuSel.innerHTML = opts.join("");
             } catch (err) {
@@ -935,10 +1039,9 @@ const Students = () => {
             await fetchAndPopulateStudents(classId, sectionId || "");
           };
 
-        stuSel.onchange = () => {
+          stuSel.onchange = () => {
             const opt = stuSel.selectedOptions[0];
             if (opt && opt.value) {
-              // opt.value is AN if available, else falls back to numeric id
               hiddenId.value = opt.value;
               hiddenName.value = opt.dataset.name || opt.textContent || "";
             } else {
@@ -947,47 +1050,33 @@ const Students = () => {
             }
           };
 
-
           const preClass = clsSel.value;
           const preSection = secSel.value;
           const preStudentId = hiddenId.value;
 
           (async () => {
-            if (!preClass && preStudentId) {
-              const studentObj = students.find((st) => String(st.id) === String(preStudentId));
-              if (studentObj) {
-                clsSel.value = studentObj.class_id || "";
-                populateSectionsForClass(clsSel.value);
-                secSel.value = studentObj.section_id || "";
-                await fetchAndPopulateStudents(clsSel.value, secSel.value || "");
-                const opt = Array.from(stuSel.options).find((o) => o.value === preStudentId);
-                if (opt) {
-                  opt.selected = true;
-                  hiddenName.value = opt.dataset.name || opt.textContent || "";
-                }
-                return;
-              }
-            }
-
-        if (preClass) {
+            if (preClass) {
               populateSectionsForClass(preClass);
               await fetchAndPopulateStudents(preClass, preSection || "");
-              if (preStudentId) {
-                // try match by AN (value) OR by primary key (data-pk) for old records
-                let opt =
-                  Array.from(stuSel.options).find((o) => String(o.value) === String(preStudentId)) ||
-                  Array.from(stuSel.options).find((o) => String(o.dataset.pk) === String(preStudentId));
-                if (opt) {
-                  opt.selected = true;
-                  hiddenName.value = opt.dataset.name || opt.textContent || "";
-                  hiddenId.value = opt.value; // normalize to AN going forward
-                }
-              }
             } else {
               populateSectionsForClass("");
               stuSel.innerHTML = `<option value="">Select class first</option>`;
             }
 
+            if (preClass && preStudentId) {
+              const opt =
+                Array.from(stuSel.options).find(
+                  (o) => String(o.value) === String(preStudentId)
+                ) ||
+                Array.from(stuSel.options).find(
+                  (o) => String(o.dataset.pk) === String(preStudentId)
+                );
+              if (opt) {
+                opt.selected = true;
+                hiddenName.value = opt.dataset.name || opt.textContent || "";
+                hiddenId.value = opt.value;
+              }
+            }
           })();
         });
       },
@@ -1007,7 +1096,11 @@ const Students = () => {
       fetchStudents();
     } catch (err) {
       console.error("showStudentForm submit:", err);
-      Swal.fire("Error", err.response?.data?.error || "Failed to save student record", "error");
+      Swal.fire(
+        "Error",
+        err.response?.data?.error || "Failed to save student record",
+        "error"
+      );
     }
   };
 
@@ -1016,12 +1109,19 @@ const Students = () => {
 
   const handleExport = async () => {
     try {
-      const resp = await api.get("/students/export-students", { responseType: "blob" });
-      const blob = new Blob([resp.data], { type: resp.headers["content-type"] || "application/octet-stream" });
+      const resp = await api.get("/students/export-students", {
+        responseType: "blob",
+      });
+      const blob = new Blob([resp.data], {
+        type:
+          resp.headers["content-type"] || "application/octet-stream",
+      });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `Students_Export_${new Date().toISOString().split('T')[0]}.xlsx`;
+      a.download = `Students_Export_${
+        new Date().toISOString().split("T")[0]
+      }.xlsx`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -1043,15 +1143,26 @@ const Students = () => {
       const res = await api.post("/students/import-students", fd, {
         headers: { "Content-Type": "multipart/form-data" },
       });
-      Swal.fire("Imported", res.data?.message || "Import completed successfully", "success");
+      Swal.fire(
+        "Imported",
+        res.data?.message || "Import completed successfully",
+        "success"
+      );
       if (res.data?.duplicates && res.data.duplicates.length) {
-        console.warn("Duplicates:", res.data.duplicates);
-        Swal.fire("Note", `${res.data.duplicates.length} duplicate rows were skipped`, "info");
+        Swal.fire(
+          "Note",
+          `${res.data.duplicates.length} duplicate rows were skipped`,
+          "info"
+        );
       }
       fetchStudents();
     } catch (err) {
       console.error("handleImport:", err);
-      Swal.fire("Error", err.response?.data?.message || "Failed to import data", "error");
+      Swal.fire(
+        "Error",
+        err.response?.data?.message || "Failed to import data",
+        "error"
+      );
     } finally {
       setImporting(false);
     }
@@ -1070,78 +1181,123 @@ const Students = () => {
 
   const studentHasSibling = (stu) => {
     return (
-      !!(stu.sibling_id_1 || stu.sibling_id_2 || stu.sibling_id_3 || stu.sibling_id_4) ||
-      !!(stu.sibling_name_1 || stu.sibling_name_2 || stu.sibling_name_3 || stu.sibling_name_4)
+      !!(
+        stu.sibling_id_1 ||
+        stu.sibling_id_2 ||
+        stu.sibling_id_3 ||
+        stu.sibling_id_4
+      ) ||
+      !!(
+        stu.sibling_name_1 ||
+        stu.sibling_name_2 ||
+        stu.sibling_name_3 ||
+        stu.sibling_name_4
+      )
     );
   };
 
-  const filteredStudents = useMemo(() => students.filter((stu) => {
-    const q = search.trim().toLowerCase();
-    const textMatch =
-      !q ||
-      [stu.name, stu.father_name, stu.aadhaar_number, stu.admission_number].some((v) =>
-        (v || "").toString().toLowerCase().includes(q)
-      );
-    const classMatch = !selectedClass || String(stu.class_id) === String(selectedClass);
-    const statusMatch = !selectedStatus || stu.status === selectedStatus;
-    const sessionMatch = !selectedSessionFilter || String(stu.session_id) === String(selectedSessionFilter);
-    const hasSibling = studentHasSibling(stu);
-    let siblingMatch = true;
-    if (hasSiblingFilter === "has") siblingMatch = hasSibling;
-    if (hasSiblingFilter === "no") siblingMatch = !hasSibling;
+  const filteredStudents = useMemo(
+    () =>
+      students.filter((stu) => {
+        const q = search.trim().toLowerCase();
+        const textMatch =
+          !q ||
+          [stu.name, stu.father_name, stu.aadhaar_number, stu.admission_number].some(
+            (v) => (v || "").toString().toLowerCase().includes(q)
+          );
+        const classMatch =
+          !selectedClass || String(stu.class_id) === String(selectedClass);
+        const statusMatch = !selectedStatus || stu.status === selectedStatus;
+        const sessionMatch =
+          !selectedSessionFilter ||
+          String(stu.session_id) === String(selectedSessionFilter);
+        const hasSibling = studentHasSibling(stu);
+        let siblingMatch = true;
+        if (hasSiblingFilter === "has") siblingMatch = hasSibling;
+        if (hasSiblingFilter === "no") siblingMatch = !hasSibling;
 
-    return textMatch && classMatch && statusMatch && sessionMatch && siblingMatch;
-  }), [students, search, selectedClass, selectedStatus, selectedSessionFilter, hasSiblingFilter]);
+        return (
+          textMatch &&
+          classMatch &&
+          statusMatch &&
+          sessionMatch &&
+          siblingMatch
+        );
+      }),
+    [
+      students,
+      search,
+      selectedClass,
+      selectedStatus,
+      selectedSessionFilter,
+      hasSiblingFilter,
+    ]
+  );
 
   const totalCount = filteredStudents.length;
-  const enabledCount = filteredStudents.filter((s) => s.status === "enabled").length;
-  const disabledCount = filteredStudents.filter((s) => s.status === "disabled").length;
+  const enabledCount = filteredStudents.filter(
+    (s) => s.status === "enabled"
+  ).length;
+  const disabledCount = filteredStudents.filter(
+    (s) => s.status === "disabled"
+  ).length;
 
   const handleSiblingClick = async (token) => {
     if (!token) return;
 
-  // Normalize legacy formats like "ID:123", extra spaces, etc.
-  let raw = String(token).trim().replace(/^ID:\s*/i, "").trim();
+    let raw = String(token).trim().replace(/^ID:\s*/i, "").trim();
 
-  // Try exact-by-AN endpoint first
-  const tryExactAN = async () => {
-    try {
-      const resp = await api.get(`/students/admission/${encodeURIComponent(raw)}`);
-      return Array.isArray(resp.data) ? (resp.data[0] || null) : resp.data || null;
-    } catch { return null; }
+    const tryExactAN = async () => {
+      try {
+        const resp = await api.get(
+          `/students/admission/${encodeURIComponent(raw)}`
+        );
+        return Array.isArray(resp.data)
+          ? resp.data[0] || null
+          : resp.data || null;
+      } catch {
+        return null;
+      }
+    };
+
+    const tryListANExact = async () => {
+      try {
+        const resp = await api.get(
+          `/students?admission_number=${encodeURIComponent(raw)}`
+        );
+        const arr = Array.isArray(resp.data) ? resp.data : [];
+        return (
+          arr.find(
+            (s) => String(s.admission_number || "").trim() === raw
+          ) || null
+        );
+      } catch {
+        return null;
+      }
+    };
+
+    const tryById = async () => {
+      if (!/^\d+$/.test(raw)) return null;
+      try {
+        const resp = await api.get(`/students/${parseInt(raw, 10)}`);
+        return Array.isArray(resp.data)
+          ? resp.data[0] || null
+          : resp.data || null;
+      } catch {
+        return null;
+      }
+    };
+
+    let respData = await tryExactAN();
+    if (!respData) respData = await tryListANExact();
+    if (!respData) respData = await tryById();
+
+    if (!respData) {
+      Swal.fire("Not Found", "Sibling record not available.", "warning");
+      return;
+    }
+    handleView(respData);
   };
-
-  // Then exact match via list query (some backends only support list)
-  const tryListANExact = async () => {
-    try {
-      const resp = await api.get(`/students?admission_number=${encodeURIComponent(raw)}`);
-      const arr = Array.isArray(resp.data) ? resp.data : [];
-      return arr.find(s => String(s.admission_number || "").trim() === raw) || null;
-    } catch { return null; }
-  };
-
-  // Finally, if it's purely digits, treat as primary key
-  const tryById = async () => {
-    if (!/^\d+$/.test(raw)) return null;
-    try {
-      const resp = await api.get(`/students/${parseInt(raw, 10)}`);
-      return Array.isArray(resp.data) ? (resp.data[0] || null) : resp.data || null;
-    } catch { return null; }
-  };
-
-  let respData = await tryExactAN();
-  if (!respData) respData = await tryListANExact();
-  if (!respData) respData = await tryById();
-
-  if (!respData) {
-    Swal.fire("Not Found", "Sibling record not available.", "warning");
-    return;
-  }
-  handleView(respData);
-};
-
-
-
 
   const PhotoCell = ({ student }) => {
     const src = buildPhotoURL(student.photo);
@@ -1182,11 +1338,22 @@ const Students = () => {
   };
 
   return (
-    <div className="container-fluid mt-3">
+    <div
+      className="container-fluid mt-3"
+      style={{
+        background:
+          "linear-gradient(180deg, #f9fafb 0%, #ffffff 180px, #ffffff 100%)",
+        minHeight: "100vh",
+      }}
+    >
       <div className="d-flex justify-content-between align-items-center mb-4">
         <div>
-          <h2 className="h4 mb-0 fw-bold text-dark">Student Management</h2>
-          <p className="mb-0 text-muted">Manage student records, admissions, and profiles.</p>
+          <h2 className="h4 mb-0 fw-bold text-dark">
+            Student Management
+          </h2>
+          <p className="mb-0 text-muted">
+            Manage student records, admissions, transport and concessions.
+          </p>
         </div>
         <div className="d-flex gap-2">
           {isAdminOrSuperAdmin && (
@@ -1195,46 +1362,73 @@ const Students = () => {
                 <i className="bi bi-plus-circle me-1"></i>
                 Add Student
               </button>
-              <button className="btn btn-outline-secondary" onClick={openImportDialog} disabled={importing}>
+              <button
+                className="btn btn-outline-secondary"
+                onClick={openImportDialog}
+                disabled={importing}
+              >
                 <i className="bi bi-upload me-1"></i>
                 {importing ? "Importing..." : "Import XLSX"}
               </button>
             </>
           )}
-          <button className="btn btn-outline-primary" onClick={handleExport}>
+          <button
+            className="btn btn-outline-primary"
+            onClick={handleExport}
+          >
             <i className="bi bi-download me-1"></i>
             Export XLSX
           </button>
         </div>
       </div>
 
+      {/* Colorful stat cards */}
       <div className="row g-3 mb-4">
         <div className="col-md-4">
-          <div className="card border-0 shadow-sm h-100">
+          <div
+            className="card border-0 shadow-sm h-100"
+            style={{
+              background:
+                "linear-gradient(135deg,#dcfce7 0%,#bbf7d0 100%)",
+            }}
+          >
             <div className="card-body text-center">
               <div className="h1 text-success mb-1">{enabledCount}</div>
-              <h6 className="text-muted mb-0">Active Students</h6>
+              <h6 className="text-success mb-0">Active Students</h6>
             </div>
           </div>
         </div>
         <div className="col-md-4">
-          <div className="card border-0 shadow-sm h-100">
+          <div
+            className="card border-0 shadow-sm h-100"
+            style={{
+              background:
+                "linear-gradient(135deg,#fee2e2 0%,#fecaca 100%)",
+            }}
+          >
             <div className="card-body text-center">
               <div className="h1 text-danger mb-1">{disabledCount}</div>
-              <h6 className="text-muted mb-0">Inactive Students</h6>
+              <h6 className="text-danger mb-0">Inactive Students</h6>
             </div>
           </div>
         </div>
         <div className="col-md-4">
-          <div className="card border-0 shadow-sm h-100">
+          <div
+            className="card border-0 shadow-sm h-100"
+            style={{
+              background:
+                "linear-gradient(135deg,#e0f2fe 0%,#bae6fd 100%)",
+            }}
+          >
             <div className="card-body text-center">
               <div className="h1 text-primary mb-1">{totalCount}</div>
-              <h6 className="text-muted mb-0">Total Students</h6>
+              <h6 className="text-primary mb-0">Total Students</h6>
             </div>
           </div>
         </div>
       </div>
 
+      {/* Filters + table */}
       <div className="card border-0 shadow-sm">
         <div className="card-header bg-white border-0 pb-0">
           <div className="d-flex flex-wrap gap-2 align-items-center">
@@ -1315,7 +1509,12 @@ const Students = () => {
         <div className="card-body p-0">
           <div className="table-responsive">
             <table className="table table-hover mb-0 align-middle">
-              <thead className="table-light sticky-top">
+              <thead
+                className="sticky-top"
+                style={{
+                  background: "linear-gradient(90deg,#eef2ff 0%,#ffffff 100%)",
+                }}
+              >
                 <tr>
                   <th className="border-0 py-3">#</th>
                   <th className="border-0 py-3">Photo</th>
@@ -1328,7 +1527,9 @@ const Students = () => {
                   <th className="border-0 py-3">Session</th>
                   <th className="border-0 py-3">Aadhaar</th>
                   <th className="border-0 py-3">Type</th>
-                  {isAdminOrSuperAdmin && <th className="border-0 py-3">Concession</th>}
+                  {isAdminOrSuperAdmin && (
+                    <th className="border-0 py-3">Concession</th>
+                  )}
                   <th className="border-0 py-3">Transport</th>
                   <th className="border-0 py-3">Actions</th>
                 </tr>
@@ -1339,29 +1540,44 @@ const Students = () => {
                     .slice()
                     .reverse()
                     .map((stu, idx) => {
-                        const combinedSiblings = [];
-                        for (let i = 1; i <= 4; i++) {
-                          const sid = stu[`sibling_id_${i}`];
-                          const sname = stu[`sibling_name_${i}`];
-                          if (sid || sname) {
-                            combinedSiblings.push({
-                              id: sid ?? null,
-                              name: sname ? String(sname) : (sid ? `ID:${sid}` : "Sibling"),
-                            });
-                          }
+                      const combinedSiblings = [];
+                      for (let i = 1; i <= 4; i++) {
+                        const sid = stu[`sibling_id_${i}`];
+                        const sname = stu[`sibling_name_${i}`];
+                        if (sid || sname) {
+                          combinedSiblings.push({
+                            id: sid ?? null,
+                            name: sname
+                              ? String(sname)
+                              : sid
+                              ? `ID:${sid}`
+                              : "Sibling",
+                          });
                         }
-
+                      }
 
                       return (
                         <tr key={stu.id} className="table-hover-row">
                           <td className="py-3">{idx + 1}</td>
-                          <td className="py-2" onClick={() => handleView(stu)}>
+                          <td
+                            className="py-2"
+                            onClick={() => handleView(stu)}
+                            style={{ cursor: "pointer" }}
+                          >
                             <PhotoCell student={stu} />
                           </td>
-                          <td className="py-3 fw-medium" onClick={() => handleView(stu)}>
+                          <td
+                            className="py-3 fw-medium"
+                            onClick={() => handleView(stu)}
+                            style={{ cursor: "pointer" }}
+                          >
                             {stu.admission_number || "-"}
                           </td>
-                          <td className="py-3" onClick={() => handleView(stu)}>
+                          <td
+                            className="py-3"
+                            onClick={() => handleView(stu)}
+                            style={{ cursor: "pointer" }}
+                          >
                             <div className="fw-semibold">{stu.name}</div>
                             {combinedSiblings.length > 0 && (
                               <div className="mt-1">
@@ -1370,39 +1586,69 @@ const Students = () => {
                                     key={i}
                                     className="badge rounded-pill me-1 mb-1"
                                     style={{
-                                      backgroundColor: SIBLING_COLORS[i % SIBLING_COLORS.length].bg,
-                                      color: SIBLING_COLORS[i % SIBLING_COLORS.length].text,
-                                      fontSize: "0.75rem",
-                                      cursor: sibling.id ? "pointer" : "default",
+                                      backgroundColor:
+                                        SIBLING_COLORS[i % SIBLING_COLORS.length]
+                                          .bg,
+                                      color:
+                                        SIBLING_COLORS[i % SIBLING_COLORS.length]
+                                          .text,
+                                      fontSize: "0.7rem",
+                                      cursor: sibling.id
+                                        ? "pointer"
+                                        : "default",
                                       border: "none",
                                     }}
                                     title={sibling.name}
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      if (sibling.id) handleSiblingClick(sibling.id);
+                                      if (sibling.id)
+                                        handleSiblingClick(sibling.id);
                                     }}
                                   >
-                                    {sibling.name.length > 15 ? `${sibling.name.substring(0, 12)}...` : sibling.name}
+                                    {sibling.name.length > 15
+                                      ? `${sibling.name.substring(0, 12)}...`
+                                      : sibling.name}
                                   </span>
                                 ))}
                               </div>
                             )}
                           </td>
-                          <td className="py-3 text-muted" onClick={() => handleView(stu)}>
+                          <td
+                            className="py-3 text-muted"
+                            onClick={() => handleView(stu)}
+                            style={{ cursor: "pointer" }}
+                          >
                             {stu.father_name || "-"}
                           </td>
-                          <td className="py-3" onClick={() => handleView(stu)}>
-                            <span className="badge bg-light text-dark">{stu.class_name || "-"}</span>
+                          <td
+                            className="py-3"
+                            onClick={() => handleView(stu)}
+                            style={{ cursor: "pointer" }}
+                          >
+                            <span className="badge bg-light text-dark">
+                              {stu.class_name || "-"}
+                            </span>
                           </td>
-                          <td className="py-3" onClick={() => handleView(stu)}>
-                            <span className="badge bg-secondary">{stu.section_name || "-"}</span>
+                          <td
+                            className="py-3"
+                            onClick={() => handleView(stu)}
+                            style={{ cursor: "pointer" }}
+                          >
+                            <span className="badge bg-secondary">
+                              {stu.section_name || "-"}
+                            </span>
                           </td>
-                          <td className="py-3" onClick={() => handleView(stu)}>
+                          <td
+                            className="py-3"
+                            onClick={() => handleView(stu)}
+                            style={{ cursor: "pointer" }}
+                          >
                             {stu.house_name ? (
                               <span
                                 className="badge"
                                 style={{
-                                  backgroundColor: stu.house_color || "#6c757d",
+                                  backgroundColor:
+                                    stu.house_color || "#6c757d",
                                   color: "#fff",
                                   fontSize: "0.8rem",
                                 }}
@@ -1413,24 +1659,57 @@ const Students = () => {
                               "-"
                             )}
                           </td>
-
-                          <td className="py-3" onClick={() => handleView(stu)}>
-                            {stu.session_name || (stu.session_id ? "Assigned" : "-")}
+                          <td
+                            className="py-3"
+                            onClick={() => handleView(stu)}
+                            style={{ cursor: "pointer" }}
+                          >
+                            {stu.session_name ||
+                              (stu.session_id ? "Assigned" : "-")}
                           </td>
-                          <td className="py-3 small" onClick={() => handleView(stu)}>
-                            {stu.aadhaar_number ? stu.aadhaar_number.replace(/(\d{4})(\d{4})(\d{4})/, '$1-$2-$3') : "-"}
+                          <td
+                            className="py-3 small"
+                            onClick={() => handleView(stu)}
+                            style={{ cursor: "pointer" }}
+                          >
+                            {stu.aadhaar_number
+                              ? stu.aadhaar_number.replace(
+                                  /(\d{4})(\d{4})(\d{4})/,
+                                  "$1-$2-$3"
+                                )
+                              : "-"}
                           </td>
-                          <td className="py-3" onClick={() => handleView(stu)}>
-                            <span className={`badge ${stu.admission_type === 'New' ? 'bg-success' : 'bg-warning'}`}>
+                          <td
+                            className="py-3"
+                            onClick={() => handleView(stu)}
+                            style={{ cursor: "pointer" }}
+                          >
+                            <span
+                              className={`badge ${
+                                stu.admission_type === "New"
+                                  ? "bg-success"
+                                  : "bg-warning"
+                              }`}
+                            >
                               {stu.admission_type}
                             </span>
                           </td>
                           {isAdminOrSuperAdmin && (
-                            <td className="py-3" onClick={() => handleView(stu)}>
-                              <span className="badge bg-info text-dark">{stu.concession_name || "-"}</span>
+                            <td
+                              className="py-3"
+                              onClick={() => handleView(stu)}
+                              style={{ cursor: "pointer" }}
+                            >
+                              <span className="badge bg-info text-dark">
+                                {stu.concession_name || "-"}
+                              </span>
                             </td>
                           )}
-                          <td className="py-3 small" onClick={() => handleView(stu)}>
+                          <td
+                            className="py-3 small"
+                            onClick={() => handleView(stu)}
+                            style={{ cursor: "pointer" }}
+                          >
                             {formatTransportById(stu.route_id)}
                           </td>
                           <td className="py-2">
@@ -1443,16 +1722,25 @@ const Students = () => {
                                       type="checkbox"
                                       id={`status-${stu.id}`}
                                       checked={stu.status === "enabled"}
-                                      onChange={() => toggleStudentStatus(stu)}
+                                      onChange={() =>
+                                        toggleStudentStatus(stu)
+                                      }
                                     />
                                   </div>
-                                  <button className="btn btn-outline-primary btn-sm" onClick={() => handleEdit(stu)}>
+                                  <button
+                                    className="btn btn-outline-primary btn-sm"
+                                    onClick={() => handleEdit(stu)}
+                                  >
                                     <i className="bi bi-pencil"></i>
                                   </button>
                                   <button
                                     className="btn btn-outline-secondary btn-sm"
                                     onClick={() => promptAndUploadPhoto(stu)}
-                                    title={stu.photo ? "Replace Photo" : "Upload Photo"}
+                                    title={
+                                      stu.photo
+                                        ? "Replace Photo"
+                                        : "Upload Photo"
+                                    }
                                   >
                                     <i className="bi bi-camera"></i>
                                   </button>
@@ -1461,7 +1749,9 @@ const Students = () => {
                               {isSuperadmin && (
                                 <button
                                   className="btn btn-outline-danger btn-sm"
-                                  onClick={() => handleDelete(stu.id, stu.name)}
+                                  onClick={() =>
+                                    handleDelete(stu.id, stu.name)
+                                  }
                                 >
                                   <i className="bi bi-trash"></i>
                                 </button>
@@ -1473,10 +1763,15 @@ const Students = () => {
                     })
                 ) : (
                   <tr>
-                    <td colSpan={isAdminOrSuperAdmin ? 13 : 12} className="text-center py-4">
+                    <td
+                      colSpan={isAdminOrSuperAdmin ? 13 : 12}
+                      className="text-center py-4"
+                    >
                       <div className="text-muted">
                         <i className="bi bi-inbox display-4 mb-3"></i>
-                        <p className="mb-0">No students match the current filters.</p>
+                        <p className="mb-0">
+                          No students match the current filters.
+                        </p>
                       </div>
                     </td>
                   </tr>
@@ -1489,6 +1784,7 @@ const Students = () => {
     </div>
   );
 
+  // VIEW POPUP (no change except style kept nice)
   function handleView(student) {
     const siblingRows = [];
     for (let i = 1; i <= 4; i++) {
@@ -1503,9 +1799,10 @@ const Students = () => {
       }
     }
 
-    const statusBadge = student.status === "enabled" 
-      ? '<span class="badge bg-success">ENABLED</span>' 
-      : '<span class="badge bg-secondary">DISABLED</span>';
+    const statusBadge =
+      student.status === "enabled"
+        ? '<span class="badge bg-success">ENABLED</span>'
+        : '<span class="badge bg-secondary">DISABLED</span>';
 
     const fields = [
       { label: "Admission Number", value: student.admission_number || "-" },
@@ -1525,29 +1822,69 @@ const Students = () => {
       { label: "State", value: student.state || "-" },
       { label: "Category", value: student.category || "-" },
       { label: "Religion", value: student.religion || "-" },
-      { label: "Bus Service Fee", value: `₹${student.bus_service || 0}` },
-      { label: "Public Visibility", value: student.visible ? "Yes" : "No" },
-      { label: "Father's Phone", value: student.father_phone || "-" },
-      { label: "Mother's Phone", value: student.mother_phone || "-" },
-      { label: "Aadhaar Number", value: student.aadhaar_number ? student.aadhaar_number.replace(/(\d{4})(\d{4})(\d{4})/, '$1-$2-$3') : "-" },
+      {
+        label: "Bus Service Fee",
+        value: `₹${student.bus_service || 0}`,
+      },
+      {
+        label: "Public Visibility",
+        value: student.visible ? "Yes" : "No",
+      },
+      {
+        label: "Father's Phone",
+        value: student.father_phone || "-",
+      },
+      {
+        label: "Mother's Phone",
+        value: student.mother_phone || "-",
+      },
+      {
+        label: "Aadhaar Number",
+        value: student.aadhaar_number
+          ? student.aadhaar_number.replace(
+              /(\d{4})(\d{4})(\d{4})/,
+              "$1-$2-$3"
+            )
+          : "-",
+      },
       { label: "Admission Type", value: student.admission_type || "-" },
     ];
 
     if (isAdminOrSuperAdmin) {
-      fields.push({ label: "Concession", value: student.concession_name || "-" });
+      fields.push({
+        label: "Concession",
+        value: student.concession_name || "-",
+      });
     }
 
-    // ✨ Details popup: show Village — Cost
-    fields.push({ label: "Transport Route", value: formatTransportById(student.route_id) });
+    fields.push({
+      label: "Transport Route",
+      value: formatTransportById(student.route_id),
+    });
     fields.push({ label: "Status", value: statusBadge });
-    fields.push({ label: "Residential Address", value: student.address || "-", full: true });
-
-    // ✨ Previous School in view
-    fields.push({ label: "Previous School", value: student.prev_school_name || "-" });
-    fields.push({ label: "Previous Class", value: student.prev_class || "-" });
-    fields.push({ label: "Previous Adm. #", value: student.prev_admission_no || "-" });
+    fields.push({
+      label: "Residential Address",
+      value: student.address || "-",
+      full: true,
+    });
+    fields.push({
+      label: "Previous School",
+      value: student.prev_school_name || "-",
+    });
+    fields.push({
+      label: "Previous Class",
+      value: student.prev_class || "-",
+    });
+    fields.push({
+      label: "Previous Adm. #",
+      value: student.prev_admission_no || "-",
+    });
     if (student.prev_school_address) {
-      fields.push({ label: "Previous School Address", value: student.prev_school_address, full: true });
+      fields.push({
+        label: "Previous School Address",
+        value: student.prev_school_address,
+        full: true,
+      });
     }
 
     const photoUrl = buildPhotoURL(student.photo);
@@ -1556,7 +1893,7 @@ const Students = () => {
     const fieldHtml = fields
       .map(
         (f) => `
-      <div class="detail-item ${f.full ? 'full-row' : ''}">
+      <div class="detail-item ${f.full ? "full-row" : ""}">
         <div class="detail-label">${f.label}</div>
         <div class="detail-value">${f.value}</div>
       </div>
@@ -1567,12 +1904,12 @@ const Students = () => {
     const siblingHtml = siblingRows.length
       ? siblingRows
           .map(
-            (s, i) => `
+            (s) => `
       <div class="detail-item sibling-item" data-sibling-id="${s.id || ""}">
         <div class="detail-label">${s.label}</div>
         <div class="detail-value" style="cursor: ${
           s.id ? "pointer" : "default"
-        }; color: ${s.id ? "#0d6efd" : "#fff"}; font-weight: 500;" ${
+        }; color: ${s.id ? "#0d6efd" : "#6b7280"}; font-weight: 500;" ${
               s.id ? `data-sibling-id="${s.id}"` : ""
             }>${s.value}</div>
       </div>
@@ -1588,12 +1925,14 @@ const Students = () => {
 
     const photoHtml = `
       <div class="d-flex align-items-center justify-content-center gap-3 mb-4 p-3 bg-light rounded">
-        <img src="${hasPhoto ? photoUrl : NO_PHOTO_SVG}" alt="Student Photo" class="rounded-circle border shadow-sm" style="width: 100px; height: 100px; object-fit: cover;" />
+        <img src="${
+          hasPhoto ? photoUrl : NO_PHOTO_SVG
+        }" alt="Student Photo" class="rounded-circle border shadow-sm" style="width: 100px; height: 100px; object-fit: cover;" />
         ${
           isAdminOrSuperAdmin
-            ? `<button id="btnChangePhoto" class="btn btn-outline-primary btn-sm"> ${
+            ? `<button id="btnChangePhoto" class="btn btn-outline-primary btn-sm">${
                 hasPhoto ? "Change Photo" : "Upload Photo"
-              } </button>`
+              }</button>`
             : ""
         }
       </div>
@@ -1601,11 +1940,16 @@ const Students = () => {
 
     const html = `
       <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-        <h3 class="text-center mb-4 fw-bold text-primary">${student.name || "Student"} - Profile Details</h3>
+        <h3 class="text-center mb-4 fw-bold text-primary">${
+          student.name || "Student"
+        } - Profile Details</h3>
         ${photoHtml}
         <div class="row g-3">
           <div class="col-md-6">
-            ${fieldHtml.split('</div>').slice(0, Math.ceil(fields.length / 2)).join('</div>')}
+            ${fieldHtml
+              .split("</div>")
+              .slice(0, Math.ceil(fields.length / 2))
+              .join("</div>")}
           </div>
           <div class="col-md-6">
             ${siblingHtml}
@@ -1633,9 +1977,7 @@ const Students = () => {
           word-break: break-word;
           font-size: 0.95rem;
         }
-        .full-row { grid-column: 1 / -1; }
         .sibling-item .detail-value:hover { text-decoration: underline; }
-        .badge { font-size: 0.875em; }
       </style>
     `;
 
@@ -1645,9 +1987,9 @@ const Students = () => {
       width: 900,
       showCloseButton: true,
       showConfirmButton: false,
-      customClass: { 
-        popup: "border-0 shadow-lg", 
-        content: "p-0" 
+      customClass: {
+        popup: "border-0 shadow-lg",
+        content: "p-0",
       },
       didOpen: () => {
         const popup = Swal.getPopup();
@@ -1656,7 +1998,6 @@ const Students = () => {
           siblingEls.forEach((el) => {
             const id = el.getAttribute("data-sibling-id");
             if (id) {
-              el.style.cursor = "pointer";
               el.addEventListener("click", (e) => {
                 e.stopPropagation();
                 Swal.close();

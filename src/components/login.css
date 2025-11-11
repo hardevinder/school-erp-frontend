@@ -17,18 +17,20 @@
   background-position: center center;
   background-repeat: no-repeat;
   position: relative;
-  overflow: hidden;                   /* scroller handles actual scrolling */
-  display: flex;                      /* allow vertical centering on wider screens */
+  overflow: hidden;                   /* parent won't scroll on desktop */
+  display: flex;
   align-items: center;
   justify-content: center;
 }
 
-/* The actual scroller: enables both vertical & horizontal scroll if needed */
+/* =========================
+   SCROLLER (but… we disable on bigger screens)
+   ========================= */
 .login-hero__scroller {
-  height: 100%;
   width: 100%;
-  overflow: auto;                     /* vertical + horizontal when required */
-  -webkit-overflow-scrolling: touch;  /* smooth iOS momentum scrolling */
+  min-height: 100dvh;
+  height: auto;
+  overflow: visible;                  /* ❗ no scroll on desktop/laptop */
 }
 
 /* content container spacing */
@@ -51,7 +53,7 @@
   box-shadow: 0 20px 70px rgba(0,0,0,0.45);
 
   /* Make the form usable on tiny phones by allowing horizontal pan */
-  min-width: 380px;     /* you can increase to 420px if your labels wrap too much */
+  min-width: 380px;       /* adjust if needed */
   width: 100%;
   max-width: 520px;
   margin: 0 auto;
@@ -154,12 +156,20 @@
    Mobile tweaks
    ========================= */
 @media (max-width: 575.98px) {
-  /* Start near top so nothing clips; scroller manages the rest */
+  /* On tiny phones we ALLOW scroll because height < card */
   .login-hero {
     align-items: flex-start !important;
     justify-content: center !important;
     padding-top: 20px;
     padding-bottom: 24px;
+    overflow: hidden; /* parent stays clean */
+  }
+
+  .login-hero__scroller {
+    height: auto;
+    max-height: none;
+    overflow: auto;               /* ✅ enable scroll only on small screens */
+    -webkit-overflow-scrolling: touch;
   }
 
   .login-hero__content { 
@@ -169,7 +179,6 @@
 
   .brand-logo { height: 48px; }
 
-  /* Comfortable touch sizes on tiny phones */
   .form-control-lg,
   .input-group-lg > .form-control,
   .btn-lg {

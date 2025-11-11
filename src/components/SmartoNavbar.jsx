@@ -18,7 +18,10 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
   // NEW: family + active student admission for switcher
   const [family, setFamily] = useState(null);
   const [activeStudentAdmission, setActiveStudentAdmission] = useState(
-    () => localStorage.getItem("activeStudentAdmission") || localStorage.getItem("username") || ""
+    () =>
+      localStorage.getItem("activeStudentAdmission") ||
+      localStorage.getItem("username") ||
+      ""
   );
 
   const { roles = [], activeRole, changeRole } = useRoles();
@@ -63,16 +66,19 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
       const token = localStorage.getItem("token");
       if (!token) return setProfilePhoto(NO_STUDENT_PHOTO_SVG);
 
-      const admission = localStorage.getItem("activeStudentAdmission") || localStorage.getItem("username");
+      const admission =
+        localStorage.getItem("activeStudentAdmission") ||
+        localStorage.getItem("username");
       const userId = localStorage.getItem("userId");
       const username = admission || localStorage.getItem("username");
 
       const tryEndpoints = [
-        // if you expose an endpoint by admission number:
-        username ? `${API_BASE}/students?admission_number=${encodeURIComponent(username)}` : null,
-        // fallback by username param:
-        username ? `${API_BASE}/students?username=${encodeURIComponent(username)}` : null,
-        // by current user:
+        username
+          ? `${API_BASE}/students?admission_number=${encodeURIComponent(username)}`
+          : null,
+        username
+          ? `${API_BASE}/students?username=${encodeURIComponent(username)}`
+          : null,
         `${API_BASE}/students/me`,
         userId ? `${API_BASE}/students/by-user/${encodeURIComponent(userId)}` : null,
       ].filter(Boolean);
@@ -109,7 +115,9 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
         const raw = localStorage.getItem("family");
         setFamily(raw ? JSON.parse(raw) : null);
         const stored =
-          localStorage.getItem("activeStudentAdmission") || localStorage.getItem("username") || "";
+          localStorage.getItem("activeStudentAdmission") ||
+          localStorage.getItem("username") ||
+          "";
         setActiveStudentAdmission(stored);
       } catch {
         setFamily(null);
@@ -143,7 +151,6 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
         if (user.name) setUserName(user.name);
 
         if ((isStudent || isParent) && localStorage.getItem("activeStudentAdmission")) {
-          // Show active student's photo if available
           await trySetStudentPhoto();
         } else if (user.profilePhoto) {
           const full = user.profilePhoto.startsWith("http")
@@ -172,10 +179,8 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
     localStorage.removeItem("token");
     localStorage.removeItem("roles");
     localStorage.removeItem("activeRole");
-    localStorage.removeItem("family");                 // ensure cleanup
-    localStorage.removeItem("activeStudentAdmission"); // ensure cleanup
-    // localStorage.removeItem("username");
-    // localStorage.removeItem("userId");
+    localStorage.removeItem("family");
+    localStorage.removeItem("activeStudentAdmission");
     navigate("/");
   };
 
@@ -226,16 +231,10 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
     try {
       localStorage.setItem("activeStudentAdmission", admissionNumber);
       setActiveStudentAdmission(admissionNumber);
-
-      // Update header photo to the selected student's
       trySetStudentPhoto();
-
-      // Notify app to refetch student-bound data (attendance, fees, diary, etc.)
       window.dispatchEvent(
         new CustomEvent("student-switched", { detail: { admissionNumber } })
       );
-
-      // Optional UX: navigate to dashboard
       if (isStudent || isParent) {
         navigate("/dashboard", { replace: true });
       }
@@ -254,6 +253,7 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
       { label: "Day", href: "/reports/day-wise", icon: "bi-calendar2-check" },
       { label: "Transport", href: "/reports/transport-summary", icon: "bi-truck" },
       { label: "Students", href: "/students", icon: "bi-people" },
+      { label: "Enquiries", href: "/enquiries", icon: "bi-inbox" }, // NEW
       { label: "Tracking", href: "/users-tracking", icon: "bi-activity" },
     ],
     superadmin: [
@@ -263,6 +263,7 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
       { label: "Day", href: "/reports/day-wise", icon: "bi-calendar2-check" },
       { label: "Transport", href: "/reports/transport-summary", icon: "bi-truck" },
       { label: "Students", href: "/students", icon: "bi-people" },
+      { label: "Enquiries", href: "/enquiries", icon: "bi-inbox" }, // NEW
       { label: "Tracking", href: "/users-tracking", icon: "bi-activity" },
     ],
     // Accounts
@@ -319,7 +320,7 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
       { label: "Assign", href: "/my-assignments", icon: "bi-journal-check" },
       { label: "Fees", href: "/student-fee", icon: "bi-cash-coin" },
     ],
-    // Parent (optional quick links – adjust to your app)
+    // Parent
     parent: [
       { label: "Home", href: "/dashboard", icon: "bi-house" },
       { label: "Attend.", href: "/student-attendance", icon: "bi-calendar2-check" },
@@ -357,7 +358,11 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
 
           {/* Student switcher (desktop pills) */}
           {canSeeStudentSwitcher && studentsList.length > 0 && (
-            <div className="ms-3 d-none d-lg-flex align-items-center gap-1" role="tablist" aria-label="Switch student">
+            <div
+              className="ms-3 d-none d-lg-flex align-items-center gap-1"
+              role="tablist"
+              aria-label="Switch student"
+            >
               {studentsList.map((s) => {
                 const isActive = s.admission_number === activeStudentAdmission;
                 return (
@@ -366,10 +371,19 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
                     type="button"
                     role="tab"
                     aria-selected={isActive}
-                    className={`btn btn-sm ${isActive ? "btn-primary" : "btn-outline-primary"} rounded-pill px-3`}
+                    className={`btn btn-sm ${
+                      isActive ? "btn-primary" : "btn-outline-primary"
+                    } rounded-pill px-3`}
                     onClick={() => handleStudentSwitch(s.admission_number)}
-                    title={`${s.name} (${s.class?.name || "—"}-${s.section?.name || "—"})`}
-                    style={{ maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                    title={`${s.name} (${s.class?.name || "—"}-${
+                      s.section?.name || "—"
+                    })`}
+                    style={{
+                      maxWidth: 180,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
                   >
                     {s.isSelf ? "Me" : s.name}
                     <span className="ms-1 text-white-50">
@@ -415,7 +429,9 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
                     <Link
                       key={q.href}
                       to={q.href}
-                      className={`text-decoration-none text-center small quick-link-icon ${active ? "ql-active" : ""}`}
+                      className={`text-decoration-none text-center small quick-link-icon ${
+                        active ? "ql-active" : ""
+                      }`}
                       title={q.label}
                       aria-label={q.label}
                     >
@@ -477,16 +493,26 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
                 aria-labelledby="profileDropdown"
               >
                 <li>
-                  <Link className="dropdown-item" to="/dashboard" onClick={() => setDropdownOpen(false)}>
+                  <Link
+                    className="dropdown-item"
+                    to="/dashboard"
+                    onClick={() => setDropdownOpen(false)}
+                  >
                     Dashboard
                   </Link>
                 </li>
                 <li>
-                  <Link className="dropdown-item" to="/edit-profile" onClick={() => setDropdownOpen(false)}>
+                  <Link
+                    className="dropdown-item"
+                    to="/edit-profile"
+                    onClick={() => setDropdownOpen(false)}
+                  >
                     Edit Profile
                   </Link>
                 </li>
-                <li><hr className="dropdown-divider" /></li>
+                <li>
+                  <hr className="dropdown-divider" />
+                </li>
                 <li>
                   <button className="dropdown-item" onClick={closeDropdownAnd(handleLogout)}>
                     Logout
@@ -520,7 +546,9 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
 
               {canSeeStudentSwitcher && studentsList.length > 0 && (
                 <div className="w-100">
-                  <label htmlFor="studentSwitcherMobile" className="visually-hidden">Switch student</label>
+                  <label htmlFor="studentSwitcherMobile" className="visually-hidden">
+                    Switch student
+                  </label>
                   <select
                     id="studentSwitcherMobile"
                     className="form-select form-select-sm bg-light border-0"
@@ -529,7 +557,10 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
                   >
                     {studentsList.map((s) => (
                       <option key={s.admission_number} value={s.admission_number}>
-                        {(s.isSelf ? "Me: " : "") + s.name} {s.class?.name ? `(${s.class.name}-${s.section?.name || "—"})` : ""}
+                        {(s.isSelf ? "Me: " : "") + s.name}{" "}
+                        {s.class?.name
+                          ? `(${s.class.name}-${s.section?.name || "—"})`
+                          : ""}
                       </option>
                     ))}
                   </select>

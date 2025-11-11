@@ -57,10 +57,12 @@ const groupByFeeHeading = (data) => {
 };
 
 // Calculate fee heading summary with payment mode breakdown.
+// Calculate fee heading summary with payment mode breakdown.
 const calculateFeeHeadingSummary = (data) => {
   const groups = groupByFeeHeading(data);
   return Object.keys(groups).map((feeHeading) => {
     const items = groups[feeHeading];
+
     // Breakdown for Cash.
     const cashTotals = items.reduce(
       (acc, item) => {
@@ -69,12 +71,21 @@ const calculateFeeHeadingSummary = (data) => {
           acc.totalConcession += Number(item.totalConcession) || 0;
           acc.totalVanFee += Number(item.totalVanFee) || 0;
           acc.totalVanFeeConcession += Number(item.totalVanFeeConcession) || 0;
+          acc.totalFine += Number(item.totalFine) || 0; // ✅ Added Fine
         }
         return acc;
       },
-      { totalFeeReceived: 0, totalConcession: 0, totalVanFee: 0, totalVanFeeConcession: 0 }
+      {
+        totalFeeReceived: 0,
+        totalConcession: 0,
+        totalVanFee: 0,
+        totalVanFeeConcession: 0,
+        totalFine: 0, // ✅ new field
+      }
     );
-    cashTotals.totalReceived = cashTotals.totalFeeReceived + cashTotals.totalVanFee;
+    cashTotals.totalReceived =
+      cashTotals.totalFeeReceived + cashTotals.totalVanFee + cashTotals.totalFine; // ✅ Fine included in total
+
     // Breakdown for Online.
     const onlineTotals = items.reduce(
       (acc, item) => {
@@ -83,23 +94,39 @@ const calculateFeeHeadingSummary = (data) => {
           acc.totalConcession += Number(item.totalConcession) || 0;
           acc.totalVanFee += Number(item.totalVanFee) || 0;
           acc.totalVanFeeConcession += Number(item.totalVanFeeConcession) || 0;
+          acc.totalFine += Number(item.totalFine) || 0; // ✅ Added Fine
         }
         return acc;
       },
-      { totalFeeReceived: 0, totalConcession: 0, totalVanFee: 0, totalVanFeeConcession: 0 }
+      {
+        totalFeeReceived: 0,
+        totalConcession: 0,
+        totalVanFee: 0,
+        totalVanFeeConcession: 0,
+        totalFine: 0, // ✅ new field
+      }
     );
-    onlineTotals.totalReceived = onlineTotals.totalFeeReceived + onlineTotals.totalVanFee;
+    onlineTotals.totalReceived =
+      onlineTotals.totalFeeReceived + onlineTotals.totalVanFee + onlineTotals.totalFine; // ✅ Fine included
+
     // Overall totals.
     const overall = {
-      totalFeeReceived: cashTotals.totalFeeReceived + onlineTotals.totalFeeReceived,
-      totalConcession: cashTotals.totalConcession + onlineTotals.totalConcession,
+      totalFeeReceived:
+        cashTotals.totalFeeReceived + onlineTotals.totalFeeReceived,
+      totalConcession:
+        cashTotals.totalConcession + onlineTotals.totalConcession,
       totalVanFee: cashTotals.totalVanFee + onlineTotals.totalVanFee,
-      totalVanFeeConcession: cashTotals.totalVanFeeConcession + onlineTotals.totalVanFeeConcession,
-      totalReceived: cashTotals.totalReceived + onlineTotals.totalReceived,
+      totalVanFeeConcession:
+        cashTotals.totalVanFeeConcession +
+        onlineTotals.totalVanFeeConcession,
+      totalFine: cashTotals.totalFine + onlineTotals.totalFine, // ✅ new field
+      totalReceived: cashTotals.totalReceived + onlineTotals.totalReceived, // ✅ includes Fine
     };
+
     return { feeHeading, cash: cashTotals, online: onlineTotals, overall };
   });
 };
+
 
 const DayWiseReport = () => {
   const [startDate, setStartDate] = useState(null);
@@ -318,6 +345,7 @@ const DayWiseReport = () => {
     acc.totalConcession += Number(item.totalConcession) || 0;
     acc.totalVanFee += Number(item.totalVanFee) || 0;
     acc.totalVanFeeConcession += Number(item.totalVanFeeConcession) || 0;
+    acc.totalFine += Number(item.totalFine) || 0; // ✅ new line
     acc.totalReceived += (Number(item.totalFeeReceived) || 0) + (Number(item.totalVanFee) || 0);
     return acc;
   }, {
@@ -325,6 +353,7 @@ const DayWiseReport = () => {
     totalConcession: 0,
     totalVanFee: 0,
     totalVanFeeConcession: 0,
+    totalFine: 0, // ✅ new key
     totalReceived: 0,
   });
 
@@ -352,25 +381,30 @@ const DayWiseReport = () => {
   const feeHeadingSummary = filteredData.length ? calculateFeeHeadingSummary(filteredData) : [];
 
   // Compute overall totals for Fee Heading Summary.
-  const totalFeeHeadingSummary = feeHeadingSummary.reduce((acc, cat) => {
-    acc.totalFeeReceived.cash += cat.cash.totalFeeReceived;
-    acc.totalFeeReceived.online += cat.online.totalFeeReceived;
-    acc.totalConcession.cash += cat.cash.totalConcession;
-    acc.totalConcession.online += cat.online.totalConcession;
-    acc.totalVanFee.cash += cat.cash.totalVanFee;
-    acc.totalVanFee.online += cat.online.totalVanFee;
-    acc.totalVanFeeConcession.cash += cat.cash.totalVanFeeConcession;
-    acc.totalVanFeeConcession.online += cat.online.totalVanFeeConcession;
-    acc.totalReceived.cash += cat.cash.totalReceived;
-    acc.totalReceived.online += cat.online.totalReceived;
-    return acc;
-  }, {
-    totalFeeReceived: { cash: 0, online: 0 },
-    totalConcession: { cash: 0, online: 0 },
-    totalVanFee: { cash: 0, online: 0 },
-    totalVanFeeConcession: { cash: 0, online: 0 },
-    totalReceived: { cash: 0, online: 0 },
-  });
+const totalFeeHeadingSummary = feeHeadingSummary.reduce((acc, cat) => {
+  acc.totalFeeReceived.cash += cat.cash.totalFeeReceived;
+  acc.totalFeeReceived.online += cat.online.totalFeeReceived;
+  acc.totalConcession.cash += cat.cash.totalConcession;
+  acc.totalConcession.online += cat.online.totalConcession;
+  acc.totalVanFee.cash += cat.cash.totalVanFee;
+  acc.totalVanFee.online += cat.online.totalVanFee;
+  acc.totalVanFeeConcession.cash += cat.cash.totalVanFeeConcession;
+  acc.totalVanFeeConcession.online += cat.online.totalVanFeeConcession;
+  acc.totalFine.cash += cat.cash.totalFine || 0; // ✅ added
+  acc.totalFine.online += cat.online.totalFine || 0; // ✅ added
+  acc.totalReceived.cash += cat.cash.totalReceived;
+  acc.totalReceived.online += cat.online.totalReceived;
+  return acc;
+}, {
+  totalFeeReceived: { cash: 0, online: 0 },
+  totalConcession: { cash: 0, online: 0 },
+  totalVanFee: { cash: 0, online: 0 },
+  totalVanFeeConcession: { cash: 0, online: 0 },
+  totalFine: { cash: 0, online: 0 }, // ✅ new
+  totalReceived: { cash: 0, online: 0 },
+});
+
+
 
   // Function to open the Receipt Modal for a given slipId.
   const viewReceipt = (slipId) => {
@@ -532,14 +566,16 @@ const DayWiseReport = () => {
                       <th className="sticky-top bg-white" style={{ top: 0 }}>Fee Received</th>
                       <th className="sticky-top bg-white" style={{ top: 0 }}>Concession</th>
                       <th className="sticky-top bg-white" style={{ top: 0 }}>Van Fee</th>
+                      <th className="sticky-top bg-white" style={{ top: 0 }}>Fine</th>
                       <th className="sticky-top bg-white" style={{ top: 0 }}>Total Received</th>
+                      <th className="sticky-top bg-white" style={{ top: 0 }}>Remarks</th>
                       <th className="sticky-top bg-white" style={{ top: 0 }}>Receipt</th>
                     </tr>
                   </thead>
                   <tbody>
                     {currentRecords.map((item, idx) => {
                       const horizontalTotal =
-                        Number(item.totalFeeReceived) + Number(item.totalVanFee);
+                          Number(item.totalFeeReceived) + Number(item.totalVanFee) + Number(item.totalFine || 0);
                       return (
                         <tr key={idx}>
                           <td>{indexOfFirstRecord + idx + 1}</td>
@@ -554,7 +590,9 @@ const DayWiseReport = () => {
                           <td>{formatTotalValue(item.totalFeeReceived)}</td>
                           <td>{formatTotalValue(item.totalConcession)}</td>
                           <td>{formatTotalValue(item.totalVanFee)}</td>
+                          <td>{item.totalFine > 0 ? formatTotalValue(item.totalFine) : "—"}</td>
                           <td>{formatTotalValue(horizontalTotal)}</td>
+                          <td>{item.Remarks || "—"}</td>
                           <td>
                             <Button
                               variant="primary"
@@ -610,6 +648,7 @@ const DayWiseReport = () => {
                     <th colSpan="3" className="sticky-top bg-white">Total Concession</th>
                     <th colSpan="3" className="sticky-top bg-white">Total Van Fee</th>
                     <th colSpan="3" className="sticky-top bg-white">Total Van Fee Concession</th>
+                    <th colSpan="3" className="sticky-top bg-white">Total Fine</th> {/* ✅ Added Fine Heading */}
                     <th colSpan="3" className="sticky-top bg-white">Total Received</th>
                   </tr>
                   <tr>
@@ -625,43 +664,61 @@ const DayWiseReport = () => {
                     <th className="sticky-top bg-white">Cash</th>
                     <th className="sticky-top bg-white">Online</th>
                     <th className="sticky-top bg-white">Overall</th>
+                    <th className="sticky-top bg-white">Cash</th>  {/* ✅ Fine */}
+                    <th className="sticky-top bg-white">Online</th>
+                    <th className="sticky-top bg-white">Overall</th>
                     <th className="sticky-top bg-white">Cash</th>
                     <th className="sticky-top bg-white">Online</th>
                     <th className="sticky-top bg-white">Overall</th>
                   </tr>
                 </thead>
-                <tbody>
-                  {feeHeadingSummary.map((cat, index) => (
-                    <tr key={index}>
-                      <td>{cat.feeHeading}</td>
-                      <td>{formatTotalValue(cat.cash.totalFeeReceived)}</td>
-                      <td>{formatTotalValue(cat.online.totalFeeReceived)}</td>
-                      <td>{formatTotalValue(cat.overall.totalFeeReceived)}</td>
-                      <td>{formatTotalValue(cat.cash.totalConcession)}</td>
-                      <td>{formatTotalValue(cat.online.totalConcession)}</td>
-                      <td>{formatTotalValue(cat.overall.totalConcession)}</td>
-                      <td>{formatTotalValue(cat.cash.totalVanFee)}</td>
-                      <td>{formatTotalValue(cat.online.totalVanFee)}</td>
-                      <td>{formatTotalValue(cat.overall.totalVanFee)}</td>
-                      <td>{formatTotalValue(cat.cash.totalVanFeeConcession)}</td>
-                      <td>{formatTotalValue(cat.online.totalVanFeeConcession)}</td>
-                      <td>{formatTotalValue(cat.overall.totalVanFeeConcession)}</td>
-                      <td>{formatTotalValue(cat.cash.totalReceived)}</td>
-                      <td>{formatTotalValue(cat.online.totalReceived)}</td>
-                      <td>{formatTotalValue(cat.overall.totalReceived)}</td>
-                    </tr>
-                  ))}
-                </tbody>
+
+            <tbody>
+              {feeHeadingSummary.map((cat, index) => (
+                <tr key={index}>
+                  <td>{cat.feeHeading}</td>
+
+                  {/* Total Fee Received */}
+                  <td>{formatTotalValue(cat.cash.totalFeeReceived)}</td>
+                  <td>{formatTotalValue(cat.online.totalFeeReceived)}</td>
+                  <td>{formatTotalValue(cat.overall.totalFeeReceived)}</td>
+
+                  {/* Total Concession */}
+                  <td>{formatTotalValue(cat.cash.totalConcession)}</td>
+                  <td>{formatTotalValue(cat.online.totalConcession)}</td>
+                  <td>{formatTotalValue(cat.overall.totalConcession)}</td>
+
+                  {/* Total Van Fee */}
+                  <td>{formatTotalValue(cat.cash.totalVanFee)}</td>
+                  <td>{formatTotalValue(cat.online.totalVanFee)}</td>
+                  <td>{formatTotalValue(cat.overall.totalVanFee)}</td>
+
+                  {/* Total Van Fee Concession */}
+                  <td>{formatTotalValue(cat.cash.totalVanFeeConcession)}</td>
+                  <td>{formatTotalValue(cat.online.totalVanFeeConcession)}</td>
+                  <td>{formatTotalValue(cat.overall.totalVanFeeConcession)}</td>
+
+                  {/* ✅ NEW — Total Fine */}
+                  <td>{formatTotalValue(cat.cash.totalFine)}</td>
+                  <td>{formatTotalValue(cat.online.totalFine)}</td>
+                  <td>{formatTotalValue(cat.overall.totalFine)}</td>
+
+                  {/* ✅ Updated — Total Received (includes Fine) */}
+                  <td>{formatTotalValue(cat.cash.totalReceived)}</td>
+                  <td>{formatTotalValue(cat.online.totalReceived)}</td>
+                  <td>{formatTotalValue(cat.overall.totalReceived)}</td>
+                </tr>
+              ))}
+            </tbody>
+
                 {Object.keys(totalFeeHeadingSummary).length > 0 && (
-                  <tfoot>
+                 <tfoot>
                     <tr>
                       <td><strong>Overall Total</strong></td>
-                      <td>
-                        <strong>{formatTotalValue(totalFeeHeadingSummary.totalFeeReceived.cash)}</strong>
-                      </td>
-                      <td>
-                        <strong>{formatTotalValue(totalFeeHeadingSummary.totalFeeReceived.online)}</strong>
-                      </td>
+
+                      {/* Total Fee Received */}
+                      <td><strong>{formatTotalValue(totalFeeHeadingSummary.totalFeeReceived.cash)}</strong></td>
+                      <td><strong>{formatTotalValue(totalFeeHeadingSummary.totalFeeReceived.online)}</strong></td>
                       <td>
                         <strong>
                           {formatTotalValue(
@@ -670,12 +727,10 @@ const DayWiseReport = () => {
                           )}
                         </strong>
                       </td>
-                      <td>
-                        <strong>{formatTotalValue(totalFeeHeadingSummary.totalConcession.cash)}</strong>
-                      </td>
-                      <td>
-                        <strong>{formatTotalValue(totalFeeHeadingSummary.totalConcession.online)}</strong>
-                      </td>
+
+                      {/* Total Concession */}
+                      <td><strong>{formatTotalValue(totalFeeHeadingSummary.totalConcession.cash)}</strong></td>
+                      <td><strong>{formatTotalValue(totalFeeHeadingSummary.totalConcession.online)}</strong></td>
                       <td>
                         <strong>
                           {formatTotalValue(
@@ -684,12 +739,10 @@ const DayWiseReport = () => {
                           )}
                         </strong>
                       </td>
-                      <td>
-                        <strong>{formatTotalValue(totalFeeHeadingSummary.totalVanFee.cash)}</strong>
-                      </td>
-                      <td>
-                        <strong>{formatTotalValue(totalFeeHeadingSummary.totalVanFee.online)}</strong>
-                      </td>
+
+                      {/* Total Van Fee */}
+                      <td><strong>{formatTotalValue(totalFeeHeadingSummary.totalVanFee.cash)}</strong></td>
+                      <td><strong>{formatTotalValue(totalFeeHeadingSummary.totalVanFee.online)}</strong></td>
                       <td>
                         <strong>
                           {formatTotalValue(
@@ -698,12 +751,10 @@ const DayWiseReport = () => {
                           )}
                         </strong>
                       </td>
-                      <td>
-                        <strong>{formatTotalValue(totalFeeHeadingSummary.totalVanFeeConcession.cash)}</strong>
-                      </td>
-                      <td>
-                        <strong>{formatTotalValue(totalFeeHeadingSummary.totalVanFeeConcession.online)}</strong>
-                      </td>
+
+                      {/* Total Van Fee Concession */}
+                      <td><strong>{formatTotalValue(totalFeeHeadingSummary.totalVanFeeConcession.cash)}</strong></td>
+                      <td><strong>{formatTotalValue(totalFeeHeadingSummary.totalVanFeeConcession.online)}</strong></td>
                       <td>
                         <strong>
                           {formatTotalValue(
@@ -712,22 +763,49 @@ const DayWiseReport = () => {
                           )}
                         </strong>
                       </td>
+
+                      {/* ✅ NEW — Total Fine */}
+                      <td><strong>{formatTotalValue(totalFeeHeadingSummary.totalFine?.cash || 0)}</strong></td>
+                      <td><strong>{formatTotalValue(totalFeeHeadingSummary.totalFine?.online || 0)}</strong></td>
                       <td>
-                        <strong>{formatTotalValue(totalFeeHeadingSummary.totalReceived.cash)}</strong>
+                        <strong>
+                          {formatTotalValue(
+                            (totalFeeHeadingSummary.totalFine?.cash || 0) +
+                              (totalFeeHeadingSummary.totalFine?.online || 0)
+                          )}
+                        </strong>
                       </td>
-                      <td>
-                        <strong>{formatTotalValue(totalFeeHeadingSummary.totalReceived.online)}</strong>
-                      </td>
+
+                      {/* ✅ Updated — Total Received (includes Fine) */}
                       <td>
                         <strong>
                           {formatTotalValue(
                             totalFeeHeadingSummary.totalReceived.cash +
-                              totalFeeHeadingSummary.totalReceived.online
+                              totalFeeHeadingSummary.totalFine?.cash || 0
+                          )}
+                        </strong>
+                      </td>
+                      <td>
+                        <strong>
+                          {formatTotalValue(
+                            totalFeeHeadingSummary.totalReceived.online +
+                              totalFeeHeadingSummary.totalFine?.online || 0
+                          )}
+                        </strong>
+                      </td>
+                      <td>
+                        <strong>
+                          {formatTotalValue(
+                            (totalFeeHeadingSummary.totalReceived.cash +
+                              totalFeeHeadingSummary.totalFine?.cash || 0) +
+                              (totalFeeHeadingSummary.totalReceived.online +
+                                totalFeeHeadingSummary.totalFine?.online || 0)
                           )}
                         </strong>
                       </td>
                     </tr>
                   </tfoot>
+
                 )}
               </Table>
             </>

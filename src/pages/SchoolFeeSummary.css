@@ -86,12 +86,6 @@
 .table-container .table { margin-bottom: 0; }
 
 /* Sticky table header cells */
-/* ─────────────────────────────
-   Sticky Table Header (Vertical Scroll)
-   ───────────────────────────── */
-/* ─────────────────────────────
-   Sticky Table Header (top)
-   ───────────────────────────── */
 .modal-table thead th {
   position: sticky;
   top: 0;
@@ -100,19 +94,18 @@
   box-shadow: 0 2px 3px rgba(0, 0, 0, 0.05);
 }
 
-
-
 /* ─────────────────────────────
-   Scrollable area: show ~15 rows max
+   Scrollable area: show ~10 rows max
    ───────────────────────────── */
 .scrollable-table {
-  max-height: calc(15 * 2.6rem + 70px); /* about 15 rows + header/footer spacing */
+  max-height: calc(10 * 2.6rem + 70px); /* about 10 rows + header/footer spacing */
   overflow-y: auto;
   overflow-x: auto;
   border-top: 1px solid #dee2e6;
   border-bottom: 1px solid #dee2e6;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-gutter: stable both-edges;
 }
-
 
 /* Keep left sticky headers above normal ones */
 .modal-table thead .slc {
@@ -127,7 +120,6 @@
   z-index: 11;
   box-shadow: -1px 0 0 rgba(0, 0, 0, 0.05);
 }
-
 
 /* Main page summary header also sticky */
 .table-sticky thead.sticky-top { top: 0; z-index: 1; }
@@ -249,7 +241,6 @@
   border-top: 2px solid #dee2e6 !important;
 }
 
-
 /* ─────────────────────────────
    Sticky Footer (bottom totals)
    ───────────────────────────── */
@@ -259,8 +250,4 @@
   z-index: 9;
   background: #f8f9fa !important;
   box-shadow: 0 -2px 3px rgba(0, 0, 0, 0.05);
-}
-.scrollable-table {
-  -webkit-overflow-scrolling: touch;
-  scrollbar-gutter: stable both-edges;
 }

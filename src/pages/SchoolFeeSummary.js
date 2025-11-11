@@ -74,9 +74,12 @@ const SchoolFeeSummary = () => {
   const [search, setSearch] = useState("");
   const [selectedHeads, setSelectedHeads] = useState(new Set());
 
-  // Transport pending cache
+  // transport
   const [transportData, setTransportData] = useState([]);
   const [transportMap, setTransportMap] = useState(new Map());
+
+  // NEW: how many rows to show in modal
+  const [modalDisplayCount, setModalDisplayCount] = useState(10);
 
   // ---------------- Fetchers ----------------
   const fetchSchool = async () => {
@@ -126,7 +129,7 @@ const SchoolFeeSummary = () => {
         ? res.data
         : [];
       setTransportData(rows);
-      // Build quick map: student_id -> heads[]
+
       const tmap = new Map();
       rows.forEach((stu) => {
         const totalPending = (stu.heads || []).reduce(
@@ -156,7 +159,6 @@ const SchoolFeeSummary = () => {
     try {
       const res = await api.get("/feedue/school-fee-summary");
       const sorted = (res.data || []).sort((a, b) => Number(a.id) - Number(b.id));
-      // Merge vanFeeDue placeholder (will compute below)
       const merged = sorted.map((r) => ({ ...r, vanFeeDue: 0 }));
       setSummary(merged);
     } catch (err) {
@@ -213,7 +215,6 @@ const SchoolFeeSummary = () => {
       }));
       const totalVanDue = allStudents.reduce((a, s) => a + s.pending, 0);
 
-      // Add same total van due to all heads for display consistency
       const merged = summary.map((head) => ({
         ...head,
         vanFeeDue: totalVanDue,
@@ -247,11 +248,7 @@ const SchoolFeeSummary = () => {
   // -------- Initial Load --------
   useEffect(() => {
     (async () => {
-      await Promise.all([
-        fetchSessions(),
-        fetchSchool(),
-        fetchFeeHeadings(),
-      ]);
+      await Promise.all([fetchSessions(), fetchSchool(), fetchFeeHeadings()]);
       await fetchFeeSummary();
       await fetchTransportPending(activeSessionId);
     })();
@@ -313,6 +310,7 @@ const SchoolFeeSummary = () => {
     setLoadingDetails(true);
     setSearch("");
     setSelectedHeads(new Set([headingName]));
+    setModalDisplayCount(10); // show only 10 initially
 
     try {
       const res = await api.get("/feedue-status/fee-heading-wise-students", {
@@ -331,7 +329,7 @@ const SchoolFeeSummary = () => {
         }
       });
 
-      // Build per-student row: academic heads (+fine) + transport heads per head
+      // Build per-student row
       const finalData = uniq.map((student) => {
         const sid = student.id ?? student.admissionNumber;
         const row = {
@@ -339,6 +337,8 @@ const SchoolFeeSummary = () => {
           name: student.name,
           admissionNumber: student.admissionNumber,
           className: student.className,
+          fatherPhone: student.fatherPhone || "",
+          motherPhone: student.motherPhone || "",
           phone:
             student.phone ||
             student.parentPhone ||
@@ -362,13 +362,12 @@ const SchoolFeeSummary = () => {
           row[`${headName} - Fine`] = fine;
         });
 
-        // Transport heads from map: per head
+        // Transport heads from map
         const transport = transportMap?.get(Number(student.id));
         if (transport && Array.isArray(transport.heads)) {
           transport.heads.forEach((vh) => {
             const label = `${vh.fee_heading_name} (Transport)`;
             const pending = Number(vh.pending || 0);
-            // Transport usually has no "fine", keep 0 (if backend adds later, handle similarly)
             row[`${label} - Remaining`] = pending;
             row[`${label} - Fine`] = 0;
           });
@@ -378,8 +377,7 @@ const SchoolFeeSummary = () => {
       });
 
       // ---- Column Order Fix ----
-      // 1) Collect all head names appearing in rows (academic + transport)
-      const allHeadsMap = new Map(); // headName -> "academic" | "transport"
+      const allHeadsMap = new Map();
       finalData.forEach((r) => {
         Object.keys(r).forEach((k) => {
           if (k.endsWith(" - Remaining")) {
@@ -392,14 +390,11 @@ const SchoolFeeSummary = () => {
         });
       });
 
-      // 2) Academic order from /fee-headings (id asc) => names
       const academicOrder = (feeHeadings || [])
         .sort((a, b) => Number(a.id) - Number(b.id))
         .map((f) => f.fee_heading);
 
-      // 3) Transport order from transportMap (by fee_heading_id asc across any student)
-      //    We build a unique map: head_name -> min(head_id) to maintain stable ordering.
-      const transportHeadOrderMap = new Map(); // name(Transport) -> min id
+      const transportHeadOrderMap = new Map();
       if (transportMap && typeof transportMap.forEach === "function") {
         transportMap.forEach((val) => {
           (val?.heads || []).forEach((vh) => {
@@ -416,23 +411,19 @@ const SchoolFeeSummary = () => {
           });
         });
       }
-      // turn into ordered array by head_id asc
       const transportOrder = Array.from(transportHeadOrderMap.entries())
         .sort((a, b) => Number(a[1]) - Number(b[1]))
         .map(([name]) => name);
 
-      // 4) Merge in desired order but only keep heads that actually appear in this modal
       const sortedHeadNames = [
         ...academicOrder.filter((n) => allHeadsMap.get(n) === "academic"),
         ...transportOrder.filter((n) => allHeadsMap.get(n) === "transport"),
       ];
 
-      // Fallback in case a head exists in data but not in feeHeadings/transport maps (rare)
       if (sortedHeadNames.length !== allHeadsMap.size) {
         const remaining = Array.from(allHeadsMap.keys()).filter(
           (n) => !sortedHeadNames.includes(n)
         );
-        // append remaining by alpha to keep them visible
         remaining.sort((a, b) => a.localeCompare(b));
         sortedHeadNames.push(...remaining);
       }
@@ -447,16 +438,25 @@ const SchoolFeeSummary = () => {
   };
 
   // ---------------- Filters and Totals ----------------
-  const filteredDetails = useMemo(() => {
+
+  // this is the FULL filtered list
+  const filteredAllDetails = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return studentDetails;
     return studentDetails.filter(
       (s) =>
         (s.name || "").toLowerCase().includes(q) ||
         (s.admissionNumber || "").toLowerCase().includes(q) ||
-        (s.className || "").toLowerCase().includes(q)
+        (s.className || "").toLowerCase().includes(q) ||
+        (s.fatherPhone || "").toLowerCase().includes(q) ||
+        (s.motherPhone || "").toLowerCase().includes(q)
     );
   }, [search, studentDetails]);
+
+  // this is only what we SHOW (first 10, then more on scroll)
+  const visibleDetails = useMemo(() => {
+    return filteredAllDetails.slice(0, modalDisplayCount);
+  }, [filteredAllDetails, modalDisplayCount]);
 
   const toggleHead = (head) => {
     setSelectedHeads((prev) => {
@@ -475,14 +475,15 @@ const SchoolFeeSummary = () => {
     headNames.forEach((head) => {
       totals[head] = { remaining: 0, fine: 0 };
     });
-    filteredDetails.forEach((stu) => {
+    // IMPORTANT: totals should be for ALL filtered, not just visible
+    filteredAllDetails.forEach((stu) => {
       headNames.forEach((head) => {
         totals[head].remaining += Number(stu[`${head} - Remaining`] || 0);
         totals[head].fine += Number(stu[`${head} - Fine`] || 0);
       });
     });
     return totals;
-  }, [filteredDetails, headNames]);
+  }, [filteredAllDetails, headNames]);
 
   const grandTotal = useMemo(() => {
     return Array.from(selectedHeads).reduce((sum, head) => {
@@ -494,16 +495,33 @@ const SchoolFeeSummary = () => {
     }, 0);
   }, [columnTotals, selectedHeads]);
 
+  // load more on scroll
+  const handleModalScroll = (e) => {
+    const el = e.target;
+    const isBottom =
+      el.scrollTop + el.clientHeight >= el.scrollHeight - 10;
+    if (isBottom) {
+      setModalDisplayCount((prev) => {
+        const next = prev + 10;
+        return next > filteredAllDetails.length ? filteredAllDetails.length : next;
+      });
+    }
+  };
+
   // ---------------- Export Excel ----------------
   const exportToExcel = () => {
-    const baseCols = ["#", "Name", "Admission No", "Class"];
-    const excelRows = filteredDetails.map((stu, idx) => {
+    const baseFixedCols = ["#", "Name", "Admission No", "Class"];
+    const phoneCols = ["Father Phone", "Mother Phone"];
+
+    // export should use ALL filtered, not only visible
+    const excelRows = filteredAllDetails.map((stu, idx) => {
       const row = {
         "#": idx + 1,
         Name: stu.name,
         "Admission No": stu.admissionNumber,
         Class: stu.className,
       };
+
       let overall = 0;
       headNames.forEach((head) => {
         if (!selectedHeads.has(head)) return;
@@ -513,16 +531,20 @@ const SchoolFeeSummary = () => {
         row[`${head} Amount`] = amt;
         row[`${head} Fine`] = fine;
       });
+
       row["Overall Total"] = overall;
+      row["Father Phone"] = stu.fatherPhone || "";
+      row["Mother Phone"] = stu.motherPhone || "";
       return row;
     });
 
     const headerCols = [
-      ...baseCols,
+      ...baseFixedCols,
       ...headNames.flatMap((h) =>
         selectedHeads.has(h) ? [`${h} Amount`, `${h} Fine`] : []
       ),
       "Overall Total",
+      ...phoneCols,
     ];
 
     const worksheet = XLSX.utils.json_to_sheet(excelRows, { header: headerCols });
@@ -535,7 +557,10 @@ const SchoolFeeSummary = () => {
     const blob = new Blob([excelBuffer], { type: "application/octet-stream" });
     saveAs(
       blob,
-      `${selectedHeadingName}_${selectedStatus}_Students.xlsx`.replace(/\s+/g, "_")
+      `${selectedHeadingName}_${selectedStatus}_Students.xlsx`.replace(
+        /\s+/g,
+        "_"
+      )
     );
   };
 
@@ -543,7 +568,6 @@ const SchoolFeeSummary = () => {
 
 // ======== PART 4/4: Main Table, Modal UI, and WhatsApp ========
 
-  // ---------------- WhatsApp Sender ----------------
   const sendWhatsAppBatch = async () => {
     if (selectedHeads.size === 0) {
       await Swal.fire({
@@ -558,7 +582,8 @@ const SchoolFeeSummary = () => {
     setShowModal(false);
     await new Promise((r) => setTimeout(r, 200));
 
-    const count = filteredDetails.length;
+    // use ALL filtered students here
+    const count = filteredAllDetails.length;
 
     const confirm = await Swal.fire({
       title: "Send WhatsApp Messages?",
@@ -575,7 +600,7 @@ const SchoolFeeSummary = () => {
       Swal.showLoading();
 
       const payload = {
-        students: filteredDetails
+        students: filteredAllDetails
           .map((s) => {
             const included = [];
             let overall = 0;
@@ -682,45 +707,47 @@ const SchoolFeeSummary = () => {
 
       {/* Opening Balances */}
       {obBreakdown.length > 0 && (
-  <div className="mb-4">
-    <h5 className="fw-bold text-primary mb-3">Opening Balances</h5>
-    <div className="rounded border p-2 bg-light">
-      <Table striped bordered hover size="sm" className="mb-0">
-        <thead className="bg-secondary-subtle">
-          <tr>
-            <th style={{ width: "60px", textAlign: "center" }}>#</th>
-            <th>Particular</th>
-            <th className="text-end" style={{ width: "180px" }}>
-              Amount
-            </th>
-          </tr>
-        </thead>
+        <div className="mb-4">
+          <h5 className="fw-bold text-primary mb-3">Opening Balances</h5>
+          <div className="rounded border p-2 bg-light">
+            <Table striped bordered hover size="sm" className="mb-0">
+              <thead className="bg-secondary-subtle">
+                <tr>
+                  <th style={{ width: "60px", textAlign: "center" }}>#</th>
+                  <th>Particular</th>
+                  <th className="text-end" style={{ width: "180px" }}>
+                    Amount
+                  </th>
+                </tr>
+              </thead>
 
-        <tbody>
-          {obBreakdown.map((row, i) => (
-            <tr key={row.key}>
-              <td style={{ textAlign: "center" }}>{i + 1}</td>
-              <td className="fw-semibold">{row.label}</td>
-              <td className="text-end">{formatCurrency(row.amount)}</td>
-            </tr>
-          ))}
+              <tbody>
+                {obBreakdown.map((row, i) => (
+                  <tr key={row.key}>
+                    <td style={{ textAlign: "center" }}>{i + 1}</td>
+                    <td className="fw-semibold">{row.label}</td>
+                    <td className="text-end">{formatCurrency(row.amount)}</td>
+                  </tr>
+                ))}
 
-          <tr className="table-total-row">
-            <td colSpan={2} className="text-end fw-bold">
-              Total
-            </td>
-            <td className="text-end fw-bold text-success">
-              {formatCurrency(
-                obBreakdown.reduce((a, r) => a + Number(r.amount || 0), 0)
-              )}
-            </td>
-          </tr>
-        </tbody>
-      </Table>
-    </div>
-  </div>
-)}
-
+                <tr className="table-total-row">
+                  <td colSpan={2} className="text-end fw-bold">
+                    Total
+                  </td>
+                  <td className="text-end fw-bold text-success">
+                    {formatCurrency(
+                      obBreakdown.reduce(
+                        (a, r) => a + Number(r.amount || 0),
+                        0
+                      )
+                    )}
+                  </td>
+                </tr>
+              </tbody>
+            </Table>
+          </div>
+        </div>
+      )}
 
       {/* Summary Table */}
       {loading ? (
@@ -819,122 +846,128 @@ const SchoolFeeSummary = () => {
         </div>
       )}
 
-          {/* Modal for Students */}
-          <Modal
-            show={showModal}
-            onHide={() => setShowModal(false)}
-            size="xl"
-            fullscreen="md-down"
-            centered
-          >
-            <Modal.Header closeButton>
-              <Modal.Title>
-                Students — {selectedStatus?.toUpperCase()} ({selectedHeadingName})
-              </Modal.Title>
-            </Modal.Header>
+      {/* Modal for Students */}
+      <Modal
+        show={showModal}
+        onHide={() => setShowModal(false)}
+        size="xl"
+        fullscreen="md-down"
+        centered
+      >
+        <Modal.Header closeButton>
+          <Modal.Title>
+            Students — {selectedStatus?.toUpperCase()} ({selectedHeadingName})
+          </Modal.Title>
+        </Modal.Header>
         <Modal.Body className="modal-body-fixed">
+          {/* Controls */}
+          <div className="modal-controls">
+            <InputGroup className="modal-search">
+              <InputGroup.Text>Search</InputGroup.Text>
+              <Form.Control
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setModalDisplayCount(10); // reset to 10 when searching
+                }}
+                placeholder="Type name or class..."
+              />
+            </InputGroup>
 
-  {/* ───────────── Controls (always visible) ───────────── */}
-  <div className="modal-controls">
-    <InputGroup className="modal-search">
-      <InputGroup.Text>Search</InputGroup.Text>
-      <Form.Control
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        placeholder="Type name or class..."
-      />
-    </InputGroup>
+            <div className="d-flex gap-2">
+              <Button variant="outline-primary" size="sm" onClick={selectAllHeads}>
+                Select All
+              </Button>
+              <Button variant="outline-secondary" size="sm" onClick={clearAllHeads}>
+                Clear
+              </Button>
+              <Button variant="success" size="sm" onClick={exportToExcel}>
+                Excel
+              </Button>
+              <Button variant="success" size="sm" onClick={sendWhatsAppBatch}>
+                WhatsApp
+              </Button>
+            </div>
+          </div>
 
-    <div className="d-flex gap-2">
-      <Button variant="outline-primary" size="sm" onClick={selectAllHeads}>
-        Select All
-      </Button>
-      <Button variant="outline-secondary" size="sm" onClick={clearAllHeads}>
-        Clear
-      </Button>
-      <Button variant="success" size="sm" onClick={exportToExcel}>
-        Excel
-      </Button>
-      <Button variant="success" size="sm" onClick={sendWhatsAppBatch}>
-        WhatsApp
-      </Button>
-    </div>
-  </div>
+          {/* Scrollable table (now loads more on scroll) */}
+          <div className="scrollable-table" onScroll={handleModalScroll}>
+            <Table striped bordered hover className="modal-table">
+              <thead>
+                <tr>
+                  <th className="slc slc-1">#</th>
+                  <th className="slc slc-2">Name</th>
+                  <th className="slc slc-3">Admission No</th>
+                  <th className="slc slc-4">Class</th>
+                  {headNames.map((head) => (
+                    <th key={head} className="feehead-header">
+                      <div className="d-flex align-items-center justify-content-between">
+                        <span>{head}</span>
+                        <Form.Check
+                          type="checkbox"
+                          checked={selectedHeads.has(head)}
+                          onChange={() => toggleHead(head)}
+                        />
+                      </div>
+                    </th>
+                  ))}
+                  <th className="sticky-overall">Overall</th>
+                  <th className="slc slc-5">Father Phone</th>
+                  <th className="slc slc-6">Mother Phone</th>
+                </tr>
+              </thead>
 
-  {/* ───────────── Scrollable table (15 rows view) ───────────── */}
-  <div className="scrollable-table">
-    <Table striped bordered hover className="modal-table">
-      <thead>
-        <tr>
-          <th className="slc slc-1">#</th>
-          <th className="slc slc-2">Name</th>
-          <th className="slc slc-3">Admission No</th>
-          <th className="slc slc-4">Class</th>
-          {headNames.map((head) => (
-            <th key={head} className="feehead-header">
-              <div className="d-flex align-items-center justify-content-between">
-                <span>{head}</span>
-                <Form.Check
-                  type="checkbox"
-                  checked={selectedHeads.has(head)}
-                  onChange={() => toggleHead(head)}
-                />
-              </div>
-            </th>
-          ))}
-          <th className="sticky-overall">Overall</th>
-        </tr>
-      </thead>
+              <tbody>
+                {visibleDetails.map((stu, idx) => {
+                  let overall = 0;
+                  headNames.forEach((h) => {
+                    if (!selectedHeads.has(h)) return;
+                    const amt = Number(stu[`${h} - Remaining`] || 0);
+                    const fine = Number(stu[`${h} - Fine`] || 0);
+                    overall += amt + fine;
+                  });
+                  return (
+                    <tr key={idx}>
+                      <td className="slc slc-1">{idx + 1}</td>
+                      <td className="slc slc-2">{stu.name}</td>
+                      <td className="slc slc-3">{stu.admissionNumber}</td>
+                      <td className="slc slc-4">{stu.className}</td>
+                      {headNames.map((h) => {
+                        const amt = Number(stu[`${h} - Remaining`] || 0);
+                        const fine = Number(stu[`${h} - Fine`] || 0);
+                        return <td key={h}>{formatCurrency(amt + fine)}</td>;
+                      })}
+                      <td className="sticky-overall text-danger fw-bold">
+                        {formatCurrency(overall)}
+                      </td>
+                      <td className="slc slc-5">{stu.fatherPhone || ""}</td>
+                      <td className="slc slc-6">{stu.motherPhone || ""}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
 
-      <tbody>
-        {filteredDetails.map((stu, idx) => {
-          let overall = 0;
-          headNames.forEach((h) => {
-            if (!selectedHeads.has(h)) return;
-            const amt = Number(stu[`${h} - Remaining`] || 0);
-            const fine = Number(stu[`${h} - Fine`] || 0);
-            overall += amt + fine;
-          });
-          return (
-            <tr key={idx}>
-              <td className="slc slc-1">{idx + 1}</td>
-              <td className="slc slc-2">{stu.name}</td>
-              <td className="slc slc-3">{stu.admissionNumber}</td>
-              <td className="slc slc-4">{stu.className}</td>
-              {headNames.map((h) => {
-                const amt = Number(stu[`${h} - Remaining`] || 0);
-                const fine = Number(stu[`${h} - Fine`] || 0);
-                return <td key={h}>{formatCurrency(amt + fine)}</td>;
-              })}
-              <td className="sticky-overall text-danger fw-bold">
-                {formatCurrency(overall)}
-              </td>
-            </tr>
-          );
-        })}
-      </tbody>
-
-      {/* Sticky total row */}
-      <tfoot>
-        <tr className="table-total-row sticky-footer">
-          <td className="slc slc-1" colSpan={4}>
-            Total (All Selected)
-          </td>
-          {headNames.map((h) => {
-            const tot =
-              (columnTotals[h]?.remaining || 0) +
-              (columnTotals[h]?.fine || 0);
-            return <td key={h}>{formatCurrency(tot)}</td>;
-          })}
-          <td className="sticky-overall fw-bold text-danger">
-            {formatCurrency(grandTotal)}
-          </td>
-        </tr>
-      </tfoot>
-    </Table>
-  </div>
-</Modal.Body>
-
+              <tfoot>
+                <tr className="table-total-row sticky-footer">
+                  <td className="slc slc-1" colSpan={4}>
+                    Total (All Selected)
+                  </td>
+                  {headNames.map((h) => {
+                    const tot =
+                      (columnTotals[h]?.remaining || 0) +
+                      (columnTotals[h]?.fine || 0);
+                    return <td key={h}>{formatCurrency(tot)}</td>;
+                  })}
+                  <td className="sticky-overall fw-bold text-danger">
+                    {formatCurrency(grandTotal)}
+                  </td>
+                  <td></td>
+                  <td></td>
+                </tr>
+              </tfoot>
+            </Table>
+          </div>
+        </Modal.Body>
 
         <Modal.Footer>
           <small className="text-muted">

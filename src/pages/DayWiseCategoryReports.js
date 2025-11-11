@@ -64,6 +64,7 @@ const pivotReportData = (data) => {
         feeCategories: {},
         vanFeeTotal: 0,
         fineAmount: 0,
+         Remarks: curr.Remarks || null, // ✅ NEW
       };
     }
     const category = curr.feeCategoryName;
@@ -346,6 +347,7 @@ const DayWiseReport = () => {
       ...categories,
       'Van Fee',
       'Fine',
+      'Remarks',
       'Overall Total'
     ];
 
@@ -374,6 +376,7 @@ const DayWiseReport = () => {
         ...categories.reduce((acc, cat, i) => { acc[cat] = categoryValues[i]; return acc; }, {}),
         'Van Fee': row.vanFeeTotal || 0,
         'Fine': row.fineAmount || 0,
+        'Remarks': row.Remarks || '',  // ✅ new
         'Overall Total': overallTotal
       };
     });
@@ -568,6 +571,7 @@ const DayWiseReport = () => {
                       ))}
                       <th className="sticky-top bg-white">Van Fee</th>
                       <th className="sticky-top bg-white">Fine</th>
+                      <th className="sticky-top bg-white">Remarks</th>
                       <th className="sticky-top bg-white">Overall Total</th>
                     </tr>
                   </thead>
@@ -601,7 +605,9 @@ const DayWiseReport = () => {
                           <td>
                             {row.fineAmount > 0 ? formatTotalValue(row.fineAmount) : "-"}
                           </td>
+                          <td>{row.Remarks || "—"}</td> {/* ✅ new column */}
                           <td>{formatTotalValue(overallTotal + (row.fineAmount || 0))}</td>
+
                         </tr>
                       );
                     })}
@@ -615,6 +621,7 @@ const DayWiseReport = () => {
                         ))}
                         <td><strong>{formatTotalValue(overallVanFeeTotal)}</strong></td>
                         <td><strong>{formatTotalValue(overallFineTotal)}</strong></td>
+                        <td><strong>—</strong></td>
                         <td><strong>{formatTotalValue(grandTotal + overallVanFeeTotal + overallFineTotal)}</strong></td>
                       </tr>
                     </tfoot>

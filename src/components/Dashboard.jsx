@@ -1,5 +1,11 @@
 // File: src/components/Dashboard.jsx
-import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import React, {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useCallback,
+} from "react";
 import api from "../api";
 
 // Charts
@@ -35,7 +41,13 @@ ChartJS.register(
 const ValueLabelPlugin = {
   id: "valueLabel",
   afterDatasetsDraw(chart, args, opts) {
-    const { enabled = false, formatter, showZero = true, align = "center", offsetY = -8 } = opts || {};
+    const {
+      enabled = false,
+      formatter,
+      showZero = true,
+      align = "center",
+      offsetY = -8,
+    } = opts || {};
     if (!enabled) return;
 
     const { ctx } = chart;
@@ -50,13 +62,18 @@ const ValueLabelPlugin = {
         const value = Number(raw || 0);
         if (!showZero && !value) return;
 
-        let pos = element.tooltipPosition ? element.tooltipPosition() : element.getCenterPoint?.() || { x: 0, y: 0 };
+        let pos = element.tooltipPosition
+          ? element.tooltipPosition()
+          : element.getCenterPoint?.() || { x: 0, y: 0 };
         let x = pos.x;
         let y = pos.y;
 
         if (meta.type === "bar") y = y + (offsetY || -8);
 
-        const text = typeof formatter === "function" ? formatter(value, { chart, dataset, datasetIndex, index }) : String(value);
+        const text =
+          typeof formatter === "function"
+            ? formatter(value, { chart, dataset, datasetIndex, index })
+            : String(value);
 
         ctx.font = "bold 13px 'Inter', sans-serif";
         ctx.fillStyle = "#1f2937";
@@ -108,7 +125,7 @@ const palette = [
   "#06b6d4",
 ];
 
-// Enhanced gradient palette for more vibrancy
+// Enhanced gradient palette
 const cardGradients = [
   "linear-gradient(135deg, #6366f1 0%, #3b82f6 100%)",
   "linear-gradient(135deg, #22c55e 0%, #16a34a 100%)",
@@ -137,17 +154,37 @@ const Dashboard = () => {
   const [selectedSessionName, setSelectedSessionName] = useState("");
 
   // Data states
-  const [reportData, setReportData] = useState([]); // session day-wise (we aggregate)
-  const [dayWiseSummary, setDayWiseSummary] = useState([]); // session day-wise for line chart
+  const [reportData, setReportData] = useState([]); // session day-wise
+  const [dayWiseSummary, setDayWiseSummary] = useState([]);
   const [classWiseCount, setClassWiseCount] = useState([]);
-  const [casteCategories, setCasteCategories] = useState(["SC", "ST", "OBC", "General"]);
-  const [religionCategories, setReligionCategories] = useState(["Hindu", "Sikh", "Muslim", "Christian", "Other"]);
+  const [casteCategories, setCasteCategories] = useState([
+    "SC",
+    "ST",
+    "OBC",
+    "General",
+  ]);
+  const [religionCategories, setReligionCategories] = useState([
+    "Hindu",
+    "Sikh",
+    "Muslim",
+    "Christian",
+    "Other",
+  ]);
   const [genderKeys, setGenderKeys] = useState(["Male", "Female"]);
   const [grandTotal, setGrandTotal] = useState(null);
   const [religionGrandTotal, setReligionGrandTotal] = useState(null);
 
+  // ✅ NEW: recent enquiries
+  const [recentEnquiries, setRecentEnquiries] = useState([]);
+
   // UX states
-  const [loading, setLoading] = useState({ session: false, report: false, day: false, class: false, cr: false });
+  const [loading, setLoading] = useState({
+    session: false,
+    report: false,
+    day: false,
+    class: false,
+    cr: false,
+  });
   const [error, setError] = useState("");
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [lastUpdated, setLastUpdated] = useState(null);
@@ -178,10 +215,9 @@ const Dashboard = () => {
   const fetchSessions = useCallback(async () => {
     setLoading((s) => ({ ...s, session: true }));
     try {
-      const res = await api.get("/sessions"); // public list
+      const res = await api.get("/sessions");
       const list = Array.isArray(res.data) ? res.data : [];
       setSessions(list);
-      // pick active by default
       const active = list.find((s) => s.is_active);
       const fallback = list[0];
       const chosen = active || fallback || null;
@@ -250,11 +286,9 @@ const Dashboard = () => {
       if (Array.isArray(data?.religions)) setReligionCategories(data.religions);
       if (Array.isArray(data?.genders)) setGenderKeys(data.genders);
       if (data?.grandTotal) setGrandTotal(data.grandTotal);
-      if (data?.religionGrandTotal) setReligionGrandTotal(data.religionGrandTotal);
-
-      // If backend returns session meta, reflect the selected name
+      if (data?.religionGrandTotal)
+        setReligionGrandTotal(data.religionGrandTotal);
       if (data?.session?.name) setSelectedSessionName(data.session.name);
-
       setError("");
       setLastUpdated(new Date());
     } catch (e) {
@@ -265,11 +299,28 @@ const Dashboard = () => {
     }
   }, [selectedSessionId]);
 
+  // ✅ fetch recent enquiries
+  const fetchRecentEnquiries = useCallback(async () => {
+    try {
+      const res = await api.get("/enquiries");
+      const list = Array.isArray(res.data) ? res.data.slice(0, 5) : [];
+      setRecentEnquiries(list);
+    } catch (e) {
+      console.error("Error fetching recent enquiries:", e);
+    }
+  }, []);
+
   const refreshAll = useCallback(() => {
     fetchSessionDayWise();
     fetchClassWiseCount();
     fetchCasteReligion();
-  }, [fetchSessionDayWise, fetchClassWiseCount, fetchCasteReligion]);
+    fetchRecentEnquiries();
+  }, [
+    fetchSessionDayWise,
+    fetchClassWiseCount,
+    fetchCasteReligion,
+    fetchRecentEnquiries,
+  ]);
 
   // Load data when a session is chosen
   useEffect(() => {
@@ -283,14 +334,31 @@ const Dashboard = () => {
 
     if (!autoRefresh || !selectedSessionId) return;
 
-    timersRef.current.report = setInterval(fetchSessionDayWise, POLLING_INTERVAL);
-    timersRef.current.class = setInterval(fetchClassWiseCount, POLLING_INTERVAL);
+    timersRef.current.report = setInterval(
+      fetchSessionDayWise,
+      POLLING_INTERVAL
+    );
+    timersRef.current.class = setInterval(
+      fetchClassWiseCount,
+      POLLING_INTERVAL
+    );
     timersRef.current.cr = setInterval(fetchCasteReligion, POLLING_INTERVAL);
+    timersRef.current.enq = setInterval(
+      fetchRecentEnquiries,
+      POLLING_INTERVAL * 2
+    );
 
     return () => {
       Object.values(timersRef.current || {}).forEach(clearInterval);
     };
-  }, [autoRefresh, fetchSessionDayWise, fetchClassWiseCount, fetchCasteReligion, selectedSessionId]);
+  }, [
+    autoRefresh,
+    fetchSessionDayWise,
+    fetchClassWiseCount,
+    fetchCasteReligion,
+    fetchRecentEnquiries,
+    selectedSessionId,
+  ]);
 
   /* ----------------------- DERIVED AGGREGATIONS ---------------------- */
   const summary = useMemo(() => {
@@ -309,15 +377,26 @@ const Dashboard = () => {
       acc[category].totalFeeReceived += Number(item.totalFeeReceived || 0);
       acc[category].totalConcession += Number(item.totalConcession || 0);
       acc[category].totalVanFee += Number(item.totalVanFee || 0);
-      acc[category].totalVanFeeConcession += Number(item.totalVanFeeConcession || 0);
+      acc[category].totalVanFeeConcession += Number(
+        item.totalVanFeeConcession || 0
+      );
       acc[category].totalFine += Number(item.totalFine || 0);
       return acc;
     }, {});
   }, [reportData]);
 
-  const totalFeeReceived = Object.values(summary).reduce((sum, c) => sum + c.totalFeeReceived, 0);
-  const totalVanFee = Object.values(summary).reduce((sum, c) => sum + c.totalVanFee, 0);
-  const totalFine = Object.values(summary).reduce((sum, c) => sum + (c.totalFine || 0), 0);
+  const totalFeeReceived = Object.values(summary).reduce(
+    (sum, c) => sum + c.totalFeeReceived,
+    0
+  );
+  const totalVanFee = Object.values(summary).reduce(
+    (sum, c) => sum + c.totalVanFee,
+    0
+  );
+  const totalFine = Object.values(summary).reduce(
+    (sum, c) => sum + (c.totalFine || 0),
+    0
+  );
 
   // Enrollments (class-wise count)
   const newEnrollments = classWiseCount
@@ -332,13 +411,22 @@ const Dashboard = () => {
   classWiseCount.forEach((item) => {
     const cls = item.className;
     if (!cls) return;
-    if (!classWiseEnrollments[cls]) classWiseEnrollments[cls] = { new: 0, old: 0 };
-    if (item.admissionType === "New") classWiseEnrollments[cls].new += Number(item.studentCount || 0);
-    if (item.admissionType === "Old") classWiseEnrollments[cls].old += Number(item.studentCount || 0);
+    if (!classWiseEnrollments[cls])
+      classWiseEnrollments[cls] = { new: 0, old: 0 };
+    if (item.admissionType === "New")
+      classWiseEnrollments[cls].new += Number(item.studentCount || 0);
+    if (item.admissionType === "Old")
+      classWiseEnrollments[cls].old += Number(item.studentCount || 0);
   });
   const classColumns = Object.keys(classWiseEnrollments).sort();
-  const overallNew = classColumns.reduce((s, c) => s + classWiseEnrollments[c].new, 0);
-  const overallOld = classColumns.reduce((s, c) => s + classWiseEnrollments[c].old, 0);
+  const overallNew = classColumns.reduce(
+    (s, c) => s + classWiseEnrollments[c].new,
+    0
+  );
+  const overallOld = classColumns.reduce(
+    (s, c) => s + classWiseEnrollments[c].old,
+    0
+  );
   const overallTotal = overallNew + overallOld;
 
   // Gender/Caste/Religion derived
@@ -363,7 +451,7 @@ const Dashboard = () => {
   }, [religionCategories, religionGrandTotal]);
 
   /* ----------------------------- CHART DATA ----------------------------- */
-  // Pie (fee distribution) from summary
+  // Pie
   const pieData = useMemo(() => {
     const labels = Object.keys(summary);
     const data = Object.values(summary).map((t) => t.totalFeeReceived);
@@ -373,7 +461,9 @@ const Dashboard = () => {
         {
           label: "Total Fee Received",
           data,
-          backgroundColor: labels.map((_, i) => palette[i % palette.length] + "66"), // More opaque for vibrancy
+          backgroundColor: labels.map(
+            (_, i) => palette[i % palette.length] + "66"
+          ),
           borderColor: labels.map((_, i) => palette[i % palette.length]),
           borderWidth: 2,
           hoverOffset: 24,
@@ -387,7 +477,13 @@ const Dashboard = () => {
       responsive: true,
       maintainAspectRatio: false,
       plugins: {
-        legend: { display: showLegends.pie, position: "right", labels: { font: { family: "'Inter', sans-serif", size: 13 } } },
+        legend: {
+          display: showLegends.pie,
+          position: "right",
+          labels: {
+            font: { family: "'Inter', sans-serif", size: 13 },
+          },
+        },
         tooltip: {
           backgroundColor: "rgba(31, 41, 55, 0.9)",
           titleFont: { family: "'Inter', sans-serif", size: 14 },
@@ -397,25 +493,38 @@ const Dashboard = () => {
               const label = ctx.label || "";
               const value = ctx.parsed || 0;
               const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
-              const pct = total ? ((value / total) * 100).toFixed(2) + "%" : "0%";
+              const pct = total
+                ? ((value / total) * 100).toFixed(2) + "%"
+                : "0%";
               return `${label}: ${formatCurrency(value)} (${pct})`;
             },
           },
         },
       },
       cutout: "60%",
-      animation: { animateScale: true, animateRotate: true, duration: 1200, easing: "easeOutBack" },
+      animation: {
+        animateScale: true,
+        animateRotate: true,
+        duration: 1200,
+        easing: "easeOutBack",
+      },
     }),
     [showLegends.pie]
   );
 
-  // Line (fee trend - day wise per category)
+  // Line
   const uniqueDates = useMemo(
-    () => Array.from(new Set((dayWiseSummary || []).map((r) => r.transactionDate))).sort(),
+    () =>
+      Array.from(
+        new Set((dayWiseSummary || []).map((r) => r.transactionDate))
+      ).sort(),
     [dayWiseSummary]
   );
   const uniqueCategories = useMemo(
-    () => Array.from(new Set((dayWiseSummary || []).map((r) => r.feeCategoryName))),
+    () =>
+      Array.from(
+        new Set((dayWiseSummary || []).map((r) => r.feeCategoryName))
+      ),
     [dayWiseSummary]
   );
 
@@ -453,17 +562,33 @@ const Dashboard = () => {
       maintainAspectRatio: false,
       scales: {
         x: {
-          title: { display: true, text: "Date", font: { family: "'Inter', sans-serif", size: 12 } },
+          title: {
+            display: true,
+            text: "Date",
+            font: { family: "'Inter', sans-serif", size: 12 },
+          },
           grid: { display: false },
         },
         y: {
-          title: { display: true, text: "Fee Received", font: { family: "'Inter', sans-serif", size: 12 } },
+          title: {
+            display: true,
+            text: "Fee Received",
+            font: { family: "'Inter', sans-serif", size: 12 },
+          },
           beginAtZero: true,
-          ticks: { callback: (val) => compactNumber(val), font: { family: "'Inter', sans-serif", size: 12 } },
+          ticks: {
+            callback: (val) => compactNumber(val),
+            font: { family: "'Inter', sans-serif", size: 12 },
+          },
           grid: { color: "rgba(0, 0, 0, 0.05)" },
         },
       },
-      plugins: { legend: { display: showLegends.line, labels: { font: { family: "'Inter', sans-serif", size: 13 } } } },
+      plugins: {
+        legend: {
+          display: showLegends.line,
+          labels: { font: { family: "'Inter', sans-serif", size: 13 } },
+        },
+      },
       interaction: { intersect: false, mode: "index" },
       animation: { duration: 1200, easing: "easeOutQuart" },
     }),
@@ -472,11 +597,15 @@ const Dashboard = () => {
 
   // Bar (enrollments)
   const uniqueClasses = useMemo(
-    () => Array.from(new Set((classWiseCount || []).map((r) => r.className))).sort(),
+    () =>
+      Array.from(new Set((classWiseCount || []).map((r) => r.className))).sort(),
     [classWiseCount]
   );
   const uniqueAdmissionTypes = useMemo(
-    () => Array.from(new Set((classWiseCount || []).map((r) => r.admissionType))),
+    () =>
+      Array.from(
+        new Set((classWiseCount || []).map((r) => r.admissionType))
+      ),
     [classWiseCount]
   );
   const barDatasets = useMemo(
@@ -484,10 +613,12 @@ const Dashboard = () => {
       uniqueAdmissionTypes.map((type, idx) => ({
         label: type,
         data: uniqueClasses.map((cls) => {
-          const rec = classWiseCount.find((r) => r.className === cls && r.admissionType === type);
+          const rec = classWiseCount.find(
+            (r) => r.className === cls && r.admissionType === type
+          );
           return rec ? Number(rec.studentCount || 0) : 0;
         }),
-        backgroundColor: `${palette[idx % palette.length]}66`, // More vibrant
+        backgroundColor: `${palette[idx % palette.length]}66`,
         borderColor: palette[idx % palette.length],
         borderWidth: 2,
         borderRadius: 8,
@@ -504,18 +635,32 @@ const Dashboard = () => {
       maintainAspectRatio: false,
       scales: {
         x: {
-          title: { display: true, text: "Class", font: { family: "'Inter', sans-serif", size: 12 } },
+          title: {
+            display: true,
+            text: "Class",
+            font: { family: "'Inter', sans-serif", size: 12 },
+          },
           grid: { display: false },
         },
         y: {
-          title: { display: true, text: "Student Count", font: { family: "'Inter', sans-serif", size: 12 } },
+          title: {
+            display: true,
+            text: "Student Count",
+            font: { family: "'Inter', sans-serif", size: 12 },
+          },
           beginAtZero: true,
-          ticks: { precision: 0, font: { family: "'Inter', sans-serif", size: 12 } },
+          ticks: {
+            precision: 0,
+            font: { family: "'Inter', sans-serif", size: 12 },
+          },
           grid: { color: "rgba(0, 0, 0, 0.05)" },
         },
       },
       plugins: {
-        legend: { display: showLegends.bar, labels: { font: { family: "'Inter', sans-serif", size: 13 } } },
+        legend: {
+          display: showLegends.bar,
+          labels: { font: { family: "'Inter', sans-serif", size: 13 } },
+        },
         valueLabel: {
           enabled: true,
           showZero: false,
@@ -530,24 +675,74 @@ const Dashboard = () => {
 
   /* ------------------------------- UI DATA ------------------------------ */
   const kpis = [
-    { label: "Fee Received (Session)", value: totalFeeReceived, icon: "bi-cash-coin" },
+    {
+      label: "Fee Received (Session)",
+      value: totalFeeReceived,
+      icon: "bi-cash-coin",
+    },
     { label: "Van Fee (Session)", value: totalVanFee, icon: "bi-truck" },
-    { label: "Fine (Session)", value: totalFine, icon: "bi-exclamation-triangle" },
-    { label: "Enrollments (Total)", value: totalEnrollments, icon: "bi-people" },
+    {
+      label: "Fine (Session)",
+      value: totalFine,
+      icon: "bi-exclamation-triangle",
+    },
+    {
+      label: "Enrollments (Total)",
+      value: totalEnrollments,
+      icon: "bi-people",
+    },
     { label: "New", value: newEnrollments, icon: "bi-person-plus" },
     { label: "Old", value: oldEnrollments, icon: "bi-person-check" },
   ];
 
-  const totalForShare = Object.values(summary).reduce((a, c) => a + (c?.totalFeeReceived || 0), 0);
+  const totalForShare = Object.values(summary).reduce(
+    (a, c) => a + (c?.totalFeeReceived || 0),
+    0
+  );
 
   const quickLinks = [
-    { label: "Collect Fee", icon: "bi-cash-stack", href: "/transactions", gradient: "linear-gradient(135deg, #22c55e, #16a34a)" },
-    { label: "Fee Due Report", icon: "bi-receipt", href: "/student-due", gradient: "linear-gradient(135deg, #22c55e, #16a34a)" },
-    { label: "Pending Due", icon: "bi-list-check", href: "/reports/school-fee-summary", gradient: "linear-gradient(135deg, #3b82f6, #2563eb)" },
-    { label: "Day Summary", icon: "bi-calendar2-check", href: "/reports/day-wise", gradient: "linear-gradient(135deg, #f59e0b, #d97706)" },
-    { label: "Transport", icon: "bi-truck", href: "/reports/van-fee", gradient: "linear-gradient(135deg, #06b6d4, #0891b2)" },
-    { label: "Students", icon: "bi-people", href: "/students", gradient: "linear-gradient(135deg, #a855f7, #7c3aed)" },
-    { label: "Caste/Gender & Religion", icon: "bi-people-fill", href: "/reports/caste-gender", gradient: "linear-gradient(135deg, #ef4444, #dc2626)" },
+    {
+      label: "Collect Fee",
+      icon: "bi-cash-stack",
+      href: "/transactions",
+      gradient: "linear-gradient(135deg, #22c55e, #16a34a)",
+    },
+    {
+      label: "Fee Due Report",
+      icon: "bi-receipt",
+      href: "/student-due",
+      gradient: "linear-gradient(135deg, #22c55e, #16a34a)",
+    },
+    {
+      label: "Pending Due",
+      icon: "bi-list-check",
+      href: "/reports/school-fee-summary",
+      gradient: "linear-gradient(135deg, #3b82f6, #2563eb)",
+    },
+    {
+      label: "Day Summary",
+      icon: "bi-calendar2-check",
+      href: "/reports/day-wise",
+      gradient: "linear-gradient(135deg, #f59e0b, #d97706)",
+    },
+    {
+      label: "Transport",
+      icon: "bi-truck",
+      href: "/reports/van-fee",
+      gradient: "linear-gradient(135deg, #06b6d4, #0891b2)",
+    },
+    {
+      label: "Students",
+      icon: "bi-people",
+      href: "/students",
+      gradient: "linear-gradient(135deg, #a855f7, #7c3aed)",
+    },
+    {
+      label: "Caste/Gender & Religion",
+      icon: "bi-people-fill",
+      href: "/reports/caste-gender",
+      gradient: "linear-gradient(135deg, #ef4444, #dc2626)",
+    },
   ];
 
   const LinkCard = ({ href, icon, label, gradient }) => (
@@ -563,7 +758,9 @@ const Dashboard = () => {
       </span>
       <span className="text-wrap">
         <span className="label">{label}</span>
-        <span className="arrow"><i className="bi bi-arrow-right" /></span>
+        <span className="arrow">
+          <i className="bi bi-arrow-right" />
+        </span>
       </span>
     </a>
   );
@@ -573,7 +770,8 @@ const Dashboard = () => {
     <div
       className="dashboard-bg"
       style={{
-        backgroundImage: `linear-gradient(135deg, rgba(99, 102, 241, 0.15), rgba(34, 197, 94, 0.15), rgba(245, 158, 11, 0.15)), url(/images/SchooBackground.jpeg)`,
+        backgroundImage:
+          "linear-gradient(135deg, rgba(99, 102, 241, 0.15), rgba(34, 197, 94, 0.15), rgba(245, 158, 11, 0.15)), url(/images/SchooBackground.jpeg)",
         backgroundSize: "cover",
         backgroundPosition: "center",
         minHeight: "100vh",
@@ -581,12 +779,18 @@ const Dashboard = () => {
     >
       <div className="dashboard-overlay" />
 
-      <div className="container-fluid px-4" style={{ position: "relative", zIndex: 2 }}>
+      <div
+        className="container-fluid px-4"
+        style={{ position: "relative", zIndex: 2 }}
+      >
         {/* Header */}
         <div className="d-flex flex-wrap align-items-center justify-content-between gap-3 my-4">
           <div className="d-flex flex-column">
             <div className="d-flex align-items-center gap-3">
-              <h2 className="mb-0 fw-bold d-flex align-items-center gap-2" style={{ fontFamily: "'Inter', sans-serif" }}>
+              <h2
+                className="mb-0 fw-bold d-flex align-items-center gap-2"
+                style={{ fontFamily: "'Inter', sans-serif" }}
+              >
                 Dashboard
                 {autoRefresh && (
                   <span
@@ -601,7 +805,12 @@ const Dashboard = () => {
 
               {/* Session selector */}
               <div className="d-inline-flex align-items-center gap-2">
-                <label htmlFor="sessionSelect" className="small text-muted mb-0">Session:</label>
+                <label
+                  htmlFor="sessionSelect"
+                  className="small text-muted mb-0"
+                >
+                  Session:
+                </label>
                 <select
                   id="sessionSelect"
                   className="form-select form-select-sm"
@@ -615,7 +824,9 @@ const Dashboard = () => {
                   }}
                   disabled={loading.session}
                 >
-                  <option value="" disabled>Choose session</option>
+                  <option value="" disabled>
+                    Choose session
+                  </option>
                   {sessions.map((s) => (
                     <option key={s.id} value={s.id}>
                       {s.name} {s.is_active ? " (Active)" : ""}
@@ -625,18 +836,31 @@ const Dashboard = () => {
               </div>
             </div>
 
-            <small className="text-muted mt-1" style={{ fontFamily: "'Inter', sans-serif" }}>
-              {selectedSessionName ? `Showing session: ${selectedSessionName}` : "Select a session"}
+            <small
+              className="text-muted mt-1"
+              style={{ fontFamily: "'Inter', sans-serif" }}
+            >
+              {selectedSessionName
+                ? `Showing session: ${selectedSessionName}`
+                : "Select a session"}
               {" · "}
-              {lastUpdated ? `Last updated: ${lastUpdated.toLocaleString()}` : (loading.session ? "Loading sessions…" : "Fetching…")}
+              {lastUpdated
+                ? `Last updated: ${lastUpdated.toLocaleString()}`
+                : loading.session
+                ? "Loading sessions…"
+                : "Fetching…"}
             </small>
           </div>
 
           <div className="d-flex gap-2">
             <button
-              className={`btn btn-outline-${autoRefresh ? "secondary" : "success"} shadow-sm`}
+              className={`btn btn-outline-${
+                autoRefresh ? "secondary" : "success"
+              } shadow-sm`}
               onClick={() => setAutoRefresh((v) => !v)}
-              aria-label={autoRefresh ? "Pause auto-refresh" : "Resume auto-refresh"}
+              aria-label={
+                autoRefresh ? "Pause auto-refresh" : "Resume auto-refresh"
+              }
             >
               {autoRefresh ? "Pause Auto-Refresh" : "Resume Auto-Refresh"}
             </button>
@@ -652,13 +876,20 @@ const Dashboard = () => {
         </div>
 
         {error ? (
-          <div className="alert alert-danger d-flex align-items-start gap-2 shadow-sm" role="alert">
+          <div
+            className="alert alert-danger d-flex align-items-start gap-2 shadow-sm"
+            role="alert"
+          >
             <i className="bi bi-exclamation-octagon-fill fs-5"></i>
             <div className="flex-grow-1">
               <div className="fw-semibold">Something went wrong</div>
               <div className="small">{error}</div>
             </div>
-            <button className="btn btn-sm btn-light border shadow-sm" onClick={refreshAll} aria-label="Try again">
+            <button
+              className="btn btn-sm btn-light border shadow-sm"
+              onClick={refreshAll}
+              aria-label="Try again"
+            >
               Try again
             </button>
           </div>
@@ -675,58 +906,178 @@ const Dashboard = () => {
           </div>
         </div>
 
-        {/* KPI Cards */}
+        {/* NEW: Recent Enquiries + KPI */}
         <div className="row g-4 mb-4">
-          {kpis.map((kpi, i) => (
-            <div key={kpi.label} className="col-12 col-sm-6 col-md-4 col-xl-2">
+          {/* Recent Enquiries */}
+          <div className="col-12 col-lg-4">
+            <div className="card shadow-lg h-100 hover-lift">
               <div
-                className="card text-white shadow-lg border-0 h-100 kpi-card hover-lift"
+                className="card-header d-flex justify-content-between align-items-center text-white"
                 style={{
-                  background: cardGradients[i % cardGradients.length],
-                  backdropFilter: "blur(8px)",
+                  background: "linear-gradient(135deg,#0ea5e9,#0369a1)",
                 }}
               >
-                <div className="card-body">
-                  <div className="d-flex justify-content-between align-items-start">
-                    <div>
-                      <div className="small text-white-75" style={{ fontFamily: "'Inter', sans-serif" }}>{kpi.label}</div>
-                      <div className="h4 mb-1" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 600 }}>{formatCurrency(kpi.value)}</div>
-                      <span className="small text-white-75" style={{ fontFamily: "'Inter', sans-serif" }}>
-                        {loading.report || loading.day || loading.class || loading.cr ? "Updating…" : "Up to date"}
-                      </span>
-                    </div>
-                    <div className="text-end d-flex flex-column align-items-end">
-                      <i className={`bi ${kpi.icon} fs-3 opacity-75`}></i>
-                      <span className="badge bg-dark bg-opacity-25 border mt-2" style={{ fontFamily: "'Inter', sans-serif" }}>
-                        {compactNumber(kpi.value)}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-                {loading.report && i < 3 ? <div className="kpi-shimmer" /> : null}
+                <h5
+                  className="mb-0"
+                  style={{ fontFamily: "'Inter', sans-serif" }}
+                >
+                  Recent Enquiries
+                </h5>
+                <a
+                  href="/enquiries"
+                  className="btn btn-sm btn-light text-primary"
+                  style={{ fontFamily: "'Inter', sans-serif" }}
+                >
+                  View all
+                </a>
+              </div>
+              <div className="card-body p-0">
+                {recentEnquiries.length === 0 ? (
+                  <p
+                    className="text-muted p-3 mb-0"
+                    style={{ fontFamily: "'Inter', sans-serif" }}
+                  >
+                    No enquiries yet.
+                  </p>
+                ) : (
+                  <ul className="list-group list-group-flush">
+                    {recentEnquiries.map((enq) => (
+                      <li
+                        key={enq.id}
+                        className="list-group-item d-flex justify-content-between align-items-start"
+                        style={{ fontFamily: "'Inter', sans-serif" }}
+                      >
+                        <div>
+                          <div className="fw-semibold">
+                            {enq.student_name || "—"}
+                          </div>
+                          <div className="small text-muted">
+                            Class: {enq.class_interested || "—"}
+                          </div>
+                          {enq.phone ? (
+                            <div className="small text-muted">
+                              📞 {enq.phone}
+                            </div>
+                          ) : null}
+                        </div>
+                        <div className="text-end">
+                          <span className="badge text-bg-light">
+                            {enq.enquiry_date
+                              ? new Date(
+                                  enq.enquiry_date
+                                ).toLocaleDateString("en-IN")
+                              : ""}
+                          </span>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
             </div>
-          ))}
+          </div>
+
+          {/* KPI cards */}
+          <div className="col-12 col-lg-8">
+            <div className="row g-4">
+              {kpis.map((kpi, i) => (
+                <div key={kpi.label} className="col-12 col-sm-6 col-xl-4">
+                  <div
+                    className="card text-white shadow-lg border-0 h-100 kpi-card hover-lift"
+                    style={{
+                      background: cardGradients[i % cardGradients.length],
+                      backdropFilter: "blur(8px)",
+                    }}
+                  >
+                    <div className="card-body">
+                      <div className="d-flex justify-content-between align-items-start">
+                        <div>
+                          <div
+                            className="small text-white-75"
+                            style={{ fontFamily: "'Inter', sans-serif" }}
+                          >
+                            {kpi.label}
+                          </div>
+                          <div
+                            className="h4 mb-1"
+                            style={{
+                              fontFamily: "'Inter', sans-serif",
+                              fontWeight: 600,
+                            }}
+                          >
+                            {formatCurrency(kpi.value)}
+                          </div>
+                          <span
+                            className="small text-white-75"
+                            style={{ fontFamily: "'Inter', sans-serif" }}
+                          >
+                            {loading.report ||
+                            loading.day ||
+                            loading.class ||
+                            loading.cr
+                              ? "Updating…"
+                              : "Up to date"}
+                          </span>
+                        </div>
+                        <div className="text-end d-flex flex-column align-items-end">
+                          <i className={`bi ${kpi.icon} fs-3 opacity-75`}></i>
+                          <span
+                            className="badge bg-dark bg-opacity-25 border mt-2"
+                            style={{ fontFamily: "'Inter', sans-serif" }}
+                          >
+                            {compactNumber(kpi.value)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    {loading.report && i < 3 ? <div className="kpi-shimmer" /> : null}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
 
         {/* Category cards */}
         <div className="row g-4 mb-4">
           {Object.entries(summary).map(([category, totals], index) => {
-            const share = totalForShare > 0 ? (totals.totalFeeReceived / totalForShare) * 100 : 0;
+            const share =
+              totalForShare > 0
+                ? (totals.totalFeeReceived / totalForShare) * 100
+                : 0;
             return (
               <div key={category} className="col-12 col-md-6 col-xl-4">
-                <div className="card h-100 shadow-lg hover-lift" style={{ background: "rgba(255, 255, 255, 0.95)" }}>
+                <div
+                  className="card h-100 shadow-lg hover-lift"
+                  style={{ background: "rgba(255, 255, 255, 0.95)" }}
+                >
                   <div
                     className="card-header text-white d-flex justify-content-between align-items-center"
-                    style={{ background: cardGradients[index % cardGradients.length] }}
+                    style={{
+                      background: cardGradients[index % cardGradients.length],
+                    }}
                   >
-                    <strong style={{ fontFamily: "'Inter', sans-serif", fontWeight: 600 }}>{category}</strong>
+                    <strong
+                      style={{
+                        fontFamily: "'Inter', sans-serif",
+                        fontWeight: 600,
+                      }}
+                    >
+                      {category}
+                    </strong>
                     {(loading.report || loading.day) && (
-                      <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                      <span
+                        className="spinner-border spinner-border-sm"
+                        role="status"
+                        aria-hidden="true"
+                      ></span>
                     )}
                   </div>
                   <div className="card-body">
-                    <div className="row small g-3 mb-3" style={{ fontFamily: "'Inter', sans-serif" }}>
+                    <div
+                      className="row small g-3 mb-3"
+                      style={{ fontFamily: "'Inter', sans-serif" }}
+                    >
                       <div className="col-6">
                         <strong>Fee Received:</strong>
                         <br />
@@ -749,16 +1100,24 @@ const Dashboard = () => {
                       </div>
                       {category === "Tuition Fee" && (
                         <div className="col-12">
-                          <strong>Fine:</strong> {formatCurrency(totals.totalFine || 0)}
+                          <strong>Fine:</strong>{" "}
+                          {formatCurrency(totals.totalFine || 0)}
                         </div>
                       )}
                     </div>
                     <div>
-                      <div className="d-flex justify-content-between small text-muted mb-1" style={{ fontFamily: "'Inter', sans-serif" }}>
+                      <div
+                        className="d-flex justify-content-between small text-muted mb-1"
+                        style={{ fontFamily: "'Inter', sans-serif" }}
+                      >
                         <span>Share of total</span>
                         <span>{share.toFixed(1)}%</span>
                       </div>
-                      <div className="progress" role="progressbar" aria-label={`Share of total for ${category}`}>
+                      <div
+                        className="progress"
+                        role="progressbar"
+                        aria-label={`Share of total for ${category}`}
+                      >
                         <div
                           className="progress-bar"
                           style={{
@@ -781,12 +1140,22 @@ const Dashboard = () => {
           {/* PIE (fees) */}
           <div className="col-12 col-xl-6">
             <div className="card h-100 shadow-lg hover-lift">
-              <div className="card-header text-white d-flex align-items-center justify-content-between" style={{ background: cardGradients[0] }}>
-                <h5 className="card-title mb-0" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 600 }}>Fee Received Distribution (Session)</h5>
+              <div
+                className="card-header text-white d-flex align-items-center justify-content-between"
+                style={{ background: cardGradients[0] }}
+              >
+                <h5
+                  className="card-title mb-0"
+                  style={{ fontFamily: "'Inter', sans-serif", fontWeight: 600 }}
+                >
+                  Fee Received Distribution (Session)
+                </h5>
                 <div className="d-flex gap-2">
                   <button
                     className="btn btn-sm btn-light shadow-sm"
-                    onClick={() => setShowLegends((s) => ({ ...s, pie: !s.pie }))}
+                    onClick={() =>
+                      setShowLegends((s) => ({ ...s, pie: !s.pie }))
+                    }
                     title="Toggle legend"
                     aria-label="Toggle legend for fee distribution chart"
                   >
@@ -815,9 +1184,18 @@ const Dashboard = () => {
                 {loading.report ? (
                   <div className="skeleton-chart" />
                 ) : pieData.labels.length ? (
-                  <Doughnut ref={pieRef} data={pieData} options={pieChartOptions} />
+                  <Doughnut
+                    ref={pieRef}
+                    data={pieData}
+                    options={pieChartOptions}
+                  />
                 ) : (
-                  <div className="text-center text-muted" style={{ fontFamily: "'Inter', sans-serif" }}>No data</div>
+                  <div
+                    className="text-center text-muted"
+                    style={{ fontFamily: "'Inter', sans-serif" }}
+                  >
+                    No data
+                  </div>
                 )}
               </div>
             </div>
@@ -826,12 +1204,22 @@ const Dashboard = () => {
           {/* LINE (fees trend) */}
           <div className="col-12 col-xl-6">
             <div className="card h-100 shadow-lg hover-lift">
-              <div className="card-header text-white d-flex align-items-center justify-content-between" style={{ background: cardGradients[1] }}>
-                <h5 className="card-title mb-0" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 600 }}>Fee Trend by Category (Session)</h5>
+              <div
+                className="card-header text-white d-flex align-items-center justify-content-between"
+                style={{ background: cardGradients[1] }}
+              >
+                <h5
+                  className="card-title mb-0"
+                  style={{ fontFamily: "'Inter', sans-serif", fontWeight: 600 }}
+                >
+                  Fee Trend by Category (Session)
+                </h5>
                 <div className="d-flex gap-2">
                   <button
                     className="btn btn-sm btn-light shadow-sm"
-                    onClick={() => setShowLegends((s) => ({ ...s, line: !s.line }))}
+                    onClick={() =>
+                      setShowLegends((s) => ({ ...s, line: !s.line }))
+                    }
                     title="Toggle legend"
                     aria-label="Toggle legend for fee trend chart"
                   >
@@ -860,9 +1248,18 @@ const Dashboard = () => {
                 {loading.day ? (
                   <div className="skeleton-chart" />
                 ) : uniqueDates.length ? (
-                  <Line ref={lineRef} data={lineChartData} options={lineChartOptions} />
+                  <Line
+                    ref={lineRef}
+                    data={lineChartData}
+                    options={lineChartOptions}
+                  />
                 ) : (
-                  <div className="text-center text-muted" style={{ fontFamily: "'Inter', sans-serif" }}>No data</div>
+                  <div
+                    className="text-center text-muted"
+                    style={{ fontFamily: "'Inter', sans-serif" }}
+                  >
+                    No data
+                  </div>
                 )}
               </div>
             </div>
@@ -874,15 +1271,30 @@ const Dashboard = () => {
           {/* Gender Pie */}
           <div className="col-12 col-xl-4">
             <div className="card h-100 shadow-lg hover-lift">
-              <div className="card-header text-white d-flex align-items-center justify-content-between" style={{ background: cardGradients[2] }}>
-                <h5 className="card-title mb-0" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 600 }}>Students by Gender</h5>
+              <div
+                className="card-header text-white d-flex align-items-center justify-content-between"
+                style={{ background: cardGradients[2] }}
+              >
+                <h5
+                  className="card-title mb-0"
+                  style={{ fontFamily: "'Inter', sans-serif", fontWeight: 600 }}
+                >
+                  Students by Gender
+                </h5>
                 <div className="d-flex gap-2">
-                  <a href="/reports/caste-gender" className="btn btn-sm btn-light shadow-sm" title="Open Caste/Gender Report" aria-label="Open Caste/Gender Report">
+                  <a
+                    href="/reports/caste-gender"
+                    className="btn btn-sm btn-light shadow-sm"
+                    title="Open Caste/Gender Report"
+                    aria-label="Open Caste/Gender Report"
+                  >
                     <i className="bi bi-box-arrow-up-right" />
                   </a>
                   <button
                     className="btn btn-sm btn-light shadow-sm"
-                    onClick={() => setShowLegends((s) => ({ ...s, genderPie: !s.genderPie }))}
+                    onClick={() =>
+                      setShowLegends((s) => ({ ...s, genderPie: !s.genderPie }))
+                    }
                     title="Toggle legend"
                     aria-label="Toggle legend for gender chart"
                   >
@@ -890,7 +1302,9 @@ const Dashboard = () => {
                   </button>
                   <button
                     className="btn btn-sm btn-light shadow-sm"
-                    onClick={() => downloadChart(genderPieRef, "students-by-gender.png")}
+                    onClick={() =>
+                      downloadChart(genderPieRef, "students-by-gender.png")
+                    }
                     title="Download PNG"
                     aria-label="Download gender chart as PNG"
                   >
@@ -909,14 +1323,19 @@ const Dashboard = () => {
               <div className="card-body" style={{ height: 340 }}>
                 {loading.cr ? (
                   <div className="skeleton-chart" />
-                ) : (genderTotals.boys + genderTotals.girls) > 0 ? (
+                ) : genderTotals.boys + genderTotals.girls > 0 ? (
                   <Doughnut
                     ref={genderPieRef}
                     data={genderPieDataFactory(genderTotals, palette)}
                     options={genderPieOptionsFactory(showLegends)}
                   />
                 ) : (
-                  <div className="text-center text-muted" style={{ fontFamily: "'Inter', sans-serif" }}>No data</div>
+                  <div
+                    className="text-center text-muted"
+                    style={{ fontFamily: "'Inter', sans-serif" }}
+                  >
+                    No data
+                  </div>
                 )}
               </div>
             </div>
@@ -925,15 +1344,30 @@ const Dashboard = () => {
           {/* Caste Bar */}
           <div className="col-12 col-xl-4">
             <div className="card h-100 shadow-lg hover-lift">
-              <div className="card-header text-white d-flex align-items-center justify-content-between" style={{ background: cardGradients[3] }}>
-                <h5 className="card-title mb-0" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 600 }}>Caste Distribution</h5>
+              <div
+                className="card-header text-white d-flex align-items-center justify-content-between"
+                style={{ background: cardGradients[3] }}
+              >
+                <h5
+                  className="card-title mb-0"
+                  style={{ fontFamily: "'Inter', sans-serif", fontWeight: 600 }}
+                >
+                  Caste Distribution
+                </h5>
                 <div className="d-flex gap-2">
-                  <a href="/reports/caste-gender" className="btn btn-sm btn-light shadow-sm" title="Open Caste/Gender Report" aria-label="Open Caste/Gender Report">
+                  <a
+                    href="/reports/caste-gender"
+                    className="btn btn-sm btn-light shadow-sm"
+                    title="Open Caste/Gender Report"
+                    aria-label="Open Caste/Gender Report"
+                  >
                     <i className="bi bi-box-arrow-up-right" />
                   </a>
                   <button
                     className="btn btn-sm btn-light shadow-sm"
-                    onClick={() => setShowLegends((s) => ({ ...s, casteBar: !s.casteBar }))}
+                    onClick={() =>
+                      setShowLegends((s) => ({ ...s, casteBar: !s.casteBar }))
+                    }
                     title="Toggle legend"
                     aria-label="Toggle legend for caste chart"
                   >
@@ -941,7 +1375,9 @@ const Dashboard = () => {
                   </button>
                   <button
                     className="btn btn-sm btn-light shadow-sm"
-                    onClick={() => downloadChart(casteBarRef, "caste-distribution.png")}
+                    onClick={() =>
+                      downloadChart(casteBarRef, "caste-distribution.png")
+                    }
                     title="Download PNG"
                     aria-label="Download caste chart as PNG"
                   >
@@ -967,7 +1403,12 @@ const Dashboard = () => {
                     options={casteBarOptionsFactory(showLegends)}
                   />
                 ) : (
-                  <div className="text-center text-muted" style={{ fontFamily: "'Inter', sans-serif" }}>No data</div>
+                  <div
+                    className="text-center text-muted"
+                    style={{ fontFamily: "'Inter', sans-serif" }}
+                  >
+                    No data
+                  </div>
                 )}
               </div>
             </div>
@@ -976,15 +1417,33 @@ const Dashboard = () => {
           {/* Religion Bar */}
           <div className="col-12 col-xl-4">
             <div className="card h-100 shadow-lg hover-lift">
-              <div className="card-header text-white d-flex align-items-center justify-content-between" style={{ background: cardGradients[4] }}>
-                <h5 className="card-title mb-0" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 600 }}>Religion Distribution</h5>
+              <div
+                className="card-header text-white d-flex align-items-center justify-content-between"
+                style={{ background: cardGradients[4] }}
+              >
+                <h5
+                  className="card-title mb-0"
+                  style={{ fontFamily: "'Inter', sans-serif", fontWeight: 600 }}
+                >
+                  Religion Distribution
+                </h5>
                 <div className="d-flex gap-2">
-                  <a href="/reports/caste-gender" className="btn btn-sm btn-light shadow-sm" title="Open Caste/Gender Report" aria-label="Open Caste/Gender Report">
+                  <a
+                    href="/reports/caste-gender"
+                    className="btn btn-sm btn-light shadow-sm"
+                    title="Open Caste/Gender Report"
+                    aria-label="Open Caste/Gender Report"
+                  >
                     <i className="bi bi-box-arrow-up-right" />
                   </a>
                   <button
                     className="btn btn-sm btn-light shadow-sm"
-                    onClick={() => setShowLegends((s) => ({ ...s, religionBar: !s.religionBar }))}
+                    onClick={() =>
+                      setShowLegends((s) => ({
+                        ...s,
+                        religionBar: !s.religionBar,
+                      }))
+                    }
                     title="Toggle legend"
                     aria-label="Toggle legend for religion chart"
                   >
@@ -992,7 +1451,12 @@ const Dashboard = () => {
                   </button>
                   <button
                     className="btn btn-sm btn-light shadow-sm"
-                    onClick={() => downloadChart(religionBarRef, "religion-distribution.png")}
+                    onClick={() =>
+                      downloadChart(
+                        religionBarRef,
+                        "religion-distribution.png"
+                      )
+                    }
                     title="Download PNG"
                     aria-label="Download religion chart as PNG"
                   >
@@ -1018,7 +1482,12 @@ const Dashboard = () => {
                     options={religionBarOptionsFactory(showLegends)}
                   />
                 ) : (
-                  <div className="text-center text-muted" style={{ fontFamily: "'Inter', sans-serif" }}>No data</div>
+                  <div
+                    className="text-center text-muted"
+                    style={{ fontFamily: "'Inter', sans-serif" }}
+                  >
+                    No data
+                  </div>
                 )}
               </div>
             </div>
@@ -1029,18 +1498,44 @@ const Dashboard = () => {
         <div className="row g-4 mb-4">
           <div className="col-12">
             <div className="card shadow-lg hover-lift">
-              <div className="card-header text-white d-flex align-items-center justify-content-between" style={{ background: cardGradients[5] }}>
-                <h5 className="mb-0" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 600 }}>Enrollments</h5>
+              <div
+                className="card-header text-white d-flex align-items-center justify-content-between"
+                style={{ background: cardGradients[5] }}
+              >
+                <h5
+                  className="mb-0"
+                  style={{ fontFamily: "'Inter', sans-serif", fontWeight: 600 }}
+                >
+                  Enrollments
+                </h5>
                 {loading.class && (
-                  <div className="spinner-border spinner-border-sm" role="status" aria-hidden="true"></div>
+                  <div
+                    className="spinner-border spinner-border-sm"
+                    role="status"
+                    aria-hidden="true"
+                  ></div>
                 )}
               </div>
               <div className="card-body" style={{ overflowX: "auto" }}>
                 {classColumns.length === 0 ? (
-                  <div className="text-center text-muted py-3" style={{ fontFamily: "'Inter', sans-serif" }}>No enrollment data</div>
+                  <div
+                    className="text-center text-muted py-3"
+                    style={{ fontFamily: "'Inter', sans-serif" }}
+                  >
+                    No enrollment data
+                  </div>
                 ) : (
                   <table className="table table-sm align-middle mb-0">
-                    <thead className="table-light" style={{ position: "sticky", top: 0, zIndex: 1, background: "linear-gradient(135deg, #f8fafc, #e2e8f0)" }}>
+                    <thead
+                      className="table-light"
+                      style={{
+                        position: "sticky",
+                        top: 0,
+                        zIndex: 1,
+                        background:
+                          "linear-gradient(135deg, #f8fafc, #e2e8f0)",
+                      }}
+                    >
                       <tr>
                         {classColumns.map((cls, i) => (
                           <th
@@ -1049,14 +1544,22 @@ const Dashboard = () => {
                             style={{
                               textAlign: "left",
                               borderRight:
-                                i !== classColumns.length - 1 ? "1px solid #dee2e6" : "none",
+                                i !== classColumns.length - 1
+                                  ? "1px solid #dee2e6"
+                                  : "none",
                               fontFamily: "'Inter', sans-serif",
                             }}
                           >
                             {cls}
                           </th>
                         ))}
-                        <th className="text-nowrap" style={{ textAlign: "left", fontFamily: "'Inter', sans-serif" }}>
+                        <th
+                          className="text-nowrap"
+                          style={{
+                            textAlign: "left",
+                            fontFamily: "'Inter', sans-serif",
+                          }}
+                        >
                           Total
                         </th>
                       </tr>
@@ -1069,14 +1572,20 @@ const Dashboard = () => {
                             style={{
                               textAlign: "left",
                               borderRight:
-                                i !== classColumns.length - 1 ? "1px solid #dee2e6" : "none",
+                                i !== classColumns.length - 1
+                                  ? "1px solid #dee2e6"
+                                  : "none",
                             }}
                           >
-                            <span className="badge text-bg-success">{`N ${classWiseEnrollments[cls].new}`}</span>
+                            <span className="badge text-bg-success">
+                              {`N ${classWiseEnrollments[cls].new}`}
+                            </span>
                           </td>
                         ))}
                         <td style={{ textAlign: "left" }}>
-                          <span className="badge text-bg-success">{`N ${overallNew}`}</span>
+                          <span className="badge text-bg-success">
+                            {`N ${overallNew}`}
+                          </span>
                         </td>
                       </tr>
                       <tr>
@@ -1086,34 +1595,54 @@ const Dashboard = () => {
                             style={{
                               textAlign: "left",
                               borderRight:
-                                i !== classColumns.length - 1 ? "1px solid #dee2e6" : "none",
+                                i !== classColumns.length - 1
+                                  ? "1px solid #dee2e6"
+                                  : "none",
                             }}
                           >
-                            <span className="badge text-bg-secondary">{`O ${classWiseEnrollments[cls].old}`}</span>
+                            <span className="badge text-bg-secondary">
+                              {`O ${classWiseEnrollments[cls].old}`}
+                            </span>
                           </td>
                         ))}
                         <td style={{ textAlign: "left" }}>
-                          <span className="badge text-bg-secondary">{`O ${overallOld}`}</span>
+                          <span className="badge text-bg-secondary">
+                            {`O ${overallOld}`}
+                          </span>
                         </td>
                       </tr>
                       <tr>
                         {classColumns.map((cls, i) => {
-                          const t = classWiseEnrollments[cls].new + classWiseEnrollments[cls].old;
+                          const t =
+                            classWiseEnrollments[cls].new +
+                            classWiseEnrollments[cls].old;
                           return (
                             <td
                               key={`tot-${cls}`}
                               style={{
                                 textAlign: "left",
                                 borderRight:
-                                  i !== classColumns.length - 1 ? "1px solid #dee2e6" : "none",
+                                  i !== classColumns.length - 1
+                                    ? "1px solid #dee2e6"
+                                    : "none",
                               }}
                             >
-                              <strong style={{ fontFamily: "'Inter', sans-serif", color: "#3b82f6" }}>{`T ${t}`}</strong>
+                              <strong
+                                style={{
+                                  fontFamily: "'Inter', sans-serif",
+                                  color: "#3b82f6",
+                                }}
+                              >{`T ${t}`}</strong>
                             </td>
                           );
                         })}
                         <td style={{ textAlign: "left" }}>
-                          <strong style={{ fontFamily: "'Inter', sans-serif", color: "#3b82f6" }}>{`T ${overallTotal}`}</strong>
+                          <strong
+                            style={{
+                              fontFamily: "'Inter', sans-serif",
+                              color: "#3b82f6",
+                            }}
+                          >{`T ${overallTotal}`}</strong>
                         </td>
                       </tr>
                     </tbody>
@@ -1128,12 +1657,22 @@ const Dashboard = () => {
         <div className="row g-4 mb-5">
           <div className="col-12">
             <div className="card shadow-lg hover-lift">
-              <div className="card-header text-white d-flex align-items-center justify-content-between" style={{ background: cardGradients[6] }}>
-                <h5 className="card-title mb-0" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 600 }}>Student Count by Class</h5>
+              <div
+                className="card-header text-white d-flex align-items-center justify-content-between"
+                style={{ background: cardGradients[6] }}
+              >
+                <h5
+                  className="card-title mb-0"
+                  style={{ fontFamily: "'Inter', sans-serif", fontWeight: 600 }}
+                >
+                  Student Count by Class
+                </h5>
                 <div className="d-flex gap-2">
                   <button
                     className="btn btn-sm btn-light shadow-sm"
-                    onClick={() => setShowLegends((s) => ({ ...s, bar: !s.bar }))}
+                    onClick={() =>
+                      setShowLegends((s) => ({ ...s, bar: !s.bar }))
+                    }
                     title="Toggle legend"
                     aria-label="Toggle legend for student count chart"
                   >
@@ -1161,9 +1700,18 @@ const Dashboard = () => {
                 {loading.class ? (
                   <div className="skeleton-chart" />
                 ) : uniqueClasses.length ? (
-                  <Bar ref={barRef} data={barChartData} options={barChartOptions} />
+                  <Bar
+                    ref={barRef}
+                    data={barChartData}
+                    options={barChartOptions}
+                  />
                 ) : (
-                  <div className="text-center text-muted" style={{ fontFamily: "'Inter', sans-serif" }}>No data</div>
+                  <div
+                    className="text-center text-muted"
+                    style={{ fontFamily: "'Inter', sans-serif" }}
+                  >
+                    No data
+                  </div>
                 )}
               </div>
             </div>
@@ -1262,7 +1810,9 @@ function genderPieDataFactory(genderTotals, palette) {
       {
         label: "Students",
         data,
-        backgroundColor: labels.map((_, i) => palette[i % palette.length] + "66"), // More vibrant
+        backgroundColor: labels.map(
+          (_, i) => palette[i % palette.length] + "66"
+        ),
         borderColor: labels.map((_, i) => palette[i % palette.length]),
         borderWidth: 2,
         hoverOffset: 24,
@@ -1275,7 +1825,11 @@ function genderPieOptionsFactory(showLegends) {
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
-      legend: { display: showLegends.genderPie, position: "right", labels: { font: { family: "'Inter', sans-serif", size: 13 } } },
+      legend: {
+        display: showLegends.genderPie,
+        position: "right",
+        labels: { font: { family: "'Inter', sans-serif", size: 13 } },
+      },
       valueLabel: {
         enabled: true,
         showZero: false,
@@ -1293,7 +1847,12 @@ function genderPieOptionsFactory(showLegends) {
       },
     },
     cutout: "60%",
-    animation: { animateScale: true, animateRotate: true, duration: 1200, easing: "easeOutBack" },
+    animation: {
+      animateScale: true,
+      animateRotate: true,
+      duration: 1200,
+      easing: "easeOutBack",
+    },
   };
 }
 
@@ -1325,18 +1884,44 @@ function casteBarOptionsFactory(showLegends) {
     responsive: true,
     maintainAspectRatio: false,
     scales: {
-      x: { title: { display: true, text: "Caste", font: { family: "'Inter', sans-serif", size: 12 } }, grid: { display: false } },
+      x: {
+        title: {
+          display: true,
+          text: "Caste",
+          font: { family: "'Inter', sans-serif", size: 12 },
+        },
+        grid: { display: false },
+      },
       y: {
-        title: { display: true, text: "Students", font: { family: "'Inter', sans-serif", size: 12 } },
+        title: {
+          display: true,
+          text: "Students",
+          font: { family: "'Inter', sans-serif", size: 12 },
+        },
         beginAtZero: true,
-        ticks: { precision: 0, font: { family: "'Inter', sans-serif", size: 12 } },
+        ticks: {
+          precision: 0,
+          font: { family: "'Inter', sans-serif", size: 12 },
+        },
         grid: { color: "rgba(0, 0, 0, 0.05)" },
       },
     },
     plugins: {
-      legend: { display: showLegends.casteBar, labels: { font: { family: "'Inter', sans-serif", size: 13 } } },
-      valueLabel: { enabled: true, showZero: false, formatter: (value) => intIN(value), offsetY: -8 },
-      tooltip: { backgroundColor: "rgba(31, 41, 55, 0.9)", titleFont: { family: "'Inter', sans-serif", size: 14 }, bodyFont: { family: "'Inter', sans-serif", size: 12 } },
+      legend: {
+        display: showLegends.casteBar,
+        labels: { font: { family: "'Inter', sans-serif", size: 13 } },
+      },
+      valueLabel: {
+        enabled: true,
+        showZero: false,
+        formatter: (value) => intIN(value),
+        offsetY: -8,
+      },
+      tooltip: {
+        backgroundColor: "rgba(31, 41, 55, 0.9)",
+        titleFont: { family: "'Inter', sans-serif", size: 14 },
+        bodyFont: { family: "'Inter', sans-serif", size: 12 },
+      },
     },
     animation: { duration: 1200, easing: "easeOutQuart" },
   };
@@ -1370,18 +1955,44 @@ function religionBarOptionsFactory(showLegends) {
     responsive: true,
     maintainAspectRatio: false,
     scales: {
-      x: { title: { display: true, text: "Religion", font: { family: "'Inter', sans-serif", size: 12 } }, grid: { display: false } },
+      x: {
+        title: {
+          display: true,
+          text: "Religion",
+          font: { family: "'Inter', sans-serif", size: 12 },
+        },
+        grid: { display: false },
+      },
       y: {
-        title: { display: true, text: "Students", font: { family: "'Inter', sans-serif", size: 12 } },
+        title: {
+          display: true,
+          text: "Students",
+          font: { family: "'Inter', sans-serif", size: 12 },
+        },
         beginAtZero: true,
-        ticks: { precision: 0, font: { family: "'Inter', sans-serif", size: 12 } },
+        ticks: {
+          precision: 0,
+          font: { family: "'Inter', sans-serif", size: 12 },
+        },
         grid: { color: "rgba(0, 0, 0, 0.05)" },
       },
     },
     plugins: {
-      legend: { display: showLegends.religionBar, labels: { font: { family: "'Inter', sans-serif", size: 13 } } },
-      valueLabel: { enabled: true, showZero: false, formatter: (value) => intIN(value), offsetY: -8 },
-      tooltip: { backgroundColor: "rgba(31, 41, 55, 0.9)", titleFont: { family: "'Inter', sans-serif", size: 14 }, bodyFont: { family: "'Inter', sans-serif", size: 12 } },
+      legend: {
+        display: showLegends.religionBar,
+        labels: { font: { family: "'Inter', sans-serif", size: 13 } },
+      },
+      valueLabel: {
+        enabled: true,
+        showZero: false,
+        formatter: (value) => intIN(value),
+        offsetY: -8,
+      },
+      tooltip: {
+        backgroundColor: "rgba(31, 41, 55, 0.9)",
+        titleFont: { family: "'Inter', sans-serif", size: 14 },
+        bodyFont: { family: "'Inter', sans-serif", size: 12 },
+      },
     },
     animation: { duration: 1200, easing: "easeOutQuart" },
   };

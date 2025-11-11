@@ -1,14 +1,20 @@
+/* ---------------------------
+   Fee Collection Modal Layout
+---------------------------- */
+
 /* Make Modal.Body the scroll container */
 .collection-modal .modal-body {
-  max-height: calc(100vh - 200px);
-  overflow: auto;
+  max-height: calc(100vh - 180px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 1rem 1.25rem;
 }
 
 /* Sticky wrapper for the student-pick Tabs */
 .collection-modal .sticky-subnav {
   position: sticky;
   top: 0;
-  z-index: 1045;   /* above table stickies */
+  z-index: 1045;
   background: #fff;
   padding-top: 6px;
 }
@@ -16,4 +22,128 @@
 /* Ensure the nav strip has a solid background */
 .collection-modal .sticky-subnav .nav-tabs {
   background: #fff;
+  border-bottom: 1px solid #dee2e6;
+}
+
+/* --- Compact & Wide Modal Layout --- */
+.compact-modal .modal-dialog,
+.collection-modal .modal-dialog {
+  max-width: 1200px;
+  width: 98%;
+  margin: auto;
+}
+
+.collection-modal .modal-content {
+  border-radius: 10px;
+  border: 1px solid #dcdcdc;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+}
+
+/* Tighten header & footer padding */
+.collection-modal .modal-header,
+.collection-modal .modal-footer {
+  padding: 0.6rem 1rem;
+}
+
+/* Make inner content slightly compact */
+.collection-modal .modal-body * {
+  font-size: 0.9rem;
+}
+
+/* Responsive modal adjustments */
+@media (max-width: 768px) {
+  .collection-modal .modal-dialog {
+    width: 100%;
+    margin: 0 10px;
+  }
+  .collection-modal .modal-content {
+    border-radius: 0.5rem;
+  }
+  .collection-modal .modal-body {
+    padding: 1rem;
+  }
+  .collection-modal .modal-footer {
+    flex-direction: column;
+    gap: 1rem;
+  }
+}
+
+/* ---------------------------
+   Student Info Inline Bar
+---------------------------- */
+
+.student-brief-inline {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  flex-wrap: nowrap !important;
+  gap: 10px;
+  background: #f8f9fa;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 0.9rem;
+  color: #222;
+  font-weight: 500;
+  white-space: nowrap !important;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+}
+
+.student-brief-inline div {
+  flex: 0 0 auto !important;
+  display: inline-block !important;
+}
+
+.student-brief-inline strong {
+  color: #000;
+}
+
+.student-brief-inline::-webkit-scrollbar {
+  height: 6px;
+}
+.student-brief-inline::-webkit-scrollbar-thumb {
+  background: #ccc;
+  border-radius: 10px;
+}
+.student-brief-inline::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ---------------------------
+   Optional UI Tweaks
+---------------------------- */
+
+.collection-modal table.table td,
+.collection-modal table.table th {
+  padding: 0.4rem 0.5rem;
+  vertical-align: middle;
+  font-size: 0.88rem;
+}
+
+.collection-modal .modal-footer button {
+  min-width: 80px;
+}
+
+.collection-modal .card {
+  margin-bottom: 0.75rem;
+}
+
+.collection-modal .modal-body .student-brief-inline * {
+  flex-wrap: nowrap !important;
+  white-space: nowrap !important;
+}
+
+.compact-fee-table th,
+.compact-fee-table td {
+  padding: 4px 6px !important;
+  vertical-align: middle !important;
+}
+
+.compact-fee-table input[type="number"],
+.compact-fee-table input[type="text"] {
+  font-size: 0.85rem !important;
+  padding: 2px 4px !important;
 }

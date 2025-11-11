@@ -83,6 +83,7 @@ import EmployeeAttendanceSummary from "./pages/EmployeeAttendanceSummary";
 import ExamSchemeManagement from "./pages/ExamSchemeManagement";
 import TermManagement from "./pages/TermManagement";
 import AssessmentComponentManagement from "./pages/AssessmentComponentManagement";
+import EnquiryForm from "./pages/EnquiryForm";
 import AcademicYearManagement from "./pages/AcademicYearManagement";
 import ExamScheduleManagement from "./pages/ExamScheduleManagement";
 import ExamManagement from "./pages/ExamManagement";
@@ -112,7 +113,10 @@ import AccountsDashboard from "./components/AccountsDashboard";
 import TransportSummary from "./pages/TransportSummary";
 import UserTracking from "./pages/UserTracking";
 import Houses from "./pages/Houses";
+import StudentFeeReport from "./pages/StudentFeeReport";
 
+// ✅ NEW: admin enquiries page
+import Enquiries from "./pages/Enquiries";
 
 // ✅ admission-aware hook for remount key
 import useActiveStudent from "./hooks/useActiveStudent";
@@ -135,18 +139,15 @@ function installGlobalApiShims() {
     localStorage.getItem("username") ||
     "";
 
-  // ---------- URL Rewriter ----------
   const rewriteUrlString = (urlString) => {
     const admission = getActiveAdmission();
     if (!admission) return urlString;
 
     let urlObj;
     try {
-      // absolute
       urlObj = new URL(urlString);
     } catch {
       try {
-        // relative
         const base = API_BASE || window.location.origin;
         urlObj = new URL(urlString.replace(/^\//, ""), base + "/");
       } catch {
@@ -154,30 +155,25 @@ function installGlobalApiShims() {
       }
     }
 
-    // only touch your API URLs
     if (API_BASE && !urlObj.href.startsWith(API_BASE)) {
       return urlString;
     }
 
-    // 1️⃣ Replace any `/admission/<something>` with `/admission/<activeAdmission>`
     urlObj.pathname = urlObj.pathname.replace(
       /\/admission\/[^/]+/i,
       `/admission/${encodeURIComponent(admission)}`
     );
 
-    // 2️⃣ Add or override admission parameter
     if (!urlObj.searchParams.has("admission")) {
       urlObj.searchParams.set("admission", admission);
     }
 
-    // 3️⃣ Override username/admission_number params if they exist
     urlObj.searchParams.set("username", admission);
     urlObj.searchParams.set("admission_number", admission);
 
     return urlObj.href;
   };
 
-  // ---------- Axios interceptor ----------
   axios.interceptors.request.use((config) => {
     const t = localStorage.getItem("token") || sessionStorage.getItem("token");
     if (t && !config.headers?.Authorization) {
@@ -196,7 +192,6 @@ function installGlobalApiShims() {
     return config;
   });
 
-  // ---------- Fetch wrapper ----------
   if (!window.__FETCH_STUDENT_SHIM_INSTALLED__) {
     const originalFetch = window.fetch.bind(window);
     window.fetch = async (input, init = {}) => {
@@ -204,7 +199,6 @@ function installGlobalApiShims() {
       const t = localStorage.getItem("token") || sessionStorage.getItem("token");
       const admission = getActiveAdmission();
 
-      // Normalize URL string
       let urlString = typeof input === "string" ? input : input?.url || "";
       urlString = rewriteUrlString(urlString);
 
@@ -224,14 +218,11 @@ function installGlobalApiShims() {
   }
 }
 
-
 function App() {
-  // ✅ run once: install API shims
   useEffect(() => {
     installGlobalApiShims();
   }, []);
 
-  // ✅ Firebase foreground notifications (unchanged)
   useEffect(() => {
     const unsubscribe = onMessage(messaging, (payload) => {
       if (payload.notification) {
@@ -242,9 +233,7 @@ function App() {
     return () => unsubscribe();
   }, []);
 
-  // ✅ force protected app to remount when student changes
   const activeAdmission = useActiveStudent();
-
   const currentUserId = localStorage.getItem("userId");
 
   return (
@@ -254,22 +243,16 @@ function App() {
         <Route path="/" element={<Navigate to="/login" replace />} />
         <Route path="/login" element={<Login />} />
 
-        {/* Protected App: header + sidebar + content push */}
-        {/* The key={activeAdmission} is the trick: it remounts the whole app shell on switch */}
+        {/* Protected App */}
         <Route element={<AppLayout key={activeAdmission} />}>
-          {/* Dashboard landing */}
           <Route path="/dashboard" element={<RoleAwareDashboard />} />
 
-          {/* Profile & Chat */}
           <Route path="/edit-profile" element={<EditProfile />} />
 
-          {/* legacy small chat component */}
           <Route
             path="/chat"
             element={<Chat chatId="chat_room_1" currentUserId={currentUserId} />}
           />
-
-          {/* full-page ChatContainer */}
           <Route
             path="/chat-page"
             element={<ChatContainer fullPage currentUserId={currentUserId} />}
@@ -281,12 +264,24 @@ function App() {
 
           {/* Core / Admissions */}
           <Route path="/classes" element={<Classes />} />
-          <Route path="/houses" element={<Houses />} /> {/* ✅ NEW */}
+          <Route path="/houses" element={<Houses />} />
           <Route path="/sessions" element={<Sessions />} />
           <Route path="/subjects" element={<Subjects />} />
           <Route path="/students" element={<Student />} />
           <Route path="/sections" element={<Sections />} />
           <Route path="/schools" element={<Schools />} />
+
+          {/* ✅ Enquiries page (admin) */}
+          <Route
+            path="/enquiries"
+            element={
+              <RequireRole roles={["admin", "superadmin"]}>
+                <Enquiries />
+              </RequireRole>
+            }
+          />
+
+          {/* ... everything else stays the same ... */}
 
           {/* Fee & Reports */}
           <Route path="/fee-structure" element={<FeeStructure />} />
@@ -296,6 +291,7 @@ function App() {
           <Route path="/student-due" element={<StudentDueTable />} />
           <Route path="/opening-balances" element={<OpeningBalances />} />
           <Route path="/reports/day-wise" element={<DayWiseReport />} />
+          <Route path="/reports/student/:admissionNumber" element={<StudentFeeReport />} />
           <Route path="/reports/day-wise-category" element={<DayWiseCategoryReports />} />
           <Route path="/reports/school-fee-summary" element={<SchoolFeeSummary />} />
           <Route path="/reports/concession" element={<ConcessionReport />} />
@@ -307,7 +303,7 @@ function App() {
           <Route path="/cancelled-transactions" element={<CancelledTransactions />} />
           <Route path="/receipt/:slipId" element={<ReceiptPrint />} />
 
-          {/* Transport & Settings */}
+          {/* Transport */}
           <Route path="/transportation" element={<Transportation />} />
 
           {/* Circulars */}
@@ -446,6 +442,9 @@ function App() {
           {/* Catch-all (inside app) */}
           <Route path="*" element={<h1 className="container py-4">404: Page Not Found</h1>} />
         </Route>
+
+        {/* keep public form */}
+        <Route path="/enquiry" element={<EnquiryForm />} />
 
         {/* Any other URL → login */}
         <Route path="*" element={<Navigate to="/login" replace />} />
