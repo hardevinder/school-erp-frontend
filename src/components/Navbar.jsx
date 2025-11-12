@@ -179,8 +179,8 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
     localStorage.removeItem("token");
     localStorage.removeItem("roles");
     localStorage.removeItem("activeRole");
-    localStorage.removeItem("family"); // ensure cleanup
-    localStorage.removeItem("activeStudentAdmission"); // ensure cleanup
+    localStorage.removeItem("family");
+    localStorage.removeItem("activeStudentAdmission");
     navigate("/");
   };
 
@@ -231,16 +231,10 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
     try {
       localStorage.setItem("activeStudentAdmission", admissionNumber);
       setActiveStudentAdmission(admissionNumber);
-
-      // Update header photo to the selected student's
       trySetStudentPhoto();
-
-      // Notify app to refetch student-bound data (attendance, fees, diary, etc.)
       window.dispatchEvent(
         new CustomEvent("student-switched", { detail: { admissionNumber } })
       );
-
-      // Optional UX: navigate to dashboard
       if (isStudent || isParent) {
         navigate("/dashboard", { replace: true });
       }
@@ -259,7 +253,7 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
       { label: "Day", href: "/reports/day-wise", icon: "bi-calendar2-check" },
       { label: "Transport", href: "/reports/transport-summary", icon: "bi-truck" },
       { label: "Students", href: "/students", icon: "bi-people" },
-      { label: "Enquiries", href: "/enquiries", icon: "bi-inbox" }, // 👈 added
+      { label: "Enquiries", href: "/enquiries", icon: "bi-inbox" }, // NEW
       { label: "Tracking", href: "/users-tracking", icon: "bi-activity" },
     ],
     superadmin: [
@@ -269,7 +263,7 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
       { label: "Day", href: "/reports/day-wise", icon: "bi-calendar2-check" },
       { label: "Transport", href: "/reports/transport-summary", icon: "bi-truck" },
       { label: "Students", href: "/students", icon: "bi-people" },
-      { label: "Enquiries", href: "/enquiries", icon: "bi-inbox" }, // 👈 added
+      { label: "Enquiries", href: "/enquiries", icon: "bi-inbox" }, // NEW
       { label: "Tracking", href: "/users-tracking", icon: "bi-activity" },
     ],
     // Accounts
@@ -336,7 +330,7 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
   };
 
   const quickLinks = QUICK_LINKS_BY_ROLE[roleLower] || [];
-  const brandLogo = `${process.env.PUBLIC_URL}/images/pts_logo.png`;
+  const brandLogo = `${process.env.PUBLIC_URL}/images/SmartoLogo.png`;
 
   return (
     <>
@@ -359,7 +353,7 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
                 e.currentTarget.style.display = "none";
               }}
             />
-            <span className="fw-semibold">Pathseekers International School</span>
+            <span className="fw-semibold">Smarto Experiential School</span>
           </Link>
 
           {/* Student switcher (desktop pills) */}

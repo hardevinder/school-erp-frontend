@@ -20,10 +20,10 @@ const ROLE_ORDER = [
 
 // Background candidates (keeps prior choices)
 const BG_CANDIDATES = [
-  `${process.env.PUBLIC_URL}/images/SchooBackground.jpeg`,
-  `${process.env.PUBLIC_URL}/images/SchooBackground.jpeg`,
-  `${process.env.PUBLIC_URL}/image/SchooBackground.jpeg`,
-  `${process.env.PUBLIC_URL}/image/SchooBackground.jpeg`,
+  `${process.env.PUBLIC_URL}/images/Smarto.png`,
+  `${process.env.PUBLIC_URL}/images/Smarto.png`,
+  `${process.env.PUBLIC_URL}/image/Smarto.png`,
+  `${process.env.PUBLIC_URL}/image/Smarto.png`,
 ];
 
 function resolveFirstExistingImage(candidates) {
@@ -71,22 +71,10 @@ const joinRooms = (user, roles = []) => {
 
 const GoogleIcon = () => (
   <svg width="18" height="18" viewBox="0 0 533.5 544.3" aria-hidden="true">
-    <path
-      fill="#EA4335"
-      d="M533.5 278.4c0-17.4-1.6-34.1-4.7-50.2H272v95.1h147.1c-6.3 34-25 62.8-53.3 82v67h86.2c50.4-46.5 81.5-115 81.5-193.9z"
-    />
-    <path
-      fill="#34A853"
-      d="M272 544.3c72.3 0 132.9-23.9 177.2-65.1l-86.2-67c-24 16.1-54.6 25.7-91 25.7-69.9 0-129.1-47.2-150.3-110.7H33.7v69.6C77.8 490.3 168.8 544.3 272 544.3z"
-    />
-    <path
-      fill="#4A90E2"
-      d="M121.7 327.2c-5.1-15.3-8-31.7-8-48.6s2.9-33.3 8-48.6V160.4H33.7C12.7 204.8 0 254.3 0 306.6c0 52.3 12.7 101.8 33.7 146.2l88-65.6z"
-    />
-    <path
-      fill="#FBBC05"
-      d="M272 107.7c39.2 0 74.5 13.5 102.2 39.9l76.7-76.7C404.8 26.2 344.2 0 272 0 168.8 0 77.8 54 33.7 160.4l88 69.6C142.9 154.9 202.1 107.7 272 107.7z"
-    />
+    <path fill="#EA4335" d="M533.5 278.4c0-17.4-1.6-34.1-4.7-50.2H272v95.1h147.1c-6.3 34-25 62.8-53.3 82v67h86.2c50.4-46.5 81.5-115 81.5-193.9z"/>
+    <path fill="#34A853" d="M272 544.3c72.3 0 132.9-23.9 177.2-65.1l-86.2-67c-24 16.1-54.6 25.7-91 25.7-69.9 0-129.1-47.2-150.3-110.7H33.7v69.6C77.8 490.3 168.8 544.3 272 544.3z"/>
+    <path fill="#4A90E2" d="M121.7 327.2c-5.1-15.3-8-31.7-8-48.6s2.9-33.3 8-48.6V160.4H33.7C12.7 204.8 0 254.3 0 306.6c0 52.3 12.7 101.8 33.7 146.2l88-65.6z"/>
+    <path fill="#FBBC05" d="M272 107.7c39.2 0 74.5 13.5 102.2 39.9l76.7-76.7C404.8 26.2 344.2 0 272 0 168.8 0 77.8 54 33.7 160.4l88 69.6C142.9 154.9 202.1 107.7 272 107.7z"/>
   </svg>
 );
 
@@ -102,10 +90,7 @@ const Login = () => {
 
   const navigate = useNavigate();
   const userInputRef = useRef(null);
-  const apiBase = useMemo(
-    () => process.env.REACT_APP_API_URL?.replace(/\/+$/, ""),
-    []
-  );
+  const apiBase = useMemo(() => process.env.REACT_APP_API_URL?.replace(/\/+$/, ""), []);
 
   // Focus first input
   useEffect(() => {
@@ -123,8 +108,7 @@ const Login = () => {
 
   // Apply stored token from either storage on mount
   useEffect(() => {
-    const token =
-      localStorage.getItem("token") || sessionStorage.getItem("token");
+    const token = localStorage.getItem("token") || sessionStorage.getItem("token");
     if (token) axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
   }, []);
 
@@ -143,6 +127,7 @@ const Login = () => {
       (err) => {
         const status = err?.response?.status;
         if (status === 401) {
+          // cleanup and redirect to login
           delete axios.defaults.headers.common["Authorization"];
           localStorage.removeItem("token");
           localStorage.removeItem("roles");
@@ -150,8 +135,8 @@ const Login = () => {
           localStorage.removeItem("userId");
           localStorage.removeItem("name");
           localStorage.removeItem("activeRole");
-          localStorage.removeItem("family");
-          localStorage.removeItem("activeStudentAdmission");
+          localStorage.removeItem("family");                 // NEW
+          localStorage.removeItem("activeStudentAdmission"); // NEW
           sessionStorage.removeItem("token");
           sessionStorage.removeItem("roles");
           window.dispatchEvent(new Event("user-logged-out"));
@@ -183,15 +168,18 @@ const Login = () => {
         sessionStorage.setItem("userId", user.id);
         sessionStorage.setItem("name", user.name);
       }
+      // set a canonical place so other parts can read (used in your app)
+      // also set axios auth header
       axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
     } catch (e) {
       console.warn("Storage failed", e);
     }
 
-    // persist family
+    // --- NEW: persist family for navbar/student switcher ---
     try {
       if (data.family) {
         localStorage.setItem("family", JSON.stringify(data.family));
+        // default active student is the logged in student; fallback to username
         localStorage.setItem(
           "activeStudentAdmission",
           data.family?.student?.admission_number || user.username
@@ -204,31 +192,31 @@ const Login = () => {
     } catch (e) {
       console.warn("Failed to store family", e);
     }
+    // --- END NEW ---
 
-    localStorage.removeItem("userRole");
+    localStorage.removeItem("userRole"); // existing cleanup intent
     const defaultActive =
-      ROLE_ORDER.find((r) => roleArrLower.includes(r)) ||
-      (roleArrLower[0] || "");
+      ROLE_ORDER.find((r) => roleArrLower.includes(r)) || (roleArrLower[0] || "");
+    // persist activeRole to localStorage (persist UI choice)
     localStorage.setItem("activeRole", defaultActive);
 
-    // Save FCM token if present
+    // If you have FCM token available on window, save it on server
     try {
       const fcm = window.FCMTOKEN;
       if (fcm) {
-        axios
-          .post(`${apiBase}/users/save-token`, {
-            username: user.username,
-            token: fcm,
-          })
-          .catch((e) => {
-            console.warn("save-token failed", e?.response?.data || e.message);
-          });
+        // prefer axios default header for token auth which is set above
+        axios.post(`${apiBase}/users/save-token`, {
+          username: user.username,
+          token: fcm,
+        }).catch((e) => {
+          console.warn("save-token failed", e?.response?.data || e.message);
+        });
       }
     } catch (e) {
       console.warn("save-token call error", e);
     }
 
-    // Setup socket
+    // Setup socket auth: attach token to socket and (re)connect
     try {
       if (token) {
         socket.auth = { token };
@@ -241,17 +229,18 @@ const Login = () => {
       console.warn("socket auth setup failed", e);
     }
 
-    // Join rooms
+    // Join relevant rooms for notifications
     try {
       joinRooms(user, roleArrLower);
     } catch (e) {
       console.warn("joinRooms failed", e);
     }
 
+    // dispatch event for other parts of app to read updated user state
     window.dispatchEvent(new Event("role-changed"));
 
-    const redirectPath =
-      defaultActive === "accounts" ? "/accounts-dashboard" : "/dashboard";
+    // redirect depending on role (accounts -> accounts dashboard)
+    const redirectPath = defaultActive === "accounts" ? "/accounts-dashboard" : "/dashboard";
     navigate(redirectPath, { replace: true });
   };
 
@@ -261,11 +250,7 @@ const Login = () => {
     setLoading(true);
     try {
       const device = navigator.userAgent || "web";
-      const { data } = await axios.post(`${apiBase}/users/login`, {
-        login,
-        password,
-        device,
-      });
+      const { data } = await axios.post(`${apiBase}/users/login`, { login, password, device });
       await afterAuth(data);
     } catch (err) {
       const msg =
@@ -308,10 +293,10 @@ const Login = () => {
     }
   };
 
+  // Optional logout helper (can be moved to Auth context)
   const logout = async () => {
     try {
-      const token =
-        localStorage.getItem("token") || sessionStorage.getItem("token");
+      const token = localStorage.getItem("token") || sessionStorage.getItem("token");
       if (token) {
         try {
           await axios.post(
@@ -320,7 +305,7 @@ const Login = () => {
             { headers: { Authorization: `Bearer ${token}` } }
           );
         } catch (e) {
-          // ignore server errors here
+          // ignore server errors here, proceed to cleanup
         }
       }
     } finally {
@@ -331,8 +316,8 @@ const Login = () => {
       localStorage.removeItem("userId");
       localStorage.removeItem("name");
       localStorage.removeItem("activeRole");
-      localStorage.removeItem("family");
-      localStorage.removeItem("activeStudentAdmission");
+      localStorage.removeItem("family");                 // NEW
+      localStorage.removeItem("activeStudentAdmission"); // NEW
       sessionStorage.removeItem("token");
       sessionStorage.removeItem("roles");
       try {
@@ -343,11 +328,10 @@ const Login = () => {
     }
   };
 
-  const schoolLogoSrc = school?.logo
-    ? `${apiBase}${school.logo}`
-    : `${process.env.PUBLIC_URL}/images/pts_logo.png`;
-  const schoolName = school?.name || "Pathseekers International School";
-  const fallbackLogo = `${process.env.PUBLIC_URL}/images/pts_logo.png`;
+  // School logo + fallback logic
+  const schoolLogoSrc = school?.logo ? `${apiBase}${school.logo}` : `${process.env.PUBLIC_URL}/images/SmartoLogo.png`;
+  const schoolName = school?.name || "Smarto Experiential School";
+  const fallbackLogo = `${process.env.PUBLIC_URL}/images/SmartoLogo.png`;
 
   return (
     <div
@@ -357,15 +341,12 @@ const Login = () => {
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        backgroundImage: `linear-gradient(rgba(8,8,18,0.55), rgba(8,8,18,0.8))${
-          bgUrl ? `, url(${bgUrl})` : ""
-        }`,
+        backgroundImage: `linear-gradient(rgba(8,8,18,0.55), rgba(8,8,18,0.8))${bgUrl ? `, url(${bgUrl})` : ""}`,
         backgroundSize: "cover",
         backgroundPosition: "center",
         backgroundRepeat: "no-repeat",
       }}
     >
-      {/* scroller stays but we make it non-scrolling on desktop via CSS */}
       <div className="login-hero__scroller">
         <div className="login-hero__content container">
           <div className="row justify-content-center">
@@ -384,17 +365,13 @@ const Login = () => {
                       }}
                     />
 
-                    <h4 className="mt-2 mb-0 fw-semibold text-white">
-                      {schoolName}
-                    </h4>
+                    <h4 className="mt-2 mb-0 fw-semibold text-white">{schoolName}</h4>
                     <p className="text-white-50 small mb-0">
                       Manage academics, fees, attendance, HR & more.
                     </p>
                   </div>
 
-                  {error && (
-                    <div className="alert alert-danger py-2">{error}</div>
-                  )}
+                  {error && <div className="alert alert-danger py-2">{error}</div>}
 
                   <h5 className="fw-semibold mb-2 text-white">Sign in</h5>
                   <p className="text-white-50 mb-4">
@@ -419,9 +396,7 @@ const Login = () => {
                     </div>
 
                     <div className="mb-2">
-                      <label className="form-label text-white-75">
-                        Password
-                      </label>
+                      <label className="form-label text-white-75">Password</label>
                       <div className="input-group input-group-lg">
                         <input
                           type={showPass ? "text" : "password"}
@@ -436,9 +411,7 @@ const Login = () => {
                           type="button"
                           className="btn btn-outline-light"
                           onClick={() => setShowPass((s) => !s)}
-                          aria-label={
-                            showPass ? "Hide password" : "Show password"
-                          }
+                          aria-label={showPass ? "Hide password" : "Show password"}
                         >
                           {showPass ? "Hide" : "Show"}
                         </button>
@@ -515,7 +488,9 @@ const Login = () => {
                 </div>
               </div>
 
-              {/* we can drop the "scroll" hint since we removed scroll on laptop */}
+              <div className="text-center mt-3 text-white-50 small d-sm-none">
+                If parts are cut off, you can scroll vertically or swipe sideways.
+              </div>
             </div>
           </div>
         </div>
