@@ -115,7 +115,8 @@ import UserTracking from "./pages/UserTracking";
 import Houses from "./pages/Houses";
 import StudentFeeReport from "./pages/StudentFeeReport";
 
-// ✅ NEW: admin enquiries page
+// ✅ NEW pages
+import TransferCertificates from "./pages/TransferCertificates";
 import Enquiries from "./pages/Enquiries";
 
 // ✅ admission-aware hook for remount key
@@ -242,13 +243,15 @@ function App() {
         {/* Public */}
         <Route path="/" element={<Navigate to="/login" replace />} />
         <Route path="/login" element={<Login />} />
+        {/* Keep public form */}
+        <Route path="/enquiry" element={<EnquiryForm />} />
 
-        {/* Protected App */}
+        {/* Protected App w/ Layout (TopBar + Sidebar) */}
         <Route element={<AppLayout key={activeAdmission} />}>
           <Route path="/dashboard" element={<RoleAwareDashboard />} />
-
           <Route path="/edit-profile" element={<EditProfile />} />
 
+          {/* Chat */}
           <Route
             path="/chat"
             element={<Chat chatId="chat_room_1" currentUserId={currentUserId} />}
@@ -271,7 +274,7 @@ function App() {
           <Route path="/sections" element={<Sections />} />
           <Route path="/schools" element={<Schools />} />
 
-          {/* ✅ Enquiries page (admin) */}
+          {/* Enquiries (admin) */}
           <Route
             path="/enquiries"
             element={
@@ -280,8 +283,6 @@ function App() {
               </RequireRole>
             }
           />
-
-          {/* ... everything else stays the same ... */}
 
           {/* Fee & Reports */}
           <Route path="/fee-structure" element={<FeeStructure />} />
@@ -439,14 +440,23 @@ function App() {
             }
           />
 
+          {/* ✅ Transfer Certificates INSIDE layout */}
+          <Route
+            path="/transfer-certificates"
+            element={
+              <RequireRole roles={["admin", "superadmin"]}>
+                <TransferCertificates />
+              </RequireRole>
+            }
+          />
+          {/* Optional short alias */}
+          <Route path="/tc" element={<Navigate to="/transfer-certificates" replace />} />
+
           {/* Catch-all (inside app) */}
           <Route path="*" element={<h1 className="container py-4">404: Page Not Found</h1>} />
         </Route>
 
-        {/* keep public form */}
-        <Route path="/enquiry" element={<EnquiryForm />} />
-
-        {/* Any other URL → login */}
+        {/* Any other URL → login (outside app) */}
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </Router>

@@ -336,7 +336,7 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
   };
 
   const quickLinks = QUICK_LINKS_BY_ROLE[roleLower] || [];
-  const brandLogo = `${process.env.PUBLIC_URL}/images/SmartoLogo.png`;
+  const brandLogo = `${process.env.PUBLIC_URL}/images/pts_logo.png`;
 
   return (
     <>
@@ -350,7 +350,7 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
           <Link to="/dashboard" className="navbar-brand d-flex align-items-center gap-2 ms-2">
             <img
               src={brandLogo}
-              alt="Smarto Experiential School logo"
+              alt="Pathseekers International School"
               width={34}
               height={34}
               className="rounded"
@@ -359,7 +359,7 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
                 e.currentTarget.style.display = "none";
               }}
             />
-            <span className="fw-semibold">Smarto Experiential School</span>
+            <span className="fw-semibold">Pathseekers International School</span>
           </Link>
 
           {/* Student switcher (desktop pills) */}
