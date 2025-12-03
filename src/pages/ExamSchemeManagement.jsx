@@ -16,7 +16,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 
 // Sortable row component
-function SortableRow({ scheme, onEdit, onDelete, onToggleLock }) {
+function SortableRow({ scheme, onEdit, onDelete, onToggleLock, onDuplicate }) {
   const { attributes, listeners, setNodeRef, transform, transition } = useSortable({
     id: scheme.id.toString(),
   });
@@ -24,7 +24,14 @@ function SortableRow({ scheme, onEdit, onDelete, onToggleLock }) {
 
   return (
     <tr ref={setNodeRef} style={style}>
-      <td {...attributes} {...listeners} style={{ cursor: "grab" }}>☰</td>
+      <td
+        {...attributes}
+        {...listeners}
+        style={{ cursor: "grab", width: 40 }}
+        title="Drag to reorder"
+      >
+        ☰
+      </td>
       <td>{scheme.class?.class_name}</td>
       <td>{scheme.subject?.name}</td>
       <td>{scheme.term?.name}</td>
@@ -35,20 +42,45 @@ function SortableRow({ scheme, onEdit, onDelete, onToggleLock }) {
       </td>
       <td>{scheme.weightage_percent}%</td>
       <td>
-        {scheme.is_locked
-          ? <span className="badge bg-danger">🔒 Locked</span>
-          : <span className="badge bg-success">🔓 Unlocked</span>
-        }
+        {scheme.is_locked ? (
+          <span className="badge bg-danger">🔒 Locked</span>
+        ) : (
+          <span className="badge bg-success">🔓 Unlocked</span>
+        )}
       </td>
       <td>
-        <button className="btn btn-sm btn-warning me-2" onClick={() => onEdit(scheme)}>
+        {/* 📄 Copy / Duplicate icon */}
+        <button
+          className="btn btn-sm btn-outline-info me-2"
+          onClick={() => onDuplicate(scheme)}
+          title="Duplicate Scheme"
+        >
+          📄
+        </button>
+
+        {/* ✏️ Edit */}
+        <button
+          className="btn btn-sm btn-warning me-2"
+          onClick={() => onEdit(scheme)}
+          title="Edit Scheme"
+        >
           Edit
         </button>
-        <button className="btn btn-sm btn-danger me-2" onClick={() => onDelete(scheme.id)}>
+
+        {/* 🗑️ Delete */}
+        <button
+          className="btn btn-sm btn-danger me-2"
+          onClick={() => onDelete(scheme.id)}
+          title="Delete Scheme"
+        >
           Delete
         </button>
+
+        {/* 🔒 Lock / Unlock */}
         <button
-          className={`btn btn-sm ${scheme.is_locked ? 'btn-secondary' : 'btn-outline-secondary'}`}
+          className={`btn btn-sm ${
+            scheme.is_locked ? "btn-secondary" : "btn-outline-secondary"
+          }`}
           onClick={() => onToggleLock(scheme)}
           title={scheme.is_locked ? "Unlock Marks Entry" : "Lock Marks Entry"}
         >
@@ -60,7 +92,6 @@ function SortableRow({ scheme, onEdit, onDelete, onToggleLock }) {
 }
 
 const ExamSchemeManagement = () => {
-  // State
   const [schemes, setSchemes] = useState([]);
   const [classes, setClasses] = useState([]);
   const [subjects, setSubjects] = useState([]);
@@ -84,7 +115,6 @@ const ExamSchemeManagement = () => {
     fetchSchemes();
   }, []);
 
-  // Data fetchers
   const fetchDropdowns = async () => {
     try {
       const [cRes, sRes, tRes, compRes] = await Promise.all([
@@ -111,13 +141,11 @@ const ExamSchemeManagement = () => {
     }
   };
 
-  // Filter handlers
-  const handleFilterChange = e =>
+  const handleFilterChange = (e) =>
     setFilters({ ...filters, [e.target.name]: e.target.value });
   const applyFilters = () => fetchSchemes();
 
-  // Modal handlers
-  const openModal = scheme => {
+  const openModal = (scheme) => {
     if (scheme) {
       setFormData({
         id: scheme.id,
@@ -141,15 +169,35 @@ const ExamSchemeManagement = () => {
     }
     setShowModal(true);
   };
+
+  const openDuplicateModal = (scheme) => {
+    setFormData({
+      id: null, // new copy record
+      class_id: scheme.class_id,
+      subject_id: scheme.subject_id,
+      term_id: scheme.term_id,
+      component_id: scheme.component_id,
+      weightage_percent: scheme.weightage_percent.toString(),
+    });
+    setIsEditing(false);
+    setShowModal(true);
+  };
+
   const closeModal = () => setShowModal(false);
 
-  // Form handlers
-  const handleChange = e =>
+  const handleChange = (e) =>
     setFormData({ ...formData, [e.target.name]: e.target.value });
 
   const handleSubmit = async () => {
-    const { class_id, subject_id, term_id, component_id, weightage_percent } = formData;
-    if (!class_id || !subject_id || !term_id || !component_id || !weightage_percent) {
+    const { class_id, subject_id, term_id, component_id, weightage_percent } =
+      formData;
+    if (
+      !class_id ||
+      !subject_id ||
+      !term_id ||
+      !component_id ||
+      !weightage_percent
+    ) {
       return Swal.fire("Warning", "Please fill all fields.", "warning");
     }
     try {
@@ -166,13 +214,13 @@ const ExamSchemeManagement = () => {
     }
   };
 
-  const handleDelete = async id => {
+  const handleDelete = async (id) => {
     const result = await Swal.fire({
       title: "Confirm Deletion",
       text: "This will delete the scheme.",
       icon: "warning",
       showCancelButton: true,
-      confirmButtonText: "Delete"
+      confirmButtonText: "Delete",
     });
     if (!result.isConfirmed) return;
     try {
@@ -184,37 +232,43 @@ const ExamSchemeManagement = () => {
     }
   };
 
-  const handleToggleLock = async scheme => {
+  const handleToggleLock = async (scheme) => {
     const action = scheme.is_locked ? "unlock" : "lock";
     const result = await Swal.fire({
       title: `Confirm to ${action}`,
       text: `Are you sure you want to ${action}?`,
       icon: "warning",
       showCancelButton: true,
-      confirmButtonText: `Yes, ${action}`
+      confirmButtonText: `Yes, ${action}`,
     });
     if (!result.isConfirmed) return;
     try {
       await api.patch(`/exam-schemes/${scheme.id}/lock`, {
-        is_locked: !scheme.is_locked
+        is_locked: !scheme.is_locked,
       });
-      Swal.fire("Success", `Component ${!scheme.is_locked ? "locked" : "unlocked"} successfully.`, "success");
+      Swal.fire(
+        "Success",
+        `Component ${!scheme.is_locked ? "locked" : "unlocked"} successfully.`,
+        "success"
+      );
       fetchSchemes();
     } catch {
       Swal.fire("Error", "Failed to toggle lock status.", "error");
     }
   };
 
-  // Drag & Drop
   const handleDragEnd = async ({ active, over }) => {
     if (!over || active.id === over.id) return;
-    const oldIndex = schemes.findIndex(s => s.id.toString() === active.id);
-    const newIndex = schemes.findIndex(s => s.id.toString() === over.id);
+    const oldIndex = schemes.findIndex((s) => s.id.toString() === active.id);
+    const newIndex = schemes.findIndex((s) => s.id.toString() === over.id);
     const reordered = arrayMove(schemes, oldIndex, newIndex);
     setSchemes(reordered);
     try {
       await api.post("/exam-schemes/reorder", {
-        schemes: reordered.map((item, idx) => ({ id: item.id, serial_order: idx + 1 }))
+        schemes: reordered.map((item, idx) => ({
+          id: item.id,
+          serial_order: idx + 1,
+        })),
       });
     } catch {
       Swal.fire("Error", "Failed to update order.", "error");
@@ -226,9 +280,9 @@ const ExamSchemeManagement = () => {
     <div className="container mt-4">
       <h2>📘 Exam Scheme Management</h2>
 
-      {/* Filter & Add */}
+      {/* Filters & Add */}
       <div className="d-flex justify-content-between align-items-end mb-3">
-        <div className="d-flex gap-2">
+        <div className="d-flex gap-2 flex-wrap">
           <select
             name="class_id"
             value={filters.class_id}
@@ -236,8 +290,10 @@ const ExamSchemeManagement = () => {
             className="form-control"
           >
             <option value="">All Classes</option>
-            {classes.map(c => (
-              <option key={c.id} value={c.id}>{c.class_name}</option>
+            {classes.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.class_name}
+              </option>
             ))}
           </select>
           <select
@@ -247,35 +303,51 @@ const ExamSchemeManagement = () => {
             className="form-control"
           >
             <option value="">All Subjects</option>
-            {subjects.map(s => (
-              <option key={s.id} value={s.id}>{s.name}</option>
+            {subjects.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
             ))}
           </select>
-          <Button variant="primary" onClick={applyFilters}>Apply Filters</Button>
+          <Button variant="primary" onClick={applyFilters}>
+            Apply Filters
+          </Button>
         </div>
-        <Button variant="success" onClick={() => openModal()}>➕ Add Scheme</Button>
+        <Button variant="success" onClick={() => openModal()}>
+          ➕ Add Scheme
+        </Button>
       </div>
 
       {/* Table */}
       <div className="card mb-3">
         <div className="card-body">
           <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-            <SortableContext items={schemes.map(s => s.id.toString())} strategy={verticalListSortingStrategy}>
+            <SortableContext
+              items={schemes.map((s) => s.id.toString())}
+              strategy={verticalListSortingStrategy}
+            >
               <table className="table table-bordered table-striped">
                 <thead className="table-light">
                   <tr>
-                    <th>#</th><th>Class</th><th>Subject</th><th>Term</th>
-                    <th>Component</th><th>Weightage (%)</th><th>Status</th><th>Actions</th>
+                    <th style={{ width: 40 }}>#</th>
+                    <th>Class</th>
+                    <th>Subject</th>
+                    <th>Term</th>
+                    <th>Component</th>
+                    <th>Weightage (%)</th>
+                    <th>Status</th>
+                    <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {schemes.map((s, i) => (
+                  {schemes.map((s) => (
                     <SortableRow
                       key={s.id}
                       scheme={s}
                       onEdit={openModal}
                       onDelete={handleDelete}
                       onToggleLock={handleToggleLock}
+                      onDuplicate={openDuplicateModal}
                     />
                   ))}
                 </tbody>
@@ -285,14 +357,16 @@ const ExamSchemeManagement = () => {
         </div>
       </div>
 
-      {/* Modal Form */}
-      <Modal show={showModal} onHide={closeModal} centered>
+      {/* Modal */}
+      <Modal show={showModal} onHide={closeModal} centered size="lg">
         <Modal.Header closeButton>
-          <Modal.Title>{isEditing ? "✏️ Edit Scheme" : "➕ Add Scheme"}</Modal.Title>
+          <Modal.Title>
+            {isEditing ? "✏️ Edit Scheme" : "➕ Add / Duplicate Scheme"}
+          </Modal.Title>
         </Modal.Header>
         <Modal.Body>
           <div className="row g-2">
-            <div className="col-6">
+            <div className="col-12 col-md-6">
               <label>Class</label>
               <select
                 name="class_id"
@@ -301,12 +375,14 @@ const ExamSchemeManagement = () => {
                 className="form-control"
               >
                 <option value="">Select Class</option>
-                {classes.map(c => (
-                  <option key={c.id} value={c.id}>{c.class_name}</option>
+                {classes.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.class_name}
+                  </option>
                 ))}
               </select>
             </div>
-            <div className="col-6">
+            <div className="col-12 col-md-6">
               <label>Subject</label>
               <select
                 name="subject_id"
@@ -315,12 +391,14 @@ const ExamSchemeManagement = () => {
                 className="form-control"
               >
                 <option value="">Select Subject</option>
-                {subjects.map(s => (
-                  <option key={s.id} value={s.id}>{s.name}</option>
+                {subjects.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
                 ))}
               </select>
             </div>
-            <div className="col-6">
+            <div className="col-12 col-md-6">
               <label>Term</label>
               <select
                 name="term_id"
@@ -329,12 +407,14 @@ const ExamSchemeManagement = () => {
                 className="form-control"
               >
                 <option value="">Select Term</option>
-                {terms.map(t => (
-                  <option key={t.id} value={t.id}>{t.name}</option>
+                {terms.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
                 ))}
               </select>
             </div>
-            <div className="col-6">
+            <div className="col-12 col-md-6">
               <label>Component</label>
               <select
                 name="component_id"
@@ -343,14 +423,14 @@ const ExamSchemeManagement = () => {
                 className="form-control"
               >
                 <option value="">Select Component</option>
-                {components.map(c => (
+                {components.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.abbreviation} - {c.name}
                   </option>
                 ))}
               </select>
             </div>
-            <div className="col-6">
+            <div className="col-12 col-md-6">
               <label>Weightage (%)</label>
               <input
                 type="number"
@@ -364,9 +444,11 @@ const ExamSchemeManagement = () => {
           </div>
         </Modal.Body>
         <Modal.Footer>
-          <Button variant="secondary" onClick={closeModal}>Cancel</Button>
+          <Button variant="secondary" onClick={closeModal}>
+            Cancel
+          </Button>
           <Button variant="primary" onClick={handleSubmit}>
-            {isEditing ? "Update" : "Create"}
+            {isEditing ? "Update" : "Save"}
           </Button>
         </Modal.Footer>
       </Modal>

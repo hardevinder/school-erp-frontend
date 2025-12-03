@@ -320,7 +320,47 @@ const Students = () => {
     input.click();
   };
 
-  // ---------------- ADD / EDIT WITH CONCESSION IN BASIC INFO ----------------
+  // Print Admission Form
+const handlePrintAdmissionForm = async (student) => {
+  if (!student?.id) return;
+
+  try {
+    // This uses the same api instance, so your JWT/token is attached
+    const resp = await api.get(`/students/${student.id}/admission-form`, {
+      responseType: "blob",
+    });
+
+    const blob = new Blob([resp.data], {
+      type: resp.headers["content-type"] || "application/pdf",
+    });
+    const url = URL.createObjectURL(blob);
+
+    // Try to open in new tab
+    const win = window.open(url, "_blank");
+    if (!win) {
+      // Popup blocked – fallback to download
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `Admission_Form_${student.admission_number || student.id}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    }
+
+    // Optional: release later
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  } catch (err) {
+    console.error("handlePrintAdmissionForm:", err);
+    Swal.fire(
+      "Error",
+      err.response?.data?.message ||
+        "Failed to generate admission form. Please try again.",
+      "error"
+    );
+  }
+};
+
+  // ---------------- ADD / EDIT FORM ----------------
   const showStudentForm = async (mode = "add", student = null) => {
     await fetchClasses();
     await fetchSections();
@@ -331,7 +371,6 @@ const Students = () => {
     const isEdit = mode === "edit";
     const s = student || {};
 
-    // pre-fill +1 for ADD mode
     let nextSuggestion = "";
     if (!isEdit) {
       nextSuggestion = await fetchNextAdmissionNumber();
@@ -370,7 +409,6 @@ const Students = () => {
       )
       .join("")}`;
 
-    // Transport dropdown
     const transportOptions = `<option value="">No Transport</option>${transportations
       .map((t) => {
         const label = (t?.Villages || "").replace(/"/g, "&quot;");
@@ -381,37 +419,49 @@ const Students = () => {
       })
       .join("")}`;
 
-    // ---------- TABS HTML (colorful) ----------
+    // ---------- TABS HTML (wider, shorter, more professional) ----------
     const html = `
       <style>
-        .swal2-popup { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+        .swal2-popup {
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+          max-width: 1040px !important;
+          width: 100% !important;
+          padding-top: 18px !important;
+        }
+        .student-form-wrapper {
+          max-height: 60vh;
+          overflow-y: auto;
+          padding-right: 4px;
+        }
         .tabbar {
           display: flex;
           gap: 6px;
-          margin-bottom: 20px;
-          border-bottom: 2px solid #eef2ff;
-          padding-bottom: 8px;
-          background: linear-gradient(90deg,#eef2ff 0%,#fef9c3 100%);
-          border-radius: 10px;
-          padding: 8px 8px 0 8px;
+          margin-bottom: 16px;
+          border-bottom: 1px solid #e5e7eb;
+          padding: 0 4px;
+          overflow-x: auto;
         }
         .tabbtn {
-          padding: 8px 13px;
+          padding: 8px 14px;
           border: none;
-          background: rgba(255,255,255,0.6);
+          background: transparent;
           cursor: pointer;
           font-weight: 500;
-          color: #6366f1;
+          color: #6b7280;
           border-bottom: 2px solid transparent;
           transition: all 0.15s ease;
-          border-top-left-radius: 8px;
-          border-top-right-radius: 8px;
+          border-top-left-radius: 6px;
+          border-top-right-radius: 6px;
+          white-space: nowrap;
         }
-        .tabbtn:hover { background: #fff; }
-        .tabbtn.active {
-          background: #fff;
-          border-bottom-color: #6366f1;
+        .tabbtn:hover {
           color: #111827;
+          background-color: #f3f4f6;
+        }
+        .tabbtn.active {
+          color: #111827;
+          border-bottom-color: #6366f1;
+          background-color: #eff6ff;
         }
         .tabpane { display: none; }
         .tabpane.active { display: block; }
@@ -420,55 +470,65 @@ const Students = () => {
           grid-template-columns: repeat(2, minmax(0, 1fr));
           gap: 16px;
           background: #fafbfc;
-          padding: 20px;
+          padding: 16px 18px;
           border-radius: 8px;
-          border: 1px solid #e9ecef;
+          border: 1px solid #e5e7eb;
         }
         .full-row { grid-column: 1 / -1; }
         .form-field {
           width: 100%;
-          padding: 8px 12px;
-          border: 1px solid #ced4da;
+          padding: 8px 10px;
+          border: 1px solid #d1d5db;
           border-radius: 6px;
           font-size: 14px;
-          transition: border-color 0.15s ease;
+          transition: border-color 0.15s ease, box-shadow 0.15s ease;
         }
         .form-field:focus {
           border-color: #6366f1;
           outline: 0;
-          box-shadow: 0 0 0 0.15rem rgba(99,102,241,.2);
+          box-shadow: 0 0 0 0.12rem rgba(99,102,241,.25);
         }
         .form-label {
           font-weight: 600;
           color: #374151;
           margin-bottom: 4px;
           display: block;
-          font-size: 14px;
+          font-size: 13px;
         }
         .required { color: #dc2626; }
         .hint {
           color: #6b7280;
-          font-size: 12px;
+          font-size: 11px;
           margin-top: 4px;
           font-style: italic;
         }
         .sibling-block {
-          border: 1px solid #e9ecef;
-          padding: 16px;
+          border: 1px dashed #e5e7eb;
+          padding: 12px;
           border-radius: 8px;
-          margin-bottom: 16px;
-          background: #fff;
-          box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+          margin-bottom: 8px;
+          background: #ffffff;
         }
         .sibling-row {
           display: flex;
-          gap: 12px;
+          gap: 10px;
           flex-wrap: wrap;
           align-items: end;
         }
+
+        /* Mobile optimizations */
+        @media (max-width: 768px) {
+          .form-container {
+            grid-template-columns: 1fr;
+            padding: 12px 10px;
+          }
+          .tabbar {
+            padding-bottom: 2px;
+          }
+        }
       </style>
 
-      <div style="height: 70vh; overflow-y: auto;">
+      <div class="student-form-wrapper">
         <div class="tabbar">
           <button class="tabbtn active" data-tab="mandatory">Basic Info</button>
           <button class="tabbtn" data-tab="personal">Personal</button>
@@ -711,7 +771,7 @@ const Students = () => {
           </div>
         </div>
 
-        <!-- Transport (now without concession) -->
+        <!-- Transport -->
         <div class="tabpane" id="pane-transport">
           <div class="form-container">
             <div>
@@ -738,7 +798,7 @@ const Students = () => {
               .map(
                 (slot) => `
               <div class="full-row sibling-block" data-slot="${slot}">
-                <label>Sibling ${slot} Details</label>
+                <label class="form-label">Sibling ${slot}</label>
                 <div class="sibling-row">
                   <select id="sib_class_${slot}" class="form-field">
                     <option value="">Select Class</option>
@@ -838,7 +898,7 @@ const Students = () => {
     const popup = await Swal.fire({
       title: isEdit ? "Edit Student Record" : "Add New Student",
       icon: isEdit ? "info" : "question",
-      width: "1100px",
+      width: "1040px",
       html,
       showCancelButton: true,
       confirmButtonText: isEdit ? "Update Student" : "Add Student",
@@ -929,7 +989,6 @@ const Students = () => {
           payload[`sibling_name_${slot}`] = cleanedName || null;
         });
 
-        // validations
         if (!payload.name)
           Swal.showValidationMessage("Full name is required");
         if (!payload.class_id)
@@ -1346,7 +1405,7 @@ const Students = () => {
         minHeight: "100vh",
       }}
     >
-      <div className="d-flex justify-content-between align-items-center mb-4">
+      <div className="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
         <div>
           <h2 className="h4 mb-0 fw-bold text-dark">
             Student Management
@@ -1355,7 +1414,7 @@ const Students = () => {
             Manage student records, admissions, transport and concessions.
           </p>
         </div>
-        <div className="d-flex gap-2">
+        <div className="d-flex gap-2 flex-wrap">
           {isAdminOrSuperAdmin && (
             <>
               <button className="btn btn-primary" onClick={handleAdd}>
@@ -1430,13 +1489,13 @@ const Students = () => {
 
       {/* Filters + table */}
       <div className="card border-0 shadow-sm">
-        <div className="card-header bg-white border-0 pb-0">
+        <div className="card-header bg-white border-0 pb-2">
           <div className="d-flex flex-wrap gap-2 align-items-center">
             <div className="flex-grow-1">
               <input
                 type="text"
                 className="form-control form-control-sm"
-                style={{ maxWidth: 300, minWidth: 200 }}
+                style={{ maxWidth: 320, minWidth: 200 }}
                 placeholder="Search by name, admission #, or Aadhaar..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -1457,7 +1516,7 @@ const Students = () => {
             </select>
 
             <select
-              className="form-select form-select-sm"
+              className="form-select form-select-sm d-none d-md-block"
               style={{ maxWidth: 200 }}
               value={selectedSessionFilter}
               onChange={(e) => setSelectedSessionFilter(e.target.value)}
@@ -1471,7 +1530,7 @@ const Students = () => {
             </select>
 
             <select
-              className="form-select form-select-sm"
+              className="form-select form-select-sm d-none d-md-block"
               style={{ maxWidth: 180 }}
               value={selectedStatus}
               onChange={(e) => setSelectedStatus(e.target.value)}
@@ -1482,7 +1541,7 @@ const Students = () => {
             </select>
 
             <select
-              className="form-select form-select-sm"
+              className="form-select form-select-sm d-none d-lg-block"
               style={{ maxWidth: 180 }}
               value={hasSiblingFilter}
               onChange={(e) => setHasSiblingFilter(e.target.value)}
@@ -1516,21 +1575,37 @@ const Students = () => {
                 }}
               >
                 <tr>
-                  <th className="border-0 py-3">#</th>
+                  <th className="border-0 py-3 d-none d-md-table-cell">#</th>
                   <th className="border-0 py-3">Photo</th>
                   <th className="border-0 py-3">Adm. #</th>
                   <th className="border-0 py-3">Student Name</th>
-                  <th className="border-0 py-3">Father's Name</th>
+                  <th className="border-0 py-3 d-none d-lg-table-cell">
+                    Father's Name
+                  </th>
                   <th className="border-0 py-3">Class</th>
-                  <th className="border-0 py-3">Section</th>
-                  <th className="border-0 py-3">House</th>
-                  <th className="border-0 py-3">Session</th>
-                  <th className="border-0 py-3">Aadhaar</th>
-                  <th className="border-0 py-3">Type</th>
+                  <th className="border-0 py-3 d-none d-md-table-cell">
+                    Section
+                  </th>
+                  <th className="border-0 py-3 d-none d-xl-table-cell">
+                    House
+                  </th>
+                  <th className="border-0 py-3 d-none d-lg-table-cell">
+                    Session
+                  </th>
+                  <th className="border-0 py-3 d-none d-xl-table-cell">
+                    Aadhaar
+                  </th>
+                  <th className="border-0 py-3 d-none d-lg-table-cell">
+                    Type
+                  </th>
                   {isAdminOrSuperAdmin && (
-                    <th className="border-0 py-3">Concession</th>
+                    <th className="border-0 py-3 d-none d-xl-table-cell">
+                      Concession
+                    </th>
                   )}
-                  <th className="border-0 py-3">Transport</th>
+                  <th className="border-0 py-3 d-none d-xl-table-cell">
+                    Transport
+                  </th>
                   <th className="border-0 py-3">Actions</th>
                 </tr>
               </thead>
@@ -1558,7 +1633,9 @@ const Students = () => {
 
                       return (
                         <tr key={stu.id} className="table-hover-row">
-                          <td className="py-3">{idx + 1}</td>
+                          <td className="py-3 d-none d-md-table-cell">
+                            {idx + 1}
+                          </td>
                           <td
                             className="py-2"
                             onClick={() => handleView(stu)}
@@ -1614,7 +1691,7 @@ const Students = () => {
                             )}
                           </td>
                           <td
-                            className="py-3 text-muted"
+                            className="py-3 text-muted d-none d-lg-table-cell"
                             onClick={() => handleView(stu)}
                             style={{ cursor: "pointer" }}
                           >
@@ -1630,7 +1707,7 @@ const Students = () => {
                             </span>
                           </td>
                           <td
-                            className="py-3"
+                            className="py-3 d-none d-md-table-cell"
                             onClick={() => handleView(stu)}
                             style={{ cursor: "pointer" }}
                           >
@@ -1639,7 +1716,7 @@ const Students = () => {
                             </span>
                           </td>
                           <td
-                            className="py-3"
+                            className="py-3 d-none d-xl-table-cell"
                             onClick={() => handleView(stu)}
                             style={{ cursor: "pointer" }}
                           >
@@ -1660,7 +1737,7 @@ const Students = () => {
                             )}
                           </td>
                           <td
-                            className="py-3"
+                            className="py-3 d-none d-lg-table-cell"
                             onClick={() => handleView(stu)}
                             style={{ cursor: "pointer" }}
                           >
@@ -1668,7 +1745,7 @@ const Students = () => {
                               (stu.session_id ? "Assigned" : "-")}
                           </td>
                           <td
-                            className="py-3 small"
+                            className="py-3 small d-none d-xl-table-cell"
                             onClick={() => handleView(stu)}
                             style={{ cursor: "pointer" }}
                           >
@@ -1680,7 +1757,7 @@ const Students = () => {
                               : "-"}
                           </td>
                           <td
-                            className="py-3"
+                            className="py-3 d-none d-lg-table-cell"
                             onClick={() => handleView(stu)}
                             style={{ cursor: "pointer" }}
                           >
@@ -1696,7 +1773,7 @@ const Students = () => {
                           </td>
                           {isAdminOrSuperAdmin && (
                             <td
-                              className="py-3"
+                              className="py-3 d-none d-xl-table-cell"
                               onClick={() => handleView(stu)}
                               style={{ cursor: "pointer" }}
                             >
@@ -1706,14 +1783,14 @@ const Students = () => {
                             </td>
                           )}
                           <td
-                            className="py-3 small"
+                            className="py-3 small d-none d-xl-table-cell"
                             onClick={() => handleView(stu)}
                             style={{ cursor: "pointer" }}
                           >
                             {formatTransportById(stu.route_id)}
                           </td>
                           <td className="py-2">
-                            <div className="d-flex gap-1 align-items-center">
+                            <div className="d-flex gap-1 align-items-center flex-wrap">
                               {isAdminOrSuperAdmin && (
                                 <>
                                   <div className="form-check form-switch form-switch-sm m-0">
@@ -1746,6 +1823,16 @@ const Students = () => {
                                   </button>
                                 </>
                               )}
+
+                              {/* Print Admission Form */}
+                              <button
+                                className="btn btn-outline-success btn-sm"
+                                onClick={() => handlePrintAdmissionForm(stu)}
+                                title="Print Admission Form"
+                              >
+                                <i className="bi bi-printer"></i>
+                              </button>
+
                               {isSuperadmin && (
                                 <button
                                   className="btn btn-outline-danger btn-sm"
@@ -1784,7 +1871,7 @@ const Students = () => {
     </div>
   );
 
-  // VIEW POPUP (no change except style kept nice)
+  // VIEW POPUP
   function handleView(student) {
     const siblingRows = [];
     for (let i = 1; i <= 4; i++) {
@@ -1978,6 +2065,16 @@ const Students = () => {
           font-size: 0.95rem;
         }
         .sibling-item .detail-value:hover { text-decoration: underline; }
+
+        @media (max-width: 768px) {
+          .detail-item {
+            flex-direction: column;
+            gap: 4px;
+          }
+          .detail-label {
+            flex: 0 0 auto;
+          }
+        }
       </style>
     `;
 

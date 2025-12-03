@@ -19,11 +19,16 @@ const getRoleFlags = () => {
 // ---------- small helpers ----------
 const esc = (v = "") => String(v).replace(/"/g, "&quot;");
 const toCSV = (arr) => (Array.isArray(arr) ? arr.join(", ") : "");
-const toLines = (arr) => (Array.isArray(arr) ? arr.join("\n") : String(arr || "").split(",").map((s) => s.trim()).join("\n"));
-const fromLines = (str) => String(str || "").split("\n").map((s) => s.trim()).filter(Boolean);
-const fromCSV = (str) =>
+const toLines = (arr) =>
+  Array.isArray(arr)
+    ? arr.join("\n")
+    : String(arr || "")
+        .split(",")
+        .map((s) => s.trim())
+        .join("\n");
+const fromLines = (str) =>
   String(str || "")
-    .split(",")
+    .split("\n")
     .map((s) => s.trim())
     .filter(Boolean);
 
@@ -45,16 +50,9 @@ const asDDMMYYYY = (v) => {
   if (/^\d{2}\/\d{2}\/\d{4}$/.test(s)) return s;
   const d = new Date(s);
   if (isNaN(d.getTime())) return s;
-  return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
-};
-
-// ---- debounce ----
-const debounce = (fn, ms = 250) => {
-  let t;
-  return (...args) => {
-    clearTimeout(t);
-    t = setTimeout(() => fn(...args), ms);
-  };
+  return `${String(d.getDate()).padStart(2, "0")}/${String(
+    d.getMonth() + 1
+  ).padStart(2, "0")}/${d.getFullYear()}`;
 };
 
 /** ================== DATE NORMALIZER ==================
@@ -79,7 +77,10 @@ const toDateInput = (v) => {
   const dmy = s.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
   if (dmy) {
     const [, dd, mm, yyyy] = dmy;
-    return `${yyyy}-${String(mm).padStart(2, "0")}-${String(dd).padStart(2, "0")}`;
+    return `${yyyy}-${String(mm).padStart(2, "0")}-${String(dd).padStart(
+      2,
+      "0"
+    )}`;
   }
 
   // Fallback: Date parse -> ISO -> first 10
@@ -111,39 +112,42 @@ const normalizeTcForModal = (tc = {}) => {
   };
 };
 
-// ---- quick search for students (uses your /students/search) ----
-async function searchStudentsQuick(query, limit = 10) {
-  if (!query?.trim()) return [];
-  try {
-    const { data } = await api.get("/students/search", {
-      params: { q: query.trim(), limit },
-    });
-    return Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : [];
-  } catch {
-    return [];
-  }
-}
-
-// ---------- admission lookup (by number OR id) ----------
-async function resolveStudentId({ admission_number, student_id }) {
-  if (student_id) return Number(student_id);
+// ---------- resolve student strictly by Admission No ----------
+async function resolveStudentIdByAdmission(admission_number) {
   if (!admission_number) return null;
+  const adm = String(admission_number).trim();
 
+  // 1) Try /students/admission/:adm
   try {
-    const r = await api.get(`/students/admission/${encodeURIComponent(admission_number)}`);
+    const r = await api.get(
+      `/students/admission/${encodeURIComponent(adm)}`
+    );
     const data = Array.isArray(r.data) ? r.data[0] : r.data;
-    if (data?.id) return Number(data.id);
-  } catch {}
+    if (
+      data?.id &&
+      String(data.admission_number || "").trim() === adm
+    ) {
+      return Number(data.id);
+    }
+  } catch (e) {
+    // ignore, try next
+    console.error("resolve by /students/admission failed", e);
+  }
 
+  // 2) Try /students?admission_number=ADM
   try {
-    const r = await api.get(`/students`, { params: { admission_number } });
+    const r = await api.get("/students", {
+      params: { admission_number: adm },
+    });
     const arr = Array.isArray(r.data) ? r.data : [];
-    const hit =
-      arr.find(
-        (s) => String(s.admission_number || "").trim() === String(admission_number).trim()
-      ) || arr[0];
+    const hit = arr.find(
+      (s) => String(s.admission_number || "").trim() === adm
+    );
     if (hit?.id) return Number(hit.id);
-  } catch {}
+  } catch (e) {
+    console.error("resolve by /students?admission_number failed", e);
+  }
+
   return null;
 }
 
@@ -169,45 +173,65 @@ const modalHtml = (tc = {}) => {
     <div class="form-grid">
       <div>
         <label class="form-label">Serial No.</label>
-        <input id="swal-serial" class="form-field" value="${esc(s.serial_no)}" placeholder="e.g., 0052">
+        <input id="swal-serial" class="form-field" value="${esc(
+          s.serial_no
+        )}" placeholder="e.g., 0052">
       </div>
       <div>
         <label class="form-label">PEN Number</label>
-        <input id="swal-pen" class="form-field" value="${esc(s.pen_number || "")}" placeholder="Student PEN">
+        <input id="swal-pen" class="form-field" value="${esc(
+          s.pen_number || ""
+        )}" placeholder="Student PEN">
       </div>
       <div>
         <label class="form-label">Admission No.</label>
-        <input id="swal-adm" class="form-field" value="${esc(s.admission_no)}" placeholder="e.g., TPIS-287">
+        <input id="swal-adm" class="form-field" value="${esc(
+          s.admission_no
+        )}" placeholder="e.g., TPIS-287">
       </div>
       <div class="full">
         <label class="form-label">Session Text</label>
-        <input id="swal-session" class="form-field" value="${esc(s.session_text || "Apr 2024-Mar 2025")}" placeholder="e.g., Apr 2024-Mar 2025">
+        <input id="swal-session" class="form-field" value="${esc(
+          s.session_text || "Apr 2024-Mar 2025"
+        )}" placeholder="e.g., Apr 2024-Mar 2025">
       </div>
 
       <div>
         <label class="form-label">Student Name</label>
-        <input id="swal-student" class="form-field" value="${esc(s.student_name)}" placeholder="e.g., YUVRAJ PHONSA">
+        <input id="swal-student" class="form-field" value="${esc(
+          s.student_name
+        )}" placeholder="e.g., YUVRAJ PHONSA">
       </div>
       <div>
         <label class="form-label">Father's Name</label>
-        <input id="swal-fname" class="form-field" value="${esc(s.father_name)}" placeholder="e.g., VIJAY KUMAR">
+        <input id="swal-fname" class="form-field" value="${esc(
+          s.father_name
+        )}" placeholder="e.g., VIJAY KUMAR">
       </div>
       <div>
         <label class="form-label">Mother's Name</label>
-        <input id="swal-mname" class="form-field" value="${esc(s.mother_name)}" placeholder="e.g., SUREKHA DEVI">
+        <input id="swal-mname" class="form-field" value="${esc(
+          s.mother_name
+        )}" placeholder="e.g., SUREKHA DEVI">
       </div>
 
       <div class="full">
         <label class="form-label">DOB (Figures: DD/MM/YYYY)</label>
-        <input id="swal-dob-fig" class="form-field" value="${esc(s.dob_figures)}" placeholder="25/01/2010">
+        <input id="swal-dob-fig" class="form-field" value="${esc(
+          s.dob_figures
+        )}" placeholder="25/01/2010">
       </div>
       <div class="full">
         <label class="form-label">DOB (Words)</label>
-        <textarea id="swal-dob-words" class="form-field" rows="2" placeholder="Twenty fifth of January Two Thousand And Ten">${esc(s.dob_words)}</textarea>
+        <textarea id="swal-dob-words" class="form-field" rows="2" placeholder="Twenty fifth of January Two Thousand And Ten">${esc(
+          s.dob_words
+        )}</textarea>
       </div>
       <div>
         <label class="form-label">Proof for DOB</label>
-        <input id="swal-proof-dob" class="form-field" value="${esc(s.proof_dob || "Birth Certificate")}" placeholder="Birth Certificate">
+        <input id="swal-proof-dob" class="form-field" value="${esc(
+          s.proof_dob || "Birth Certificate"
+        )}" placeholder="Birth Certificate">
       </div>
       <div>
         <label class="form-label">SC/ST/OBC</label>
@@ -219,24 +243,34 @@ const modalHtml = (tc = {}) => {
 
       <div>
         <label class="form-label">First Admission Date</label>
-        <input id="swal-first-adm-date" type="date" class="form-field" value="${esc(asYMD(s.first_admission_date))}">
+        <input id="swal-first-adm-date" type="date" class="form-field" value="${esc(
+          asYMD(s.first_admission_date)
+        )}">
       </div>
       <div>
         <label class="form-label">First Admission Class</label>
-        <input id="swal-first-class" class="form-field" value="${esc(s.first_class || "")}">
+        <input id="swal-first-class" class="form-field" value="${esc(
+          s.first_class || ""
+        )}">
       </div>
 
       <div>
         <label class="form-label">Last Class (Figure)</label>
-        <input id="swal-last-fig" class="form-field" value="${esc(s.last_class_figure || "")}" placeholder="e.g., 10TH">
+        <input id="swal-last-fig" class="form-field" value="${esc(
+          s.last_class_figure || ""
+        )}" placeholder="e.g., 10TH">
       </div>
       <div>
         <label class="form-label">Last Class (Words)</label>
-        <input id="swal-last-words" class="form-field" value="${esc(s.last_class_words || "")}" placeholder="e.g., TENTH">
+        <input id="swal-last-words" class="form-field" value="${esc(
+          s.last_class_words || ""
+        )}" placeholder="e.g., TENTH">
       </div>
       <div class="full">
         <label class="form-label">Last Exam Result</label>
-        <input id="swal-last-res" class="form-field" value="${esc(s.last_exam_result || "Passed AISSE(X)")}" placeholder="e.g., Passed AISSE(X)">
+        <input id="swal-last-res" class="form-field" value="${esc(
+          s.last_exam_result || "Passed AISSE(X)"
+        )}" placeholder="e.g., Passed AISSE(X)">
       </div>
       <div>
         <label class="form-label">Failed in Class?</label>
@@ -248,7 +282,9 @@ const modalHtml = (tc = {}) => {
 
       <div class="full">
         <label class="form-label">Subjects Studied (one per line)</label>
-        <textarea id="swal-subjects" class="form-field" rows="4" placeholder="English&#10;Hindi&#10;Mathematics&#10;...">${esc(toLines(s.subjects || []))}</textarea>
+        <textarea id="swal-subjects" class="form-field" rows="4" placeholder="English&#10;Hindi&#10;Mathematics&#10;...">${esc(
+          toLines(s.subjects || [])
+        )}</textarea>
       </div>
 
       <div>
@@ -260,16 +296,22 @@ const modalHtml = (tc = {}) => {
       </div>
       <div>
         <label class="form-label">Working Days</label>
-        <input id="swal-wd" type="number" min="0" class="form-field" value="${esc(s.working_days || "")}">
+        <input id="swal-wd" type="number" min="0" class="form-field" value="${esc(
+          s.working_days || ""
+        )}">
       </div>
       <div>
         <label class="form-label">Presence Days</label>
-        <input id="swal-pd" type="number" min="0" class="form-field" value="${esc(s.presence_days || "")}">
+        <input id="swal-pd" type="number" min="0" class="form-field" value="${esc(
+          s.presence_days || ""
+        )}">
       </div>
 
       <div>
         <label class="form-label">Fees Paid Upto</label>
-        <input id="swal-feeupto" class="form-field" value="${esc(s.fees_paid_upto || "")}" placeholder="e.g., March 2025">
+        <input id="swal-feeupto" class="form-field" value="${esc(
+          s.fees_paid_upto || ""
+        )}" placeholder="e.g., March 2025">
       </div>
       <div>
         <label class="form-label">Fee Concession?</label>
@@ -280,7 +322,9 @@ const modalHtml = (tc = {}) => {
       </div>
       <div>
         <label class="form-label">Fee Concession Nature</label>
-        <input id="swal-fee-nature" class="form-field" value="${esc(s.fee_concession || "")}" placeholder="If yes, e.g., Sibling 25%">
+        <input id="swal-fee-nature" class="form-field" value="${esc(
+          s.fee_concession || ""
+        )}" placeholder="If yes, e.g., Sibling 25%">
       </div>
 
       <div>
@@ -292,30 +336,42 @@ const modalHtml = (tc = {}) => {
       </div>
       <div>
         <label class="form-label">NCC/Scout/Guide Details</label>
-        <input id="swal-ncc-details" class="form-field" value="${esc(s.ncc_details || "")}" placeholder="If yes, details">
+        <input id="swal-ncc-details" class="form-field" value="${esc(
+          s.ncc_details || ""
+        )}" placeholder="If yes, details">
       </div>
 
       <div class="full">
         <label class="form-label">Games/Extra Curricular</label>
-        <input id="swal-games" class="form-field" value="${esc(s.games_eca || "NA")}" placeholder="NA or details">
+        <input id="swal-games" class="form-field" value="${esc(
+          s.games_eca || "NA"
+        )}" placeholder="NA or details">
       </div>
 
       <div>
         <label class="form-label">Date of Application</label>
-        <input id="swal-date-app" type="date" class="form-field" value="${esc(asYMD(s.date_application))}">
+        <input id="swal-date-app" type="date" class="form-field" value="${esc(
+          asYMD(s.date_application)
+        )}">
       </div>
       <div>
         <label class="form-label">Date Struck Off Rolls</label>
-        <input id="swal-date-struck" type="date" class="form-field" value="${esc(asYMD(s.date_struck_off))}">
+        <input id="swal-date-struck" type="date" class="form-field" value="${esc(
+          asYMD(s.date_struck_off)
+        )}">
       </div>
       <div>
         <label class="form-label">Date of Issue</label>
-        <input id="swal-date-issue" type="date" class="form-field" value="${esc(asYMD(s.date_issue))}">
+        <input id="swal-date-issue" type="date" class="form-field" value="${esc(
+          asYMD(s.date_issue)
+        )}">
       </div>
 
       <div class="full">
         <label class="form-label">Remarks</label>
-        <textarea id="swal-remarks" class="form-field" rows="3">${esc(s.remarks || "")}</textarea>
+        <textarea id="swal-remarks" class="form-field" rows="3">${esc(
+          s.remarks || ""
+        )}</textarea>
       </div>
     </div>
   `;
@@ -365,147 +421,51 @@ export default function TransferCertificates() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ----------- Create (prefill) with AUTOCOMPLETE -----------
+  // ----------- Create (simple: by Admission No) -----------
   const handleCreate = async () => {
-    let chosen = { student_id: "", admission_number: "", school_id: "" };
-    let cache = [];
-
     await Swal.fire({
       title: "Create Transfer Certificate",
-      width: "820px",
+      width: "520px",
       allowOutsideClick: false,
       allowEscapeKey: false,
       html: `
         <style>
-          .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
           .form-label{font-weight:600;margin-bottom:4px}
           .form-field{width:100%;padding:8px 10px;border:1px solid #ddd;border-radius:6px}
-          .hint{font-size:12px;color:#6b7280}
+          .hint{font-size:12px;color:#6b7280;margin-top:4px}
         </style>
-        <div class="form-grid">
-          <div>
-            <label class="form-label">Admission No.</label>
-            <input id="tc-admno" class="form-field" list="admno-list" placeholder="Type to search...">
-            <datalist id="admno-list"></datalist>
-            <div class="hint">Type at least 2 characters</div>
-          </div>
-          <div>
-            <label class="form-label">Student Name</label>
-            <input id="tc-stuname" class="form-field" list="stuname-list" placeholder="Type to search...">
-            <datalist id="stuname-list"></datalist>
-            <div class="hint">Type at least 2 characters</div>
-          </div>
-          <div>
-            <label class="form-label">School ID</label>
-            <input id="tc-schoolid" type="number" class="form-field" placeholder="optional if single school">
-          </div>
+        <div>
+          <label class="form-label">Admission No.</label>
+          <input id="tc-admno" class="form-field" placeholder="e.g., TPIS-848" />
+          <div class="hint">Exact Admission Number as per student master.</div>
+        </div>
+        <div style="margin-top:12px;">
+          <label class="form-label">School ID</label>
+          <input id="tc-schoolid" type="number" class="form-field" placeholder="optional if single school" />
         </div>
       `,
       showCancelButton: true,
       confirmButtonText: "Create Draft",
-      didOpen: () => {
-        const popup = Swal.getPopup();
-        const $adm = popup.querySelector("#tc-admno");
-        const $admList = popup.querySelector("#admno-list");
-        const $name = popup.querySelector("#tc-stuname");
-        const $nameList = popup.querySelector("#stuname-list");
-        const $sid = popup.querySelector("#tc-schoolid");
-
-        const renderList = (elList, results, as = "admission") => {
-          cache = results;
-          elList.innerHTML = results
-            .map((r) => {
-              const text =
-                as === "admission"
-                  ? `${r.admission_number || ""} — ${r.name || ""}`
-                  : `${r.name || ""} — ${r.admission_number || ""}`;
-              return `<option value="${esc(text)}"></option>`;
-            })
-            .join("");
-        };
-
-        const onPick = (inputEl, as = "admission") => {
-          const v = (inputEl.value || "").trim().toLowerCase();
-          const hit =
-            cache.find((r) => {
-              const label =
-                as === "admission"
-                  ? `${r.admission_number || ""} — ${r.name || ""}`
-                  : `${r.name || ""} — ${r.admission_number || ""}`;
-              return label.toLowerCase() === v;
-            }) || null;
-
-          if (hit?.id) {
-            chosen.student_id = String(hit.id);
-            chosen.admission_number = hit.admission_number || "";
-            if (as === "admission" && $name) {
-              $name.value = `${hit.name || ""} — ${hit.admission_number || ""}`;
-            }
-            if (as === "name" && $adm) {
-              $adm.value = `${hit.admission_number || ""} — ${hit.name || ""}`;
-            }
-          }
-        };
-
-        const debSearchAdm = debounce(async (q) => {
-          if ((q || "").trim().length < 2) return renderList($admList, []);
-          const results = await searchStudentsQuick(q, 12);
-          renderList($admList, results, "admission");
-        }, 250);
-
-        const debSearchName = debounce(async (q) => {
-          if ((q || "").trim().length < 2) return renderList($nameList, []);
-          const results = await searchStudentsQuick(q, 12);
-          renderList($nameList, results, "name");
-        }, 250);
-
-        $adm?.addEventListener("input", (e) => {
-          debSearchAdm(e.target.value);
-          chosen.student_id = "";
-        });
-        $name?.addEventListener("input", (e) => {
-          debSearchName(e.target.value);
-          chosen.student_id = "";
-        });
-
-        $adm?.addEventListener("change", () => onPick($adm, "admission"));
-        $name?.addEventListener("change", () => onPick($name, "name"));
-
-        $sid?.addEventListener("input", (e) => {
-          chosen.school_id = (e.target.value || "").trim();
-        });
-      },
       preConfirm: async () => {
         const p = Swal.getPopup();
-        const admText = (p.querySelector("#tc-admno")?.value || "").trim();
-        const nameText = (p.querySelector("#tc-stuname")?.value || "").trim();
+        const admRaw = (p.querySelector("#tc-admno")?.value || "").trim();
         const schoolId = (p.querySelector("#tc-schoolid")?.value || "").trim();
 
-        if (!chosen.student_id) {
-          const tryExtractAdm = (s) => {
-            if (!s) return "";
-            const parts = s.split("—").map((x) => x.trim());
-            const cand = parts.find((x) => /[A-Za-z]*\d/.test(x) || x.includes("/")) || parts[0];
-            return cand || "";
-          };
-          const fromFieldsAdm = tryExtractAdm(admText) || tryExtractAdm(nameText) || "";
-
-          const studentId = await resolveStudentId({
-            admission_number: fromFieldsAdm,
-            student_id: "",
-          });
-          if (studentId) chosen.student_id = String(studentId);
+        if (!admRaw) {
+          Swal.showValidationMessage("Admission No. is required");
+          return false;
         }
 
-        if (!chosen.student_id) {
+        const studentId = await resolveStudentIdByAdmission(admRaw);
+        if (!studentId) {
           Swal.showValidationMessage(
-            "Please select a student from suggestions (or enter a valid Admission No.)"
+            `No student found with Admission No. "${admRaw}".`
           );
           return false;
         }
 
         return {
-          student_id: Number(chosen.student_id),
+          student_id: studentId,
           school_id: schoolId ? Number(schoolId) : undefined,
         };
       },
@@ -514,35 +474,51 @@ export default function TransferCertificates() {
       try {
         const { student_id, school_id } = res.value || {};
         const { data } = await api.post(`/tc/${student_id}`, { school_id });
-        Swal.fire("Draft Created", `TC #${data?.serial_no || data?.id} created.`, "success");
+
+        Swal.fire(
+          "Draft Created",
+          `TC #${data?.serial_no || data?.id} created for ${
+            data?.student_name || ""
+          } (${data?.admission_no || ""}).`,
+          "success"
+        );
+
         await fetchList({ page: 1 });
+
         if (data?.id) {
-          handleEdit({ id: data.id, serial_no: data?.serial_no });
+          handleEdit({
+            id: data.id,
+            status: data.status || "draft",
+            serial_no: data.serial_no,
+          });
         }
       } catch (err) {
         console.error("create TC error:", err);
-        Swal.fire("Error", err?.response?.data?.error || "Failed to create TC.", "error");
+        Swal.fire(
+          "Error",
+          err?.response?.data?.error || "Failed to create TC.",
+          "error"
+        );
       }
     });
   };
 
   // ----------- Edit (draft only) -----------
   const handleEdit = async (row) => {
-    if (row.status !== "draft") {
-      Swal.fire("Locked", "Only DRAFT TCs can be edited.", "info");
-      return;
-    }
-
-    // Get the freshest single row
+    // always fetch fresh row first
     let full = row;
     try {
       const { data } = await api.get(`/tc/${row.id}`);
       full = data || row;
-    } catch {
-      // fall back to the list row
+    } catch (e) {
+      console.error("fetch single TC for edit error:", e);
     }
 
-    // Normalize for modal
+    if (full.status !== "draft") {
+      Swal.fire("Locked", "Only DRAFT TCs can be edited.", "info");
+      return;
+    }
+
     const tc = normalizeTcForModal(full);
 
     await Swal.fire({
@@ -561,31 +537,64 @@ export default function TransferCertificates() {
           student_name: p.querySelector("#swal-student").value.trim(),
           father_name: p.querySelector("#swal-fname").value.trim(),
           mother_name: p.querySelector("#swal-mname").value.trim(),
-          dob_figures: p.querySelector("#swal-dob-fig").value.trim() || null,
-          dob_words: p.querySelector("#swal-dob-words").value.trim() || null,
-          proof_dob: p.querySelector("#swal-proof-dob").value.trim() || null,
+          dob_figures:
+            p.querySelector("#swal-dob-fig").value.trim() || null,
+          dob_words:
+            p.querySelector("#swal-dob-words").value.trim() || null,
+          proof_dob:
+            p.querySelector("#swal-proof-dob").value.trim() || null,
           is_sc_st_obc: p.querySelector("#swal-scst").value,
-          first_admission_date: toDateInput(p.querySelector("#swal-first-adm-date").value) || null,
-          first_class: p.querySelector("#swal-first-class").value.trim() || null,
-          last_class_figure: p.querySelector("#swal-last-fig").value.trim() || null,
-          last_class_words: p.querySelector("#swal-last-words").value.trim() || null,
-          last_exam_result: p.querySelector("#swal-last-res").value.trim() || null,
+          first_admission_date:
+            toDateInput(
+              p.querySelector("#swal-first-adm-date").value
+            ) || null,
+          first_class:
+            p.querySelector("#swal-first-class").value.trim() || null,
+          last_class_figure:
+            p.querySelector("#swal-last-fig").value.trim() || null,
+          last_class_words:
+            p.querySelector("#swal-last-words").value.trim() || null,
+          last_exam_result:
+            p.querySelector("#swal-last-res").value.trim() || null,
           is_failed: p.querySelector("#swal-failed").value,
-          subjects: fromLines(p.querySelector("#swal-subjects").value),
-          is_qualified_promotion: p.querySelector("#swal-qualified").value,
-          working_days: Number(p.querySelector("#swal-wd").value) || null,
-          presence_days: Number(p.querySelector("#swal-pd").value) || null,
-          fees_paid_upto: p.querySelector("#swal-feeupto").value.trim() || null,
-          fee_concession_yesno: p.querySelector("#swal-fee-yesno").value,
-          fee_concession: p.querySelector("#swal-fee-nature").value.trim() || null,
+          subjects: fromLines(
+            p.querySelector("#swal-subjects").value
+          ),
+          is_qualified_promotion:
+            p.querySelector("#swal-qualified").value,
+          working_days:
+            Number(p.querySelector("#swal-wd").value) || null,
+          presence_days:
+            Number(p.querySelector("#swal-pd").value) || null,
+          fees_paid_upto:
+            p.querySelector("#swal-feeupto").value.trim() || null,
+          fee_concession_yesno:
+            p.querySelector("#swal-fee-yesno").value,
+          fee_concession:
+            p.querySelector("#swal-fee-nature").value.trim() ||
+            null,
           ncc_yesno: p.querySelector("#swal-ncc-yesno").value,
-          ncc_details: p.querySelector("#swal-ncc-details").value.trim() || null,
-          games_eca: p.querySelector("#swal-games").value.trim() || null,
-          date_application: toDateInput(p.querySelector("#swal-date-app").value) || null,
-          date_struck_off: toDateInput(p.querySelector("#swal-date-struck").value) || null,
-          date_issue: toDateInput(p.querySelector("#swal-date-issue").value) || null,
-          remarks: p.querySelector("#swal-remarks").value.trim() || null,
-          session_text: p.querySelector("#swal-session").value.trim() || null,
+          ncc_details:
+            p.querySelector("#swal-ncc-details").value.trim() ||
+            null,
+          games_eca:
+            p.querySelector("#swal-games").value.trim() || null,
+          date_application:
+            toDateInput(
+              p.querySelector("#swal-date-app").value
+            ) || null,
+          date_struck_off:
+            toDateInput(
+              p.querySelector("#swal-date-struck").value
+            ) || null,
+          date_issue:
+            toDateInput(
+              p.querySelector("#swal-date-issue").value
+            ) || null,
+          remarks:
+            p.querySelector("#swal-remarks").value.trim() || null,
+          session_text:
+            p.querySelector("#swal-session").value.trim() || null,
         };
         if (!payload.student_name) {
           Swal.showValidationMessage("Student Name is required");
@@ -601,7 +610,11 @@ export default function TransferCertificates() {
         fetchList();
       } catch (err) {
         console.error("update TC error:", err);
-        Swal.fire("Error", err?.response?.data?.error || "Failed to update TC.", "error");
+        Swal.fire(
+          "Error",
+          err?.response?.data?.error || "Failed to update TC.",
+          "error"
+        );
       }
     });
   };
@@ -627,7 +640,11 @@ export default function TransferCertificates() {
       fetchList();
     } catch (err) {
       console.error("issue TC error:", err);
-      Swal.fire("Error", err?.response?.data?.error || "Failed to issue TC.", "error");
+      Swal.fire(
+        "Error",
+        err?.response?.data?.error || "Failed to issue TC.",
+        "error"
+      );
     }
   };
 
@@ -648,7 +665,11 @@ export default function TransferCertificates() {
       fetchList();
     } catch (err) {
       console.error("cancel TC error:", err);
-      Swal.fire("Error", err?.response?.data?.error || "Failed to cancel TC.", "error");
+      Swal.fire(
+        "Error",
+        err?.response?.data?.error || "Failed to cancel TC.",
+        "error"
+      );
     }
   };
 
@@ -673,17 +694,22 @@ export default function TransferCertificates() {
       fetchList({ page: 1 });
     } catch (err) {
       console.error("delete TC error:", err);
-      Swal.fire("Error", err?.response?.data?.error || "Failed to delete TC.", "error");
+      Swal.fire(
+        "Error",
+        err?.response?.data?.error || "Failed to delete TC.",
+        "error"
+      );
     }
   };
 
   // ----------- PDF (fetch as blob so auth is included) -----------
   const handlePdf = async (tc) => {
     try {
-      const resp = await api.get(`/tc/${tc.id}/pdf`, { responseType: "blob" });
+      const resp = await api.get(`/tc/${tc.id}/pdf`, {
+        responseType: "blob",
+      });
       const blob = new Blob([resp.data], { type: "application/pdf" });
       const url = URL.createObjectURL(blob);
-      // Try opening in a new tab; if blocked, show download dialog:
       const w = window.open(url, "_blank", "noopener,noreferrer");
       if (!w) {
         const a = document.createElement("a");
@@ -786,104 +812,160 @@ export default function TransferCertificates() {
           <tbody>
             {items.map((tc, i) => {
               const details = {
-                "Student": tc.student_name,
-                "Father": tc_father(tc),
-                "Mother": tc.mother_name,
-                "DOB": `${tc.dob_figures || asDDMMYYYY(tc.dob)} (${tc.dob_words || ''})`,
+                Student: tc.student_name,
+                Father: tc_father(tc),
+                Mother: tc.mother_name,
+                DOB: `${tc.dob_figures || asDDMMYYYY(tc.dob)} (${
+                  tc.dob_words || ""
+                })`,
                 "Proof DOB": tc.proof_dob || "—",
                 "SC/ST/OBC": tc.is_sc_st_obc || "No",
-                "First Admission": `${asDDMMYYYY(tc.first_admission_date)} Class ${tc.first_class || ''}`,
-                "Last Class": `${tc.last_class_figure || ''} (${tc.last_class_words || ''})`,
+                "First Admission": `${asDDMMYYYY(
+                  tc.first_admission_date
+                )} Class ${tc.first_class || ""}`,
+                "Last Class": `${tc.last_class_figure || ""} (${
+                  tc.last_class_words || ""
+                })`,
                 "Last Exam": tc.last_exam_result || "—",
-                "Failed": tc.is_failed || "No",
-                "Subjects": toCSV(tc.subjects),
-                "Qualified": tc.is_qualified_promotion || "No",
+                Failed: tc.is_failed || "No",
+                Subjects: toCSV(tc.subjects),
+                Qualified: tc.is_qualified_promotion || "No",
                 "Working Days": tc.working_days || 0,
-                "Presence": tc.presence_days || 0,
-                "Attendance %": tc.presence_days && tc.working_days ? Math.round((tc.presence_days / tc.working_days) * 100) + '%' : "—",
+                Presence: tc.presence_days || 0,
+                "Attendance %":
+                  tc.presence_days && tc.working_days
+                    ? Math.round(
+                        (tc.presence_days / tc.working_days) * 100
+                      ) + "%"
+                    : "—",
                 "Fees Upto": tc.fees_paid_upto || "—",
-                "Fee Concession": `${tc.fee_concession_yesno || "No"} ${tc.fee_concession || ""}`.trim(),
-                "NCC": `${tc.ncc_yesno || "No"}: ${tc.ncc_details || ""}`,
+                "Fee Concession": `${tc.fee_concession_yesno || "No"} ${
+                  tc.fee_concession || ""
+                }`.trim(),
+                NCC: `${tc.ncc_yesno || "No"}: ${tc.ncc_details || ""}`,
                 "Games/ECA": tc.games_eca || "NA",
-                "Struck Off": asDDMMYYYY(tc.date_struck_off) || "—",
-                "Issue Date": asDDMMYYYY(tc.date_issue || tc.issue_date) || "—",
-                "Remarks": tc.remarks || "—",
+                "Struck Off":
+                  asDDMMYYYY(tc.date_struck_off) || "—",
+                "Issue Date":
+                  asDDMMYYYY(tc.date_issue || tc.issue_date) ||
+                  "—",
+                Remarks: tc.remarks || "—",
               };
               return (
-              <tr key={tc.id}>
-                <td>{(page - 1) * pageSize + i + 1}</td>
-                <td className="fw-semibold">{tc.serial_no}</td>
-                <td>{tc.admission_no}</td>
-                <td>{tc.student_name}</td>
-                <td>{tc_father(tc)}</td>
-                <td>
-                  {tc.status === "draft" && <span className="badge bg-warning text-dark">Draft</span>}
-                  {tc.status === "issued" && <span className="badge bg-success">Issued</span>}
-                  {tc.status === "cancelled" && <span className="badge bg-secondary">Cancelled</span>}
-                </td>
-                <td>{asYMD(tc.issue_date) || "—"}</td>
-                <td
-                  title={toCSV(tc.subjects)}
-                  style={{ maxWidth: 180, whiteSpace: "nowrap", textOverflow: "ellipsis", overflow: "hidden" }}
-                >
-                  {toCSV(tc.subjects)}
-                </td>
-                <td>
-                  {(tc.working_days ?? 0)}/{(tc.presence_days ?? 0)}
-                </td>
-                <td>{tc.fees_paid_upto || "—"}</td>
-                <td>{tc.school?.name || "—"}</td>
-                <td>
-                  <div className="d-flex flex-wrap gap-1">
-                    <button
-                      className="btn btn-outline-secondary btn-sm"
-                      onClick={() =>
-                        Swal.fire({
-                          title: `TC Details (Serial: ${tc.serial_no})`,
-                          html: `
+                <tr key={tc.id}>
+                  <td>{(page - 1) * pageSize + i + 1}</td>
+                  <td className="fw-semibold">{tc.serial_no}</td>
+                  <td>{tc.admission_no}</td>
+                  <td>{tc.student_name}</td>
+                  <td>{tc_father(tc)}</td>
+                  <td>
+                    {tc.status === "draft" && (
+                      <span className="badge bg-warning text-dark">
+                        Draft
+                      </span>
+                    )}
+                    {tc.status === "issued" && (
+                      <span className="badge bg-success">
+                        Issued
+                      </span>
+                    )}
+                    {tc.status === "cancelled" && (
+                      <span className="badge bg-secondary">
+                        Cancelled
+                      </span>
+                    )}
+                  </td>
+                  <td>{asYMD(tc.issue_date) || "—"}</td>
+                  <td
+                    title={toCSV(tc.subjects)}
+                    style={{
+                      maxWidth: 180,
+                      whiteSpace: "nowrap",
+                      textOverflow: "ellipsis",
+                      overflow: "hidden",
+                    }}
+                  >
+                    {toCSV(tc.subjects)}
+                  </td>
+                  <td>
+                    {(tc.working_days ?? 0)}/
+                    {(tc.presence_days ?? 0)}
+                  </td>
+                  <td>{tc.fees_paid_upto || "—"}</td>
+                  <td>{tc.school?.name || "—"}</td>
+                  <td>
+                    <div className="d-flex flex-wrap gap-1">
+                      <button
+                        className="btn btn-outline-secondary btn-sm"
+                        onClick={() =>
+                          Swal.fire({
+                            title: `TC Details (Serial: ${tc.serial_no})`,
+                            html: `
                             <div style="text-align:left; white-space: pre-wrap;">
-                              ${Object.entries(details).map(([k, v]) => `<div><b>${k}:</b> ${esc(v)}</div>`).join("")}
+                              ${Object.entries(details)
+                                .map(
+                                  ([k, v]) =>
+                                    `<div><b>${k}:</b> ${esc(v)}</div>`
+                                )
+                                .join("")}
                             </div>
                           `,
-                          confirmButtonText: "Close",
-                          width: "600px",
-                        })
-                      }
-                    >
-                      View
-                    </button>
-
-                    {canManage && tc.status === "draft" && (
-                      <button className="btn btn-primary btn-sm" onClick={() => handleEdit(tc)}>
-                        Edit
+                            confirmButtonText: "Close",
+                            width: "600px",
+                          })
+                        }
+                      >
+                        View
                       </button>
-                    )}
 
-                    {canManage && tc.status !== "issued" && (
-                      <button className="btn btn-success btn-sm" onClick={() => handleIssue(tc)}>
-                        Issue
+                      {canManage && tc.status === "draft" && (
+                        <button
+                          className="btn btn-primary btn-sm"
+                          onClick={() => handleEdit(tc)}
+                        >
+                          Edit
+                        </button>
+                      )}
+
+                      {canManage && tc.status !== "issued" && (
+                        <button
+                          className="btn btn-success btn-sm"
+                          onClick={() => handleIssue(tc)}
+                        >
+                          Issue
+                        </button>
+                      )}
+
+                      {canManage &&
+                        tc.status !== "cancelled" && (
+                          <button
+                            className="btn btn-warning btn-sm"
+                            onClick={() => handleCancel(tc)}
+                          >
+                            Cancel
+                          </button>
+                        )}
+
+                      {canManage && (
+                        <button
+                          className="btn btn-outline-danger btn-sm"
+                          onClick={() => handleDelete(tc)}
+                        >
+                          Delete
+                        </button>
+                      )}
+
+                      <button
+                        className="btn btn-outline-primary btn-sm"
+                        onClick={() => handlePdf(tc)}
+                      >
+                        PDF
                       </button>
-                    )}
-
-                    {canManage && tc.status !== "cancelled" && (
-                      <button className="btn btn-warning btn-sm" onClick={() => handleCancel(tc)}>
-                        Cancel
-                      </button>
-                    )}
-
-                    {canManage && (
-                      <button className="btn btn-outline-danger btn-sm" onClick={() => handleDelete(tc)}>
-                        Delete
-                      </button>
-                    )}
-
-                    <button className="btn btn-outline-primary btn-sm" onClick={() => handlePdf(tc)}>
-                      PDF
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            )})}
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
             {!loading && items.length === 0 && (
               <tr>
                 <td colSpan={12} className="text-center">

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import ClassTimetableAssignment from "./Timetable";
 import TeacherTimetableAssignment from "./TeacherTimetableAssignment";
 import "./CombinedTimetableAssignment.css";
@@ -21,7 +21,6 @@ const getInitialTab = () => {
 };
 
 // Attach data-label="<header text>" to each TD based on its column header.
-// This lets CSS show labels on mobile when we transform rows into cards.
 function applyMobileLabels(root) {
   if (!root) return;
 
@@ -38,19 +37,12 @@ function applyMobileLabels(root) {
     rows.forEach((tr) => {
       const cells = tr.querySelectorAll("td");
       cells.forEach((td, idx) => {
-        // Preserve existing data-label if developer already set it.
+        // Only set data-label – do NOT move / wrap children
         if (!td.getAttribute("data-label")) {
           const label = headers[idx] ?? "";
-          if (label) td.setAttribute("data-label", label);
-        }
-        // Wrap text so value aligns right on mobile pattern
-        // (only if not already wrapped by developer)
-        if (!td.querySelector(".tt-cellv")) {
-          const wrapper = document.createElement("span");
-          wrapper.className = "tt-cellv";
-          // Move all child nodes into wrapper
-          while (td.firstChild) wrapper.appendChild(td.firstChild);
-          td.appendChild(wrapper);
+          if (label) {
+            td.setAttribute("data-label", label);
+          }
         }
       });
     });
@@ -75,17 +67,19 @@ const CombinedTimetableAssignment = () => {
     } catch {}
   }, [activeTab]);
 
-  // Apply data-labels when tab changes and when content mutates (child renders)
+  // Apply data-labels when tab changes and when content mutates
   useEffect(() => {
     const root = contentRef.current;
     if (!root) return;
 
-    // Initial run (next tick to allow child render)
+    // Run once after render
     const t = setTimeout(() => applyMobileLabels(root), 0);
 
-    // Observe mutations to re-apply on dynamic changes
+    // Observe for new rows / tables, but only update attributes
     if (observerRef.current) observerRef.current.disconnect();
-    observerRef.current = new MutationObserver(() => applyMobileLabels(root));
+    observerRef.current = new MutationObserver(() => {
+      applyMobileLabels(root);
+    });
     observerRef.current.observe(root, {
       childList: true,
       subtree: true,
@@ -97,17 +91,16 @@ const CombinedTimetableAssignment = () => {
     };
   }, [activeTab]);
 
-  const activeLabel = useMemo(
-    () => TABS.find((t) => t.key === activeTab)?.label || "Class Wise",
-    [activeTab]
-  );
-
   return (
     <div className="container mt-4">
       <h2 className="mb-3">Timetable Assignment</h2>
 
       {/* Desktop/Tablet tabs */}
-      <div className="cta-tabs cta-sticky cta-desktop" role="tablist" aria-label="Timetable views">
+      <div
+        className="cta-tabs cta-sticky cta-desktop"
+        role="tablist"
+        aria-label="Timetable views"
+      >
         <div className="cta-tabrow">
           {TABS.map(({ key, label }) => {
             const isActive = activeTab === key;
@@ -149,7 +142,7 @@ const CombinedTimetableAssignment = () => {
         </select>
       </div>
 
-      {/* Panels (wrapped in tt-responsive so child tables auto-adapt) */}
+      {/* Panels */}
       <div className="tab-content tt-responsive" ref={contentRef}>
         <section
           id="panel-class"

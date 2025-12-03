@@ -1,7 +1,7 @@
 // src/pages/EnquiryForm.jsx
 import React, { useState } from "react";
-import axios from "axios";
 import Swal from "sweetalert2";
+import api from "../api"; // ✅ shared API instance (dynamic baseURL)
 
 export default function EnquiryForm() {
   const [formData, setFormData] = useState({
@@ -17,18 +17,73 @@ export default function EnquiryForm() {
     previous_school: "",
     remarks: "",
   });
+
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [phoneError, setPhoneError] = useState("");
 
   const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+
+    // Special handling for phone: keep only digits
+    if (name === "phone") {
+      const digitsOnly = value.replace(/\D/g, ""); // remove spaces, +, etc.
+      setFormData((prev) => ({ ...prev, phone: digitsOnly }));
+
+      if (!digitsOnly) {
+        setPhoneError("Phone number is required.");
+      } else if (digitsOnly.length !== 10) {
+        setPhoneError("Please enter a valid 10-digit Indian mobile number.");
+      } else {
+        setPhoneError("");
+      }
+      return;
+    }
+
+    setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    // Final phone validation before submit
+    const digitsOnly = (formData.phone || "").replace(/\D/g, "");
+    if (!digitsOnly) {
+      setPhoneError("Phone number is required.");
+      Swal.fire(
+        "Invalid Phone",
+        "Please enter your 10-digit mobile number (without +91).",
+        "error"
+      );
+      return;
+    }
+    if (digitsOnly.length !== 10) {
+      setPhoneError("Please enter a valid 10-digit Indian mobile number.");
+      Swal.fire(
+        "Invalid Phone",
+        "Phone number must be exactly 10 digits. Example: 9876543210",
+        "error"
+      );
+      return;
+    }
+
+    setPhoneError("");
     setIsSubmitting(true);
+
+    // Prepare payload: store as +91XXXXXXXXXX
+    const payload = {
+      ...formData,
+      phone: `+91${digitsOnly}`,
+    };
+
     try {
-      await axios.post("/enquiries", formData);
-      Swal.fire("Thank You!", "Your admission enquiry has been submitted successfully.", "success");
+      await api.post("/enquiries", payload);
+
+      Swal.fire(
+        "Thank You!",
+        "Your admission enquiry has been submitted successfully.",
+        "success"
+      );
+
       setFormData({
         student_name: "",
         father_name: "",
@@ -44,7 +99,28 @@ export default function EnquiryForm() {
       });
     } catch (error) {
       console.error("Error submitting enquiry:", error);
-      Swal.fire("Error", "Something went wrong. Please try again.", "error");
+
+      let message = "Something went wrong. Please try again.";
+
+      if (error.response) {
+        const { status, data } = error.response;
+
+        if (status === 400 || status === 422) {
+          message =
+            data?.message ||
+            "Some form fields seem invalid. Please check the details and try again.";
+        } else if (status >= 500) {
+          message =
+            "Server error while saving your enquiry. Please try again after some time.";
+        } else if (data?.message) {
+          message = data.message;
+        }
+      } else if (error.request) {
+        message =
+          "Unable to reach the server. Please check your internet connection and try again.";
+      }
+
+      Swal.fire("Error", message, "error");
     } finally {
       setIsSubmitting(false);
     }
@@ -135,7 +211,9 @@ export default function EnquiryForm() {
                       />
                     </div>
                     <div className="col-md-6">
-                      <label className="form-label text-light">Date of Birth</label>
+                      <label className="form-label text-light">
+                        Date of Birth
+                      </label>
                       <input
                         type="date"
                         name="dob"
@@ -150,7 +228,9 @@ export default function EnquiryForm() {
                   <h5 className="fw-semibold mb-3 text-info">Parent / Guardian</h5>
                   <div className="row g-3 mb-4">
                     <div className="col-md-6">
-                      <label className="form-label text-light">Father's Name</label>
+                      <label className="form-label text-light">
+                        Father's Name
+                      </label>
                       <input
                         type="text"
                         name="father_name"
@@ -161,7 +241,9 @@ export default function EnquiryForm() {
                       />
                     </div>
                     <div className="col-md-6">
-                      <label className="form-label text-light">Mother's Name</label>
+                      <label className="form-label text-light">
+                        Mother's Name
+                      </label>
                       <input
                         type="text"
                         name="mother_name"
@@ -180,16 +262,32 @@ export default function EnquiryForm() {
                       <label className="form-label text-light">
                         Phone Number <span className="text-danger">*</span>
                       </label>
-                      <input
-                        type="tel"
-                        name="phone"
-                        className="form-control bg-transparent text-white border-secondary"
-                        value={formData.phone}
-                        onChange={handleChange}
-                        required
-                        placeholder="e.g. 9876543210"
-                      />
+                      <div className="input-group">
+                        <span className="input-group-text bg-dark text-white border-secondary">
+                          +91
+                        </span>
+                        <input
+                          type="tel"
+                          name="phone"
+                          className="form-control bg-transparent text-white border-secondary"
+                          value={formData.phone}
+                          onChange={handleChange}
+                          required
+                          maxLength={10}
+                          placeholder="10-digit mobile number"
+                        />
+                      </div>
+                      <small className="text-muted d-block mt-1">
+                        Please enter a 10-digit Indian mobile number (without
+                        +91). We will save it as +91XXXXXXXXXX.
+                      </small>
+                      {phoneError && (
+                        <div className="text-danger small mt-1">
+                          {phoneError}
+                        </div>
+                      )}
                     </div>
+
                     <div className="col-md-6">
                       <label className="form-label text-light">Email</label>
                       <input
@@ -251,7 +349,9 @@ export default function EnquiryForm() {
                   </div>
 
                   {/* Additional Info */}
-                  <h5 className="fw-semibold mb-3 text-info">Additional Information</h5>
+                  <h5 className="fw-semibold mb-3 text-info">
+                    Additional Information
+                  </h5>
                   <div className="row g-3 mb-4">
                     <div className="col-md-6">
                       <label className="form-label text-light">
@@ -309,7 +409,8 @@ export default function EnquiryForm() {
               className="text-center text-white-50 mt-4 mb-0"
               style={{ fontSize: "0.85rem" }}
             >
-              © {new Date().getFullYear()} Smarto Experiential School | All Rights Reserved
+              © {new Date().getFullYear()} Smarto Experiential School | All
+              Rights Reserved
             </p>
           </div>
         </div>

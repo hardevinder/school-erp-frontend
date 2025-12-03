@@ -118,9 +118,15 @@ import StudentFeeReport from "./pages/StudentFeeReport";
 // ✅ NEW pages
 import TransferCertificates from "./pages/TransferCertificates";
 import Enquiries from "./pages/Enquiries";
+import BonafideCertificates from "./pages/BonafideCertificates";
+import DisciplinaryActions from "./pages/DisciplinaryActions";
+import FeeCertificates from "./pages/FeeCertificates";
 
 // ✅ admission-aware hook for remount key
 import useActiveStudent from "./hooks/useActiveStudent";
+
+import StudentTotalDueReport from "./pages/StudentTotalDueReport";
+import DirectPayPage from "./pages/DirectPayPage";
 
 // ---------- auth guard ----------
 const RequireRole = ({ roles = [], children }) => {
@@ -246,6 +252,11 @@ function App() {
         {/* Keep public form */}
         <Route path="/enquiry" element={<EnquiryForm />} />
 
+         {/* 🔥 PUBLIC DIRECT PAY PAGE (no login required) */}
+          <Route path="/direct-pay" element={<DirectPayPage />} />
+          {/* agar tum path based wala use karna chahte ho: /student-fee/direct-pay/TPIS-877/101 */}
+          <Route path="/student-fee/direct-pay/*" element={<DirectPayPage />} />
+
         {/* Protected App w/ Layout (TopBar + Sidebar) */}
         <Route element={<AppLayout key={activeAdmission} />}>
           <Route path="/dashboard" element={<RoleAwareDashboard />} />
@@ -298,6 +309,16 @@ function App() {
           <Route path="/reports/concession" element={<ConcessionReport />} />
           <Route path="/reports/van-fee" element={<VanFeeDetailedReport />} />
           <Route path="/reports/transport-summary" element={<TransportSummary />} />
+
+          {/* ✅ NEW: Student Total Due Report */}
+          <Route
+            path="/reports/student-total-due"
+            element={
+              <RequireRole roles={["accounts", "admin", "superadmin"]}>
+                <StudentTotalDueReport />
+              </RequireRole>
+            }
+          />
 
           {/* Transactions */}
           <Route path="/transactions" element={<Transactions />} />
@@ -452,8 +473,55 @@ function App() {
           {/* Optional short alias */}
           <Route path="/tc" element={<Navigate to="/transfer-certificates" replace />} />
 
+          {/* ✅ Bonafide Certificates INSIDE layout */}
+          <Route
+            path="/bonafide-certificates"
+            element={
+              <RequireRole roles={["admin", "superadmin"]}>
+                <BonafideCertificates />
+              </RequireRole>
+            }
+          />
+
+          {/* ✅ Fee Certificates INSIDE layout */}
+          <Route
+            path="/fee-certificates"
+            element={
+              <RequireRole roles={["admin", "superadmin"]}>
+                <FeeCertificates />
+              </RequireRole>
+            }
+          />
+
+           {/* ✅ Disciplinary Actions INSIDE layout */}
+          <Route
+            path="/disciplinary-actions"
+            element={
+              <RequireRole
+                roles={[
+                  "admin",
+                  "superadmin",
+                  "academic_coordinator",
+                  "principal",
+                ]}
+              >
+                <DisciplinaryActions />
+              </RequireRole>
+            }
+          />
+          {/* Optional short alias */}
+          <Route
+            path="/discipline"
+            element={<Navigate to="/disciplinary-actions" replace />}
+          />
+          {/* Optional short alias */}
+          <Route path="/bonafide" element={<Navigate to="/bonafide-certificates" replace />} />
+
           {/* Catch-all (inside app) */}
-          <Route path="*" element={<h1 className="container py-4">404: Page Not Found</h1>} />
+          <Route
+            path="*"
+            element={<h1 className="container py-4">404: Page Not Found</h1>}
+          />
         </Route>
 
         {/* Any other URL → login (outside app) */}

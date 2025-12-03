@@ -20,14 +20,11 @@ import {
 } from "react-bootstrap";
 import ReceiptModal from "./ReceiptModal"; // For the pop-up view
 import "bootstrap/dist/css/bootstrap.min.css";
-
 /* ---------------- Helpers ---------------- */
-
 /// --- normalize helpers (robust) ---
 const asArray = (d) => {
   if (Array.isArray(d)) return d;
   if (d == null) return [];
-
   const keys = [
     "data",
     "rows",
@@ -43,7 +40,6 @@ const asArray = (d) => {
     if (Array.isArray(d?.[k])) return d[k];
     if (Array.isArray(d?.data?.[k])) return d.data[k];
   }
-
   if (typeof d === "string") {
     try {
       const p = JSON.parse(d);
@@ -52,7 +48,6 @@ const asArray = (d) => {
       return [];
     }
   }
-
   if (typeof d === "object") {
     const stack = [d];
     while (stack.length) {
@@ -64,10 +59,8 @@ const asArray = (d) => {
       }
     }
   }
-
   return [];
 };
-
 const firstNonEmpty = (...vals) => {
   for (const v of vals) {
     const s = (v ?? "").toString().trim();
@@ -75,12 +68,10 @@ const firstNonEmpty = (...vals) => {
   }
   return "";
 };
-
 const normalizeClassRow = (x) => {
   const id = Number(
     x?.id ?? x?.class_id ?? x?.Class_ID ?? x?.classId ?? x?.Class?.id ?? 0
   );
-
   const name = firstNonEmpty(
     x?.class_name,
     x?.Class_Name,
@@ -93,13 +84,11 @@ const normalizeClassRow = (x) => {
     x?.ClassTitle,
     x?.classTitle
   );
-
   return {
     id,
     class_name: name || (id ? `Class ${id}` : "—"),
   };
 };
-
 const normalizeSectionRow = (x) => {
   const id = Number(
     x?.id ??
@@ -109,7 +98,6 @@ const normalizeSectionRow = (x) => {
       x?.Section?.id ??
       0
   );
-
   const name =
     firstNonEmpty(
       x?.section_name,
@@ -128,10 +116,8 @@ const normalizeSectionRow = (x) => {
       x?.Section?.label,
       x?.Section?.title
     ) || "";
-
   return { id, section_name: name || "" };
 };
-
 const normalizeStudentRow = (s) => {
   const id = Number(s?.id ?? s?.student_id ?? s?.Student_ID ?? 0);
   const name =
@@ -143,14 +129,12 @@ const normalizeStudentRow = (s) => {
         s?.adm_no ??
         ""
     ) || "—";
-
   const Class = s?.Class
     ? {
         id: Number(s.Class.id ?? s.class_id ?? 0),
         class_name: s.Class.class_name ?? s.class_name ?? "—",
       }
     : { id: Number(s?.class_id ?? 0), class_name: s?.class_name ?? "—" };
-
   const section_name =
     firstNonEmpty(
       s?.Section?.section_name,
@@ -160,17 +144,13 @@ const normalizeStudentRow = (s) => {
       s?.section,
       s?.Section?.name
     ) || "—";
-
   const Section = s?.Section
     ? { id: Number(s.Section.id ?? s.section_id ?? 0), section_name }
     : { id: Number(s?.section_id ?? 0), section_name };
-
   return { ...s, id, name, admission_number, Class, Section };
 };
-
 const formatINR = (n) =>
   `₹${Number(n || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
-
 const pickNum = (...vals) => {
   for (const v of vals) {
     const n = Number(v);
@@ -178,7 +158,6 @@ const pickNum = (...vals) => {
   }
   return 0;
 };
-
 /**
  * Convert an image URL to a base64 data URL usable by @react-pdf/renderer.
  * Returns the original URL on failure (so caller can fallback).
@@ -202,7 +181,6 @@ async function fetchImageAsDataURL(url) {
     return url;
   }
 }
-
 /* ----- Print Receipt (robust for new /schools shape) ----- */
 const handlePrintReceipt = async (slipId) => {
   try {
@@ -212,12 +190,10 @@ const handlePrintReceipt = async (slipId) => {
       allowOutsideClick: false,
       showConfirmButton: false,
     });
-
     const [schoolResp, receiptResp] = await Promise.allSettled([
       api.get("/schools"),
       api.get(`/transactions/slip/${slipId}`),
     ]);
-
     let receipt = null;
     if (receiptResp.status === "fulfilled") {
       const r = receiptResp.value?.data;
@@ -233,13 +209,11 @@ const handlePrintReceipt = async (slipId) => {
         if (receipt && !Array.isArray(receipt)) receipt = [receipt];
       }
     }
-
     if (!receipt || receipt.length === 0) {
       Swal.close();
       Swal.fire("No receipt", "Server returned no receipt data.", "error");
       return;
     }
-
     let school = null;
     if (schoolResp.status === "fulfilled") {
       const d = schoolResp.value?.data;
@@ -263,7 +237,6 @@ const handlePrintReceipt = async (slipId) => {
     if (!school) {
       school = { name: "Your School", address: "", logo: null, phone: "", email: "" };
     }
-
     const isNeg = (v) => typeof v === "number" && !Number.isNaN(v) && v < 0;
     const stripNeg = (v) => (isNeg(v) ? undefined : v);
     const fieldsToClean = [
@@ -276,7 +249,6 @@ const handlePrintReceipt = async (slipId) => {
       "RemainingBeforeFine",
       "remainingBeforeFine",
     ];
-
     const cleanedReceipt = receipt.map((row) => {
       const out = { ...row };
       fieldsToClean.forEach((k) => {
@@ -294,26 +266,21 @@ const handlePrintReceipt = async (slipId) => {
         });
         out.Transport = T;
       }
-
       return out;
     });
-
     const payload = {
       receipt: cleanedReceipt,
       school,
       fileName: `Receipt-${slipId}`,
       options: { hideNegativeBalances: true },
     };
-
     const res = await api.post("/receipt-pdf/receipt/generate-pdf", payload, {
       responseType: "blob",
     });
-
     const blob = new Blob([res.data], { type: "application/pdf" });
     const url = window.URL.createObjectURL(blob);
     window.open(url, "_blank");
     setTimeout(() => window.URL.revokeObjectURL(url), 60 * 1000);
-
     Swal.close();
   } catch (err) {
     Swal.close();
@@ -321,16 +288,13 @@ const handlePrintReceipt = async (slipId) => {
     Swal.fire("Error", err?.message || "Failed to prepare receipt PDF", "error");
   }
 };
-
 const Transactions = () => {
   const [userRole, setUserRole] = useState(localStorage.getItem("activeRole") || "");
-
   useEffect(() => {
     const handler = () => setUserRole(localStorage.getItem("activeRole") || "");
     window.addEventListener("role-changed", handler);
     return () => window.removeEventListener("role-changed", handler);
   }, []);
-
   const isCancelled = (txn) => txn.status === "cancelled";
   const canCancel = () => {
     const role = (userRole || "").toLowerCase();
@@ -338,12 +302,10 @@ const Transactions = () => {
       role
     );
   };
-
   const canDelete = (txn) => {
     const role = (userRole || "").toLowerCase();
     return role === "superadmin" && isCancelled(txn);
   };
-
   const [transactions, setTransactions] = useState([]);
   const [classes, setClasses] = useState([]);
   const [sections, setSections] = useState([]);
@@ -362,31 +324,22 @@ const Transactions = () => {
   const [daySummary, setDaySummary] = useState({ data: [], grandTotal: 0 });
   const [searchAdmissionNumber, setSearchAdmissionNumber] = useState("");
   const [selectedAdmissionStudent, setSelectedAdmissionStudent] = useState(null);
-
   const [showReceiptModal, setShowReceiptModal] = useState(false);
   const [selectedSlipId, setSelectedSlipId] = useState(null);
-
   const [transportRoutes, setTransportRoutes] = useState([]);
-
   const [sessions, setSessions] = useState([]);
   const [selectedSession, setSelectedSession] = useState(null);
-
   const [modalError, setModalError] = useState(null);
-
   const [quickAmount, setQuickAmount] = useState("");
-
   const [selectedHeads, setSelectedHeads] = useState(new Set());
-
   const [prevBalanceHeadId, setPrevBalanceHeadId] = useState(null);
   const [openingBalanceDue, setOpeningBalanceDue] = useState(0);
-
   const [sbQuery, setSbQuery] = useState("");
   const [sbResults, setSbResults] = useState([]);
   const [sbOpen, setSbOpen] = useState(false);
   const [sbActive, setSbActive] = useState(-1);
   const sbWrapRef = useRef(null);
   const debounceRef = useRef(null);
-
   const escapeHtml = (s) =>
     String(s ?? "")
       .replace(/&/g, "&amp;")
@@ -394,12 +347,10 @@ const Transactions = () => {
       .replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;")
       .replace(/'/g, "&#039;");
-
   const debounce = (fn, ms = 250) => {
     clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(fn, ms);
   };
-
   const asStudentsArray = (data) =>
     Array.isArray(data)
       ? data
@@ -408,7 +359,6 @@ const Transactions = () => {
       : Array.isArray(data?.data)
       ? data.data
       : [];
-
   const fetchStudentsInline = async (term) => {
     if (!term || term.trim().length < 1) {
       setSbResults([]);
@@ -431,26 +381,20 @@ const Transactions = () => {
       setSbOpen(false);
     }
   };
-
   const handlePickStudent = (s) => {
     if (!s) return;
-
     setSelectedClass((prev) => prev || s.class_id || s.Class?.id || "");
     setSelectedSection((prev) => prev || s.section_id || s.Section?.id || "");
-
     setSelectedAdmissionStudent(s);
     setSelectedStudentInfo(s);
     setSbQuery(`${s.name} (${s.admission_number || "—"})`);
     setSbOpen(false);
-
     if (!selectedSession) {
       setModalError("Please select an academic session before loading fee details.");
       return;
     }
-
     fetchFeeHeadsForStudent(s.class_id, s.id, s);
   };
-
   useEffect(() => {
     const onDocClick = (e) => {
       if (!sbWrapRef.current) return;
@@ -459,24 +403,19 @@ const Transactions = () => {
     document.addEventListener("click", onDocClick, { capture: true });
     return () => document.removeEventListener("click", onDocClick);
   }, []);
-
   const dueIncludingVanForRow = (row) => {
     const academicNetDue = Math.max(
       0,
       (row.Fee_Due || 0) - (row.Fee_Recieved || 0) - (row.Concession || 0)
     );
-
     const fineDue = row.isFineApplicable
       ? Math.max(0, (row.fineAmount || 0) - (row.Fine_Amount || 0))
       : 0;
-
     const vanOutstanding = row.ShowVanFeeInput
       ? Math.max(0, (row.Van_Fee_Due || 0) - (row.VanFee || 0))
       : 0;
-
     return academicNetDue + fineDue + vanOutstanding;
   };
-
   const selectedDueTotal = useMemo(() => {
     if (!newTransactionDetails?.length || selectedHeads.size === 0) return 0;
     return newTransactionDetails.reduce((sum, row) => {
@@ -485,18 +424,14 @@ const Transactions = () => {
         : sum;
     }, 0);
   }, [newTransactionDetails, selectedHeads]);
-
   useEffect(() => {
     setSelectedHeads(new Set());
   }, [showModal, feeHeads]);
-
   const POLLING_INTERVAL = 5000;
-
   const viewReceipt = (slipId) => {
     setSelectedSlipId(slipId);
     setShowReceiptModal(true);
   };
-
   const totalFeeReceived = useMemo(
     () => newTransactionDetails.reduce((t, i) => t + (i.Fee_Recieved || 0), 0),
     [newTransactionDetails]
@@ -505,13 +440,17 @@ const Transactions = () => {
     () => newTransactionDetails.reduce((t, i) => t + (i.VanFee || 0), 0),
     [newTransactionDetails]
   );
-  const totalConcessions = useMemo(
-    () =>
-      newTransactionDetails.reduce(
-        (t, i) => t + ((i.Concession || 0) + (i.Van_Fee_Concession || 0)),
-        0
-      ),
+  const totalAcademicConcession = useMemo(
+    () => newTransactionDetails.reduce((t, i) => t + (i.Concession || 0), 0),
     [newTransactionDetails]
+  );
+  const totalVanConcession = useMemo(
+    () => newTransactionDetails.reduce((t, i) => t + (i.Van_Fee_Concession || 0), 0),
+    [newTransactionDetails]
+  );
+  const totalConcessions = useMemo(
+    () => totalAcademicConcession + totalVanConcession,
+    [totalAcademicConcession, totalVanConcession]
   );
   const totalFine = useMemo(
     () => newTransactionDetails.reduce((t, i) => t + (i.Fine_Amount || 0), 0),
@@ -521,7 +460,6 @@ const Transactions = () => {
     () => totalFeeReceived + totalVanFee + totalFine,
     [totalFeeReceived, totalVanFee, totalFine]
   );
-
   const fetchFineEligibility = async (studentId) => {
     try {
       const res = await api.get(`/transactions/fine-eligibility/${studentId}`);
@@ -531,7 +469,6 @@ const Transactions = () => {
       return {};
     }
   };
-
   const fetchTransportRoutes = async () => {
     try {
       const response = await api.get("/transportations");
@@ -540,13 +477,11 @@ const Transactions = () => {
       console.error("Error fetching transport routes:", error);
     }
   };
-
   const fetchSessions = async () => {
     try {
       const res = await api.get("/sessions");
       const sessionList = res.data || [];
       setSessions(sessionList);
-
       if (!selectedSession) {
         let active = sessionList.find((s) => s.is_active === true);
         if (!active && sessionList.length > 0) {
@@ -560,7 +495,6 @@ const Transactions = () => {
       console.error("Error fetching sessions:", error);
     }
   };
-
   const fetchTransactions = async () => {
     try {
       const response = await api.get(
@@ -571,7 +505,6 @@ const Transactions = () => {
       console.error("Error fetching transactions:", error);
     }
   };
-
   const fetchDaySummary = async () => {
     try {
       const response = await api.get(
@@ -584,7 +517,6 @@ const Transactions = () => {
       console.error("Error fetching day summary:", error);
     }
   };
-
   const fetchClasses = async () => {
     try {
       const response = await api.get("/classes");
@@ -594,12 +526,10 @@ const Transactions = () => {
       console.error("Error fetching classes:", error);
     }
   };
-
   const fetchSections = async (classId = "") => {
     try {
       const url = classId ? `/sections?class_id=${classId}` : `/sections`;
       const res = await api.get(url);
-
       const raw = Array.isArray(res.data)
         ? res.data
         : Array.isArray(res.data?.data)
@@ -607,7 +537,6 @@ const Transactions = () => {
         : Array.isArray(res.data?.sections)
         ? res.data.sections
         : [];
-
       const list = raw.map(normalizeSectionRow).filter((s) => s.id);
       setSections(list);
     } catch (error) {
@@ -615,7 +544,6 @@ const Transactions = () => {
       setSections([]);
     }
   };
-
   const fetchStudentsByClassAndSection = useCallback(async () => {
     if (!selectedClass || !selectedSection) {
       setStudents([]);
@@ -627,17 +555,14 @@ const Transactions = () => {
       params.append("section_id", selectedSection);
       if (selectedSession) params.append("session_id", selectedSession);
       const url = `/students/searchByClassAndSection?${params.toString()}`;
-
       const res = await api.get(url);
       const raw = asArray(res.data);
-
       setStudents(raw.map(normalizeStudentRow).filter((s) => s.id));
     } catch (error) {
       console.error("Error fetching students:", error);
       setStudents([]);
     }
   }, [selectedClass, selectedSection, selectedSession]);
-
   const ensurePrevBalanceHeadId = async () => {
     if (prevBalanceHeadId) return prevBalanceHeadId;
     try {
@@ -655,7 +580,6 @@ const Transactions = () => {
     }
     return null;
   };
-
   const fetchOpeningBalanceOutstanding = async (studentId, sessionId) => {
     try {
       const try1 = await api.get(`/opening-balances/outstanding`, {
@@ -668,26 +592,22 @@ const Transactions = () => {
       );
       if (!Number.isNaN(val1) && val1 > 0) return val1;
     } catch (_) {}
-
     try {
       const res = await api.get(`/opening-balances`, {
         params: { student_id: studentId, session_id: sessionId },
       });
-
       const rows = Array.isArray(res.data?.rows)
         ? res.data.rows
         : Array.isArray(res.data)
         ? res.data
         : [];
       if (!rows.length) return 0;
-
       const providedTotal = Number(
         res.data?.outstanding ||
           res.data?.totalOutstanding ||
           res.data?.totals?.outstanding
       );
       if (!Number.isNaN(providedTotal)) return Math.max(0, providedTotal);
-
       const total = rows.reduce((sum, r) => sum + Number(r.amount || 0), 0);
       return Math.max(0, total);
     } catch (e) {
@@ -695,7 +615,6 @@ const Transactions = () => {
       return 0;
     }
   };
-
   const fetchFeeHeadsForStudent = async (
     _classId,
     studentId,
@@ -707,7 +626,6 @@ const Transactions = () => {
         setModalError("Please select an academic session before loading fee details.");
         return;
       }
-
       const feeResponse = await api.get(
         `/students/${studentId}/fee-details?session_id=${selectedSession}`
       );
@@ -715,7 +633,6 @@ const Transactions = () => {
       const baseStudent =
         feeResponse?.data?.student || baseStudentFromAdmission || {};
       const studentRouteFromFeeDetails = baseStudent?.route || null;
-
       const [
         receivedVanFeeResponse,
         lastRouteResponse,
@@ -731,7 +648,6 @@ const Transactions = () => {
         api.get(`/transportations`),
         fetchFineEligibility(studentId),
       ]);
-
       let transportDueMap = {};
       let firstTransportItem = null;
       try {
@@ -752,7 +668,6 @@ const Transactions = () => {
           err?.message || err
         );
       }
-
       let serverTransportCostGlobal = null;
       const serverTransportCostByHead = {};
       const receivedVanData =
@@ -761,7 +676,6 @@ const Transactions = () => {
           : Array.isArray(receivedVanFeeResponse.data)
           ? receivedVanFeeResponse.data
           : [];
-
       if (Array.isArray(receivedVanData)) {
         if (
           receivedVanData.length > 0 &&
@@ -777,7 +691,6 @@ const Transactions = () => {
           }
         });
       }
-
       const receivedVanFeeMap = {};
       const vanFeeConcessionMap = {};
       (receivedVanData || []).forEach((item) => {
@@ -786,18 +699,15 @@ const Transactions = () => {
         vanFeeConcessionMap[item.Fee_Head] =
           parseFloat(item.TotalVanFeeConcession) || 0;
       });
-
       const lastRouteMap = {};
       (lastRouteResponse.data.data || []).forEach((item) => {
         lastRouteMap[item.Fee_Head] = item.Route_Number || "";
       });
-
       const transportRoutesData = Array.isArray(routeDetailsResponse.data)
         ? routeDetailsResponse.data
         : Array.isArray(routeDetailsResponse.data?.data)
         ? routeDetailsResponse.data.data
         : [];
-
       const today = new Date();
       const studentAssignedRouteId =
         baseStudent?.transport_id ??
@@ -806,10 +716,8 @@ const Transactions = () => {
         baseStudent?.Transportation?.id ??
         studentRouteFromFeeDetails?.route_id ??
         null;
-
       const hasExistingTxnForStudent =
         Array.isArray(receivedVanData) && receivedVanData.length > 0;
-
       const feeDetails = feeDetailsData.map((detail) => {
         const headId = detail.fee_heading_id;
         const transportApplicable =
@@ -819,11 +727,9 @@ const Transactions = () => {
           /transport|van/i.test(
             String(detail.fee_heading || detail.Fee_Heading_Name || "")
           );
-
         const baseFeeDue = detail.feeDue || 0;
         const extraConcession = 0;
         const academicDue = Math.max(0, baseFeeDue - extraConcession);
-
         const key = String(headId);
         let eligible;
         if (
@@ -837,9 +743,7 @@ const Transactions = () => {
           eligible = true;
         }
         const originalFine = eligible ? detail.fineAmount || 0 : 0;
-
         const transportItem = transportDueMap[String(headId)] ?? null;
-
         const serverCostPerHead = serverTransportCostByHead[String(headId)];
         const serverCost =
           typeof serverCostPerHead !== "undefined" &&
@@ -848,7 +752,6 @@ const Transactions = () => {
             : serverTransportCostGlobal !== null
             ? serverTransportCostGlobal
             : null;
-
         const rawStudentAssignedRouteId =
           baseStudent?.transport_id ??
           baseStudent?.route_id ??
@@ -856,7 +759,6 @@ const Transactions = () => {
           baseStudent?.Transportation?.id ??
           studentRouteFromFeeDetails?.route_id ??
           null;
-
         const normalizeRouteId = (maybeId) => {
           if (
             maybeId === undefined ||
@@ -875,12 +777,10 @@ const Transactions = () => {
           );
           return hit ? String(hit.id) : null;
         };
-
         const inferredRouteIdForHead = (hid) =>
           normalizeRouteId(lastRouteMap[hid]) ??
           normalizeRouteId(rawStudentAssignedRouteId) ??
           null;
-
         const feeDetailCost = pickNum(
           detail.transportCost,
           detail.TransportCost,
@@ -895,7 +795,6 @@ const Transactions = () => {
           detail.price,
           detail.fare
         );
-
         const routeId = inferredRouteIdForHead(headId);
         const selectedRouteObj = routeId
           ? (Array.isArray(transportRoutesData)
@@ -905,7 +804,6 @@ const Transactions = () => {
               (r) => String(r?.id ?? "") === String(routeId)
             ) || null
           : null;
-
         const routeObjCost = selectedRouteObj
           ? pickNum(
               selectedRouteObj.Cost,
@@ -924,7 +822,6 @@ const Transactions = () => {
               selectedRouteObj.Rate
             )
           : 0;
-
         const transportItemCost = transportItem
           ? pickNum(
               transportItem.transportCost,
@@ -941,7 +838,6 @@ const Transactions = () => {
               transportItem.fare
             )
           : 0;
-
         const studentTransportCost = Number(
           baseStudent?.Transportation?.Cost ??
             baseStudent?.transport_cost ??
@@ -949,9 +845,7 @@ const Transactions = () => {
             studentRouteFromFeeDetails?.route_cost ??
             0
         );
-
         const serverCostVal = pickNum(serverCostPerHead, serverTransportCostGlobal);
-
         const selectedRouteFee = pickNum(
           transportItemCost,
           serverCostVal,
@@ -960,10 +854,8 @@ const Transactions = () => {
           studentTransportCost,
           studentRouteFromFeeDetails?.route_cost
         );
-
         const receivedVanFeeFromMap = receivedVanFeeMap[headId] || 0;
         const vanFeeConcessionFromMap = vanFeeConcessionMap[headId] || 0;
-
         const receivedFromServer =
           transportItem &&
           (transportItem.received !== undefined ||
@@ -974,7 +866,6 @@ const Transactions = () => {
                   : transportItem.TotalVanFeeReceived || 0
               )
             : receivedVanFeeFromMap;
-
         const concessionFromServer =
           transportItem &&
           (transportItem.concession !== undefined ||
@@ -985,7 +876,6 @@ const Transactions = () => {
                   : transportItem.TotalVanFeeConcession || 0
               )
             : vanFeeConcessionFromMap;
-
         const remainingBeforeFineFromServer =
           transportItem &&
           (transportItem.remainingBeforeFine !== undefined ||
@@ -999,21 +889,18 @@ const Transactions = () => {
                 0,
                 selectedRouteFee - (receivedFromServer || 0) - (concessionFromServer || 0)
               );
-
         const vanFineFromServer = Number(
           transportItem?.vanFine ??
             transportItem?.vanFineAmount ??
             transportItem?.VanFineAmount ??
             0
         );
-
         const finalDue =
           transportItem &&
           (transportItem.due !== undefined ||
             transportItem.FinalDue !== undefined)
             ? Number(transportItem.due ?? transportItem.FinalDue ?? 0)
             : Math.max(0, remainingBeforeFineFromServer + vanFineFromServer);
-
         let showVan;
         if (hasExistingTxnForStudent) {
           showVan = Boolean(transportApplicable);
@@ -1027,11 +914,11 @@ const Transactions = () => {
                 studentAssignedRouteId)
           );
         }
-
         const vanFields = showVan
           ? {
               VanFee: 0,
               Van_Fee_Concession: concessionFromServer,
+              _vanFeeConcession: concessionFromServer,
               _routeFee: selectedRouteFee,
               _receivedVanFee: receivedFromServer,
               Van_Fee_Remaining: remainingBeforeFineFromServer,
@@ -1042,6 +929,7 @@ const Transactions = () => {
           : {
               VanFee: 0,
               Van_Fee_Concession: 0,
+              _vanFeeConcession: 0,
               _routeFee: 0,
               _receivedVanFee: 0,
               Van_Fee_Remaining: 0,
@@ -1049,7 +937,6 @@ const Transactions = () => {
               Van_Fine_Amount: 0,
               SelectedRoute: null,
             };
-
         const baseRow = {
           Fee_Head: headId,
           Fee_Heading_Name: detail.fee_heading,
@@ -1066,7 +953,6 @@ const Transactions = () => {
           ShowVanFeeInput: showVan,
           ...vanFields,
         };
-
         if (!hasExistingTxnForStudent && transportApplicable) {
           const hasGlobalCostSignal =
             Number(baseRow._routeFee) > 0 ||
@@ -1076,9 +962,7 @@ const Transactions = () => {
             Number(feeDetailCost) > 0 ||
             Number(studentTransportCost) > 0 ||
             Number(studentRouteFromFeeDetails?.route_cost || 0) > 0;
-
           const hasHeadSpecificItem = Boolean(transportDueMap[String(headId)]);
-
           if (hasGlobalCostSignal && !hasHeadSpecificItem) {
             const fallbackCost = pickNum(
               baseRow._routeFee,
@@ -1087,29 +971,26 @@ const Transactions = () => {
               feeDetailCost,
               selectedRouteFee
             );
-
             const inferredConcession = Number(baseRow.Van_Fee_Concession || 0) || 0;
             const remaining = Math.max(
               0,
               Number(fallbackCost || 0) - inferredConcession
             );
             const vanFine = baseRow.Van_Fine_Amount || 0;
-
             return {
               ...baseRow,
               ShowVanFeeInput: true,
               _routeFee: Number(fallbackCost || 0),
               _receivedVanFee: 0,
+              _vanFeeConcession: inferredConcession,
               Van_Fee_Remaining: remaining,
               Van_Fine_Amount: vanFine,
               Van_Fee_Due: Math.max(0, remaining + vanFine),
             };
           }
         }
-
         return baseRow;
       });
-
       try {
         const headId = await ensurePrevBalanceHeadId();
         if (headId && baseStudent?.id && selectedSession) {
@@ -1118,7 +999,6 @@ const Transactions = () => {
             selectedSession
           );
           setOpeningBalanceDue(obDue || 0);
-
           if (obDue > 0) {
             const openingRow = {
               isOpeningBalance: true,
@@ -1136,13 +1016,13 @@ const Transactions = () => {
               Van_Fee_Due: 0,
               Van_Fee_Remaining: 0,
               Van_Fine_Amount: 0,
+              Van_Fee_Concession: 0,
+              _vanFeeConcession: 0,
               _routeFee: 0,
               _receivedVanFee: 0,
-              _vanFeeConcession: 0,
               SelectedRoute: null,
               defaultConcessionAmount: 0,
             };
-
             feeDetails.unshift(openingRow);
           }
         } else {
@@ -1152,7 +1032,6 @@ const Transactions = () => {
         console.warn("OB injection failed:", e?.message || e);
         setOpeningBalanceDue(0);
       }
-
       setFeeHeads(feeDetails);
       setNewTransactionDetails(feeDetails);
       if (feeResponse.data.student) {
@@ -1165,7 +1044,6 @@ const Transactions = () => {
       setNewTransactionDetails([]);
     }
   };
-
   const fetchStudentAndFeeByAdmissionNumber = async () => {
     if (!searchAdmissionNumber) return;
     try {
@@ -1201,25 +1079,21 @@ const Transactions = () => {
       );
     }
   };
-
   const getAcademicRemaining = (row) =>
     Math.max(
       0,
       (row.Fee_Due || 0) - (row.Fee_Recieved || 0) - (row.Concession || 0)
     );
-
   const getFineRemaining = (row) =>
     row.isFineApplicable
       ? Math.max(0, (row.fineAmount || 0) - (row.Fine_Amount || 0))
       : 0;
-
   const getVanRemaining = (row) => {
     if (!row.ShowVanFeeInput) return 0;
     const alreadyEntered = Number(row.VanFee || 0);
     const remaining = Math.max(0, (row.Van_Fee_Due || 0) - alreadyEntered);
     return remaining;
   };
-
   const sortTuitionFirst = (rows) => {
     const withIdx = rows.map((r, i) => ({ r, i }));
     withIdx.sort((a, b) => {
@@ -1230,7 +1104,6 @@ const Transactions = () => {
     });
     return withIdx.map((x) => x.i);
   };
-
   const autoAllocateQuickAmount = () => {
     const amt = parseInt(quickAmount, 10);
     if (isNaN(amt) || amt <= 0) {
@@ -1241,39 +1114,40 @@ const Transactions = () => {
       setModalError("Pick a student and load fee details first to auto-allocate.");
       return;
     }
-
     let remaining = amt;
     const updated = newTransactionDetails.map((d) => ({ ...d }));
     const order = sortTuitionFirst(updated);
-
     for (const idx of order) {
       if (remaining <= 0) break;
       const row = updated[idx];
-
       const acadNeed = getAcademicRemaining(row);
       if (acadNeed > 0 && remaining > 0) {
         const take = Math.min(remaining, acadNeed);
         row.Fee_Recieved = (row.Fee_Recieved || 0) + take;
         remaining -= take;
       }
-
       const fineNeed = getFineRemaining(row);
       if (!row.isFineEdited && fineNeed > 0 && remaining > 0) {
         const takeFine = Math.min(remaining, fineNeed);
         row.Fine_Amount = (row.Fine_Amount || 0) + takeFine;
         remaining -= takeFine;
       }
-
       const vanNeed = getVanRemaining(row);
       if (vanNeed > 0 && remaining > 0) {
         const takeVan = Math.min(remaining, vanNeed);
         row.VanFee = (row.VanFee || 0) + takeVan;
         remaining -= takeVan;
       }
+      // keep Van_Fee_Remaining in sync
+      if (row.ShowVanFeeInput) {
+        const baseDueNoFine = Math.max(
+          0,
+          (row.Van_Fee_Due || 0) - (row.Van_Fine_Amount || 0)
+        );
+        row.Van_Fee_Remaining = Math.max(0, baseDueNoFine - (row.VanFee || 0));
+      }
     }
-
     setNewTransactionDetails(updated);
-
     if (remaining > 0) {
       Swal.fire(
         "Amount left",
@@ -1284,7 +1158,6 @@ const Transactions = () => {
       );
     }
   };
-
   const clearQuickAllocations = () => {
     if (!newTransactionDetails.length) return;
     const cleared = newTransactionDetails.map((d) => ({
@@ -1295,11 +1168,9 @@ const Transactions = () => {
     }));
     setNewTransactionDetails(cleared);
   };
-
   const saveTransaction = async () => {
     try {
       setModalError(null);
-
       if (editingTransaction) {
         const updatedTransaction = {
           Fee_Recieved: editingTransaction.Fee_Recieved,
@@ -1315,12 +1186,10 @@ const Transactions = () => {
           session_id: editingTransaction.session_id ?? null,
           Remarks: editingTransaction.Remarks || null,
         };
-
         const response = await api.put(
           `/transactions/${editingTransaction.Serial}`,
           updatedTransaction
         );
-
         if (response.data.success) {
           Swal.fire("Updated!", "Transaction has been updated successfully.", "success");
           fetchTransactions();
@@ -1341,19 +1210,16 @@ const Transactions = () => {
           setModalError("Please select a payment mode.");
           return;
         }
-
         if (!selectedSession) {
           setModalError("Please select an academic session before collecting.");
           return;
         }
-
         const transactionsPayload = newTransactionDetails.map((details) => ({
           AdmissionNumber: selectedStudentInfo.admission_number,
           Student_ID: selectedStudentInfo.id,
           Class_ID: selectedStudentInfo.class_id,
           Section_ID: selectedStudentInfo.section_id,
           DateOfTransaction: new Date().toISOString(),
-
           Fee_Head: details.Fee_Head,
           Fee_Recieved: details.Fee_Recieved,
           Concession: details.isOpeningBalance ? 0 : details.Concession,
@@ -1371,7 +1237,6 @@ const Transactions = () => {
             !details.isOpeningBalance
               ? Number(details.SelectedRoute)
               : null,
-
           PaymentMode: paymentMode,
           Transaction_ID: paymentMode === "Online" ? transactionID : null,
           Fine_Amount:
@@ -1381,11 +1246,9 @@ const Transactions = () => {
           session_id: selectedSession,
           Remarks: remarks || null,
         }));
-
         const response = await api.post("/transactions/bulk", {
           transactions: transactionsPayload,
         });
-
         if (response.data.success) {
           Swal.fire({
             title: "Added!",
@@ -1404,7 +1267,6 @@ const Transactions = () => {
         } else {
           setModalError(response.data.message || "Failed to create transactions.");
         }
-
         await fetchFeeHeadsForStudent(
           selectedStudentInfo.class_id,
           selectedStudentInfo.id
@@ -1422,7 +1284,6 @@ const Transactions = () => {
       );
     }
   };
-
   const resetForm = () => {
     setFeeHeads([]);
     setNewTransactionDetails([]);
@@ -1437,7 +1298,6 @@ const Transactions = () => {
     setModalError(null);
     setRemarks("");
   };
-
   const cancelTransaction = async (id) => {
     try {
       await api.post(`/transactions/${id}/cancel`);
@@ -1453,7 +1313,6 @@ const Transactions = () => {
       );
     }
   };
-
   const deleteTransaction = async (id) => {
     try {
       await api.delete(`/transactions/${id}`);
@@ -1469,14 +1328,12 @@ const Transactions = () => {
       );
     }
   };
-
   useEffect(() => {
     fetchTransportRoutes();
     fetchClasses();
     fetchSections();
     fetchSessions();
   }, []);
-
   useEffect(() => {
     if (showModal) {
       setSearchAdmissionNumber("");
@@ -1490,12 +1347,10 @@ const Transactions = () => {
       setModalError(null);
     }
   }, [showModal]);
-
   useEffect(() => {
     fetchSections(selectedClass);
     fetchStudentsByClassAndSection();
   }, [selectedClass, selectedSection]);
-
   useEffect(() => {
     fetchTransactions();
     fetchDaySummary();
@@ -1505,7 +1360,6 @@ const Transactions = () => {
     }, POLLING_INTERVAL);
     return () => clearInterval(intervalId);
   }, []);
-
   const cashCollection = useMemo(() => {
     return (daySummary.paymentSummary || [])
       .filter((p) => p.PaymentMode === "Cash")
@@ -1514,16 +1368,17 @@ const Transactions = () => {
         0
       );
   }, [daySummary.paymentSummary]);
-
+  const totalVanConcessionDay = useMemo(() => 
+    transactions.reduce((sum, t) => sum + (t.Van_Fee_Concession || 0), 0),
+    [transactions]
+  );
   return (
     <div className="container-fluid mt-4">
       <h2 className="mb-3 text-center">Transactions Management</h2>
-
       <div className="d-flex justify-content-between align-items-center mb-3">
         <h4 className="fw-bold text-primary">Transaction Summary for Today</h4>
         <span className="text-muted fs-6">{new Date().toLocaleDateString()}</span>
       </div>
-
       {daySummary && daySummary.data ? (
         <Row className="mb-4 g-3">
           <Col md={3}>
@@ -1595,6 +1450,18 @@ const Transactions = () => {
           <Col md={2}>
             <Card className="shadow-sm border-0 h-100">
               <Card.Body className="text-center">
+                <div className="small text-uppercase text-muted mb-1">
+                  Van Fee Cons.
+                </div>
+                <div className="fs-4 fw-bold">
+                  {formatINR(totalVanConcessionDay)}
+                </div>
+              </Card.Body>
+            </Card>
+          </Col>
+          <Col md={1}>
+            <Card className="shadow-sm border-0 h-100">
+              <Card.Body className="text-center">
                 <div className="small text-uppercase text-muted mb-1">Fine</div>
                 <div className="fs-4 fw-bold">
                   {formatINR(
@@ -1613,7 +1480,6 @@ const Transactions = () => {
           Loading transaction summary...
         </p>
       )}
-
       <Row className="mb-4 g-3">
         {(daySummary.paymentSummary || []).map((p) => (
           <Col md={3} key={p.PaymentMode}>
@@ -1632,7 +1498,6 @@ const Transactions = () => {
           </Col>
         ))}
       </Row>
-
       <div className="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
         <div className="d-flex align-items-center gap-2">
           <Form.Group className="mb-0" style={{ minWidth: 280 }}>
@@ -1664,7 +1529,6 @@ const Transactions = () => {
             Pick session once — applies to collections.
           </div>
         </div>
-
         <div>
           <Button
             variant="success"
@@ -1690,194 +1554,186 @@ const Transactions = () => {
           </Button>
         </div>
       </div>
-
       <div className="table-responsive">
         <table className="table table-striped table-sm align-middle">
-            <thead className="table-light">
-              <tr>
-                <th>#</th>
-                <th>Student</th>
-                <th>Slip ID</th>
-                <th>Adm. No.</th>
-                <th>Class</th>
-                <th>Date & Time</th>
-                <th>Head</th>
-                <th>Concession</th>
-                <th>Fee Received</th>
-                <th>Van Fee</th>
-                <th>Fine</th>
-                <th>Mode</th>
-                <th>Status</th>
-                <th>Remarks</th>
-                <th>Actions</th>
-                <th>Receipt</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(() => {
-                const grouped = new Map();
-                const activeTxns = (transactions || []).filter(
-                  (t) => t.status !== "cancelled"
-                );
-
-                activeTxns.forEach((t) => {
-                  if (!grouped.has(t.Slip_ID)) grouped.set(t.Slip_ID, []);
-                  grouped.get(t.Slip_ID).push(t);
-                });
-
-                const rows = Array.from(grouped.entries()).flatMap(
-                  ([slipID, group]) =>
-                    group.map((t, index) => {
-                      const isMiddleRow = index === Math.floor(group.length / 2);
-                      return (
-                        <tr key={t.Serial}>
-                          <td>
-                            {activeTxns.length - activeTxns.indexOf(t)}
-                          </td>
-                          <td>{t.Student?.name || "—"}</td>
-                          <td>{t.Slip_ID}</td>
-                          <td>{t.AdmissionNumber}</td>
-                          <td>{t.Class?.class_name || "—"}</td>
-                          <td>
-                            {new Date(
-                              t.DateOfTransaction
-                            ).toLocaleString()}
-                          </td>
-                          <td>{t.FeeHeading?.fee_heading || "—"}</td>
-                          <td>{formatINR(t.Concession)}</td>
-                          <td>{formatINR(t.Fee_Recieved)}</td>
-                          <td>{formatINR(t.VanFee)}</td>
-                          <td
-                            className={
-                              t.Fine_Amount > 0 ? "text-danger fw-bold" : ""
-                            }
+          <thead className="table-light">
+            <tr>
+              <th>#</th>
+              <th>Student</th>
+              <th>Slip ID</th>
+              <th>Adm. No.</th>
+              <th>Class</th>
+              <th>Date & Time</th>
+              <th>Head</th>
+              <th>Concession</th>
+              <th>Fee Received</th>
+              <th>Van Fee</th>
+              <th>Van Fee Cons.</th>
+              <th>Fine</th>
+              <th>Mode</th>
+              <th>Status</th>
+              <th>Remarks</th>
+              <th>Actions</th>
+              <th>Receipt</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(() => {
+              const grouped = new Map();
+              const activeTxns = (transactions || []).filter(
+                (t) => t.status !== "cancelled"
+              );
+              activeTxns.forEach((t) => {
+                if (!grouped.has(t.Slip_ID)) grouped.set(t.Slip_ID, []);
+                grouped.get(t.Slip_ID).push(t);
+              });
+              const rows = Array.from(grouped.entries()).flatMap(
+                ([slipID, group]) =>
+                  group.map((t, index) => {
+                    const isMiddleRow = index === Math.floor(group.length / 2);
+                    return (
+                      <tr key={t.Serial}>
+                        <td>
+                          {activeTxns.length - activeTxns.indexOf(t)}
+                        </td>
+                        <td>{t.Student?.name || "—"}</td>
+                        <td>{t.Slip_ID}</td>
+                        <td>{t.AdmissionNumber}</td>
+                        <td>{t.Class?.class_name || "—"}</td>
+                        <td>
+                          {new Date(
+                            t.DateOfTransaction
+                          ).toLocaleString()}
+                        </td>
+                        <td>{t.FeeHeading?.fee_heading || "—"}</td>
+                        <td>{formatINR(t.Concession)}</td>
+                        <td>{formatINR(t.Fee_Recieved)}</td>
+                        <td>{formatINR(t.VanFee)}</td>
+                        <td>{formatINR(t.Van_Fee_Concession || 0)}</td>
+                        <td
+                          className={
+                            t.Fine_Amount > 0 ? "text-danger fw-bold" : ""
+                          }
+                        >
+                          {formatINR(t.Fine_Amount || 0)}
+                        </td>
+                        <td>{t.PaymentMode}</td>
+                        <td>
+                          <Badge bg="success">Active</Badge>
+                        </td>
+                        <td>{t.Remarks || "—"}</td>
+                        <td className="text-nowrap">
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            className="me-1"
+                            onClick={() => {
+                              setEditingTransaction({
+                                Serial: t.Serial,
+                                Fee_Recieved: t.Fee_Recieved,
+                                Concession: t.Concession,
+                                VanFee: t.VanFee,
+                                Fine_Amount: t.Fine_Amount || 0,
+                                Van_Fee_Concession: t.Van_Fee_Concession || 0,
+                                PaymentMode: t.PaymentMode,
+                                Transaction_ID: t.Transaction_ID || "",
+                                FeeHeadingName:
+                                  t.FeeHeading?.fee_heading || "—",
+                                StudentName: t.Student?.name || "—",
+                                AdmissionNumber: t.AdmissionNumber,
+                                ClassName: t.Class?.class_name || "—",
+                                DateOfTransaction: t.DateOfTransaction,
+                                session_id: t.session_id ?? null,
+                                Remarks: t.Remarks || "",
+                              });
+                              setSelectedSession(
+                                t.session_id ?? selectedSession ?? null
+                              );
+                              setShowModal(true);
+                            }}
                           >
-                            {formatINR(t.Fine_Amount || 0)}
-                          </td>
-                          <td>{t.PaymentMode}</td>
-                          <td>
-                            <Badge bg="success">Active</Badge>
-                          </td>
-                          <td>{t.Remarks || "—"}</td>
-
-                          <td className="text-nowrap">
+                            Edit
+                          </Button>
+                          {canCancel() && (
+                            <Button
+                              variant="warning"
+                              size="sm"
+                              className="me-1"
+                              onClick={() =>
+                                Swal.fire({
+                                  title: "Cancel this transaction?",
+                                  text: "Status will become cancelled.",
+                                  icon: "warning",
+                                  showCancelButton: true,
+                                  confirmButtonText: "Yes, cancel",
+                                }).then((r) => {
+                                  if (r.isConfirmed)
+                                    cancelTransaction(t.Serial);
+                                })
+                              }
+                            >
+                              Cancel
+                            </Button>
+                          )}
+                          {canDelete(t) && (
+                            <Button
+                              variant="danger"
+                              size="sm"
+                              onClick={() =>
+                                Swal.fire({
+                                  title: "Delete permanently?",
+                                  text: "This cannot be undone.",
+                                  icon: "error",
+                                  showCancelButton: true,
+                                  confirmButtonText: "Yes, delete",
+                                }).then((r) => {
+                                  if (r.isConfirmed)
+                                    deleteTransaction(t.Serial);
+                                })
+                              }
+                            >
+                              Delete
+                            </Button>
+                          )}
+                        </td>
+                        {isMiddleRow && (
+                          <td className="align-middle text-center border-start border-0">
                             <Button
                               variant="primary"
                               size="sm"
-                              className="me-1"
-                              onClick={() => {
-                                setEditingTransaction({
-                                  Serial: t.Serial,
-                                  Fee_Recieved: t.Fee_Recieved,
-                                  Concession: t.Concession,
-                                  VanFee: t.VanFee,
-                                  Fine_Amount: t.Fine_Amount || 0,
-                                  Van_Fee_Concession: t.Van_Fee_Concession || 0,
-                                  PaymentMode: t.PaymentMode,
-                                  Transaction_ID: t.Transaction_ID || "",
-                                  FeeHeadingName:
-                                    t.FeeHeading?.fee_heading || "—",
-                                  StudentName: t.Student?.name || "—",
-                                  AdmissionNumber: t.AdmissionNumber,
-                                  ClassName: t.Class?.class_name || "—",
-                                  DateOfTransaction: t.DateOfTransaction,
-                                  session_id: t.session_id ?? null,
-                                  Remarks: t.Remarks || "",
-                                });
-                                setSelectedSession(
-                                  t.session_id ?? selectedSession ?? null
-                                );
-                                setShowModal(true);
-                              }}
+                              onClick={() => viewReceipt(t.Slip_ID)}
+                              className="me-2"
                             >
-                              Edit
+                              View
                             </Button>
-
-                            {canCancel() && (
-                              <Button
-                                variant="warning"
-                                size="sm"
-                                className="me-1"
-                                onClick={() =>
-                                  Swal.fire({
-                                    title: "Cancel this transaction?",
-                                    text: "Status will become cancelled.",
-                                    icon: "warning",
-                                    showCancelButton: true,
-                                    confirmButtonText: "Yes, cancel",
-                                  }).then((r) => {
-                                    if (r.isConfirmed)
-                                      cancelTransaction(t.Serial);
-                                  })
-                                }
-                              >
-                                Cancel
-                              </Button>
-                            )}
-
-                            {canDelete(t) && (
-                              <Button
-                                variant="danger"
-                                size="sm"
-                                onClick={() =>
-                                  Swal.fire({
-                                    title: "Delete permanently?",
-                                    text: "This cannot be undone.",
-                                    icon: "error",
-                                    showCancelButton: true,
-                                    confirmButtonText: "Yes, delete",
-                                  }).then((r) => {
-                                    if (r.isConfirmed)
-                                      deleteTransaction(t.Serial);
-                                  })
-                                }
-                              >
-                                Delete
-                              </Button>
-                            )}
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              onClick={() =>
+                                handlePrintReceipt(t.Slip_ID)
+                              }
+                            >
+                              Print
+                            </Button>
                           </td>
-
-                          {isMiddleRow && (
-                            <td className="align-middle text-center border-start border-0">
-                              <Button
-                                variant="primary"
-                                size="sm"
-                                onClick={() => viewReceipt(t.Slip_ID)}
-                                className="me-2"
-                              >
-                                View
-                              </Button>
-                              <Button
-                                variant="secondary"
-                                size="sm"
-                                onClick={() =>
-                                  handlePrintReceipt(t.Slip_ID)
-                                }
-                              >
-                                Print
-                              </Button>
-                            </td>
-                          )}
-                        </tr>
-                      );
-                    })
+                        )}
+                      </tr>
+                    );
+                  })
+              );
+              if (rows.length === 0) {
+                return (
+                  <tr key="no-data">
+                    <td colSpan={17} className="text-center py-5 text-muted">
+                      No transactions to display.
+                    </td>
+                  </tr>
                 );
-
-                if (rows.length === 0) {
-                  return (
-                    <tr key="no-data">
-                      <td colSpan={15} className="text-center py-5 text-muted">
-                        No transactions to display.
-                      </td>
-                    </tr>
-                  );
-                }
-
-                return rows;
-              })()}
-            </tbody>
+              }
+              return rows;
+            })()}
+          </tbody>
         </table>
-
         {showReceiptModal && (
           <ReceiptModal
             show={showReceiptModal}
@@ -1886,7 +1742,6 @@ const Transactions = () => {
           />
         )}
       </div>
-
       {/* Collect / Edit Modal */}
       <Modal
         show={showModal}
@@ -1901,7 +1756,6 @@ const Transactions = () => {
             {editingTransaction ? "Edit Transaction" : "Add Transaction"}
           </Modal.Title>
         </Modal.Header>
-
         <Modal.Body>
           {modalError && (
             <Alert
@@ -1912,7 +1766,6 @@ const Transactions = () => {
               {modalError}
             </Alert>
           )}
-
           {!editingTransaction ? (
             <>
               <Tabs
@@ -1920,7 +1773,6 @@ const Transactions = () => {
                 onSelect={(tab) => {
                   setActiveTab(tab);
                   setModalError(null);
-
                   if (tab === "admissionNumber") {
                     setSearchAdmissionNumber("");
                     setSelectedAdmissionStudent(null);
@@ -1951,7 +1803,6 @@ const Transactions = () => {
                     .secondary-line { font-size: 12px; color: #6c757d; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
                     .pill { font-weight: 500; font-size: 12px; color: #495057; background: #eef1f5; border-radius: 999px; padding: 1px 8px; margin-left: 6px; }
                   `}</style>
-
                   <Form.Group className="mb-3">
                     <Form.Label>Search (name / admission no.)</Form.Label>
                     <div className="sb-autocomplete" ref={sbWrapRef}>
@@ -1993,7 +1844,6 @@ const Transactions = () => {
                         }}
                         autoComplete="off"
                       />
-
                       {sbOpen && (
                         <div className="sb-menu">
                           {sbResults.length === 0 ? (
@@ -2045,7 +1895,6 @@ const Transactions = () => {
                       .
                     </div>
                   </Form.Group>
-
                   {selectedAdmissionStudent && (
                     <div className="student-brief-inline mb-3">
                       <span>
@@ -2075,7 +1924,6 @@ const Transactions = () => {
                     </div>
                   )}
                 </Tab>
-
                 <Tab eventKey="searchByName" title="Search by Class">
                   <div className="d-flex flex-wrap gap-3 mb-3">
                     <Form.Group style={{ minWidth: 200 }}>
@@ -2092,7 +1940,6 @@ const Transactions = () => {
                         ))}
                       </Form.Select>
                     </Form.Group>
-
                     <Form.Group style={{ minWidth: 200 }}>
                       <Form.Label>Section</Form.Label>
                       <Form.Select
@@ -2110,7 +1957,6 @@ const Transactions = () => {
                       </Form.Select>
                     </Form.Group>
                   </div>
-
                   <Form.Group className="mb-3">
                     <Form.Label>Student</Form.Label>
                     <Form.Select
@@ -2169,7 +2015,6 @@ const Transactions = () => {
                   )}
                 </Tab>
               </Tabs>
-
               {feeHeads.length > 0 && (
                 <Card className="mb-3 shadow-sm">
                   <Card.Body
@@ -2195,7 +2040,6 @@ const Transactions = () => {
                         </span>
                       </div>
                     </div>
-
                     <div className="d-flex align-items-center gap-2 flex-wrap">
                       <Form.Control
                         type="number"
@@ -2227,11 +2071,9 @@ const Transactions = () => {
                   </Card.Body>
                 </Card>
               )}
-
               {feeHeads.length > 0 && (
                 <>
                   <h5 className="mb-2">Fee Details</h5>
-
                   <div className="collection-table-wrap">
                     <table className="table table-bordered mb-0">
                       <thead className="table-light sticky-top">
@@ -2264,11 +2106,11 @@ const Transactions = () => {
                           <th style={{ minWidth: 100 }}>Cons</th>
                           <th style={{ minWidth: 100 }}>Recv</th>
                           <th style={{ minWidth: 110 }}>Van Recv</th>
+                          <th style={{ minWidth: 110 }}>Van Fee Cons.</th>
                           <th style={{ minWidth: 100 }}>Van Fee</th>
                           <th style={{ minWidth: 90 }}>Fine</th>
                         </tr>
                       </thead>
-
                       <tbody>
                         {newTransactionDetails.map((feeDetail, index) => (
                           <tr
@@ -2295,9 +2137,7 @@ const Transactions = () => {
                                 }}
                               />
                             </td>
-
                             <td>{feeDetail.Fee_Heading_Name}</td>
-
                             <td>
                               <OverlayTrigger
                                 placement="top"
@@ -2321,7 +2161,6 @@ const Transactions = () => {
                                           )}
                                         </span>
                                       </div>
-
                                       {feeDetail.defaultConcessionAmount > 0 &&
                                         selectedStudentInfo?.concession && (
                                           <div>
@@ -2339,7 +2178,6 @@ const Transactions = () => {
                                             </span>
                                           </div>
                                         )}
-
                                       {feeDetail.Concession > 0 && (
                                         <div>
                                           <strong className="text-success">
@@ -2350,7 +2188,6 @@ const Transactions = () => {
                                           </span>
                                         </div>
                                       )}
-
                                       {feeDetail.fineAmount > 0 && (
                                         <div>
                                           <strong className="text-danger">
@@ -2361,7 +2198,6 @@ const Transactions = () => {
                                           </span>
                                         </div>
                                       )}
-
                                       {feeDetail.ShowVanFeeInput && (
                                         <>
                                           <hr />
@@ -2385,7 +2221,8 @@ const Transactions = () => {
                                             <strong>Concession:</strong>
                                             <span className="ms-1">
                                               {formatINR(
-                                                feeDetail._vanFeeConcession
+                                                feeDetail._vanFeeConcession ||
+                                                  0
                                               )}
                                             </span>
                                           </div>
@@ -2410,6 +2247,7 @@ const Transactions = () => {
                                           <div>
                                             <strong>
                                               Total Van Due (after fine):
+                                              {/* live based on Van_Fee_Due */}
                                             </strong>
                                             <span className="ms-1">
                                               {formatINR(feeDetail.Van_Fee_Due)}
@@ -2437,7 +2275,6 @@ const Transactions = () => {
                                       0,
                                       originalFine - fineReceived
                                     );
-
                                     return (
                                       <>
                                         {formatINR(netDue)}
@@ -2456,15 +2293,16 @@ const Transactions = () => {
                                 </div>
                               </OverlayTrigger>
                             </td>
-
                             <td>
                               <Form.Control
                                 type="number"
                                 value={feeDetail.Concession || ""}
                                 onChange={(e) => {
                                   const updated = [...newTransactionDetails];
-                                  updated[index].Concession =
+                                  const row = { ...updated[index] };
+                                  row.Concession =
                                     parseInt(e.target.value, 10) || 0;
+                                  updated[index] = row;
                                   setNewTransactionDetails(updated);
                                 }}
                                 disabled={
@@ -2475,29 +2313,27 @@ const Transactions = () => {
                                 }
                               />
                             </td>
-
                             <td>
                               <Form.Control
                                 type="number"
                                 value={feeDetail.Fee_Recieved || ""}
                                 onChange={(e) => {
                                   const updated = [...newTransactionDetails];
+                                  const row = { ...updated[index] };
                                   const val = parseInt(e.target.value, 10) || 0;
                                   const maxAllowed = Math.max(
                                     0,
-                                    (feeDetail.Fee_Due || 0) -
-                                      (feeDetail.Concession || 0)
+                                    (row.Fee_Due || 0) -
+                                      (row.Concession || 0)
                                   );
-                                  updated[index].Fee_Recieved = Math.min(
-                                    val,
-                                    maxAllowed
-                                  );
+                                  row.Fee_Recieved = Math.min(val, maxAllowed);
+                                  updated[index] = row;
                                   setNewTransactionDetails(updated);
                                 }}
                                 disabled={(feeDetail.Fee_Due || 0) <= 0}
                               />
                             </td>
-
+                            {/* Van Recv */}
                             <td>
                               {feeDetail.ShowVanFeeInput ? (
                                 <div>
@@ -2515,15 +2351,13 @@ const Transactions = () => {
                                       0,
                                       totalDue - enteredNow
                                     );
-
                                     return (
                                       <>
                                         <div className="fw-semibold">
                                           {formatINR(remainingNow)}
                                         </div>
                                         <div className="small text-muted">
-                                          Rec: {formatINR(alreadyRec)}{" "}
-                                          {enteredNow > 0 && <></>}
+                                          Rec: {formatINR(alreadyRec)}
                                         </div>
                                       </>
                                     );
@@ -2533,7 +2367,62 @@ const Transactions = () => {
                                 "—"
                               )}
                             </td>
-
+                            {/* Van Fee Cons. */}
+                            <td>
+                              {feeDetail.ShowVanFeeInput ? (
+                                <Form.Control
+                                  type="number"
+                                  value={
+                                    feeDetail.Van_Fee_Concession === 0
+                                      ? ""
+                                      : feeDetail.Van_Fee_Concession
+                                  }
+                                  onChange={(e) => {
+                                    const updated = [
+                                      ...newTransactionDetails,
+                                    ];
+                                    const row = { ...updated[index] };
+                                    const cons =
+                                      parseInt(e.target.value, 10) || 0;
+                                    row.Van_Fee_Concession = cons;
+                                    row._vanFeeConcession = cons;
+                                    const routeFee = Number(
+                                      row._routeFee || 0
+                                    );
+                                    const prevRec = Number(
+                                      row._receivedVanFee || 0
+                                    );
+                                    const fine = Number(
+                                      row.Van_Fine_Amount || 0
+                                    );
+                                    const baseWithoutFine = Math.max(
+                                      0,
+                                      routeFee - prevRec - cons
+                                    );
+                                    const maxNowPayable =
+                                      baseWithoutFine + fine;
+                                    // adjust already typed VanFee if it exceeds
+                                    if ((row.VanFee || 0) > maxNowPayable) {
+                                      row.VanFee = maxNowPayable;
+                                    }
+                                    row.Van_Fee_Remaining = Math.max(
+                                      0,
+                                      baseWithoutFine - (row.VanFee || 0)
+                                    );
+                                    row.Van_Fee_Due = Math.max(
+                                      0,
+                                      baseWithoutFine + fine
+                                    );
+                                    updated[index] = row;
+                                    setNewTransactionDetails(updated);
+                                  }}
+                                  disabled={(feeDetail.Van_Fee_Due || 0) <= 0}
+                                />
+                              ) : (
+                                "—"
+                              )}
+                            </td>
+                            {/* Van Fee (amount received now) */}
                             <td>
                               {feeDetail.ShowVanFeeInput ? (
                                 <Form.Control
@@ -2544,9 +2433,43 @@ const Transactions = () => {
                                       : feeDetail.VanFee
                                   }
                                   onChange={(e) => {
-                                    const updated = [...newTransactionDetails];
-                                    updated[index].VanFee =
+                                    const updated = [
+                                      ...newTransactionDetails,
+                                    ];
+                                    const row = { ...updated[index] };
+                                    const raw =
                                       parseInt(e.target.value, 10) || 0;
+                                    const routeFee = Number(
+                                      row._routeFee || 0
+                                    );
+                                    const prevRec = Number(
+                                      row._receivedVanFee || 0
+                                    );
+                                    const cons = Number(
+                                      row.Van_Fee_Concession || 0
+                                    );
+                                    const fine = Number(
+                                      row.Van_Fine_Amount || 0
+                                    );
+                                    const baseWithoutFine = Math.max(
+                                      0,
+                                      routeFee - prevRec - cons
+                                    );
+                                    const maxNowPayable =
+                                      baseWithoutFine + fine;
+                                    row.VanFee = Math.max(
+                                      0,
+                                      Math.min(raw, maxNowPayable)
+                                    );
+                                    row.Van_Fee_Remaining = Math.max(
+                                      0,
+                                      baseWithoutFine - (row.VanFee || 0)
+                                    );
+                                    row.Van_Fee_Due = Math.max(
+                                      0,
+                                      baseWithoutFine + fine
+                                    );
+                                    updated[index] = row;
                                     setNewTransactionDetails(updated);
                                   }}
                                   disabled={(feeDetail.Van_Fee_Due || 0) <= 0}
@@ -2555,7 +2478,6 @@ const Transactions = () => {
                                 "—"
                               )}
                             </td>
-
                             <td>
                               <Form.Control
                                 type="number"
@@ -2567,17 +2489,19 @@ const Transactions = () => {
                                 }
                                 onChange={(e) => {
                                   const updated = [...newTransactionDetails];
+                                  const row = { ...updated[index] };
                                   const value = parseInt(e.target.value, 10);
-                                  updated[index].Fine_Amount = isNaN(value)
+                                  row.Fine_Amount = isNaN(value)
                                     ? 0
                                     : Math.max(
                                         0,
                                         Math.min(
                                           value,
-                                          feeDetail.fineAmount || 0
+                                          row.fineAmount || 0
                                         )
                                       );
-                                  updated[index].isFineEdited = true;
+                                  row.isFineEdited = true;
+                                  updated[index] = row;
                                   setNewTransactionDetails(updated);
                                 }}
                                 disabled={
@@ -2608,6 +2532,7 @@ const Transactions = () => {
                     <th>Fee Received</th>
                     <th>Concession</th>
                     <th>Van Fee</th>
+                    <th>Van Fee Cons.</th>
                     <th>Fine</th>
                     <th>Payment Mode</th>
                     <th>Session</th>
@@ -2666,6 +2591,18 @@ const Transactions = () => {
                     <td style={{ maxWidth: 140 }}>
                       <Form.Control
                         type="number"
+                        value={editingTransaction?.Van_Fee_Concession ?? 0}
+                        onChange={(e) =>
+                          setEditingTransaction((prev) => ({
+                            ...prev,
+                            Van_Fee_Concession: parseFloat(e.target.value) || 0,
+                          }))
+                        }
+                      />
+                    </td>
+                    <td style={{ maxWidth: 140 }}>
+                      <Form.Control
+                        type="number"
                         value={editingTransaction?.Fine_Amount || ""}
                         onChange={(e) =>
                           setEditingTransaction((prev) => ({
@@ -2693,7 +2630,6 @@ const Transactions = () => {
                         <option value="Online">Online</option>
                       </Form.Select>
                     </td>
-
                     <td style={{ minWidth: 160 }}>
                       <Form.Select
                         value={editingTransaction?.session_id ?? ""}
@@ -2732,7 +2668,6 @@ const Transactions = () => {
                   </tr>
                 </tbody>
               </table>
-
               {editingTransaction?.PaymentMode === "Online" && (
                 <Form.Group className="mt-3" style={{ maxWidth: 360 }}>
                   <Form.Label>Transaction ID</Form.Label>
@@ -2753,7 +2688,6 @@ const Transactions = () => {
             </>
           )}
         </Modal.Body>
-
         <Modal.Footer
           className="py-2 px-3"
           style={{
@@ -2796,7 +2730,6 @@ const Transactions = () => {
                   ))}
                 </Form.Select>
               </Form.Group>
-
               <Form.Group className="m-0" style={{ width: 150, flexShrink: 0 }}>
                 <Form.Label
                   className="m-0 small text-muted fw-semibold"
@@ -2813,7 +2746,6 @@ const Transactions = () => {
                   <option value="Online">Online</option>
                 </Form.Select>
               </Form.Group>
-
               <Form.Group className="m-0 flex-grow-1" style={{ minWidth: 220 }}>
                 <Form.Label
                   className="m-0 small text-muted fw-semibold"
@@ -2829,7 +2761,6 @@ const Transactions = () => {
                   onChange={(e) => setRemarks(e.target.value)}
                 />
               </Form.Group>
-
               {paymentMode === "Online" && (
                 <Form.Group className="m-0" style={{ width: 180 }}>
                   <Form.Label
@@ -2848,7 +2779,6 @@ const Transactions = () => {
                 </Form.Group>
               )}
             </div>
-
             <div
               className="d-flex flex-wrap align-items-center justify-content-center text-center gap-2 px-2"
               style={{
@@ -2860,6 +2790,9 @@ const Transactions = () => {
                 flexShrink: 0,
               }}
             >
+               <div className="small text-success fw-bold">
+                <strong>Total:</strong> {formatINR(grandTotal)}
+              </div>
               <div className="small">
                 <strong>Acad:</strong> {formatINR(totalFeeReceived)}
               </div>
@@ -2870,13 +2803,13 @@ const Transactions = () => {
                 <strong>Fine:</strong> {formatINR(totalFine)}
               </div>
               <div className="small text-secondary">
-                <strong>Cons:</strong> {formatINR(totalConcessions)}
+                <strong>Acad Cons:</strong> {formatINR(totalAcademicConcession)}
               </div>
-              <div className="small text-success fw-bold">
-                <strong>Total:</strong> {formatINR(grandTotal)}
+              <div className="small text-secondary">
+                <strong>Van Cons:</strong> {formatINR(totalVanConcession)}
               </div>
+             
             </div>
-
             <div className="d-flex align-items-center gap-2 flex-shrink-0">
               <Button
                 variant="secondary"
@@ -2885,7 +2818,6 @@ const Transactions = () => {
               >
                 Close
               </Button>
-
               {selectedStudentInfo?.admission_number && (
                 <Button
                   variant="info"
@@ -2900,7 +2832,6 @@ const Transactions = () => {
                   View Full Report
                 </Button>
               )}
-
               <Button variant="primary" size="sm" onClick={saveTransaction}>
                 Save
               </Button>
@@ -2911,5 +2842,4 @@ const Transactions = () => {
     </div>
   );
 };
-
 export default Transactions;
