@@ -87,7 +87,9 @@ const STATES = [
   "Puducherry",
   "Other",
 ];
+
 const CATEGORIES = ["General", "OBC", "SC", "ST", "EWS", "Other"];
+
 const RELIGIONS = [
   "Hindu",
   "Muslim",
@@ -97,6 +99,9 @@ const RELIGIONS = [
   "Jain",
   "Other",
 ];
+
+// blood groups list
+const BLOOD_GROUPS = ["A+","A-","B+","B-","AB+","AB-","O+","O-"];
 
 // colors for sibling badges
 const SIBLING_COLORS = [
@@ -321,44 +326,44 @@ const Students = () => {
   };
 
   // Print Admission Form
-const handlePrintAdmissionForm = async (student) => {
-  if (!student?.id) return;
+  const handlePrintAdmissionForm = async (student) => {
+    if (!student?.id) return;
 
-  try {
-    // This uses the same api instance, so your JWT/token is attached
-    const resp = await api.get(`/students/${student.id}/admission-form`, {
-      responseType: "blob",
-    });
+    try {
+      // This uses the same api instance, so your JWT/token is attached
+      const resp = await api.get(`/students/${student.id}/admission-form`, {
+        responseType: "blob",
+      });
 
-    const blob = new Blob([resp.data], {
-      type: resp.headers["content-type"] || "application/pdf",
-    });
-    const url = URL.createObjectURL(blob);
+      const blob = new Blob([resp.data], {
+        type: resp.headers["content-type"] || "application/pdf",
+      });
+      const url = URL.createObjectURL(blob);
 
-    // Try to open in new tab
-    const win = window.open(url, "_blank");
-    if (!win) {
-      // Popup blocked – fallback to download
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `Admission_Form_${student.admission_number || student.id}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
+      // Try to open in new tab
+      const win = window.open(url, "_blank");
+      if (!win) {
+        // Popup blocked – fallback to download
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `Admission_Form_${student.admission_number || student.id}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      }
+
+      // Optional: release later
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (err) {
+      console.error("handlePrintAdmissionForm:", err);
+      Swal.fire(
+        "Error",
+        err.response?.data?.message ||
+          "Failed to generate admission form. Please try again.",
+        "error"
+      );
     }
-
-    // Optional: release later
-    setTimeout(() => URL.revokeObjectURL(url), 60_000);
-  } catch (err) {
-    console.error("handlePrintAdmissionForm:", err);
-    Swal.fire(
-      "Error",
-      err.response?.data?.message ||
-        "Failed to generate admission form. Please try again.",
-      "error"
-    );
-  }
-};
+  };
 
   // ---------------- ADD / EDIT FORM ----------------
   const showStudentForm = async (mode = "add", student = null) => {
@@ -370,6 +375,26 @@ const handlePrintAdmissionForm = async (student) => {
 
     const isEdit = mode === "edit";
     const s = student || {};
+
+    // helper: pick first non-empty field from multiple possible keys
+    const pickField = (obj, keys, fallback = "") => {
+      for (const k of keys) {
+        if (obj && obj[k] != null && String(obj[k]).trim() !== "") {
+          return String(obj[k]).trim();
+        }
+      }
+      return fallback;
+    };
+
+    // normalize from backend: support different key names / casing
+    const existingBG = pickField(s, [
+      "b_group",
+      "B_group",
+      "B_GROUP",
+      "blood_group",
+      "Blood_Group",
+    ]);
+    const existingState = pickField(s, ["state", "State", "STATE"]);
 
     let nextSuggestion = "";
     if (!isEdit) {
@@ -418,6 +443,41 @@ const handlePrintAdmissionForm = async (student) => {
         }>${label}${cost ? ` — ₹${cost}` : ""}</option>`;
       })
       .join("")}`;
+
+    // ----- Blood group options (case-insensitive, allow custom value) -----
+    const currentBG = existingBG;
+    let bgOptionsHtml = BLOOD_GROUPS.map((bg) => {
+      const isSelected =
+        currentBG && bg.toLowerCase() === currentBG.toLowerCase();
+      return `<option value="${bg}" ${isSelected ? "selected" : ""}>${bg}</option>`;
+    }).join("");
+
+    if (
+      currentBG &&
+      !BLOOD_GROUPS.some(
+        (bg) => bg.toLowerCase() === currentBG.toLowerCase()
+      )
+    ) {
+      // value not in predefined list → keep it as extra option
+      bgOptionsHtml += `<option value="${currentBG}" selected>${currentBG}</option>`;
+    }
+
+    // ----- State options (case-insensitive, allow custom value) -----
+    const currentState = existingState;
+    let stateOptionsHtml = STATES.map((st) => {
+      const isSelected =
+        currentState && st.toLowerCase() === currentState.toLowerCase();
+      return `<option value="${st}" ${isSelected ? "selected" : ""}>${st}</option>`;
+    }).join("");
+
+    if (
+      currentState &&
+      !STATES.some(
+        (st) => st.toLowerCase() === currentState.toLowerCase()
+      )
+    ) {
+      stateOptionsHtml += `<option value="${currentState}" selected>${currentState}</option>`;
+    }
 
     // ---------- TABS HTML (wider, shorter, more professional) ----------
     const html = `
@@ -660,14 +720,7 @@ const handlePrintAdmissionForm = async (student) => {
               <label class="form-label">Blood Group</label>
               <select id="f_b_group" class="form-field">
                 <option value="">Select Blood Group</option>
-                ${["A+","A-","B+","B-","AB+","AB-","O+","O-"]
-                  .map(
-                    (bg) =>
-                      `<option value="${bg}" ${
-                        s.b_group === bg ? "selected" : ""
-                      }>${bg}</option>`
-                  )
-                  .join("")}
+                ${bgOptionsHtml}
               </select>
             </div>
 
@@ -696,12 +749,7 @@ const handlePrintAdmissionForm = async (student) => {
               <label class="form-label">State</label>
               <select id="f_state" class="form-field">
                 <option value="">Select State</option>
-                ${STATES.map(
-                  (st) =>
-                    `<option value="${st}" ${
-                      st === (s.state || "") ? "selected" : ""
-                    }>${st}</option>`
-                ).join("")}
+                ${stateOptionsHtml}
               </select>
             </div>
 
@@ -1396,6 +1444,262 @@ const handlePrintAdmissionForm = async (student) => {
     );
   };
 
+  // VIEW POPUP
+  function handleView(student) {
+    const siblingRows = [];
+    for (let i = 1; i <= 4; i++) {
+      const id = student[`sibling_id_${i}`];
+      const name = student[`sibling_name_${i}`];
+      if (id || name) {
+        siblingRows.push({
+          label: `Sibling ${i}`,
+          value: name ? name : `ID:${id}`,
+          id,
+        });
+      }
+    }
+
+    const statusBadge =
+      student.status === "enabled"
+        ? '<span class="badge bg-success">ENABLED</span>'
+        : '<span class="badge bg-secondary">DISABLED</span>';
+
+    // tolerant blood group & state for view as well
+    const viewBloodGroup =
+      student.b_group ||
+      student.B_group ||
+      student.B_GROUP ||
+      student.blood_group ||
+      student.Blood_Group ||
+      "-";
+
+    const viewState =
+      student.state || student.State || student.STATE || "-";
+
+    const fields = [
+      { label: "Admission Number", value: student.admission_number || "-" },
+      { label: "Full Name", value: student.name || "-" },
+      { label: "Father's Name", value: student.father_name || "-" },
+      { label: "Mother's Name", value: student.mother_name || "-" },
+      { label: "Class", value: student.class_name || "-" },
+      { label: "Section", value: student.section_name || "-" },
+      { label: "House", value: student.house_name || "-" },
+      { label: "Session", value: student.session_name || "-" },
+      { label: "Roll Number", value: student.roll_number || "-" },
+      { label: "Date of Birth", value: student.Date_Of_Birth || "-" },
+      { label: "Admission Date", value: student.date_of_admission || "-" },
+      { label: "Withdrawal Date", value: student.date_of_withdraw || "-" },
+      { label: "PEN Number", value: student.pen_number || "-" },
+      { label: "Blood Group", value: viewBloodGroup },
+      { label: "State", value: viewState },
+      { label: "Category", value: student.category || "-" },
+      { label: "Religion", value: student.religion || "-" },
+      {
+        label: "Bus Service Fee",
+        value: `₹${student.bus_service || 0}`,
+      },
+      {
+        label: "Public Visibility",
+        value: student.visible ? "Yes" : "No",
+      },
+      {
+        label: "Father's Phone",
+        value: student.father_phone || "-",
+      },
+      {
+        label: "Mother's Phone",
+        value: student.mother_phone || "-",
+      },
+      {
+        label: "Aadhaar Number",
+        value: student.aadhaar_number
+          ? student.aadhaar_number.replace(
+              /(\d{4})(\d{4})(\d{4})/,
+              "$1-$2-$3"
+            )
+          : "-",
+      },
+      { label: "Admission Type", value: student.admission_type || "-" },
+    ];
+
+    if (isAdminOrSuperAdmin) {
+      fields.push({
+        label: "Concession",
+        value: student.concession_name || "-",
+      });
+    }
+
+    fields.push({
+      label: "Transport Route",
+      value: formatTransportById(student.route_id),
+    });
+    fields.push({ label: "Status", value: statusBadge });
+    fields.push({
+      label: "Residential Address",
+      value: student.address || "-",
+      full: true,
+    });
+    fields.push({
+      label: "Previous School",
+      value: student.prev_school_name || "-",
+    });
+    fields.push({
+      label: "Previous Class",
+      value: student.prev_class || "-",
+    });
+    fields.push({
+      label: "Previous Adm. #",
+      value: student.prev_admission_no || "-",
+    });
+    if (student.prev_school_address) {
+      fields.push({
+        label: "Previous School Address",
+        value: student.prev_school_address,
+        full: true,
+      });
+    }
+
+    const photoUrl = buildPhotoURL(student.photo);
+    const hasPhoto = !!student.photo;
+
+    const fieldHtml = fields
+      .map(
+        (f) => `
+      <div class="detail-item ${f.full ? "full-row" : ""}">
+        <div class="detail-label">${f.label}</div>
+        <div class="detail-value">${f.value}</div>
+      </div>
+    `
+      )
+      .join("");
+
+    const siblingHtml = siblingRows.length
+      ? siblingRows
+          .map(
+            (s) => `
+      <div class="detail-item sibling-item" data-sibling-id="${s.id || ""}">
+        <div class="detail-label">${s.label}</div>
+        <div class="detail-value" style="cursor: ${
+          s.id ? "pointer" : "default"
+        }; color: ${s.id ? "#0d6efd" : "#6b7280"}; font-weight: 500;" ${
+              s.id ? `data-sibling-id="${s.id}"` : ""
+            }>${s.value}</div>
+      </div>
+    `
+          )
+          .join("")
+      : `
+      <div class="detail-item">
+        <div class="detail-label">Siblings</div>
+        <div class="detail-value">None recorded</div>
+      </div>
+    `;
+
+    const photoHtml = `
+      <div class="d-flex align-items-center justify-content-center gap-3 mb-4 p-3 bg-light rounded">
+        <img src="${
+          hasPhoto ? photoUrl : NO_PHOTO_SVG
+        }" alt="Student Photo" class="rounded-circle border shadow-sm" style="width: 100px; height: 100px; object-fit: cover;" />
+        ${
+          isAdminOrSuperAdmin
+            ? `<button id="btnChangePhoto" class="btn btn-outline-primary btn-sm">${
+                hasPhoto ? "Change Photo" : "Upload Photo"
+              }</button>`
+            : ""
+        }
+      </div>
+    `;
+
+    const html = `
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+        <h3 class="text-center mb-4 fw-bold text-primary">${
+          student.name || "Student"
+        } - Profile Details</h3>
+        ${photoHtml}
+        <div class="row g-3">
+          <div class="col-md-6">
+            ${fieldHtml
+              .split("</div>")
+              .slice(0, Math.ceil(fields.length / 2))
+              .join("</div>")}
+          </div>
+          <div class="col-md-6">
+            ${siblingHtml}
+          </div>
+        </div>
+      </div>
+      <style>
+        .detail-item {
+          display: flex;
+          align-items: flex-start;
+          gap: 12px;
+          padding: 12px 0;
+          border-bottom: 1px solid #f8f9fa;
+        }
+        .detail-item:last-child { border-bottom: none; }
+        .detail-label {
+          font-weight: 600;
+          color: #6c757d;
+          flex: 0 0 140px;
+          font-size: 0.9rem;
+        }
+        .detail-value {
+          color: #212529;
+          flex: 1;
+          word-break: break-word;
+          font-size: 0.95rem;
+        }
+        .sibling-item .detail-value:hover { text-decoration: underline; }
+
+        @media (max-width: 768px) {
+          .detail-item {
+            flex-direction: column;
+            gap: 4px;
+          }
+          .detail-label {
+            flex: 0 0 auto;
+          }
+        }
+      </style>
+    `;
+
+    Swal.fire({
+      title: "",
+      html,
+      width: 900,
+      showCloseButton: true,
+      showConfirmButton: false,
+      customClass: {
+        popup: "border-0 shadow-lg",
+        content: "p-0",
+      },
+      didOpen: () => {
+        const popup = Swal.getPopup();
+        if (popup) {
+          const siblingEls = popup.querySelectorAll("[data-sibling-id]");
+          siblingEls.forEach((el) => {
+            const id = el.getAttribute("data-sibling-id");
+            if (id) {
+              el.addEventListener("click", (e) => {
+                e.stopPropagation();
+                Swal.close();
+                setTimeout(() => handleSiblingClick(id), 100);
+              });
+            }
+          });
+        }
+        const btn = document.getElementById("btnChangePhoto");
+        if (btn && isAdminOrSuperAdmin) {
+          btn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            Swal.close();
+            promptAndUploadPhoto(student);
+          });
+        }
+      },
+    });
+  }
+
   return (
     <div
       className="container-fluid mt-3"
@@ -1870,250 +2174,6 @@ const handlePrintAdmissionForm = async (student) => {
       </div>
     </div>
   );
-
-  // VIEW POPUP
-  function handleView(student) {
-    const siblingRows = [];
-    for (let i = 1; i <= 4; i++) {
-      const id = student[`sibling_id_${i}`];
-      const name = student[`sibling_name_${i}`];
-      if (id || name) {
-        siblingRows.push({
-          label: `Sibling ${i}`,
-          value: name ? name : `ID:${id}`,
-          id,
-        });
-      }
-    }
-
-    const statusBadge =
-      student.status === "enabled"
-        ? '<span class="badge bg-success">ENABLED</span>'
-        : '<span class="badge bg-secondary">DISABLED</span>';
-
-    const fields = [
-      { label: "Admission Number", value: student.admission_number || "-" },
-      { label: "Full Name", value: student.name || "-" },
-      { label: "Father's Name", value: student.father_name || "-" },
-      { label: "Mother's Name", value: student.mother_name || "-" },
-      { label: "Class", value: student.class_name || "-" },
-      { label: "Section", value: student.section_name || "-" },
-      { label: "House", value: student.house_name || "-" },
-      { label: "Session", value: student.session_name || "-" },
-      { label: "Roll Number", value: student.roll_number || "-" },
-      { label: "Date of Birth", value: student.Date_Of_Birth || "-" },
-      { label: "Admission Date", value: student.date_of_admission || "-" },
-      { label: "Withdrawal Date", value: student.date_of_withdraw || "-" },
-      { label: "PEN Number", value: student.pen_number || "-" },
-      { label: "Blood Group", value: student.b_group || "-" },
-      { label: "State", value: student.state || "-" },
-      { label: "Category", value: student.category || "-" },
-      { label: "Religion", value: student.religion || "-" },
-      {
-        label: "Bus Service Fee",
-        value: `₹${student.bus_service || 0}`,
-      },
-      {
-        label: "Public Visibility",
-        value: student.visible ? "Yes" : "No",
-      },
-      {
-        label: "Father's Phone",
-        value: student.father_phone || "-",
-      },
-      {
-        label: "Mother's Phone",
-        value: student.mother_phone || "-",
-      },
-      {
-        label: "Aadhaar Number",
-        value: student.aadhaar_number
-          ? student.aadhaar_number.replace(
-              /(\d{4})(\d{4})(\d{4})/,
-              "$1-$2-$3"
-            )
-          : "-",
-      },
-      { label: "Admission Type", value: student.admission_type || "-" },
-    ];
-
-    if (isAdminOrSuperAdmin) {
-      fields.push({
-        label: "Concession",
-        value: student.concession_name || "-",
-      });
-    }
-
-    fields.push({
-      label: "Transport Route",
-      value: formatTransportById(student.route_id),
-    });
-    fields.push({ label: "Status", value: statusBadge });
-    fields.push({
-      label: "Residential Address",
-      value: student.address || "-",
-      full: true,
-    });
-    fields.push({
-      label: "Previous School",
-      value: student.prev_school_name || "-",
-    });
-    fields.push({
-      label: "Previous Class",
-      value: student.prev_class || "-",
-    });
-    fields.push({
-      label: "Previous Adm. #",
-      value: student.prev_admission_no || "-",
-    });
-    if (student.prev_school_address) {
-      fields.push({
-        label: "Previous School Address",
-        value: student.prev_school_address,
-        full: true,
-      });
-    }
-
-    const photoUrl = buildPhotoURL(student.photo);
-    const hasPhoto = !!student.photo;
-
-    const fieldHtml = fields
-      .map(
-        (f) => `
-      <div class="detail-item ${f.full ? "full-row" : ""}">
-        <div class="detail-label">${f.label}</div>
-        <div class="detail-value">${f.value}</div>
-      </div>
-    `
-      )
-      .join("");
-
-    const siblingHtml = siblingRows.length
-      ? siblingRows
-          .map(
-            (s) => `
-      <div class="detail-item sibling-item" data-sibling-id="${s.id || ""}">
-        <div class="detail-label">${s.label}</div>
-        <div class="detail-value" style="cursor: ${
-          s.id ? "pointer" : "default"
-        }; color: ${s.id ? "#0d6efd" : "#6b7280"}; font-weight: 500;" ${
-              s.id ? `data-sibling-id="${s.id}"` : ""
-            }>${s.value}</div>
-      </div>
-    `
-          )
-          .join("")
-      : `
-      <div class="detail-item">
-        <div class="detail-label">Siblings</div>
-        <div class="detail-value">None recorded</div>
-      </div>
-    `;
-
-    const photoHtml = `
-      <div class="d-flex align-items-center justify-content-center gap-3 mb-4 p-3 bg-light rounded">
-        <img src="${
-          hasPhoto ? photoUrl : NO_PHOTO_SVG
-        }" alt="Student Photo" class="rounded-circle border shadow-sm" style="width: 100px; height: 100px; object-fit: cover;" />
-        ${
-          isAdminOrSuperAdmin
-            ? `<button id="btnChangePhoto" class="btn btn-outline-primary btn-sm">${
-                hasPhoto ? "Change Photo" : "Upload Photo"
-              }</button>`
-            : ""
-        }
-      </div>
-    `;
-
-    const html = `
-      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-        <h3 class="text-center mb-4 fw-bold text-primary">${
-          student.name || "Student"
-        } - Profile Details</h3>
-        ${photoHtml}
-        <div class="row g-3">
-          <div class="col-md-6">
-            ${fieldHtml
-              .split("</div>")
-              .slice(0, Math.ceil(fields.length / 2))
-              .join("</div>")}
-          </div>
-          <div class="col-md-6">
-            ${siblingHtml}
-          </div>
-        </div>
-      </div>
-      <style>
-        .detail-item {
-          display: flex;
-          align-items: flex-start;
-          gap: 12px;
-          padding: 12px 0;
-          border-bottom: 1px solid #f8f9fa;
-        }
-        .detail-item:last-child { border-bottom: none; }
-        .detail-label {
-          font-weight: 600;
-          color: #6c757d;
-          flex: 0 0 140px;
-          font-size: 0.9rem;
-        }
-        .detail-value {
-          color: #212529;
-          flex: 1;
-          word-break: break-word;
-          font-size: 0.95rem;
-        }
-        .sibling-item .detail-value:hover { text-decoration: underline; }
-
-        @media (max-width: 768px) {
-          .detail-item {
-            flex-direction: column;
-            gap: 4px;
-          }
-          .detail-label {
-            flex: 0 0 auto;
-          }
-        }
-      </style>
-    `;
-
-    Swal.fire({
-      title: "",
-      html,
-      width: 900,
-      showCloseButton: true,
-      showConfirmButton: false,
-      customClass: {
-        popup: "border-0 shadow-lg",
-        content: "p-0",
-      },
-      didOpen: () => {
-        const popup = Swal.getPopup();
-        if (popup) {
-          const siblingEls = popup.querySelectorAll("[data-sibling-id]");
-          siblingEls.forEach((el) => {
-            const id = el.getAttribute("data-sibling-id");
-            if (id) {
-              el.addEventListener("click", (e) => {
-                e.stopPropagation();
-                Swal.close();
-                setTimeout(() => handleSiblingClick(id), 100);
-              });
-            }
-          });
-        }
-        const btn = document.getElementById("btnChangePhoto");
-        if (btn && isAdminOrSuperAdmin) {
-          btn.addEventListener("click", (e) => {
-            e.stopPropagation();
-            Swal.close();
-            promptAndUploadPhoto(student);
-          });
-        }
-      },
-    });
-  }
 };
 
 export default Students;

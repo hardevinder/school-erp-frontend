@@ -24,7 +24,7 @@ export default function EnquiryForm() {
   const handleChange = (e) => {
     const { name, value } = e.target;
 
-    // Special handling for phone: keep only digits
+    // ✅ Same phone handling as Smarto form
     if (name === "phone") {
       const digitsOnly = value.replace(/\D/g, ""); // remove spaces, +, etc.
       setFormData((prev) => ({ ...prev, phone: digitsOnly }));
@@ -45,7 +45,7 @@ export default function EnquiryForm() {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    // Final phone validation before submit
+    // ✅ Final phone validation before submit
     const digitsOnly = (formData.phone || "").replace(/\D/g, "");
     if (!digitsOnly) {
       setPhoneError("Phone number is required.");
@@ -69,7 +69,7 @@ export default function EnquiryForm() {
     setPhoneError("");
     setIsSubmitting(true);
 
-    // Prepare payload: store as +91XXXXXXXXXX
+    // ✅ Save as +91XXXXXXXXXX
     const payload = {
       ...formData,
       phone: `+91${digitsOnly}`,
@@ -130,18 +130,18 @@ export default function EnquiryForm() {
     <div
       className="min-vh-100 d-flex align-items-center justify-content-center position-relative"
       style={{
-        backgroundImage: "url(/images/Smarto.png)",
+        backgroundImage: "url(/images/SchooBackground.jpeg)",
         backgroundSize: "cover",
-        backgroundPosition: "center",
+        backgroundPosition: "center center",
         backgroundRepeat: "no-repeat",
       }}
     >
-      {/* Gradient overlay */}
+      {/* Overlay */}
       <div
         className="position-absolute top-0 start-0 w-100 h-100"
         style={{
-          background: "linear-gradient(rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0.7))",
-          backdropFilter: "blur(2px)",
+          background: "rgba(0, 0, 0, 0.55)",
+          backdropFilter: "blur(3px)",
         }}
       ></div>
 
@@ -151,28 +151,25 @@ export default function EnquiryForm() {
             {/* Header */}
             <div className="text-center mb-4 text-white">
               <img
-                src="/images/SmartoLogo.png"
-                alt="Smarto Logo"
+                src="/images/pts_logo.png"
+                alt="PathSeeker Logo"
                 className="mb-3"
                 style={{
-                  width: "95px",
-                  height: "95px",
+                  width: "90px",
+                  height: "90px",
                   objectFit: "contain",
                   borderRadius: "50%",
-                  backgroundColor: "rgba(255,255,255,0.1)",
+                  backgroundColor: "rgba(255,255,255,0.15)",
                   padding: "5px",
                 }}
               />
-              <h2 className="fw-bold mb-1 text-uppercase">
-                Smarto Experiential School
-              </h2>
-              <p className="text-white-50 mb-1 fw-semibold">
-                Kheri Lakha Singh, Yamunanagar, Haryana, India
+              <h2 className="fw-bold mb-1">PathSeeker International School</h2>
+              <p className="mb-0 text-white fw-semibold">
+                RAMGARH/VIJAYPUR, DISTRICT SAMBA (JKUT) INDIA.
               </p>
-              <h4 className="fw-semibold text-info mt-3">
-                Admission Enquiry Form
-              </h4>
-              <p className="text-white-50 mb-0">(Pre-Nursery to Grade 9)</p>
+              <p className="mb-0">
+                Admission Enquiry Form (Pre-Nursery to 9th Grade)
+              </p>
             </div>
 
             {/* Form Card */}
@@ -180,20 +177,22 @@ export default function EnquiryForm() {
               className="card border-0 shadow-lg"
               style={{
                 borderRadius: "1rem",
-                background: "rgba(30, 30, 30, 0.85)",
+                background: "rgba(20, 20, 20, 0.75)",
                 color: "#f1f1f1",
+                boxShadow: "0 0 25px rgba(0,0,0,0.3)",
               }}
             >
               <div className="card-body p-4 p-md-5">
                 <form onSubmit={handleSubmit}>
+                  {/* Option color fix */}
                   <style>{`
                     select option {
-                      color: #000;
-                      background-color: #fff;
+                      color: black;
+                      background-color: white;
                     }
                   `}</style>
 
-                  {/* Student Details */}
+                  {/* Student details */}
                   <h5 className="fw-semibold mb-3 text-info">Student Details</h5>
                   <div className="row g-3 mb-4">
                     <div className="col-md-6">
@@ -207,7 +206,7 @@ export default function EnquiryForm() {
                         value={formData.student_name}
                         onChange={handleChange}
                         required
-                        placeholder="Enter student's full name"
+                        placeholder="Enter student name"
                       />
                     </div>
                     <div className="col-md-6">
@@ -224,8 +223,10 @@ export default function EnquiryForm() {
                     </div>
                   </div>
 
-                  {/* Parents Section */}
-                  <h5 className="fw-semibold mb-3 text-info">Parent / Guardian</h5>
+                  {/* Parents */}
+                  <h5 className="fw-semibold mb-3 text-info">
+                    Parent / Guardian
+                  </h5>
                   <div className="row g-3 mb-4">
                     <div className="col-md-6">
                       <label className="form-label text-light">
@@ -256,7 +257,9 @@ export default function EnquiryForm() {
                   </div>
 
                   {/* Contact & Class */}
-                  <h5 className="fw-semibold mb-3 text-info">Contact & Class</h5>
+                  <h5 className="fw-semibold mb-3 text-info">
+                    Contact & Class
+                  </h5>
                   <div className="row g-3 mb-4">
                     <div className="col-md-6">
                       <label className="form-label text-light">
@@ -350,7 +353,7 @@ export default function EnquiryForm() {
 
                   {/* Additional Info */}
                   <h5 className="fw-semibold mb-3 text-info">
-                    Additional Information
+                    Additional Info
                   </h5>
                   <div className="row g-3 mb-4">
                     <div className="col-md-6">
@@ -370,22 +373,22 @@ export default function EnquiryForm() {
                       <label className="form-label text-light">Address</label>
                       <textarea
                         name="address"
-                        rows="2"
+                        rows={2}
                         className="form-control bg-transparent text-white border-secondary"
                         value={formData.address}
                         onChange={handleChange}
-                        placeholder="Enter full address"
+                        placeholder="Enter address"
                       />
                     </div>
                     <div className="col-12">
                       <label className="form-label text-light">Remarks</label>
                       <textarea
                         name="remarks"
-                        rows="2"
+                        rows={2}
                         className="form-control bg-transparent text-white border-secondary"
                         value={formData.remarks}
                         onChange={handleChange}
-                        placeholder="Any special notes or requests"
+                        placeholder="Any special requirements"
                       />
                     </div>
                   </div>
@@ -406,11 +409,10 @@ export default function EnquiryForm() {
 
             {/* Footer */}
             <p
-              className="text-center text-white-50 mt-4 mb-0"
-              style={{ fontSize: "0.85rem" }}
+              className="text-center text-white-50 mt-3 mb-0"
+              style={{ fontSize: "0.8rem" }}
             >
-              © {new Date().getFullYear()} Smarto Experiential School | All
-              Rights Reserved
+              © {new Date().getFullYear()} PathSeeker International School
             </p>
           </div>
         </div>
