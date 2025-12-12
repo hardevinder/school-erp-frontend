@@ -76,11 +76,10 @@ const StudentFeePage = () => {
         localStorage.getItem("activeStudentAdmission") || localStorage.getItem("username");
       if (adm) {
         const n = normalizeAdmission(adm);
-        // refresh data for newly active student
         fetchStudentDetails(n);
         fetchTransactionHistory(n);
         fetchVanFeeByHead();
-        fetchOpeningBalanceOutstandingForMe(); // refresh OB on switch
+        fetchOpeningBalanceOutstandingForMe();
       }
     };
 
@@ -135,9 +134,12 @@ const StudentFeePage = () => {
   const formatINR = (v) =>
     isNaN(v)
       ? v
-      : new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 }).format(
-          Number(v || 0)
-        );
+      : new Intl.NumberFormat("en-IN", {
+          style: "currency",
+          currency: "INR",
+          maximumFractionDigits: 2,
+        }).format(Number(v || 0));
+
   const formatDateTime = (dateString) => {
     const d = new Date(dateString);
     return d.toLocaleString("en-IN", {
@@ -153,11 +155,21 @@ const StudentFeePage = () => {
   // Fine totals from server (any shape)
   const getFineTotal = (fee) =>
     Number(
-      fee?.fineAmount ?? fee?.fine_due ?? fee?.lateFee ?? fee?.LateFee ?? fee?.Fine ?? fee?.FineAmount ?? 0
+      fee?.fineAmount ??
+        fee?.fine_due ??
+        fee?.lateFee ??
+        fee?.LateFee ??
+        fee?.Fine ??
+        fee?.FineAmount ??
+        0
     );
   const getFinePaid = (fee) =>
     Number(
-      fee?.fineReceived ?? fee?.totalFineReceived ?? fee?.Fine_Amount ?? fee?.FineReceived ?? 0
+      fee?.fineReceived ??
+        fee?.totalFineReceived ??
+        fee?.Fine_Amount ??
+        fee?.FineReceived ??
+        0
     );
   const getFineDue = (fee) => Math.max(0, getFineTotal(fee) - getFinePaid(fee));
 
@@ -165,7 +177,7 @@ const StudentFeePage = () => {
   const fetchActiveSessionId = async () => {
     try {
       const res = await api.get("/sessions");
-      const list = Array.isArray(res.data) ? res.data : (res.data?.data || []);
+      const list = Array.isArray(res.data) ? res.data : res.data?.data || [];
       let active = list.find((s) => s.is_active === true) || list[0] || null;
       if (active) setActiveSessionId(Number(active.id));
       else setActiveSessionId(null);
@@ -179,8 +191,10 @@ const StudentFeePage = () => {
     if (prevBalanceHeadId) return prevBalanceHeadId;
     try {
       const res = await api.get("/fee-headings");
-      const list = Array.isArray(res.data) ? res.data : (res.data?.data || []);
-      const hit = list.find((h) => String(h.fee_heading).toLowerCase() === "previous balance");
+      const list = Array.isArray(res.data) ? res.data : res.data?.data || [];
+      const hit = list.find(
+        (h) => String(h.fee_heading).toLowerCase() === "previous balance"
+      );
       if (hit) {
         setPrevBalanceHeadId(hit.id);
         return hit.id;
@@ -211,8 +225,8 @@ const StudentFeePage = () => {
         });
         const val1 = Number(
           try1?.data?.outstanding ??
-          try1?.data?.data?.outstanding ??
-          try1?.data?.totalOutstanding
+            try1?.data?.data?.outstanding ??
+            try1?.data?.totalOutstanding
         );
         if (!Number.isNaN(val1) && val1 > 0) {
           setPrevBalanceDue(val1);
@@ -225,15 +239,17 @@ const StudentFeePage = () => {
         const res = await api.get(`/opening-balances`, {
           params: { student_id: sid, session_id: activeSessionId },
         });
-        const rows = Array.isArray(res.data?.rows) ? res.data.rows : (Array.isArray(res.data) ? res.data : []);
+        const rows = Array.isArray(res.data?.rows)
+          ? res.data.rows
+          : Array.isArray(res.data)
+          ? res.data
+          : [];
         if (!rows.length) {
           setPrevBalanceDue(0);
           return 0;
         }
         const providedTotal = Number(
-          res.data?.outstanding ||
-          res.data?.totalOutstanding ||
-          res.data?.totals?.outstanding
+          res.data?.outstanding || res.data?.totalOutstanding || res.data?.totals?.outstanding
         );
         const total = !Number.isNaN(providedTotal)
           ? providedTotal
@@ -294,7 +310,7 @@ const StudentFeePage = () => {
         fetchStudentDetails(username);
         fetchTransactionHistory(username);
         fetchVanFeeByHead();
-        fetchOpeningBalanceOutstandingForMe(); // keep OB fresh
+        fetchOpeningBalanceOutstandingForMe();
       }, 15000);
       return () => clearInterval(id);
     }
@@ -314,7 +330,7 @@ const StudentFeePage = () => {
   const fetchTransactionHistory = async (admissionNumber) => {
     try {
       const res = await api.get(`/StudentsApp/feehistory/${admissionNumber}`);
-    if (res.data && res.data.success) {
+      if (res.data && res.data.success) {
         setTransactionHistory(res.data.data || []);
       } else {
         setTransactionHistory([]);
@@ -551,7 +567,8 @@ const StudentFeePage = () => {
     return () => {
       if (popupPollRef.current) clearInterval(popupPollRef.current);
       if (popupTimeoutRef.current) clearTimeout(popupTimeoutRef.current);
-      if (messageListenerRef.current) window.removeEventListener("message", messageListenerRef.current);
+      if (messageListenerRef.current)
+        window.removeEventListener("message", messageListenerRef.current);
       try {
         if (popupRef.current && !popupRef.current.closed) popupRef.current.close();
       } catch {}
@@ -587,9 +604,10 @@ const StudentFeePage = () => {
 
   // ======== NEW: Previous slabs auto-inclusion ========
   const computePreviousSlabsTotals = (untilIndex) => {
-    // Sum all dues from heads strictly before 'untilIndex'
     const feesList = studentDetails?.feeDetails || [];
-    let prevAcademic = 0, prevFine = 0, prevVan = 0;
+    let prevAcademic = 0,
+      prevFine = 0,
+      prevVan = 0;
     const items = [];
 
     for (let i = 0; i < untilIndex; i++) {
@@ -640,7 +658,7 @@ const StudentFeePage = () => {
     totalDue += Number(f.finalAmountDue || 0);
     totalReceived += Number(f.totalFeeReceived || 0);
     totalConcession += Number(f.totalConcessionReceived || 0);
-    totalFineRemaining += getFineDue(f); // show remaining fine, not original
+    totalFineRemaining += getFineDue(f);
   });
 
   // Van (overall)
@@ -656,20 +674,31 @@ const StudentFeePage = () => {
   const vanConcession = Number(van.totalVanFeeConcession || 0);
   const vanDue = Math.max(vanCost - (vanReceived + vanConcession), 0);
 
-  // ------------- Payment handlers (UPDATED: include Fine Due + Van Pending + Previous Balance + Previous Slabs) -------------
+  // ===== Helper: save last order id (NEW) =====
+  const saveLastOrderId = (orderData) => {
+    try {
+      const vendorOrderId =
+        orderData?.vendorOrderId ||
+        orderData?.session?.vendorOrderId ||
+        orderData?.order_id ||
+        orderData?.orderId ||
+        orderData?.merchantOrderId ||
+        null;
+
+      if (vendorOrderId) localStorage.setItem("lastPaymentOrderId", String(vendorOrderId));
+    } catch {}
+  };
+
+  // ------------- Payment handlers -------------
   const handlePayFee = async (fee, feeIndex) => {
     const academicDue = Number(fee?.finalAmountDue || 0);
     const fineDue = getFineDue(fee);
     const vanBreak = getTransportBreakdown(fee);
     const vanDueHead = Number(vanBreak?.pending || 0);
 
-    // previous slabs (heads before this one)
     const prev = computePreviousSlabsTotals(feeIndex);
-
-    // Opening Balance
     const openingBalanceDue = Number(prevBalanceDue || 0);
 
-    // GRAND total for this payment
     const dueAmount = academicDue + fineDue + vanDueHead + openingBalanceDue + prev.total;
 
     if (isNaN(dueAmount) || dueAmount <= 0) {
@@ -713,8 +742,6 @@ const StudentFeePage = () => {
       localStorage.getItem("username");
     const admissionNumber = normalizeAdmission(admissionNumberRaw);
     const feeHeadId = Number(fee?.fee_heading_id) || fee?.fee_heading_id || null;
-    console.log("💳 Sending create-order with:", { admissionNumber, feeHeadId, dueAmount });
-
 
     if (!admissionNumber || !feeHeadId) {
       return Swal.fire({
@@ -746,16 +773,13 @@ const StudentFeePage = () => {
         feeHeadId,
         gateway: paymentGateway,
 
-        // per-head breakdown (this head)
         fineAmount: fineDue,
         vanFeeAmount: vanDueHead,
 
-        // Opening balance
         openingBalanceAmount: openingBalanceDue,
         openingBalanceHeadId: prevBalanceHeadId || undefined,
 
-        // Previous slabs breakdown
-        previousSlabs: prev.items,                    // array of { feeHeadId, academicDue, fineDue, vanDue, total }
+        previousSlabs: prev.items,
         previousSlabsTotal: prev.total,
 
         breakdown: {
@@ -775,6 +799,10 @@ const StudentFeePage = () => {
       });
 
       const orderData = orderRes.data || {};
+
+      // ✅ NEW: Save last order/vendorOrderId locally (for support/debug)
+      saveLastOrderId(orderData);
+
       const reportedGateway = (orderData && orderData.gateway) || paymentGateway;
 
       // HDFC flow
@@ -798,7 +826,11 @@ const StudentFeePage = () => {
           if (paymentWindow && !paymentWindow.closed) paymentWindow.close();
           const handled = handleGatewayResponse(orderData, orderData.session || null);
           if (!handled) {
-            Swal.fire({ icon: "error", title: "Payment initialization failed", text: "No payment URL returned. Try again." });
+            Swal.fire({
+              icon: "error",
+              title: "Payment initialization failed",
+              text: "No payment URL returned. Try again.",
+            });
           }
           return;
         }
@@ -839,7 +871,6 @@ const StudentFeePage = () => {
               amount: dueAmount,
               feeHeadId,
 
-              // same breakdown on verify
               fineAmount: fineDue,
               vanFeeAmount: vanDueHead,
               openingBalanceAmount: openingBalanceDue,
@@ -851,7 +882,11 @@ const StudentFeePage = () => {
             refreshAfterPayment();
           } catch (e) {
             console.error("Verification failed:", e);
-            Swal.fire({ icon: "error", title: "Payment Verification Failed", text: "Please try again." });
+            Swal.fire({
+              icon: "error",
+              title: "Payment Verification Failed",
+              text: "Please try again.",
+            });
           }
         },
         notes: {
@@ -881,11 +916,15 @@ const StudentFeePage = () => {
     const vanConcession = Number(van.totalVanFeeConcession || 0);
     const vanDueOnly = Math.max(vanCost - (vanReceived + vanConcession), 0);
 
-    const openingBalanceDue = Number(prevBalanceDue || 0); // include OB with van-only pay
+    const openingBalanceDue = Number(prevBalanceDue || 0);
     const totalToPay = vanDueOnly + openingBalanceDue;
 
     if (totalToPay <= 0) {
-      return Swal.fire({ icon: "info", title: "No Dues", text: "You're all clear on Van Fee and Previous Balance." });
+      return Swal.fire({
+        icon: "info",
+        title: "No Dues",
+        text: "You're all clear on Van Fee and Previous Balance.",
+      });
     }
 
     const { isConfirmed } = await Swal.fire({
@@ -937,6 +976,10 @@ const StudentFeePage = () => {
       });
 
       const orderData = orderRes.data || {};
+
+      // ✅ NEW: Save last order/vendorOrderId locally (for support/debug)
+      saveLastOrderId(orderData);
+
       const reportedGateway = (orderData && orderData.gateway) || paymentGateway;
 
       if (reportedGateway && String(reportedGateway).toLowerCase().includes("hdfc")) {
@@ -977,11 +1020,7 @@ const StudentFeePage = () => {
           openPaymentPopup(paymentPageUrl);
         }
 
-        Swal.fire({
-          icon: "info",
-          title: "Payment page opened",
-          text: "Complete the payment in the opened window.",
-        });
+        Swal.fire({ icon: "info", title: "Payment page opened", text: "Complete the payment in the opened window." });
         return;
       }
 
@@ -1025,15 +1064,16 @@ const StudentFeePage = () => {
     }
   };
 
-  // ------------- Student switch handler (re-added to fix no-undef) -------------
+  // ------------- Student switch handler -------------
   const handleStudentSwitch = (admissionNumber) => {
     const norm = normalizeAdmission(admissionNumber);
     if (!norm || norm === activeStudentAdmission) return;
     try {
       localStorage.setItem("activeStudentAdmission", norm);
       setActiveStudentAdmission(norm);
-      window.dispatchEvent(new CustomEvent("student-switched", { detail: { admissionNumber: norm } }));
-      // refresh this page immediately
+      window.dispatchEvent(
+        new CustomEvent("student-switched", { detail: { admissionNumber: norm } })
+      );
       fetchStudentDetails(norm);
       fetchTransactionHistory(norm);
       fetchVanFeeByHead();
@@ -1100,7 +1140,7 @@ const StudentFeePage = () => {
             </div>
           </div>
 
-          {/* Student switcher UI (Desktop pills + Mobile select) */}
+          {/* Student switcher UI */}
           {canSeeStudentSwitcher && studentsList.length > 0 && (
             <>
               <div className="d-none d-lg-flex align-items-center gap-1 mt-3" role="tablist" aria-label="Switch student">
@@ -1115,7 +1155,12 @@ const StudentFeePage = () => {
                       className={`btn btn-sm ${isActive ? "btn-warning" : "btn-outline-light"} rounded-pill px-3`}
                       onClick={() => handleStudentSwitch(s.admission_number)}
                       title={`${s.name} (${s.class?.name || "—"}-${s.section?.name || "—"})`}
-                      style={{ maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                      style={{
+                        maxWidth: 200,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
                     >
                       {s.isSelf ? "Me" : s.name}
                       <span className="ms-1" style={{ opacity: 0.8 }}>
@@ -1163,14 +1208,17 @@ const StudentFeePage = () => {
             </div>
             <div className={`chip ${vanDue > 0 ? "chip-red" : "chip-green"}`}>
               <i className="bi bi-cash-coin me-1" />
-              Van Due:
-              <strong className="ms-1">{formatINR(vanDue)}</strong>
+              Van Due: <strong className="ms-1">{formatINR(vanDue)}</strong>
             </div>
             <div className={`chip ${prevBalanceDue > 0 ? "chip-red" : "chip-green"}`}>
               <i className="bi bi-exclamation-octagon me-1" />
               Previous Balance: <strong className="ms-1">{formatINR(prevBalanceDue)}</strong>
             </div>
-            <button className="btn btn-success btn-sm ms-auto shrink-0" disabled={vanDue + prevBalanceDue <= 0} onClick={handlePayVanFee}>
+            <button
+              className="btn btn-success btn-sm ms-auto shrink-0"
+              disabled={vanDue + prevBalanceDue <= 0}
+              onClick={handlePayVanFee}
+            >
               <i className="bi bi-credit-card-2-front me-1" /> Pay Van Fee
             </button>
           </div>
@@ -1197,7 +1245,7 @@ const StudentFeePage = () => {
                     studentDetails.feeDetails.map((fee, idx) => {
                       const t = getTransportBreakdown(fee);
                       const academicDue = Number(fee.finalAmountDue || 0);
-                      const fineDue = getFineDue(fee); // remaining fine (not original)
+                      const fineDue = getFineDue(fee);
                       const totalInclVan = academicDue + Number(t?.pending || 0) + fineDue;
 
                       const paidPct =
@@ -1207,7 +1255,9 @@ const StudentFeePage = () => {
 
                       const vanPaidPct =
                         t && t.cost > 0
-                          ? ((Number(t.received || 0) + Number(t.concession || 0)) / (Number(t.cost || 0) || 1)) * 100
+                          ? ((Number(t.received || 0) + Number(t.concession || 0)) /
+                              (Number(t.cost || 0) || 1)) *
+                            100
                           : 0;
 
                       const prev = computePreviousSlabsTotals(idx);
@@ -1277,13 +1327,17 @@ const StudentFeePage = () => {
                                   <div
                                     className="progress-bar bg-success progress-bar-striped progress-bar-animated"
                                     role="progressbar"
-                                    style={{ width: `${Math.min(100, Math.max(0, paidPct)).toFixed(1)}%` }}
+                                    style={{
+                                      width: `${Math.min(100, Math.max(0, paidPct)).toFixed(1)}%`,
+                                    }}
                                     aria-valuenow={paidPct}
                                     aria-valuemin="0"
                                     aria-valuemax="100"
                                   />
                                 </div>
-                                <div className="small text-muted mt-1">Academic Paid {paidPct.toFixed(1)}%</div>
+                                <div className="small text-muted mt-1">
+                                  Academic Paid {paidPct.toFixed(1)}%
+                                </div>
                               </div>
 
                               {t && (
@@ -1312,7 +1366,11 @@ const StudentFeePage = () => {
                                   </div>
                                   <div className="d-flex justify-content-between tiny-row">
                                     <span className="label">Pending (Head)</span>
-                                    <span className={`value fw-bold ${t.pending > 0 ? "text-danger" : "text-success"}`}>
+                                    <span
+                                      className={`value fw-bold ${
+                                        t.pending > 0 ? "text-danger" : "text-success"
+                                      }`}
+                                    >
                                       {formatINR(t.pending)}
                                     </span>
                                   </div>
@@ -1323,13 +1381,17 @@ const StudentFeePage = () => {
                                         <div
                                           className="progress-bar bg-info progress-bar-striped progress-bar-animated"
                                           role="progressbar"
-                                          style={{ width: `${Math.min(100, Math.max(0, vanPaidPct)).toFixed(1)}%` }}
+                                          style={{
+                                            width: `${Math.min(100, Math.max(0, vanPaidPct)).toFixed(1)}%`,
+                                          }}
                                           aria-valuenow={vanPaidPct}
                                           aria-valuemin="0"
                                           aria-valuemax="100"
                                         />
                                       </div>
-                                      <div className="small text-muted mt-1">Transport Paid {vanPaidPct.toFixed(1)}%</div>
+                                      <div className="small text-muted mt-1">
+                                        Transport Paid {vanPaidPct.toFixed(1)}%
+                                      </div>
                                     </>
                                   )}
                                 </div>
@@ -1338,7 +1400,11 @@ const StudentFeePage = () => {
                               <hr className="my-2" />
                               <div className="d-flex justify-content-between">
                                 <span className="fw-semibold">Academic Due</span>
-                                <span className={`fw-bold ${academicDue > 0 ? "text-danger" : "text-success"}`}>
+                                <span
+                                  className={`fw-bold ${
+                                    academicDue > 0 ? "text-danger" : "text-success"
+                                  }`}
+                                >
                                   {formatINR(academicDue)}
                                 </span>
                               </div>
@@ -1347,13 +1413,21 @@ const StudentFeePage = () => {
                                 <>
                                   <div className="d-flex justify-content-between mt-1">
                                     <span className="fw-semibold">Transport Pending (Head)</span>
-                                    <span className={`fw-bold ${t.pending > 0 ? "text-danger" : "text-success"}`}>
+                                    <span
+                                      className={`fw-bold ${
+                                        t.pending > 0 ? "text-danger" : "text-success"
+                                      }`}
+                                    >
                                       {formatINR(t.pending)}
                                     </span>
                                   </div>
                                   <div className="d-flex justify-content-between mt-1">
                                     <span className="fw-semibold">Total Due (incl. Fine + TR)</span>
-                                    <span className={`fw-bold ${totalInclVan > 0 ? "text-danger" : "text-success"}`}>
+                                    <span
+                                      className={`fw-bold ${
+                                        totalInclVan > 0 ? "text-danger" : "text-success"
+                                      }`}
+                                    >
                                       {formatINR(totalInclVan)}
                                     </span>
                                   </div>
@@ -1361,7 +1435,11 @@ const StudentFeePage = () => {
                               ) : (
                                 <div className="d-flex justify-content-between mt-1">
                                   <span className="fw-semibold">Total Due (incl. Fine)</span>
-                                  <span className={`fw-bold ${totalInclVan > 0 ? "text-danger" : "text-success"}`}>
+                                  <span
+                                    className={`fw-bold ${
+                                      totalInclVan > 0 ? "text-danger" : "text-success"
+                                    }`}
+                                  >
                                     {formatINR(totalInclVan)}
                                   </span>
                                 </div>
@@ -1369,8 +1447,15 @@ const StudentFeePage = () => {
                             </div>
 
                             <div className="card-footer bg-transparent">
-                              {Number(fee.finalAmountDue) > 0 || getFineDue(fee) > 0 || (t && t.pending > 0) || prev.count > 0 || prevBalanceDue > 0 ? (
-                                <button className="btn btn-primary w-100 soft-shadow" onClick={() => handlePayFee(fee, idx)}>
+                              {Number(fee.finalAmountDue) > 0 ||
+                              getFineDue(fee) > 0 ||
+                              (t && t.pending > 0) ||
+                              prev.count > 0 ||
+                              prevBalanceDue > 0 ? (
+                                <button
+                                  className="btn btn-primary w-100 soft-shadow"
+                                  onClick={() => handlePayFee(fee, idx)}
+                                >
                                   <i className="bi bi-currency-rupee me-1" /> Pay
                                   {t && t.pending > 0 ? " (Acad + Fine + TR" : " (Acad + Fine"}
                                   {prev.count > 0 ? " + Prev Heads" : ""}
@@ -1459,13 +1544,17 @@ const StudentFeePage = () => {
                             <div className="fs-6 fw-semibold">{formatINR(vanConcession)}</div>
                           </div>
                           <div className="me-3">
-                            <div className={`small text-muted`}>Van Due</div>
+                            <div className="small text-muted">Van Due</div>
                             <div className={`fs-6 fw-bold ${vanDue > 0 ? "text-danger" : "text-success"}`}>
                               {formatINR(vanDue)}
                             </div>
                           </div>
                           <div className="ms-auto">
-                            <button className="btn btn-success btn-sm" onClick={handlePayVanFee} disabled={vanDue + prevBalanceDue <= 0}>
+                            <button
+                              className="btn btn-success btn-sm"
+                              onClick={handlePayVanFee}
+                              disabled={vanDue + prevBalanceDue <= 0}
+                            >
                               Pay Van Fee {prevBalanceDue > 0 ? "(incl. OB)" : ""}
                             </button>
                           </div>
@@ -1514,7 +1603,9 @@ const StudentFeePage = () => {
               {/* History */}
               <Tab eventKey="history" title="History">
                 <div className="card shadow-sm rounded-4">
-                  <div className="card-header bg-dark text-white text-center fw-semibold">Transaction History</div>
+                  <div className="card-header bg-dark text-white text-center fw-semibold">
+                    Transaction History
+                  </div>
                   <div className="card-body">
                     {transactionHistory?.length ? (
                       <div className="table-responsive">
@@ -1526,6 +1617,11 @@ const StudentFeePage = () => {
                               <th>Slip ID</th>
                               <th>Date & Time</th>
                               <th>Payment Mode</th>
+
+                              {/* ✅ NEW (for HDFC compliance/debug) */}
+                              <th>Order ID</th>
+                              <th>Txn ID</th>
+
                               <th>Fee Received</th>
                               <th>Concession</th>
                               <th>Fine</th>
@@ -1542,12 +1638,19 @@ const StudentFeePage = () => {
                                 <td>
                                   <span
                                     className={`badge ${
-                                      txn.PaymentMode === "ONLINE" ? "text-bg-primary" : "text-bg-secondary"
+                                      String(txn.PaymentMode).toUpperCase() === "ONLINE"
+                                        ? "text-bg-primary"
+                                        : "text-bg-secondary"
                                     }`}
                                   >
                                     {txn.PaymentMode}
                                   </span>
                                 </td>
+
+                                {/* ✅ NEW: show stored ids */}
+                                <td>{txn.Order_ID || txn.order_id || txn.vendorOrderId || "—"}</td>
+                                <td>{txn.Transaction_ID || txn.transaction_id || txn.txnId || "—"}</td>
+
                                 <td>{formatINR(txn.Fee_Recieved)}</td>
                                 <td>{formatINR(txn.Concession)}</td>
                                 <td>{formatINR(txn.Fine ?? txn.LateFee ?? txn.FineAmount ?? 0)}</td>
