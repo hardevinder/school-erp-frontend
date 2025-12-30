@@ -38,13 +38,16 @@ const StudentFeePage = () => {
   const normalizedRoles = roles.map(normalizeRole);
   const isStudent = normalizedRoles.includes("student");
   const isParent = normalizedRoles.includes("parent");
-  const isAdminish = normalizedRoles.includes("admin") || normalizedRoles.includes("superadmin");
+  const isAdminish =
+    normalizedRoles.includes("admin") || normalizedRoles.includes("superadmin");
   const canView = isStudent || isParent || isAdminish;
 
   // ------------- NEW: family + active student (sibling switcher parity) -------------
   const [family, setFamily] = useState(null);
-  const [activeStudentAdmission, setActiveStudentAdmission] = useState(
-    () => localStorage.getItem("activeStudentAdmission") || localStorage.getItem("username") || ""
+  const [activeStudentAdmission, setActiveStudentAdmission] = useState(() =>
+    localStorage.getItem("activeStudentAdmission") ||
+    localStorage.getItem("username") ||
+    ""
   );
 
   const studentsList = useMemo(() => {
@@ -61,7 +64,9 @@ const StudentFeePage = () => {
         const raw = localStorage.getItem("family");
         setFamily(raw ? JSON.parse(raw) : null);
         const stored =
-          localStorage.getItem("activeStudentAdmission") || localStorage.getItem("username") || "";
+          localStorage.getItem("activeStudentAdmission") ||
+          localStorage.getItem("username") ||
+          "";
         setActiveStudentAdmission(stored);
       } catch {
         setFamily(null);
@@ -73,7 +78,8 @@ const StudentFeePage = () => {
     const onStudentSwitched = () => {
       load();
       const adm =
-        localStorage.getItem("activeStudentAdmission") || localStorage.getItem("username");
+        localStorage.getItem("activeStudentAdmission") ||
+        localStorage.getItem("username");
       if (adm) {
         const n = normalizeAdmission(adm);
         fetchStudentDetails(n);
@@ -104,7 +110,8 @@ const StudentFeePage = () => {
     const token = localStorage.getItem("token");
     if (token) {
       const payload = parseJwt(token);
-      const adm = (payload && (payload.admission_number || payload.username)) || null;
+      const adm =
+        (payload && (payload.admission_number || payload.username)) || null;
       if (adm) return normalizeAdmission(adm);
     }
     return null;
@@ -118,8 +125,10 @@ const StudentFeePage = () => {
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState("details");
 
-  // Payment gateway + popup state
-  const [paymentGateway, setPaymentGateway] = useState("razorpay");
+  // ✅ Payment gateway (Razorpay removed completely)
+  const [paymentGateway] = useState("hdfc"); // only option now
+
+  // Popup state (kept for HDFC payment page)
   const popupRef = useRef(null);
   const popupPollRef = useRef(null);
   const messageListenerRef = useRef(null);
@@ -205,64 +214,43 @@ const StudentFeePage = () => {
     return null;
   };
 
+  /**
+   * ✅ FIXED:
+   * - Students: call /opening-balances/outstanding with session_id ONLY (backend forces student_id from token)
+   * - Staff: can pass student_id (preview)
+   * - Removed student fallback to /opening-balances (list) because it is staff-only and causes Access Denied logs
+   */
   const fetchOpeningBalanceOutstandingForMe = async () => {
     try {
-      const sid =
-        Number(studentDetails?.student_id) ||
-        Number(studentDetails?.id) ||
-        Number(studentDetails?.Student_ID) ||
-        null;
-
-      if (!sid || !activeSessionId) {
+      if (!activeSessionId) {
         setPrevBalanceDue(0);
         return 0;
       }
 
-      // Preferred server endpoint
-      try {
-        const try1 = await api.get(`/opening-balances/outstanding`, {
-          params: { student_id: sid, session_id: activeSessionId },
-        });
-        const val1 = Number(
-          try1?.data?.outstanding ??
-            try1?.data?.data?.outstanding ??
-            try1?.data?.totalOutstanding
-        );
-        if (!Number.isNaN(val1) && val1 > 0) {
-          setPrevBalanceDue(val1);
-          return val1;
-        }
-      } catch (_) {}
+      const params = { session_id: activeSessionId };
 
-      // Fallback: list and sum
-      try {
-        const res = await api.get(`/opening-balances`, {
-          params: { student_id: sid, session_id: activeSessionId },
-        });
-        const rows = Array.isArray(res.data?.rows)
-          ? res.data.rows
-          : Array.isArray(res.data)
-          ? res.data
-          : [];
-        if (!rows.length) {
-          setPrevBalanceDue(0);
-          return 0;
-        }
-        const providedTotal = Number(
-          res.data?.outstanding || res.data?.totalOutstanding || res.data?.totals?.outstanding
-        );
-        const total = !Number.isNaN(providedTotal)
-          ? providedTotal
-          : rows.reduce((sum, r) => sum + Number(r.amount || 0), 0);
-
-        const final = Math.max(0, total);
-        setPrevBalanceDue(final);
-        return final;
-      } catch (e) {
-        console.warn("opening balance fallback failed:", e?.message || e);
-        setPrevBalanceDue(0);
-        return 0;
+      // staff can preview by student_id
+      if (!isStudent) {
+        const sid =
+          Number(studentDetails?.student_id) ||
+          Number(studentDetails?.id) ||
+          Number(studentDetails?.Student_ID) ||
+          null;
+        if (sid) params.student_id = sid;
       }
+
+      const res = await api.get(`/opening-balances/outstanding`, { params });
+
+      const val = Number(
+        res?.data?.outstanding ??
+          res?.data?.data?.outstanding ??
+          res?.data?.totalOutstanding ??
+          0
+      );
+
+      const final = Number.isFinite(val) ? Math.max(0, val) : 0;
+      setPrevBalanceDue(final);
+      return final;
     } catch (e) {
       console.warn("OB fetch failed:", e?.message || e);
       setPrevBalanceDue(0);
@@ -279,12 +267,15 @@ const StudentFeePage = () => {
     }
     const load = async () => {
       setLoading(true);
-      await Promise.all([fetchStudentDetails(username), fetchTransactionHistory(username)]);
+      await Promise.all([
+        fetchStudentDetails(username),
+        fetchTransactionHistory(username),
+      ]);
       await fetchVanFeeByHead();
       setLoading(false);
     };
     load();
-  }, [canView, username]);
+  }, [canView, username]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // NEW: on mount, resolve session & OB head id
   useEffect(() => {
@@ -314,7 +305,7 @@ const StudentFeePage = () => {
       }, 15000);
       return () => clearInterval(id);
     }
-  }, [username, canView]);
+  }, [username, canView]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchStudentDetails = async (admissionNumber) => {
     try {
@@ -376,7 +367,9 @@ const StudentFeePage = () => {
       const w = window.open("", "_blank", features);
       if (w) {
         try {
-          w.document.write("<p style='font-family:system-ui;padding:20px'>Preparing payment page…</p>");
+          w.document.write(
+            "<p style='font-family:system-ui;padding:20px'>Preparing payment page…</p>"
+          );
         } catch {}
       }
       return w;
@@ -452,8 +445,6 @@ const StudentFeePage = () => {
       const left = window.screenX + (window.innerWidth - width) / 2;
       const top = window.screenY + (window.innerHeight - height) / 2;
       const features = `width=${width},height=${height},left=${left},top=${top},noopener`;
-
-      // eslint-disable-next-line no-restricted-globals
       const w = window.open(url, "_blank", features);
       if (!w) {
         Swal.fire({
@@ -511,13 +502,22 @@ const StudentFeePage = () => {
     if (data && data.action && data.params) {
       const w = window.open("", "_blank", "noopener");
       if (!w) {
-        Swal.fire({ icon: "error", title: "Popup blocked", text: "Allow popups to complete payment." });
+        Swal.fire({
+          icon: "error",
+          title: "Popup blocked",
+          text: "Allow popups to complete payment.",
+        });
         return false;
       }
       const formHtml = `
         <form id="payForm" method="POST" action="${data.action}">
           ${Object.entries(data.params)
-            .map(([k, v]) => `<input type="hidden" name="${k}" value="${String(v == null ? "" : v)}" />`)
+            .map(
+              ([k, v]) =>
+                `<input type="hidden" name="${k}" value="${String(
+                  v == null ? "" : v
+                )}" />`
+            )
             .join("\n")}
         </form>
         <script>document.getElementById('payForm').submit();</script>
@@ -525,7 +525,11 @@ const StudentFeePage = () => {
       w.document.write(formHtml);
       installMessageListener();
       pollPopupClosed(w);
-      Swal.fire({ icon: "info", title: "Payment page opened", text: "A new tab was opened to complete your payment." });
+      Swal.fire({
+        icon: "info",
+        title: "Payment page opened",
+        text: "A new tab was opened to complete your payment.",
+      });
       return true;
     }
 
@@ -576,6 +580,26 @@ const StudentFeePage = () => {
   }, []);
 
   // ------------- UI helpers (Transport) -------------
+
+  // NEW: Decide transport applicability strictly (prevents wrong map fallback)
+  const isTransportApplicableForFee = (fee) => {
+    const raw =
+      fee?.transportApplicable ??
+      fee?.transport_applicable ??
+      fee?.is_transport_applicable ??
+      fee?.TransportApplicable ??
+      fee?.isTransportApplicable;
+
+    if (raw === false || raw === 0 || raw === "0") return false;
+    if (raw === true || raw === 1 || raw === "1") return true;
+
+    // if transport object exists, treat as applicable
+    if (fee?.transport) return true;
+
+    // default: NOT applicable (important)
+    return false;
+  };
+
   const getVanForHeadFromMap = (feeHeadId) => {
     const v = vanByHead[Number(feeHeadId)];
     if (!v) return null;
@@ -586,11 +610,17 @@ const StudentFeePage = () => {
     return { cost, received, concession, pending, due: cost };
   };
 
+  // FIXED: if NOT applicable, return null and DO NOT fallback
   const getTransportBreakdown = (fee) => {
-    if (fee?.transportApplicable && fee?.transport) {
+    if (!isTransportApplicableForFee(fee)) return null;
+
+    if (fee?.transport) {
       const t = fee.transport;
       return {
-        cost: Number(t.transportDue || 0) + Number(t.transportReceived || 0) + Number(t.transportConcession || 0),
+        cost:
+          Number(t.transportDue || 0) +
+          Number(t.transportReceived || 0) +
+          Number(t.transportConcession || 0),
         due: Number(t.transportDue || 0),
         received: Number(t.transportReceived || 0),
         concession: Number(t.transportConcession || 0),
@@ -598,9 +628,33 @@ const StudentFeePage = () => {
         source: "api",
       };
     }
+
     const fallback = getVanForHeadFromMap(fee?.fee_heading_id);
     return fallback ? { ...fallback, source: "map" } : null;
   };
+
+  // OPTIONAL: decide if transport chips should show at top
+  const transportEnabled = useMemo(() => {
+    if (!studentDetails) return false;
+
+    const global =
+      studentDetails?.transportApplicable ??
+      studentDetails?.transport_applicable ??
+      studentDetails?.is_transport_applicable;
+
+    if (global === false || global === 0 || global === "0") return false;
+
+    const anyHead = (studentDetails?.feeDetails || []).some((f) =>
+      isTransportApplicableForFee(f)
+    );
+
+    const v = studentDetails?.vanFee;
+    const cost = Number(v?.perHeadTotalDue || v?.transportCost || 0);
+    const rec = Number(v?.totalVanFeeReceived || 0);
+    const con = Number(v?.totalVanFeeConcession || 0);
+
+    return anyHead || cost > 0 || rec > 0 || con > 0;
+  }, [studentDetails]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ======== NEW: Previous slabs auto-inclusion ========
   const computePreviousSlabsTotals = (untilIndex) => {
@@ -685,24 +739,31 @@ const StudentFeePage = () => {
         orderData?.merchantOrderId ||
         null;
 
-      if (vendorOrderId) localStorage.setItem("lastPaymentOrderId", String(vendorOrderId));
+      if (vendorOrderId)
+        localStorage.setItem("lastPaymentOrderId", String(vendorOrderId));
     } catch {}
   };
 
-  // ------------- Payment handlers -------------
+  // ------------- Payment handlers (HDFC only) -------------
   const handlePayFee = async (fee, feeIndex) => {
     const academicDue = Number(fee?.finalAmountDue || 0);
     const fineDue = getFineDue(fee);
+
     const vanBreak = getTransportBreakdown(fee);
     const vanDueHead = Number(vanBreak?.pending || 0);
 
     const prev = computePreviousSlabsTotals(feeIndex);
     const openingBalanceDue = Number(prevBalanceDue || 0);
 
-    const dueAmount = academicDue + fineDue + vanDueHead + openingBalanceDue + prev.total;
+    const dueAmount =
+      academicDue + fineDue + vanDueHead + openingBalanceDue + prev.total;
 
     if (isNaN(dueAmount) || dueAmount <= 0) {
-      return Swal.fire({ icon: "error", title: "Invalid Amount", text: "Nothing due to pay." });
+      return Swal.fire({
+        icon: "error",
+        title: "Invalid Amount",
+        text: "Nothing due to pay.",
+      });
     }
 
     const breakupHtml = `
@@ -711,14 +772,22 @@ const StudentFeePage = () => {
         <div>Academic (this head): <strong>${formatINR(academicDue)}</strong></div>
         <div>Fine (remaining, this head): <strong>${formatINR(fineDue)}</strong></div>
         <div>Transport (this head): <strong>${formatINR(vanDueHead)}</strong></div>
-        ${prev.count > 0 ? `
+        ${
+          prev.count > 0
+            ? `
           <hr/>
           <div><strong>Previous Heads (${prev.count})</strong></div>
           <div>Academic (prev): <strong>${formatINR(prev.totalAcademic)}</strong></div>
           <div>Fine (prev): <strong>${formatINR(prev.totalFine)}</strong></div>
           <div>Transport (prev): <strong>${formatINR(prev.totalVan)}</strong></div>
-        ` : ""}
-        ${openingBalanceDue > 0 ? `<hr/><div>Previous Balance: <strong>${formatINR(openingBalanceDue)}</strong></div>` : ""}
+        `
+            : ""
+        }
+        ${
+          openingBalanceDue > 0
+            ? `<hr/><div>Previous Balance: <strong>${formatINR(openingBalanceDue)}</strong></div>`
+            : ""
+        }
       </div>
     `;
 
@@ -758,20 +827,12 @@ const StudentFeePage = () => {
     } catch {}
 
     try {
-      if (paymentGateway === "razorpay" && !window.Razorpay) {
-        if (paymentWindow && !paymentWindow.closed) paymentWindow.close();
-        return Swal.fire({
-          icon: "error",
-          title: "Payment SDK not loaded",
-          text: "Please refresh the page and try again.",
-        });
-      }
-
       const orderRes = await api.post("/student-fee/create-order", {
         admissionNumber,
+        amount: dueAmount, // required by backend
         clientComputedDueAmount: dueAmount,
         feeHeadId,
-        gateway: paymentGateway,
+        gateway: "hdfc", // ✅ force HDFC
 
         fineAmount: fineDue,
         vanFeeAmount: vanDueHead,
@@ -800,111 +861,63 @@ const StudentFeePage = () => {
 
       const orderData = orderRes.data || {};
 
-      // ✅ NEW: Save last order/vendorOrderId locally (for support/debug)
+      // Save last order/vendorOrderId locally
       saveLastOrderId(orderData);
 
-      const reportedGateway = (orderData && orderData.gateway) || paymentGateway;
+      const paymentPageUrl =
+        orderData.paymentPageUrl ||
+        orderData.payment_page_url ||
+        orderData.redirectUrl ||
+        orderData.paymentUrl ||
+        (orderData.vendorOrderId &&
+          (process.env.REACT_APP_HDFC_PAYMENT_PAGE_BASE
+            ? `${process.env.REACT_APP_HDFC_PAYMENT_PAGE_BASE.replace(/\/$/, "")}/${orderData.vendorOrderId}`
+            : null)) ||
+        (orderData.session?.vendorOrderId &&
+          (process.env.REACT_APP_HDFC_PAYMENT_PAGE_BASE
+            ? `${process.env.REACT_APP_HDFC_PAYMENT_PAGE_BASE.replace(/\/$/, "")}/${orderData.session.vendorOrderId}`
+            : null)) ||
+        null;
 
-      // HDFC flow
-      if (reportedGateway && String(reportedGateway).toLowerCase().includes("hdfc")) {
-        const paymentPageUrl =
-          orderData.paymentPageUrl ||
-          orderData.payment_page_url ||
-          orderData.redirectUrl ||
-          orderData.paymentUrl ||
-          (orderData.vendorOrderId &&
-            (process.env.REACT_APP_HDFC_PAYMENT_PAGE_BASE
-              ? `${process.env.REACT_APP_HDFC_PAYMENT_PAGE_BASE.replace(/\/$/, "")}/${orderData.vendorOrderId}`
-              : null)) ||
-          (orderData.session?.vendorOrderId &&
-            (process.env.REACT_APP_HDFC_PAYMENT_PAGE_BASE
-              ? `${process.env.REACT_APP_HDFC_PAYMENT_PAGE_BASE.replace(/\/$/, "")}/${orderData.session.vendorOrderId}`
-              : null)) ||
-          null;
-
-        if (!paymentPageUrl) {
-          if (paymentWindow && !paymentWindow.closed) paymentWindow.close();
-          const handled = handleGatewayResponse(orderData, orderData.session || null);
-          if (!handled) {
-            Swal.fire({
-              icon: "error",
-              title: "Payment initialization failed",
-              text: "No payment URL returned. Try again.",
-            });
-          }
-          return;
+      if (!paymentPageUrl) {
+        if (paymentWindow && !paymentWindow.closed) paymentWindow.close();
+        const handled = handleGatewayResponse(orderData, orderData.session || null);
+        if (!handled) {
+          Swal.fire({
+            icon: "error",
+            title: "Payment initialization failed",
+            text: "No payment URL returned. Try again.",
+          });
         }
-
-        try {
-          if (paymentWindow && !paymentWindow.closed) {
-            paymentWindow.location.href = paymentPageUrl;
-            popupRef.current = paymentWindow;
-            installMessageListener();
-            pollPopupClosed(paymentWindow);
-          } else {
-            openPaymentPopup(paymentPageUrl);
-          }
-        } catch {
-          openPaymentPopup(paymentPageUrl);
-        }
-
-        Swal.fire({ icon: "info", title: "Payment page opened", text: "Complete the payment in the opened window." });
         return;
       }
 
-      // Razorpay flow
-      const order = orderData.order || orderData;
-      const options = {
-        key: process.env.REACT_APP_RAZORPAY_KEY,
-        amount: order.amount,
-        currency: order.currency || "INR",
-        name: "Pathseekers International School",
-        description: `Fee Payment - ${fee.fee_heading}`,
-        order_id: order.id,
-        handler: async (resp) => {
-          try {
-            await api.post("/student-fee/verify-payment", {
-              razorpay_order_id: resp.razorpay_order_id,
-              razorpay_payment_id: resp.razorpay_payment_id,
-              razorpay_signature: resp.razorpay_signature,
-              admissionNumber,
-              amount: dueAmount,
-              feeHeadId,
+      try {
+        if (paymentWindow && !paymentWindow.closed) {
+          paymentWindow.location.href = paymentPageUrl;
+          popupRef.current = paymentWindow;
+          installMessageListener();
+          pollPopupClosed(paymentWindow);
+        } else {
+          openPaymentPopup(paymentPageUrl);
+        }
+      } catch {
+        openPaymentPopup(paymentPageUrl);
+      }
 
-              fineAmount: fineDue,
-              vanFeeAmount: vanDueHead,
-              openingBalanceAmount: openingBalanceDue,
-              openingBalanceHeadId: prevBalanceHeadId || undefined,
-              previousSlabs: prev.items,
-              previousSlabsTotal: prev.total,
-            });
-            Swal.fire({ icon: "success", title: "Payment Successful!" });
-            refreshAfterPayment();
-          } catch (e) {
-            console.error("Verification failed:", e);
-            Swal.fire({
-              icon: "error",
-              title: "Payment Verification Failed",
-              text: "Please try again.",
-            });
-          }
-        },
-        notes: {
-          admissionNumber,
-          feeHeadId,
-          fineAmount: fineDue,
-          vanFeeAmount: vanDueHead,
-          openingBalanceAmount: openingBalanceDue,
-          previousSlabsTotal: prev.total,
-        },
-        theme: { color: "#22c55e" },
-      };
-      const rzp = new window.Razorpay(options);
-      rzp.open();
+      Swal.fire({
+        icon: "info",
+        title: "Payment page opened",
+        text: "Complete the payment in the opened window.",
+      });
     } catch (e) {
       console.error("Error initiating payment:", e);
       if (paymentWindow && !paymentWindow.closed) paymentWindow.close();
-      Swal.fire({ icon: "error", title: "Payment Error", text: "Please try again later." });
+      Swal.fire({
+        icon: "error",
+        title: "Payment Error",
+        text: "Please try again later.",
+      });
     }
   };
 
@@ -933,7 +946,11 @@ const StudentFeePage = () => {
         <div style="text-align:left;font-size:.95rem">
           <div><strong>Breakup</strong></div>
           <div>Van Fee: <strong>${formatINR(vanDueOnly)}</strong></div>
-          ${openingBalanceDue > 0 ? `<div>Previous Balance: <strong>${formatINR(openingBalanceDue)}</strong></div>` : ""}
+          ${
+            openingBalanceDue > 0
+              ? `<div>Previous Balance: <strong>${formatINR(openingBalanceDue)}</strong></div>`
+              : ""
+          }
         </div>
       `,
       icon: "question",
@@ -956,118 +973,78 @@ const StudentFeePage = () => {
     } catch {}
 
     try {
-      if (paymentGateway === "razorpay" && !window.Razorpay) {
-        if (paymentWindow && !paymentWindow.closed) paymentWindow.close();
-        return Swal.fire({
-          icon: "error",
-          title: "Payment SDK not loaded",
-          text: "Refresh the page and try again.",
-        });
-      }
-
       const orderRes = await api.post("/student-fee/create-order", {
         admissionNumber,
+        amount: totalToPay,
         clientComputedDueAmount: totalToPay,
         feeHeadId: "VAN_FEE",
-        gateway: paymentGateway,
+        gateway: "hdfc", // ✅ force HDFC
         openingBalanceAmount: openingBalanceDue,
         openingBalanceHeadId: prevBalanceHeadId || undefined,
         breakdown: { vanDue: vanDueOnly, openingBalanceDue },
       });
 
       const orderData = orderRes.data || {};
-
-      // ✅ NEW: Save last order/vendorOrderId locally (for support/debug)
       saveLastOrderId(orderData);
 
-      const reportedGateway = (orderData && orderData.gateway) || paymentGateway;
+      const paymentPageUrl =
+        orderData.paymentPageUrl ||
+        orderData.payment_page_url ||
+        orderData.redirectUrl ||
+        orderData.paymentUrl ||
+        (orderData.vendorOrderId &&
+          (process.env.REACT_APP_HDFC_PAYMENT_PAGE_BASE
+            ? `${process.env.REACT_APP_HDFC_PAYMENT_PAGE_BASE.replace(/\/$/, "")}/${orderData.vendorOrderId}`
+            : null)) ||
+        null;
 
-      if (reportedGateway && String(reportedGateway).toLowerCase().includes("hdfc")) {
-        const paymentPageUrl =
-          orderData.paymentPageUrl ||
-          orderData.payment_page_url ||
-          orderData.redirectUrl ||
-          orderData.paymentUrl ||
-          (orderData.vendorOrderId &&
-            (process.env.REACT_APP_HDFC_PAYMENT_PAGE_BASE
-              ? `${process.env.REACT_APP_HDFC_PAYMENT_PAGE_BASE.replace(/\/$/, "")}/${orderData.vendorOrderId}`
-              : null)) ||
-          null;
-
-        if (!paymentPageUrl) {
-          if (paymentWindow && !paymentWindow.closed) paymentWindow.close();
-          const handled = handleGatewayResponse(orderData, orderData.session || null);
-          if (!handled) {
-            Swal.fire({
-              icon: "error",
-              title: "Payment init failed",
-              text: "No payment URL returned. Try again.",
-            });
-          }
-          return;
+      if (!paymentPageUrl) {
+        if (paymentWindow && !paymentWindow.closed) paymentWindow.close();
+        const handled = handleGatewayResponse(orderData, orderData.session || null);
+        if (!handled) {
+          Swal.fire({
+            icon: "error",
+            title: "Payment init failed",
+            text: "No payment URL returned. Try again.",
+          });
         }
-
-        try {
-          if (paymentWindow && !paymentWindow.closed) {
-            paymentWindow.location.href = paymentPageUrl;
-            popupRef.current = paymentWindow;
-            installMessageListener();
-            pollPopupClosed(paymentWindow);
-          } else {
-            openPaymentPopup(paymentPageUrl);
-          }
-        } catch {
-          openPaymentPopup(paymentPageUrl);
-        }
-
-        Swal.fire({ icon: "info", title: "Payment page opened", text: "Complete the payment in the opened window." });
         return;
       }
 
-      // Razorpay fallback
-      const order = orderData.order || orderData;
-      const options = {
-        key: process.env.REACT_APP_RAZORPAY_KEY,
-        amount: order.amount,
-        currency: order.currency || "INR",
-        name: "Pathseekers International School",
-        description: "Van Fee Payment",
-        order_id: order.id,
-        handler: async (resp) => {
-          try {
-            await api.post("/student-fee/verify-payment", {
-              razorpay_order_id: resp.razorpay_order_id,
-              razorpay_payment_id: resp.razorpay_payment_id,
-              razorpay_signature: resp.razorpay_signature,
-              admissionNumber,
-              amount: totalToPay,
-              feeHeadId: "VAN_FEE",
-              openingBalanceAmount: openingBalanceDue,
-              openingBalanceHeadId: prevBalanceHeadId || undefined,
-            });
-            Swal.fire({ icon: "success", title: "Payment Successful!" });
-            refreshAfterPayment();
-          } catch (e) {
-            console.error("Verification failed:", e);
-            Swal.fire({ icon: "error", title: "Verification Failed", text: "Please try again." });
-          }
-        },
-        notes: { admissionNumber, feeHeadId: "VAN_FEE", openingBalanceAmount: openingBalanceDue },
-        theme: { color: "#16a34a" },
-      };
-      const rzp = new window.Razorpay(options);
-      rzp.open();
+      try {
+        if (paymentWindow && !paymentWindow.closed) {
+          paymentWindow.location.href = paymentPageUrl;
+          popupRef.current = paymentWindow;
+          installMessageListener();
+          pollPopupClosed(paymentWindow);
+        } else {
+          openPaymentPopup(paymentPageUrl);
+        }
+      } catch {
+        openPaymentPopup(paymentPageUrl);
+      }
+
+      Swal.fire({
+        icon: "info",
+        title: "Payment page opened",
+        text: "Complete the payment in the opened window.",
+      });
     } catch (e) {
       console.error("Error initiating van fee payment:", e);
       if (paymentWindow && !paymentWindow.closed) paymentWindow.close();
-      Swal.fire({ icon: "error", title: "Payment Error", text: "Please try again later." });
+      Swal.fire({
+        icon: "error",
+        title: "Payment Error",
+        text: "Please try again later.",
+      });
     }
   };
 
   // ------------- Student switch handler -------------
   const handleStudentSwitch = (admissionNumber) => {
     const norm = normalizeAdmission(admissionNumber);
-    if (!norm || norm === activeStudentAdmission) return;
+    const curr = normalizeAdmission(activeStudentAdmission);
+    if (!norm || norm === curr) return;
     try {
       localStorage.setItem("activeStudentAdmission", norm);
       setActiveStudentAdmission(norm);
@@ -1090,10 +1067,14 @@ const StudentFeePage = () => {
         <div className="rounded-4 p-3 p-md-4 mb-3 shadow-sm hero">
           <div className="d-flex flex-wrap align-items-center gap-2">
             <div className="h4 mb-0 me-2 text-white">
-              Fees for <span className="fw-semibold">{studentDetails?.name || "Student"}</span>
+              Fees for{" "}
+              <span className="fw-semibold">{studentDetails?.name || "Student"}</span>
             </div>
             <span className="badge badge-soft badge-soft-primary">
-              Adm No: <strong className="ms-1">{studentDetails?.admissionNumber || username}</strong>
+              Adm No:{" "}
+              <strong className="ms-1">
+                {studentDetails?.admissionNumber || username}
+              </strong>
             </span>
             {studentDetails?.class_name && (
               <span className="badge badge-soft badge-soft-info">
@@ -1108,17 +1089,11 @@ const StudentFeePage = () => {
 
             <div className="ms-auto d-flex gap-2 align-items-center">
               <div className="d-flex align-items-center">
-                <label className="me-2 small text-white-75 mb-0">Gateway</label>
-                <select
-                  value={paymentGateway}
-                  onChange={(e) => setPaymentGateway(e.target.value)}
-                  className="form-select form-select-sm"
-                  style={{ width: 160 }}
-                >
-                  <option value="razorpay">Razorpay (Default)</option>
-                  <option value="hdfc">SmartHDFC</option>
-                </select>
+                <span className="badge text-bg-light">
+                  Gateway: <strong className="ms-1">SmartHDFC</strong>
+                </span>
               </div>
+
               <button
                 className="btn btn-light btn-sm rounded-pill px-3 action-chip"
                 onClick={() => setActiveTab("details")}
@@ -1143,16 +1118,25 @@ const StudentFeePage = () => {
           {/* Student switcher UI */}
           {canSeeStudentSwitcher && studentsList.length > 0 && (
             <>
-              <div className="d-none d-lg-flex align-items-center gap-1 mt-3" role="tablist" aria-label="Switch student">
+              <div
+                className="d-none d-lg-flex align-items-center gap-1 mt-3"
+                role="tablist"
+                aria-label="Switch student"
+              >
                 {studentsList.map((s) => {
-                  const isActive = s.admission_number === activeStudentAdmission;
+                  const isActive =
+                    normalizeAdmission(s.admission_number) ===
+                    normalizeAdmission(activeStudentAdmission);
+
                   return (
                     <button
                       key={s.admission_number}
                       type="button"
                       role="tab"
                       aria-selected={isActive}
-                      className={`btn btn-sm ${isActive ? "btn-warning" : "btn-outline-light"} rounded-pill px-3`}
+                      className={`btn btn-sm ${
+                        isActive ? "btn-warning" : "btn-outline-light"
+                      } rounded-pill px-3`}
                       onClick={() => handleStudentSwitch(s.admission_number)}
                       title={`${s.name} (${s.class?.name || "—"}-${s.section?.name || "—"})`}
                       style={{
@@ -1192,35 +1176,43 @@ const StudentFeePage = () => {
             </>
           )}
 
-          {/* Transport + OB chips */}
+          {/* Chips row: Transport chips only if transportEnabled, OB always */}
           <div className="d-flex gap-2 mt-3 overflow-auto pb-1 fancy-chip-row">
-            <div className="chip chip-amber">
-              <i className="bi bi-truck me-1" />
-              Transport Due: <strong className="ms-1">{formatINR(vanCost)}</strong>
-            </div>
-            <div className="chip chip-blue">
-              <i className="bi bi-wallet2 me-1" />
-              Van Received: <strong className="ms-1">{formatINR(vanReceived)}</strong>
-            </div>
-            <div className="chip chip-orange">
-              <i className="bi bi-ticket-perforated me-1" />
-              Van Concession: <strong className="ms-1">{formatINR(vanConcession)}</strong>
-            </div>
-            <div className={`chip ${vanDue > 0 ? "chip-red" : "chip-green"}`}>
-              <i className="bi bi-cash-coin me-1" />
-              Van Due: <strong className="ms-1">{formatINR(vanDue)}</strong>
-            </div>
+            {transportEnabled && (
+              <>
+                <div className="chip chip-amber">
+                  <i className="bi bi-truck me-1" />
+                  Transport Due: <strong className="ms-1">{formatINR(vanCost)}</strong>
+                </div>
+                <div className="chip chip-blue">
+                  <i className="bi bi-wallet2 me-1" />
+                  Van Received: <strong className="ms-1">{formatINR(vanReceived)}</strong>
+                </div>
+                <div className="chip chip-orange">
+                  <i className="bi bi-ticket-perforated me-1" />
+                  Van Concession: <strong className="ms-1">{formatINR(vanConcession)}</strong>
+                </div>
+                <div className={`chip ${vanDue > 0 ? "chip-red" : "chip-green"}`}>
+                  <i className="bi bi-cash-coin me-1" />
+                  Van Due: <strong className="ms-1">{formatINR(vanDue)}</strong>
+                </div>
+              </>
+            )}
+
             <div className={`chip ${prevBalanceDue > 0 ? "chip-red" : "chip-green"}`}>
               <i className="bi bi-exclamation-octagon me-1" />
               Previous Balance: <strong className="ms-1">{formatINR(prevBalanceDue)}</strong>
             </div>
-            <button
-              className="btn btn-success btn-sm ms-auto shrink-0"
-              disabled={vanDue + prevBalanceDue <= 0}
-              onClick={handlePayVanFee}
-            >
-              <i className="bi bi-credit-card-2-front me-1" /> Pay Van Fee
-            </button>
+
+            {transportEnabled && (
+              <button
+                className="btn btn-success btn-sm ms-auto shrink-0"
+                disabled={vanDue + prevBalanceDue <= 0}
+                onClick={handlePayVanFee}
+              >
+                <i className="bi bi-credit-card-2-front me-1" /> Pay Van Fee
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -1237,19 +1229,24 @@ const StudentFeePage = () => {
           ) : error ? (
             <p className="text-danger text-center">{error}</p>
           ) : studentDetails ? (
-            <Tabs activeKey={activeTab} onSelect={(k) => setActiveTab(k)} className="mb-3 colorful-tabs">
+            <Tabs
+              activeKey={activeTab}
+              onSelect={(k) => setActiveTab(k)}
+              className="mb-3 colorful-tabs"
+            >
               {/* Details */}
               <Tab eventKey="details" title="Fee Details">
                 <div className="row g-3">
                   {(studentDetails?.feeDetails || []).length ? (
                     studentDetails.feeDetails.map((fee, idx) => {
-                      const t = getTransportBreakdown(fee);
+                      const t = getTransportBreakdown(fee); // ✅ fixed
                       const academicDue = Number(fee.finalAmountDue || 0);
                       const fineDue = getFineDue(fee);
                       const totalInclVan = academicDue + Number(t?.pending || 0) + fineDue;
 
                       const paidPct =
-                        ((Number(fee.totalFeeReceived || 0) + Number(fee.totalConcessionReceived || 0)) /
+                        ((Number(fee.totalFeeReceived || 0) +
+                          Number(fee.totalConcessionReceived || 0)) /
                           (Number(fee.effectiveFeeDue || 0) || 1)) *
                         100;
 
@@ -1275,10 +1272,14 @@ const StudentFeePage = () => {
                                     TR Pending: {formatINR(t.pending)}
                                   </span>
                                 ) : (
-                                  <span className="badge rounded-pill text-bg-success ms-2">TR Clear</span>
+                                  <span className="badge rounded-pill text-bg-success ms-2">
+                                    TR Clear
+                                  </span>
                                 )
                               ) : (
-                                <span className="badge rounded-pill text-bg-secondary ms-2">No Transport</span>
+                                <span className="badge rounded-pill text-bg-secondary ms-2">
+                                  No Transport
+                                </span>
                               )}
                             </div>
 
@@ -1297,7 +1298,9 @@ const StudentFeePage = () => {
                               </div>
                               <div className="d-flex justify-content-between small mb-1">
                                 <span>Concession</span>
-                                <span className="fw-semibold">{formatINR(fee.totalConcessionReceived)}</span>
+                                <span className="fw-semibold">
+                                  {formatINR(fee.totalConcessionReceived)}
+                                </span>
                               </div>
                               <div className="d-flex justify-content-between small mb-2">
                                 <span>Fine (remaining)</span>
@@ -1382,7 +1385,9 @@ const StudentFeePage = () => {
                                           className="progress-bar bg-info progress-bar-striped progress-bar-animated"
                                           role="progressbar"
                                           style={{
-                                            width: `${Math.min(100, Math.max(0, vanPaidPct)).toFixed(1)}%`,
+                                            width: `${Math.min(100, Math.max(0, vanPaidPct)).toFixed(
+                                              1
+                                            )}%`,
                                           }}
                                           aria-valuenow={vanPaidPct}
                                           aria-valuemin="0"
@@ -1483,7 +1488,9 @@ const StudentFeePage = () => {
                 <div className="row g-3">
                   <div className="col-12 col-lg-6">
                     <div className="card h-100 shadow-sm rounded-4">
-                      <div className="card-header bg-secondary text-white text-center fw-semibold">Breakdown</div>
+                      <div className="card-header bg-secondary text-white text-center fw-semibold">
+                        Breakdown
+                      </div>
                       <div className="card-body">
                         <div className="table-responsive">
                           <table className="table table-sm align-middle">
@@ -1516,49 +1523,61 @@ const StudentFeePage = () => {
                                 <th>Total Due (Academic)</th>
                                 <td className="text-end fw-semibold">{formatINR(totalDue)}</td>
                               </tr>
-                              <tr className="table-success">
-                                <th>Van Received</th>
-                                <td className="text-end">{formatINR(vanReceived)}</td>
-                              </tr>
-                              <tr className="table-warning">
-                                <th>Van Due</th>
-                                <td className="text-end fw-semibold">{formatINR(vanDue)}</td>
-                              </tr>
+
+                              {transportEnabled && (
+                                <>
+                                  <tr className="table-success">
+                                    <th>Van Received</th>
+                                    <td className="text-end">{formatINR(vanReceived)}</td>
+                                  </tr>
+                                  <tr className="table-warning">
+                                    <th>Van Due</th>
+                                    <td className="text-end fw-semibold">{formatINR(vanDue)}</td>
+                                  </tr>
+                                </>
+                              )}
                             </tbody>
                           </table>
                         </div>
 
-                        <hr />
-
-                        <div className="alert alert-success d-flex flex-wrap justify-content-between align-items-center mb-0">
-                          <div className="me-3">
-                            <div className="small text-muted">Transport Due</div>
-                            <div className="fs-6 fw-semibold">{formatINR(vanCost)}</div>
-                          </div>
-                          <div className="me-3">
-                            <div className="small text-muted">Van Received</div>
-                            <div className="fs-6 fw-semibold">{formatINR(vanReceived)}</div>
-                          </div>
-                          <div className="me-3">
-                            <div className="small text-muted">Van Concession</div>
-                            <div className="fs-6 fw-semibold">{formatINR(vanConcession)}</div>
-                          </div>
-                          <div className="me-3">
-                            <div className="small text-muted">Van Due</div>
-                            <div className={`fs-6 fw-bold ${vanDue > 0 ? "text-danger" : "text-success"}`}>
-                              {formatINR(vanDue)}
+                        {transportEnabled && (
+                          <>
+                            <hr />
+                            <div className="alert alert-success d-flex flex-wrap justify-content-between align-items-center mb-0">
+                              <div className="me-3">
+                                <div className="small text-muted">Transport Due</div>
+                                <div className="fs-6 fw-semibold">{formatINR(vanCost)}</div>
+                              </div>
+                              <div className="me-3">
+                                <div className="small text-muted">Van Received</div>
+                                <div className="fs-6 fw-semibold">{formatINR(vanReceived)}</div>
+                              </div>
+                              <div className="me-3">
+                                <div className="small text-muted">Van Concession</div>
+                                <div className="fs-6 fw-semibold">{formatINR(vanConcession)}</div>
+                              </div>
+                              <div className="me-3">
+                                <div className="small text-muted">Van Due</div>
+                                <div
+                                  className={`fs-6 fw-bold ${
+                                    vanDue > 0 ? "text-danger" : "text-success"
+                                  }`}
+                                >
+                                  {formatINR(vanDue)}
+                                </div>
+                              </div>
+                              <div className="ms-auto">
+                                <button
+                                  className="btn btn-success btn-sm"
+                                  onClick={handlePayVanFee}
+                                  disabled={vanDue + prevBalanceDue <= 0}
+                                >
+                                  Pay Van Fee {prevBalanceDue > 0 ? "(incl. OB)" : ""}
+                                </button>
+                              </div>
                             </div>
-                          </div>
-                          <div className="ms-auto">
-                            <button
-                              className="btn btn-success btn-sm"
-                              onClick={handlePayVanFee}
-                              disabled={vanDue + prevBalanceDue <= 0}
-                            >
-                              Pay Van Fee {prevBalanceDue > 0 ? "(incl. OB)" : ""}
-                            </button>
-                          </div>
-                        </div>
+                          </>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -1566,7 +1585,9 @@ const StudentFeePage = () => {
                   {/* At-a-glance user info */}
                   <div className="col-12 col-lg-6">
                     <div className="card h-100 shadow-sm rounded-4">
-                      <div className="card-header bg-primary text-white text-center fw-semibold">Student</div>
+                      <div className="card-header bg-primary text-white text-center fw-semibold">
+                        Student
+                      </div>
                       <div className="card-body">
                         <div className="row g-2">
                           <div className="col-6">
@@ -1578,7 +1599,9 @@ const StudentFeePage = () => {
                           <div className="col-6">
                             <div className="kpi kpi-amber">
                               <div className="kpi-label">Admission</div>
-                              <div className="kpi-value">{studentDetails?.admissionNumber || username}</div>
+                              <div className="kpi-value">
+                                {studentDetails?.admissionNumber || username}
+                              </div>
                             </div>
                           </div>
                           <div className="col-6">
@@ -1617,11 +1640,8 @@ const StudentFeePage = () => {
                               <th>Slip ID</th>
                               <th>Date & Time</th>
                               <th>Payment Mode</th>
-
-                              {/* ✅ NEW (for HDFC compliance/debug) */}
                               <th>Order ID</th>
                               <th>Txn ID</th>
-
                               <th>Fee Received</th>
                               <th>Concession</th>
                               <th>Fine</th>
@@ -1631,7 +1651,9 @@ const StudentFeePage = () => {
                           <tbody>
                             {transactionHistory.map((txn) => (
                               <tr key={txn.Serial}>
-                                <td>{txn.FeeHeading ? txn.FeeHeading.fee_heading : "N/A"}</td>
+                                <td>
+                                  {txn.FeeHeading ? txn.FeeHeading.fee_heading : "N/A"}
+                                </td>
                                 <td>{txn.Serial}</td>
                                 <td>{txn.Slip_ID}</td>
                                 <td>{formatDateTime(txn.createdAt)}</td>
@@ -1647,9 +1669,10 @@ const StudentFeePage = () => {
                                   </span>
                                 </td>
 
-                                {/* ✅ NEW: show stored ids */}
                                 <td>{txn.Order_ID || txn.order_id || txn.vendorOrderId || "—"}</td>
-                                <td>{txn.Transaction_ID || txn.transaction_id || txn.txnId || "—"}</td>
+                                <td>
+                                  {txn.Transaction_ID || txn.transaction_id || txn.txnId || "—"}
+                                </td>
 
                                 <td>{formatINR(txn.Fee_Recieved)}</td>
                                 <td>{formatINR(txn.Concession)}</td>
@@ -1661,7 +1684,9 @@ const StudentFeePage = () => {
                         </table>
                       </div>
                     ) : (
-                      <div className="alert alert-info mb-0">No transaction history available.</div>
+                      <div className="alert alert-info mb-0">
+                        No transaction history available.
+                      </div>
                     )}
                   </div>
                 </div>

@@ -1,6 +1,7 @@
 // src/pages/StudentTotalDueReport.jsx
+"use client";
 
-// ======== PART 1/4: Imports, Helpers, and Basic Setup ========
+// ======== FULL UPDATED FILE: adds WhatsApp per-row + WhatsApp All (ONLY pending till date > 0) + toast + progress ========
 
 import React, { useEffect, useMemo, useState } from "react";
 import {
@@ -12,6 +13,10 @@ import {
   Form,
   InputGroup,
   Badge,
+  Toast,
+  ToastContainer,
+  OverlayTrigger,
+  Tooltip,
 } from "react-bootstrap";
 import api from "../api";
 import "./SchoolFeeSummary.css"; // reuse styles
@@ -125,6 +130,18 @@ const isHeadOverdue = (head) => {
   return remaining > 0 && due <= today;
 };
 
+const safeStr = (v) => (v === null || v === undefined ? "" : String(v));
+const digitsOnly = (s) => safeStr(s).replace(/\D/g, "");
+const toISODate = (d) => {
+  try {
+    const x = d instanceof Date ? d : new Date(d);
+    if (Number.isNaN(x.getTime())) return new Date().toISOString().slice(0, 10);
+    return x.toISOString().slice(0, 10);
+  } catch {
+    return new Date().toISOString().slice(0, 10);
+  }
+};
+
 // ================= Component =================
 const StudentTotalDueReport = () => {
   const [school, setSchool] = useState(null);
@@ -152,6 +169,29 @@ const StudentTotalDueReport = () => {
   // Filters
   const [classFilter, setClassFilter] = useState("all"); // "all" or "Class / Section"
   const [pendingFilter, setPendingFilter] = useState("all"); // "all" | "pending" | "clear"
+
+  // WhatsApp sending state (per student row)
+  const [waSending, setWaSending] = useState(() => new Set());
+
+  // WhatsApp bulk send state
+  const [waAllSending, setWaAllSending] = useState(false);
+  const [waAllProgress, setWaAllProgress] = useState({
+    done: 0,
+    total: 0,
+    skipped: 0,
+  });
+
+  // Toast UI
+  const [toast, setToast] = useState({
+    show: false,
+    title: "",
+    msg: "",
+    bg: "success", // success | danger | warning | info
+  });
+
+  const showToast = (bg, title, msg) => {
+    setToast({ show: true, bg, title, msg });
+  };
 
   // ---------------- Fetchers (same style as your file) ----------------
   const fetchSchool = async () => {
@@ -263,10 +303,7 @@ const StudentTotalDueReport = () => {
       );
       if (!Number.isNaN(providedTotal)) return Math.max(0, providedTotal);
 
-      const total = rows.reduce(
-        (sum, r) => sum + Number(r.amount || 0),
-        0
-      );
+      const total = rows.reduce((sum, r) => sum + Number(r.amount || 0), 0);
       return Math.max(0, total);
     } catch (e) {
       console.warn("opening-balances fallback failed:", e?.message || e);
@@ -296,7 +333,11 @@ const StudentTotalDueReport = () => {
       // Worker: call /feedue-status/fee-heading-wise-students (SAME API)
       const worker = async ({ feeHeadingId, status }) => {
         const res = await api.get("/feedue-status/fee-heading-wise-students", {
-          params: { feeHeadingId, status, session_id: activeSessionId || undefined },
+          params: {
+            feeHeadingId,
+            status,
+            session_id: activeSessionId || undefined,
+          },
         });
 
         const rawData = Array.isArray(res?.data?.data) ? res.data.data : [];
@@ -304,10 +345,7 @@ const StudentTotalDueReport = () => {
         rawData.forEach((student) => {
           // DB primary key (student_id) agar mile
           const pk =
-            student.student_id ??
-            student.Student_ID ??
-            student.id ??
-            null;
+            student.student_id ?? student.Student_ID ?? student.id ?? null;
 
           const sid = pk ?? student.admissionNumber;
           if (!sid) return;
@@ -365,9 +403,7 @@ const StudentTotalDueReport = () => {
             const paid = Number(fd.paid || 0);
             const concession = Number(fd.concession || 0);
             const fine = Number(fd.fineAmount || 0);
-            const remaining = Number(
-              fd.remaining ?? (due - (paid + concession))
-            );
+            const remaining = Number(fd.remaining ?? due - (paid + concession));
 
             head.due = due;
             head.paid = paid;
@@ -376,9 +412,7 @@ const StudentTotalDueReport = () => {
             head.fine = fine;
 
             const dueDate = extractDueDate(fd);
-            if (dueDate) {
-              head.dueDate = dueDate;
-            }
+            if (dueDate) head.dueDate = dueDate;
           });
         });
       };
@@ -415,9 +449,8 @@ const StudentTotalDueReport = () => {
 
           (val.heads || []).forEach((vh) => {
             const baseHeadName = vh.fee_heading_name; // e.g. "APR-JUN"
-            const headName = `${baseHeadName} (Transport)`; // display name
+            const headName = `${baseHeadName} (Transport)`;
 
-            // Check if transport head already exists
             let transportIndex = agg.heads.findIndex(
               (h) => h.name === headName && h.isTransport
             );
@@ -435,80 +468,58 @@ const StudentTotalDueReport = () => {
                 dueDate: null,
               };
 
-              // 🔹 Find matching academic head position
+              // insert after matching academic head, if exists
               const academicIndex = agg.heads.findIndex(
                 (h) => !h.isTransport && h.name === baseHeadName
               );
 
-              if (academicIndex >= 0) {
-                // Insert transport head just after its academic head
+              if (academicIndex >= 0)
                 agg.heads.splice(academicIndex + 1, 0, head);
-              } else {
-                // If no matching academic head, push at the end
-                agg.heads.push(head);
-              }
+              else agg.heads.push(head);
             } else {
               head = agg.heads[transportIndex];
             }
 
-            // Update transport remaining & fine
             head.remaining = Number(vh.pending || 0);
             head.fine = Number(vh.fine || vh.fineAmount || 0);
 
-            // 1️⃣ Try to get due date directly from transport head (if backend sends it)
             let dueDate = extractDueDate(vh);
-
-            // 2️⃣ If not present, copy from matching academic head
             if (!dueDate) {
               const academicHead = agg.heads.find(
-                (h) =>
-                  !h.isTransport &&
-                  h.name === baseHeadName &&
-                  h.dueDate
+                (h) => !h.isTransport && h.name === baseHeadName && h.dueDate
               );
-              if (academicHead) {
-                dueDate = academicHead.dueDate;
-              }
+              if (academicHead) dueDate = academicHead.dueDate;
             }
-
-            if (dueDate) {
-              head.dueDate = dueDate;
-            }
+            if (dueDate) head.dueDate = dueDate;
           });
         });
       }
 
-      // 🔹 After academic + transport merge -> inject Opening Balance as a separate head
+      // 🔹 Inject Opening Balance as a separate head
       if (activeSessionId) {
         const studentList = Array.from(studentMap.values());
 
         await withConcurrency(studentList, 8, async (s) => {
-          // Prefer explicit studentId; fallback numeric s.id
           const pk =
             s.studentId ??
-            (Number(s.id) && !Number.isNaN(Number(s.id))
-              ? Number(s.id)
-              : null);
+            (Number(s.id) && !Number.isNaN(Number(s.id)) ? Number(s.id) : null);
 
-          if (!pk) return; // cannot fetch OB without DB id
+          if (!pk) return;
 
-          const ob = await fetchOpeningBalanceOutstanding(
-            pk,
-            activeSessionId
-          );
+          const ob = await fetchOpeningBalanceOutstanding(pk, activeSessionId);
 
           if (ob > 0) {
             if (!Array.isArray(s.heads)) s.heads = [];
             s.heads.push({
               name: "Previous Balance",
               isTransport: false,
-              isOpeningBalance: true, // 🔹 mark specially
+              isOpeningBalance: true,
               due: ob,
               paid: 0,
               concession: 0,
               remaining: ob,
               fine: 0,
-              dueDate: null, // handled via isOpeningBalance in isHeadOverdue
+              dueDate: null,
             });
           }
         });
@@ -529,11 +540,7 @@ const StudentTotalDueReport = () => {
           return sum + remaining + fine;
         }, 0);
 
-        return {
-          ...s,
-          totalDueAllTime,
-          totalDueTillDate,
-        };
+        return { ...s, totalDueAllTime, totalDueTillDate };
       });
 
       // Sort by class then name
@@ -552,6 +559,146 @@ const StudentTotalDueReport = () => {
     }
   };
 
+  // ======== WhatsApp: Send reminder to Father ========
+
+  const computeOverdueFineTotal = (heads) => {
+    return (heads || []).reduce((sum, h) => {
+      if (!isHeadOverdue(h)) return sum;
+      return sum + Number(h.fine || 0);
+    }, 0);
+  };
+
+  const computeEarliestOverdueDate = (heads) => {
+    let best = null;
+    let bestTime = null;
+
+    (heads || []).forEach((h) => {
+      if (!isHeadOverdue(h)) return;
+      const ds = h.dueDate;
+      if (!ds) return;
+      const d = new Date(ds);
+      if (Number.isNaN(d.getTime())) return;
+      if (bestTime === null || d.getTime() < bestTime) {
+        bestTime = d.getTime();
+        best = ds;
+      }
+    });
+
+    return best; // YYYY-MM-DD or null
+  };
+
+  const sendWhatsAppReminder = async (stu) => {
+    const rowKey = stu?.id;
+    if (!rowKey) return;
+
+    // Father number only (as per request)
+    const father = digitsOnly(stu.fatherPhone);
+    if (!father) {
+      showToast(
+        "warning",
+        "Father number missing",
+        "This student has no Father phone number."
+      );
+      return;
+    }
+
+    // prevent double-click
+    setWaSending((prev) => new Set(prev).add(rowKey));
+
+    try {
+      const classSection = stu.sectionName
+        ? `${stu.className} / ${stu.sectionName}`
+        : stu.className || "";
+
+      const fineOverdue = computeOverdueFineTotal(stu.heads || []);
+      const dueDate = computeEarliestOverdueDate(stu.heads || []) || "-";
+
+      // Keep receiptNo: you can change to your own (admission no is safe)
+      const receiptNo = stu.admissionNumber || "-";
+
+      await api.post("/whatsapp/fee-reminder", {
+        to: father, // backend will normalize to 91xxxxxxxxxx
+        name: stu.name || "",
+        dueDate: dueDate === "-" ? "-" : dueDate, // template param 2
+        receiptNo, // template param 3
+        amount: String(Math.round(Number(stu.totalDueTillDate || 0))), // param 4
+        fine: String(Math.round(Number(fineOverdue || 0))), // param 5
+        tillDate: toISODate(new Date()), // param 6
+        grade: classSection || "-", // param 7
+      });
+
+      showToast("success", "WhatsApp Sent", `Reminder sent to Father (${father}).`);
+    } catch (err) {
+      const apiMsg =
+        err?.response?.data?.message ||
+        err?.response?.data?.error?.message ||
+        err?.response?.data?.error ||
+        err?.message ||
+        "Failed to send";
+      console.error("WA send error:", err?.response?.data || err);
+      showToast("danger", "WhatsApp Failed", safeStr(apiMsg));
+    } finally {
+      setWaSending((prev) => {
+        const next = new Set(prev);
+        next.delete(rowKey);
+        return next;
+      });
+    }
+  };
+
+  // ✅ WhatsApp ALL (ONLY pending till date > 0) + Father number required
+  const sendWhatsAppToAllPending = async () => {
+    if (waAllSending) return;
+
+    // ONLY students visible after filters AND pending till date > 0
+    const pendingList = (filteredStudents || []).filter(
+      (s) => Number(s.totalDueTillDate || 0) > 0
+    );
+
+    if (!pendingList.length) {
+      showToast(
+        "warning",
+        "No pending students",
+        "No students have pending till date in current filtered list."
+      );
+      return;
+    }
+
+    const targets = pendingList.filter((s) => digitsOnly(s.fatherPhone));
+    const skipped = pendingList.length - targets.length;
+
+    if (!targets.length) {
+      showToast(
+        "warning",
+        "No valid Father numbers",
+        "Pending students found, but Father numbers are missing."
+      );
+      return;
+    }
+
+    setWaAllSending(true);
+    setWaAllProgress({ done: 0, total: targets.length, skipped });
+
+    try {
+      // send 3 at a time (safe)
+      await withConcurrency(targets, 3, async (stu, idx) => {
+        await sendWhatsAppReminder(stu);
+        setWaAllProgress((p) => ({ ...p, done: idx + 1 }));
+      });
+
+      showToast(
+        "success",
+        "Bulk WhatsApp Done",
+        `Sent ${targets.length} message(s). Skipped (no Father No): ${skipped}.`
+      );
+    } catch (e) {
+      console.error("sendWhatsAppToAllPending error", e);
+      showToast("danger", "Send all failed", "Some messages failed. Please check logs.");
+    } finally {
+      setWaAllSending(false);
+    }
+  };
+
   // ======== PART 3/4: Effects & Filters ========
 
   // Initial: load sessions + school
@@ -559,6 +706,7 @@ const StudentTotalDueReport = () => {
     (async () => {
       await Promise.all([fetchSessions(), fetchSchool()]);
     })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // When session changes: load fee headings + transport
@@ -569,6 +717,7 @@ const StudentTotalDueReport = () => {
       await fetchFeeHeadings();
       await fetchTransportPending(activeSessionId);
     })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSessionId]);
 
   // When headings or transport map ready, build combined student report
@@ -599,11 +748,7 @@ const StudentTotalDueReport = () => {
       if (tt > 0) pending++;
       else clear++;
     });
-    return {
-      total: students.length,
-      pending,
-      clear,
-    };
+    return { total: students.length, pending, clear };
   }, [students]);
 
   // Filtered students list (Search + Class Filter + Pending Filter)
@@ -616,9 +761,7 @@ const StudentTotalDueReport = () => {
       // 1) Search by Name / Admission No
       if (q) {
         const matchesName = (s.name || "").toLowerCase().includes(q);
-        const matchesAdm = (s.admissionNumber || "")
-          .toLowerCase()
-          .includes(q);
+        const matchesAdm = (s.admissionNumber || "").toLowerCase().includes(q);
         if (!matchesName && !matchesAdm) return false;
       }
 
@@ -654,7 +797,6 @@ const StudentTotalDueReport = () => {
   const exportToExcel = () => {
     if (!filteredStudents.length) return;
 
-    // Summary sheet
     const summaryRows = filteredStudents.map((stu, idx) => {
       const classSection = stu.sectionName
         ? `${stu.className} / ${stu.sectionName}`
@@ -678,7 +820,6 @@ const StudentTotalDueReport = () => {
     const wsSummary = XLSX.utils.json_to_sheet(summaryRows);
     XLSX.utils.book_append_sheet(wb, wsSummary, "Summary");
 
-    // Detailed heads sheet
     const headRows = [];
     filteredStudents.forEach((stu) => {
       const classSection = stu.sectionName
@@ -718,13 +859,8 @@ const StudentTotalDueReport = () => {
       XLSX.utils.book_append_sheet(wb, wsHeads, "Head Details");
     }
 
-    const excelBuffer = XLSX.write(wb, {
-      bookType: "xlsx",
-      type: "array",
-    });
-    const blob = new Blob([excelBuffer], {
-      type: "application/octet-stream",
-    });
+    const excelBuffer = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+    const blob = new Blob([excelBuffer], { type: "application/octet-stream" });
 
     const todayStr = new Date().toISOString().slice(0, 10);
     saveAs(blob, `Student_Total_Due_${todayStr}.xlsx`);
@@ -749,6 +885,24 @@ const StudentTotalDueReport = () => {
 
   return (
     <Container className="mt-4">
+      {/* Toast */}
+      <ToastContainer position="top-end" className="p-3" style={{ zIndex: 9999 }}>
+        <Toast
+          bg={toast.bg}
+          show={toast.show}
+          onClose={() => setToast((t) => ({ ...t, show: false }))}
+          delay={3500}
+          autohide
+        >
+          <Toast.Header closeButton>
+            <strong className="me-auto">{toast.title || "Info"}</strong>
+          </Toast.Header>
+          <Toast.Body className={toast.bg === "danger" ? "text-white" : ""}>
+            {toast.msg}
+          </Toast.Body>
+        </Toast>
+      </ToastContainer>
+
       {/* Header */}
       <div className="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
         <div>
@@ -808,8 +962,7 @@ const StudentTotalDueReport = () => {
           </div>
 
           {/* Filters */}
-          <div className="d-flex gap-2 flex-wrap justify-content-end">
-            {/* Search Name / Admission No */}
+          <div className="d-flex gap-2 flex-wrap justify-content-end align-items-start">
             <InputGroup size="sm" style={{ minWidth: 240 }}>
               <InputGroup.Text>Search</InputGroup.Text>
               <Form.Control
@@ -819,7 +972,6 @@ const StudentTotalDueReport = () => {
               />
             </InputGroup>
 
-            {/* Class Filter */}
             <Form.Select
               size="sm"
               value={classFilter}
@@ -834,7 +986,6 @@ const StudentTotalDueReport = () => {
               ))}
             </Form.Select>
 
-            {/* Pending Filter */}
             <Form.Select
               size="sm"
               value={pendingFilter}
@@ -850,23 +1001,53 @@ const StudentTotalDueReport = () => {
               variant="outline-secondary"
               size="sm"
               onClick={buildStudentReport}
+              disabled={waAllSending}
             >
               Refresh
             </Button>
+
             <Button
               variant="outline-danger"
               size="sm"
               onClick={handleClearFilters}
+              disabled={waAllSending}
             >
               Clear Filters
             </Button>
+
             <Button
               variant="success"
               size="sm"
               onClick={exportToExcel}
+              disabled={waAllSending}
             >
               Excel
             </Button>
+
+            {/* ✅ WhatsApp ALL Pending */}
+            <div className="d-flex flex-column align-items-end">
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={sendWhatsAppToAllPending}
+                disabled={waAllSending || !filteredStudents.length}
+              >
+                {waAllSending ? (
+                  <>
+                    <Spinner animation="border" size="sm" className="me-2" />
+                    Sending {waAllProgress.done}/{waAllProgress.total}
+                  </>
+                ) : (
+                  "WhatsApp All (Pending)"
+                )}
+              </Button>
+
+              {waAllSending && (
+                <div className="small text-muted mt-1">
+                  Skipped (no Father No): {waAllProgress.skipped}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -890,8 +1071,10 @@ const StudentTotalDueReport = () => {
                 <th className="text-end">Total Due Till Date</th>
                 <th className="text-end">Total Due (All Heads)</th>
                 <th style={{ width: "90px" }}>Details</th>
+                <th style={{ width: "120px" }}>WhatsApp</th>
               </tr>
             </thead>
+
             <tbody>
               {filteredStudents.map((stu, index) => {
                 const isOpen = expandedIds.has(stu.id);
@@ -900,6 +1083,7 @@ const StudentTotalDueReport = () => {
                   : stu.className;
 
                 const hasPending = Number(stu.totalDueTillDate || 0) > 0;
+                const isSending = waSending.has(stu.id);
 
                 return (
                   <React.Fragment key={stu.id || index}>
@@ -915,6 +1099,7 @@ const StudentTotalDueReport = () => {
                       onDoubleClick={() => toggleExpand(stu.id)}
                     >
                       <td>{index + 1}</td>
+
                       <td>
                         <div className="d-flex flex-column">
                           <span className="fw-semibold">{stu.name}</span>
@@ -926,9 +1111,11 @@ const StudentTotalDueReport = () => {
                           )}
                         </div>
                       </td>
+
                       <td>{stu.admissionNumber}</td>
                       <td>{classSection}</td>
                       <td>{stu.phone || "—"}</td>
+
                       <td
                         className={`text-end fw-bold ${
                           hasPending ? "text-danger" : "text-success"
@@ -936,23 +1123,68 @@ const StudentTotalDueReport = () => {
                       >
                         {formatCurrency(stu.totalDueTillDate)}
                       </td>
+
                       <td className="text-end">
                         {formatCurrency(stu.totalDueAllTime)}
                       </td>
+
                       <td className="text-center">
                         <Button
                           size="sm"
                           variant={isOpen ? "outline-primary" : "primary"}
-                          onClick={() => toggleExpand(stu.id)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleExpand(stu.id);
+                          }}
                         >
                           {isOpen ? "Hide" : "View"}
                         </Button>
+                      </td>
+
+                      <td className="text-center">
+                        <OverlayTrigger
+                          placement="top"
+                          overlay={<Tooltip>Sends template to Father number only</Tooltip>}
+                        >
+                          <span className="d-inline-block">
+                            <Button
+                              size="sm"
+                              variant="success"
+                              disabled={
+                                !digitsOnly(stu.fatherPhone) ||
+                                isSending ||
+                                waAllSending
+                              }
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                sendWhatsAppReminder(stu);
+                              }}
+                            >
+                              {isSending ? (
+                                <>
+                                  <Spinner
+                                    animation="border"
+                                    size="sm"
+                                    className="me-2"
+                                  />
+                                  Sending
+                                </>
+                              ) : (
+                                "WhatsApp"
+                              )}
+                            </Button>
+                          </span>
+                        </OverlayTrigger>
+
+                        {!digitsOnly(stu.fatherPhone) && (
+                          <div className="small text-muted mt-1">No Father No</div>
+                        )}
                       </td>
                     </tr>
 
                     {isOpen && (
                       <tr className="bg-body-tertiary">
-                        <td colSpan={8}>
+                        <td colSpan={9}>
                           {Array.isArray(stu.heads) && stu.heads.length > 0 ? (
                             <Table
                               size="sm"
@@ -974,6 +1206,7 @@ const StudentTotalDueReport = () => {
                                   <th style={{ width: "110px" }}>Status</th>
                                 </tr>
                               </thead>
+
                               <tbody>
                                 {stu.heads.map((h, idx) => {
                                   const overdue = isHeadOverdue(h);
@@ -1026,12 +1259,13 @@ const StudentTotalDueReport = () => {
 
               {filteredStudents.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="text-center text-muted py-3">
+                  <td colSpan={9} className="text-center text-muted py-3">
                     No students found.
                   </td>
                 </tr>
               )}
             </tbody>
+
             <tfoot>
               <tr className="fw-bold">
                 <td colSpan={5} className="text-end">
@@ -1043,7 +1277,7 @@ const StudentTotalDueReport = () => {
                 <td className="text-end">
                   {formatCurrency(grandTotals.dueAllTime)}
                 </td>
-                <td></td>
+                <td colSpan={2}></td>
               </tr>
             </tfoot>
           </Table>
