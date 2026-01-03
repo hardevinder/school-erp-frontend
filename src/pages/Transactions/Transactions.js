@@ -477,6 +477,71 @@ const Transactions = () => {
       console.error("Error fetching transport routes:", error);
     }
   };
+
+  const fillRowAuto = (index) => {
+  setNewTransactionDetails((prev) => {
+    if (!prev?.length) return prev;
+
+    const updated = [...prev];
+    const row = { ...updated[index] };
+
+    // Safety
+    if (row.isOpeningBalance) {
+      // Only academic for opening balance
+      const acadNeed = Math.max(
+        0,
+        (row.Fee_Due || 0) - (row.Concession || 0) - (row.Fee_Recieved || 0)
+      );
+      const maxAllowed = Math.max(0, (row.Fee_Due || 0) - (row.Concession || 0));
+      row.Fee_Recieved = Math.min(acadNeed, maxAllowed);
+      row.Fine_Amount = 0;
+      row.VanFee = 0;
+      updated[index] = row;
+      return updated;
+    }
+
+    // Remaining academic due
+    const acadNeed = Math.max(
+      0,
+      (row.Fee_Due || 0) - (row.Concession || 0) - (row.Fee_Recieved || 0)
+    );
+
+    // Remaining fine due
+    const fineNeed = row.isFineApplicable
+      ? Math.max(0, (row.fineAmount || 0) - (row.Fine_Amount || 0))
+      : 0;
+
+    // Remaining van due (optional but useful)
+    const vanNeed =
+      row.ShowVanFeeInput
+        ? Math.max(0, (row.Van_Fee_Due || 0) - (row.VanFee || 0))
+        : 0;
+
+    // Apply values (replace / top-up style)
+    const maxAllowed = Math.max(0, (row.Fee_Due || 0) - (row.Concession || 0));
+    row.Fee_Recieved = Math.min((row.Fee_Recieved || 0) + acadNeed, maxAllowed);
+
+    if (row.isFineApplicable) {
+      row.Fine_Amount = Math.min((row.Fine_Amount || 0) + fineNeed, row.fineAmount || 0);
+      row.isFineEdited = true; // user clicked, so treat as explicit edit
+    }
+
+    if (row.ShowVanFeeInput) {
+      row.VanFee = Math.max(0, (row.VanFee || 0) + vanNeed);
+
+      // keep Van_Fee_Remaining in sync (same logic as your other handlers)
+      const baseDueNoFine = Math.max(
+        0,
+        (row.Van_Fee_Due || 0) - (row.Van_Fine_Amount || 0)
+      );
+      row.Van_Fee_Remaining = Math.max(0, baseDueNoFine - (row.VanFee || 0));
+    }
+
+    updated[index] = row;
+    return updated;
+  });
+};
+
   const fetchSessions = async () => {
     try {
       const res = await api.get("/sessions");
@@ -2088,17 +2153,23 @@ const Transactions = () => {
                                   selectedHeads.has(String(row.Fee_Head))
                                 )
                               }
-                              onChange={(e) => {
-                                const checked = e.target.checked;
-                                setSelectedHeads(() => {
-                                  if (!checked) return new Set();
-                                  const all = new Set();
-                                  newTransactionDetails.forEach((row) =>
-                                    all.add(String(row.Fee_Head))
-                                  );
-                                  return all;
-                                });
-                              }}
+                          onChange={(e) => {
+                            const checked = e.target.checked;
+
+                            // 1) select/unselect all
+                            setSelectedHeads(() => {
+                              if (!checked) return new Set();
+                              const all = new Set();
+                              newTransactionDetails.forEach((row) => all.add(String(row.Fee_Head)));
+                              return all;
+                            });
+
+                            // 2) tick all = autofill all rows
+                            if (checked) {
+                              newTransactionDetails.forEach((_, idx) => fillRowAuto(idx));
+                            }
+                          }}
+
                             />
                           </th>
                           <th style={{ minWidth: 140 }}>Fee</th>
@@ -2120,24 +2191,50 @@ const Transactions = () => {
                             }
                           >
                             <td style={{ textAlign: "center" }}>
-                              <Form.Check
+                            <Form.Check
                                 type="checkbox"
                                 aria-label={`Select ${feeDetail.Fee_Heading_Name}`}
-                                checked={selectedHeads.has(
-                                  String(feeDetail.Fee_Head)
-                                )}
-                                onChange={() => {
+                                checked={selectedHeads.has(String(feeDetail.Fee_Head))}
+                                onChange={(e) => {
+                                  const checked = e.target.checked;
+                                  const key = String(feeDetail.Fee_Head);
+
+                                  // 1) select/unselect
                                   setSelectedHeads((prev) => {
                                     const next = new Set(prev);
-                                    const key = String(feeDetail.Fee_Head);
-                                    if (next.has(key)) next.delete(key);
-                                    else next.add(key);
+                                    if (checked) next.add(key);
+                                    else next.delete(key);
                                     return next;
                                   });
+
+                                  // 2) tick = same autofill as fee-name click
+                                  if (checked) fillRowAuto(index);
                                 }}
                               />
+
                             </td>
-                            <td>{feeDetail.Fee_Heading_Name}</td>
+                          <td
+                              onClick={() => {
+                                const key = String(feeDetail.Fee_Head);
+
+                                // 1) auto-select checkbox
+                                setSelectedHeads((prev) => {
+                                  const next = new Set(prev);
+                                  next.add(key);
+                                  return next;
+                                });
+
+                                // 2) auto-fill values
+                                fillRowAuto(index);
+                              }}
+                              style={{ cursor: "pointer", userSelect: "none" }}
+                              title="Click to auto-fill Due + Fine (and Van if applicable)"
+                              className="fw-semibold"
+                            >
+                              {feeDetail.Fee_Heading_Name}
+                            </td>
+
+
                             <td>
                               <OverlayTrigger
                                 placement="top"
