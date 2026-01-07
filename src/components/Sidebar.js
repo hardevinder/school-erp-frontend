@@ -1,4 +1,4 @@
-// src/components/Sidebar.jsx
+// File: src/components/Sidebar.jsx
 import React, { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import "bootstrap/dist/css/bootstrap.min.css";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -77,14 +77,14 @@ export default function Sidebar({ headerHeight = 56 }) {
 
   // roles
   const roleLower = (activeRole || "").toLowerCase();
-  const isSuperAdmin =
-    roleLower === "superadmin" || roleLower === "super_admin";
+  const isSuperAdmin = roleLower === "superadmin" || roleLower === "super_admin";
   const isAdmin = isSuperAdmin || roleLower === "admin";
   const isAcademic = roleLower === "academic_coordinator";
   const isTeacher = roleLower === "teacher";
   const isStudent = roleLower === "student";
   const isHR = roleLower === "hr";
   const isAccounts = roleLower === "accounts" || roleLower === "account";
+  const isFrontoffice = roleLower === "frontoffice"; // ✅ NEW
 
   const hasAccess = (item) => {
     if (!item?.roles || item.roles.length === 0) return true;
@@ -98,6 +98,75 @@ export default function Sidebar({ headerHeight = 56 }) {
   // ===== MENU GROUPS =====
   const menuGroups = useMemo(() => {
     const groups = [];
+
+    // ✅ FRONT OFFICE MENU
+    if (isFrontoffice) {
+      groups.push({
+        heading: "Main",
+        items: [
+          {
+            key: "frontoffice-dashboard",
+            label: "Dashboard",
+            icon: "bi-speedometer2",
+            path: "/dashboard",
+            roles: ["frontoffice"],
+          },
+        ],
+      });
+
+      groups.push({
+        heading: "Front Office",
+        items: [
+          {
+            key: "gate-pass",
+            label: "Gate Pass",
+            icon: "bi-box-arrow-right",
+            path: "/gate-pass",
+            roles: ["frontoffice"],
+          },
+
+          // ✅ NEW: Visitors (Frontoffice only)
+          // NOTE: Ensure route exists in App.js e.g. <Route path="/visitors" element={<Visitors />} />
+          {
+            key: "visitors",
+            label: "Visitors",
+            icon: "bi-person-bounding-box",
+            path: "/visitors",
+            roles: ["frontoffice"],
+          },
+
+          {
+            key: "students",
+            label: "Students",
+            icon: "bi-people",
+            path: "/students",
+            roles: ["frontoffice"],
+          },
+          {
+            key: "enquiries",
+            label: "Enquiries",
+            icon: "bi-person-lines-fill",
+            path: "/enquiries",
+            roles: ["frontoffice"],
+          },
+          {
+            key: "transfer-certificates",
+            label: "Transfer Certificates",
+            icon: "bi-award",
+            path: "/transfer-certificates",
+            roles: ["frontoffice"],
+          },
+          // optional quick utilities (keep only if routes exist)
+          // {
+          //   key: "bonafide-certificates",
+          //   label: "Bonafide Certificates",
+          //   icon: "bi-patch-check",
+          //   path: "/bonafide-certificates",
+          //   roles: ["frontoffice"],
+          // },
+        ],
+      });
+    }
 
     // ====== ACCOUNTS-ONLY MENU (Fee focus) ======
     if (isAccounts) {
@@ -447,173 +516,42 @@ export default function Sidebar({ headerHeight = 56 }) {
       groups.push({
         heading: "Academic",
         items: [
-          {
-            key: "subjects",
-            label: "Subjects",
-            icon: "bi-book",
-            path: "/subjects",
-          },
-          {
-            key: "students",
-            label: "Students",
-            icon: "bi-people",
-            path: "/students",
-          },
-          {
-            key: "teacherAssignment",
-            label: "Teacher Assignment",
-            icon: "bi-person-check",
-            path: "/teacher-assignment",
-          },
-          {
-            key: "inchargeAssignment",
-            label: "Incharge Assignment",
-            icon: "bi-person-badge",
-            path: "/incharge-assignment",
-          },
-          {
-            key: "holidayMarking",
-            label: "Holiday Marking",
-            icon: "bi-calendar3",
-            path: "/holiday-marking",
-          },
-          {
-            key: "periods",
-            label: "Periods",
-            icon: "bi-clock",
-            path: "/periods",
-          },
-          {
-            key: "combined-timetable",
-            label: "Timetable",
-            icon: "bi-table",
-            path: "/combined-timetable",
-          },
-          {
-            key: "substitution",
-            label: "Substitutions",
-            icon: "bi-arrow-repeat",
-            path: "/substitution",
-          },
-          {
-            key: "substitutionListing",
-            label: "Substitution Listing",
-            icon: "bi-list-ul",
-            path: "/substitution-listing",
-          },
-          {
-            key: "studentUserAccounts",
-            label: "Create Student Login",
-            icon: "bi-person-plus",
-            path: "/student-user-accounts",
-          },
-          {
-            key: "sessions",
-            label: "Sessions",
-            icon: "bi-calendar4-week",
-            path: "/sessions",
-          },
-          {
-            key: "student-transport",
-            label: "Transport Assignments",
-            icon: "bi-truck",
-            path: "/student-transport",
-          },
-          {
-            key: "caste-gender-report",
-            label: "Caste/Gender Report",
-            icon: "bi-people-fill",
-            path: "/reports/caste-gender",
-          },
+          { key: "subjects", label: "Subjects", icon: "bi-book", path: "/subjects" },
+          { key: "students", label: "Students", icon: "bi-people", path: "/students" },
+          { key: "teacherAssignment", label: "Teacher Assignment", icon: "bi-person-check", path: "/teacher-assignment" },
+          { key: "inchargeAssignment", label: "Incharge Assignment", icon: "bi-person-badge", path: "/incharge-assignment" },
+          { key: "holidayMarking", label: "Holiday Marking", icon: "bi-calendar3", path: "/holiday-marking" },
+          { key: "periods", label: "Periods", icon: "bi-clock", path: "/periods" },
+          { key: "combined-timetable", label: "Timetable", icon: "bi-table", path: "/combined-timetable" },
+          { key: "substitution", label: "Substitutions", icon: "bi-arrow-repeat", path: "/substitution" },
+          { key: "substitutionListing", label: "Substitution Listing", icon: "bi-list-ul", path: "/substitution-listing" },
+          { key: "studentUserAccounts", label: "Create Student Login", icon: "bi-person-plus", path: "/student-user-accounts" },
+          { key: "sessions", label: "Sessions", icon: "bi-calendar4-week", path: "/sessions" },
+          { key: "student-transport", label: "Transport Assignments", icon: "bi-truck", path: "/student-transport" },
+          { key: "caste-gender-report", label: "Caste/Gender Report", icon: "bi-people-fill", path: "/reports/caste-gender" },
         ],
       });
       groups.push({
         heading: "Exam Settings",
         items: [
-          {
-            key: "academic-years",
-            label: "Academic Years",
-            icon: "bi-calendar2-week",
-            path: "/academic-years",
-          },
-          {
-            key: "exams",
-            label: "Exams",
-            icon: "bi-journal-bookmark",
-            path: "/exams",
-          },
-          {
-            key: "exam-schemes",
-            label: "Exam Scheme",
-            icon: "bi-card-checklist",
-            path: "/exam-schemes",
-          },
-          {
-            key: "co-scholastic-areas",
-            label: "Co-Scholastic Areas",
-            icon: "bi-easel3",
-            path: "/co-scholastic-areas",
-          },
-          {
-            key: "co-scholastic-grades",
-            label: "Co-Scholastic Grades",
-            icon: "bi-star",
-            path: "/co-scholastic-grades",
-          },
-          {
-            key: "class-co-scholastic-mapping",
-            label: "Class Co-Scholastic Mapping",
-            icon: "bi-easel3",
-            path: "/class-co-scholastic-mapping",
-            roles: ["academic_coordinator", "superadmin"],
-          },
-          {
-            key: "grade-schemes",
-            label: "Grade Scheme",
-            icon: "bi-ui-checks",
-            path: "/grade-schemes",
-          },
-          {
-            key: "term-management",
-            label: "Terms",
-            icon: "bi-calendar3-range",
-            path: "/term-management",
-          },
-          {
-            key: "assessment-components",
-            label: "Assessment Components",
-            icon: "bi-diagram-3",
-            path: "/assessment-components",
-          },
-          {
-            key: "exam-schedules",
-            label: "Exam Schedule",
-            icon: "bi-calendar2-check",
-            path: "/exam-schedules",
-          },
-          {
-            key: "report-card-formats",
-            label: "Report Card Format",
-            icon: "bi-file-earmark-font",
-            path: "/report-card-formats",
-          },
-          {
-            key: "assign-report-card-format",
-            label: "Assign Report Format",
-            icon: "bi-link",
-            path: "/assign-report-card-format",
-          },
+          { key: "academic-years", label: "Academic Years", icon: "bi-calendar2-week", path: "/academic-years" },
+          { key: "exams", label: "Exams", icon: "bi-journal-bookmark", path: "/exams" },
+          { key: "exam-schemes", label: "Exam Scheme", icon: "bi-card-checklist", path: "/exam-schemes" },
+          { key: "co-scholastic-areas", label: "Co-Scholastic Areas", icon: "bi-easel3", path: "/co-scholastic-areas" },
+          { key: "co-scholastic-grades", label: "Co-Scholastic Grades", icon: "bi-star", path: "/co-scholastic-grades" },
+          { key: "class-co-scholastic-mapping", label: "Class Co-Scholastic Mapping", icon: "bi-easel3", path: "/class-co-scholastic-mapping", roles: ["academic_coordinator", "superadmin"] },
+          { key: "grade-schemes", label: "Grade Scheme", icon: "bi-ui-checks", path: "/grade-schemes" },
+          { key: "term-management", label: "Terms", icon: "bi-calendar3-range", path: "/term-management" },
+          { key: "assessment-components", label: "Assessment Components", icon: "bi-diagram-3", path: "/assessment-components" },
+          { key: "exam-schedules", label: "Exam Schedule", icon: "bi-calendar2-check", path: "/exam-schedules" },
+          { key: "report-card-formats", label: "Report Card Format", icon: "bi-file-earmark-font", path: "/report-card-formats" },
+          { key: "assign-report-card-format", label: "Assign Report Format", icon: "bi-link", path: "/assign-report-card-format" },
         ],
       });
       groups.push({
         heading: "Leave",
         items: [
-          {
-            key: "employee-leave-request",
-            label: "Leave Request",
-            icon: "bi-box-arrow-in-down-left",
-            path: "/employee-leave-request",
-          },
+          { key: "employee-leave-request", label: "Leave Request", icon: "bi-box-arrow-in-down-left", path: "/employee-leave-request" },
         ],
       });
 
@@ -636,83 +574,23 @@ export default function Sidebar({ headerHeight = 56 }) {
       groups.push({
         heading: "Main",
         items: [
-          {
-            key: "dashboard",
-            label: "Dashboard",
-            icon: "bi-speedometer2",
-            path: "/dashboard",
-          },
-          {
-            key: "combined-circulars",
-            label: "Circulars",
-            icon: "bi-megaphone",
-            path: "/combined-circulars",
-          },
+          { key: "dashboard", label: "Dashboard", icon: "bi-speedometer2", path: "/dashboard" },
+          { key: "combined-circulars", label: "Circulars", icon: "bi-megaphone", path: "/combined-circulars" },
         ],
       });
       groups.push({
         heading: "HR Management",
         items: [
-          {
-            key: "departments",
-            label: "Departments",
-            icon: "bi-diagram-3",
-            path: "/departments",
-          },
-          {
-            key: "employees",
-            label: "Employees",
-            icon: "bi-person-badge",
-            path: "/employees",
-          },
-          {
-            key: "employee-user-accounts",
-            label: "Employee Login Accounts",
-            icon: "bi-person-plus",
-            path: "/employee-user-accounts",
-          },
-          {
-            key: "leave-types",
-            label: "Leave Types",
-            icon: "bi-journals",
-            path: "/leave-types",
-          },
-          {
-            key: "employee-leave-balances",
-            label: "Employee Leave Balances",
-            icon: "bi-calendar-check",
-            path: "/employee-leave-balances",
-          },
-          {
-            key: "employee-leave-request",
-            label: "Leave Request",
-            icon: "bi-box-arrow-in-down-left",
-            path: "/employee-leave-request",
-          },
-          {
-            key: "hr-leave-requests",
-            label: "Review Leave Requests",
-            icon: "bi-clipboard-check",
-            path: "/hr-leave-requests",
-          },
-          {
-            key: "employee-attendance",
-            label: "Employee Attendance",
-            icon: "bi-person-check-fill",
-            path: "/employee-attendance",
-          },
-          {
-            key: "my-attendance-calendar",
-            label: "My Attendance",
-            icon: "bi-calendar2-week",
-            path: "/my-attendance-calendar",
-          },
-          {
-            key: "employee-attendance-summary",
-            label: "Employee Attendance Summary",
-            icon: "bi-calendar-range",
-            path: "/employee-attendance-summary",
-          },
+          { key: "departments", label: "Departments", icon: "bi-diagram-3", path: "/departments" },
+          { key: "employees", label: "Employees", icon: "bi-person-badge", path: "/employees" },
+          { key: "employee-user-accounts", label: "Employee Login Accounts", icon: "bi-person-plus", path: "/employee-user-accounts" },
+          { key: "leave-types", label: "Leave Types", icon: "bi-journals", path: "/leave-types" },
+          { key: "employee-leave-balances", label: "Employee Leave Balances", icon: "bi-calendar-check", path: "/employee-leave-balances" },
+          { key: "employee-leave-request", label: "Leave Request", icon: "bi-box-arrow-in-down-left", path: "/employee-leave-request" },
+          { key: "hr-leave-requests", label: "Review Leave Requests", icon: "bi-clipboard-check", path: "/hr-leave-requests" },
+          { key: "employee-attendance", label: "Employee Attendance", icon: "bi-person-check-fill", path: "/employee-attendance" },
+          { key: "my-attendance-calendar", label: "My Attendance", icon: "bi-calendar2-week", path: "/my-attendance-calendar" },
+          { key: "employee-attendance-summary", label: "Employee Attendance Summary", icon: "bi-calendar-range", path: "/employee-attendance-summary" },
         ],
       });
     }
@@ -721,147 +599,40 @@ export default function Sidebar({ headerHeight = 56 }) {
       groups.push({
         heading: "Main",
         items: [
-          {
-            key: "dashboard",
-            label: "Dashboard",
-            icon: "bi-speedometer2",
-            path: "/dashboard",
-          },
-          {
-            key: "view-circulars",
-            label: "Circulars",
-            icon: "bi-megaphone",
-            path: "/view-circulars",
-          },
-          {
-            key: "mark-attendance",
-            label: "Mark Attendance",
-            icon: "bi-check2-square",
-            path: "/mark-attendance",
-          },
-          {
-            key: "attendance-calendar",
-            label: "Attendance Calendar",
-            icon: "bi-calendar2-check",
-            path: "/attendance-calendar",
-          },
-          {
-            key: "assignments",
-            label: "Assignments",
-            icon: "bi-clipboard",
-            path: "/assignments",
-          },
-          {
-            key: "assignment-marking",
-            label: "Assignment Marking",
-            icon: "bi-pencil-square",
-            path: "/assignment-marking",
-          },
-          {
-            key: "teacher-timetable-display",
-            label: "Time Table",
-            icon: "bi-table",
-            path: "/teacher-timetable-display",
-          },
-          {
-            key: "combined-teacher-substitution",
-            label: "My Substitutions",
-            icon: "bi-arrow-repeat",
-            path: "/combined-teacher-substitution",
-          },
-          {
-            key: "lesson-plan",
-            label: "Lesson Plan",
-            icon: "bi-journal-text",
-            path: "/lesson-plan",
-          },
-          {
-            key: "employee-leave-request",
-            label: "Request Leave",
-            icon: "bi-box-arrow-in-down-left",
-            path: "/employee-leave-request",
-          },
-          {
-            key: "my-attendance-calendar",
-            label: "My Attendance",
-            icon: "bi-calendar2-week",
-            path: "/my-attendance-calendar",
-          },
+          { key: "dashboard", label: "Dashboard", icon: "bi-speedometer2", path: "/dashboard" },
+          { key: "view-circulars", label: "Circulars", icon: "bi-megaphone", path: "/view-circulars" },
+          { key: "mark-attendance", label: "Mark Attendance", icon: "bi-check2-square", path: "/mark-attendance" },
+          { key: "attendance-calendar", label: "Attendance Calendar", icon: "bi-calendar2-check", path: "/attendance-calendar" },
+          { key: "assignments", label: "Assignments", icon: "bi-clipboard", path: "/assignments" },
+          { key: "assignment-marking", label: "Assignment Marking", icon: "bi-pencil-square", path: "/assignment-marking" },
+          { key: "teacher-timetable-display", label: "Time Table", icon: "bi-table", path: "/teacher-timetable-display" },
+          { key: "combined-teacher-substitution", label: "My Substitutions", icon: "bi-arrow-repeat", path: "/combined-teacher-substitution" },
+          { key: "lesson-plan", label: "Lesson Plan", icon: "bi-journal-text", path: "/lesson-plan" },
+          { key: "employee-leave-request", label: "Request Leave", icon: "bi-box-arrow-in-down-left", path: "/employee-leave-request" },
+          { key: "my-attendance-calendar", label: "My Attendance", icon: "bi-calendar2-week", path: "/my-attendance-calendar" },
         ],
       });
       groups.push({
         heading: "Leave Management",
-        items: [
-          {
-            key: "leave-requests",
-            label: "Leave Requests",
-            icon: "bi-envelope",
-            path: "/leave-requests",
-          },
-        ],
+        items: [{ key: "leave-requests", label: "Leave Requests", icon: "bi-envelope", path: "/leave-requests" }],
       });
       groups.push({
         heading: "Academic",
         items: [
-          {
-            key: "classes",
-            label: "Classes",
-            icon: "bi-list-task",
-            path: "/classes",
-          },
-          {
-            key: "subjects",
-            label: "Subjects",
-            icon: "bi-book",
-            path: "/subjects",
-          },
+          { key: "classes", label: "Classes", icon: "bi-list-task", path: "/classes" },
+          { key: "subjects", label: "Subjects", icon: "bi-book", path: "/subjects" },
         ],
       });
       groups.push({
         heading: "Exam",
         items: [
-          {
-            key: "roll-numbers",
-            label: "Roll Numbers",
-            icon: "bi-list-ol",
-            path: "/roll-numbers",
-          },
-          {
-            key: "marks-entry",
-            label: "Marks Entry",
-            icon: "bi-pencil-square",
-            path: "/marks-entry",
-          },
-          {
-            key: "classwise-result-summary",
-            label: "Result Summary",
-            icon: "bi-bar-chart",
-            path: "/reports/classwise-result-summary",
-          },
-          {
-            key: "final-result-summary",
-            label: "Final Result Summary",
-            icon: "bi-bar-chart-line",
-            path: "/reports/final-result-summary",
-          },
-          {
-            key: "coscholastic-entry",
-            label: "Co-Scholastic Entry",
-            icon: "bi-stars",
-            path: "/co-scholastic-entry",
-          },
-          {
-            key: "student-remarks-entry",
-            label: "Student Remarks Entry",
-            icon: "bi-chat-square-text",
-            path: "/student-remarks-entry",
-          },
-          {
-            key: "report-card-generator",
-            label: "Print Report Cards",
-            icon: "bi-printer",
-            path: "/report-card-generator",
-          },
+          { key: "roll-numbers", label: "Roll Numbers", icon: "bi-list-ol", path: "/roll-numbers" },
+          { key: "marks-entry", label: "Marks Entry", icon: "bi-pencil-square", path: "/marks-entry" },
+          { key: "classwise-result-summary", label: "Result Summary", icon: "bi-bar-chart", path: "/reports/classwise-result-summary" },
+          { key: "final-result-summary", label: "Final Result Summary", icon: "bi-bar-chart-line", path: "/reports/final-result-summary" },
+          { key: "coscholastic-entry", label: "Co-Scholastic Entry", icon: "bi-stars", path: "/co-scholastic-entry" },
+          { key: "student-remarks-entry", label: "Student Remarks Entry", icon: "bi-chat-square-text", path: "/student-remarks-entry" },
+          { key: "report-card-generator", label: "Print Report Cards", icon: "bi-printer", path: "/report-card-generator" },
         ],
       });
     }
@@ -871,62 +642,14 @@ export default function Sidebar({ headerHeight = 56 }) {
       groups.push({
         heading: "Student",
         items: [
-          {
-            key: "student-home",
-            label: "Home",
-            icon: "bi-house",
-            path: "/dashboard",
-            roles: ["student"],
-          },
-          {
-            key: "student-attendance",
-            label: "Attendance",
-            icon: "bi-calendar2-check",
-            path: "/student-attendance",
-            roles: ["student"],
-          },
-          {
-            key: "my-assignments",
-            label: "Assignments",
-            icon: "bi-journal-check",
-            path: "/my-assignments",
-            roles: ["student"],
-          },
-          {
-            key: "student-diary",
-            label: "Diary",
-            icon: "bi-journal-text",
-            path: "/student-diary",
-            roles: ["student"],
-          },
-          {
-            key: "student-circulars",
-            label: "Circulars",
-            icon: "bi-megaphone",
-            path: "/student-circulars",
-            roles: ["student"],
-          },
-          {
-            key: "student-timetable-display",
-            label: "Timetable",
-            icon: "bi-clock-history",
-            path: "/student-timetable-display",
-            roles: ["student"],
-          },
-          {
-            key: "student-fee",
-            label: "Fees",
-            icon: "bi-cash-coin",
-            path: "/student-fee",
-            roles: ["student"],
-          },
-          {
-            key: "chat",
-            label: "Chat",
-            icon: "bi-chat-dots",
-            path: "/chat",
-            roles: ["student"],
-          },
+          { key: "student-home", label: "Home", icon: "bi-house", path: "/dashboard", roles: ["student"] },
+          { key: "student-attendance", label: "Attendance", icon: "bi-calendar2-check", path: "/student-attendance", roles: ["student"] },
+          { key: "my-assignments", label: "Assignments", icon: "bi-journal-check", path: "/my-assignments", roles: ["student"] },
+          { key: "student-diary", label: "Diary", icon: "bi-journal-text", path: "/student-diary", roles: ["student"] },
+          { key: "student-circulars", label: "Circulars", icon: "bi-megaphone", path: "/student-circulars", roles: ["student"] },
+          { key: "student-timetable-display", label: "Timetable", icon: "bi-clock-history", path: "/student-timetable-display", roles: ["student"] },
+          { key: "student-fee", label: "Fees", icon: "bi-cash-coin", path: "/student-fee", roles: ["student"] },
+          { key: "chat", label: "Chat", icon: "bi-chat-dots", path: "/chat", roles: ["student"] },
         ],
       });
     }
@@ -936,20 +659,8 @@ export default function Sidebar({ headerHeight = 56 }) {
       groups.splice(1, 0, {
         heading: "User Management",
         items: [
-          {
-            key: "users",
-            label: "Users",
-            icon: "bi-person",
-            path: "/users",
-            roles: ["superadmin"],
-          },
-          {
-            key: "users-tracking",
-            label: "User Tracking",
-            icon: "bi-activity",
-            path: "/users-tracking",
-            roles: ["admin", "superadmin"],
-          },
+          { key: "users", label: "Users", icon: "bi-person", path: "/users", roles: ["superadmin"] },
+          { key: "users-tracking", label: "User Tracking", icon: "bi-activity", path: "/users-tracking", roles: ["admin", "superadmin"] },
         ],
       });
     }
@@ -964,6 +675,7 @@ export default function Sidebar({ headerHeight = 56 }) {
     isHR,
     isSuperAdmin,
     isAccounts,
+    isFrontoffice,
     roleLower,
   ]);
 
@@ -979,9 +691,7 @@ export default function Sidebar({ headerHeight = 56 }) {
         const group = (g.heading || "").toLowerCase();
         return label.includes(s) || path.includes(s) || group.includes(s);
       });
-      if (matchedItems.length) {
-        out.push({ ...g, items: matchedItems });
-      }
+      if (matchedItems.length) out.push({ ...g, items: matchedItems });
     }
     return out;
   }, [q, menuGroups]);
@@ -1007,37 +717,20 @@ export default function Sidebar({ headerHeight = 56 }) {
 
   const PRIMARY_BY_ROLE = {
     admin: ["dashboard", "transactions", "studentDue", "opening-balances"],
-    academic_coordinator: [
-      "dashboard",
-      "combined-timetable",
-      "students",
-      "exam-schemes",
-    ],
-    teacher: [
-      "dashboard",
-      "mark-attendance",
-      "teacher-timetable-display",
-      "marks-entry",
-    ],
-    student: [
-      "student-home",
-      "student-diary",
-      "student-attendance",
-      "student-timetable-display",
-    ],
+    academic_coordinator: ["dashboard", "combined-timetable", "students", "exam-schemes"],
+    teacher: ["dashboard", "mark-attendance", "teacher-timetable-display", "marks-entry"],
+    student: ["student-home", "student-diary", "student-attendance", "student-timetable-display"],
     hr: ["dashboard", "employees", "employee-attendance", "hr-leave-requests"],
-    superadmin: [
-      "dashboard",
-      "users",
-      "reports/day-wise",
-      "transactions",
-      "opening-balances",
-    ],
-    accounts: [
-      "accounts-dashboard",
-      "transactions",
-      "studentDue",
-      "dayWiseReport",
+    superadmin: ["dashboard", "users", "reports/day-wise", "transactions", "opening-balances"],
+    accounts: ["accounts-dashboard", "transactions", "studentDue", "dayWiseReport"],
+    // ✅ NEW
+    frontoffice: [
+      "frontoffice-dashboard",
+      "gate-pass",
+      "visitors", // ✅ include Visitors in bottom-nav priorities too
+      "enquiries",
+      "students",
+      "transfer-certificates",
     ],
   };
 
@@ -1063,11 +756,7 @@ export default function Sidebar({ headerHeight = 56 }) {
   // Desktop: sidebar
   return (
     <>
-      <aside
-        className="app-sidebar"
-        style={asideStyle}
-        aria-label="Sidebar navigation"
-      >
+      <aside className="app-sidebar" style={asideStyle} aria-label="Sidebar navigation">
         <div className="sidebar-top d-flex align-items-center px-2">
           <button
             className="btn toggle-btn ms-auto"
@@ -1075,11 +764,7 @@ export default function Sidebar({ headerHeight = 56 }) {
             aria-label={isExpanded ? "Collapse sidebar" : "Expand sidebar"}
             title={isExpanded ? "Collapse" : "Expand"}
           >
-            {isExpanded ? (
-              <i className="bi bi-chevron-left" />
-            ) : (
-              <i className="bi bi-list" />
-            )}
+            {isExpanded ? <i className="bi bi-chevron-left" /> : <i className="bi bi-list" />}
           </button>
         </div>
 
@@ -1105,36 +790,26 @@ export default function Sidebar({ headerHeight = 56 }) {
               <ul className="nav flex-column">
                 {group.items.map((item, ii) => {
                   const active = isPathActive(item.path);
-                  const gradient =
-                    sidebarGradients[ii % sidebarGradients.length];
+                  const gradient = sidebarGradients[ii % sidebarGradients.length];
                   return (
                     <li
                       key={item.key}
-                      className={`nav-item sidebar-item ${
-                        active ? "active" : ""
-                      }`}
+                      className={`nav-item sidebar-item ${active ? "active" : ""}`}
                       onClick={() => handleMenuClick(item)}
                       title={!isExpanded ? item.label : undefined}
                       role="button"
                       tabIndex={0}
                       onKeyDown={(e) =>
-                        (e.key === "Enter" || e.key === " ") &&
-                        handleMenuClick(item)
+                        (e.key === "Enter" || e.key === " ") && handleMenuClick(item)
                       }
                       style={{ "--item-gradient": gradient }}
                     >
                       <span className="active-indicator" />
-                      <div
-                        className={`item-content ${
-                          isExpanded ? "expanded" : "collapsed"
-                        }`}
-                      >
+                      <div className={`item-content ${isExpanded ? "expanded" : "collapsed"}`}>
                         <i
                           className={`bi ${item.icon} item-icon`}
                           aria-hidden="true"
-                          style={{
-                            color: palette[ii % palette.length],
-                          }}
+                          style={{ color: palette[ii % palette.length] }}
                         />
                         <span className="item-label">{item.label}</span>
                       </div>
@@ -1146,9 +821,7 @@ export default function Sidebar({ headerHeight = 56 }) {
           ))}
 
           {filteredGroups.length === 0 && (
-            <div className="px-3 py-2 text-muted small">
-              No menu items match “{q}”.
-            </div>
+            <div className="px-3 py-2 text-muted small">No menu items match “{q}”.</div>
           )}
         </nav>
       </aside>
@@ -1161,23 +834,18 @@ export default function Sidebar({ headerHeight = 56 }) {
 function BottomNav({ items, moreItems, isActive, onClick }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
+
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
     if (!s) return moreItems;
     return moreItems.filter(
-      (i) =>
-        i.label.toLowerCase().includes(s) ||
-        i.group?.toLowerCase().includes(s)
+      (i) => i.label.toLowerCase().includes(s) || i.group?.toLowerCase().includes(s)
     );
   }, [q, moreItems]);
 
   return (
     <>
-      <nav
-        className="bottom-nav"
-        role="navigation"
-        aria-label="Primary mobile navigation"
-      >
+      <nav className="bottom-nav" role="navigation" aria-label="Primary mobile navigation">
         {items.map((it, i) => (
           <button
             key={it.key}
@@ -1211,17 +879,8 @@ function BottomNav({ items, moreItems, isActive, onClick }) {
 
       {open && (
         <>
-          <div
-            className="bn-scrim"
-            onClick={() => setOpen(false)}
-            aria-hidden="true"
-          />
-          <div
-            className="bn-sheet"
-            role="dialog"
-            aria-modal="true"
-            aria-label="All menu options"
-          >
+          <div className="bn-scrim" onClick={() => setOpen(false)} aria-hidden="true" />
+          <div className="bn-sheet" role="dialog" aria-modal="true" aria-label="All menu options">
             <div className="bn-sheet-handle" />
             <div className="bn-sheet-header">
               <input
@@ -1230,10 +889,7 @@ function BottomNav({ items, moreItems, isActive, onClick }) {
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
               />
-              <button
-                className="btn btn-sm btn-light"
-                onClick={() => setOpen(false)}
-              >
+              <button className="btn btn-sm btn-light" onClick={() => setOpen(false)}>
                 Close
               </button>
             </div>
@@ -1247,14 +903,10 @@ function BottomNav({ items, moreItems, isActive, onClick }) {
                     setOpen(false);
                   }}
                   style={{
-                    "--item-gradient":
-                      sidebarGradients[i % sidebarGradients.length],
+                    "--item-gradient": sidebarGradients[i % sidebarGradients.length],
                   }}
                 >
-                  <i
-                    className={`bi ${it.icon}`}
-                    style={{ color: palette[i % palette.length] }}
-                  />
+                  <i className={`bi ${it.icon}`} style={{ color: palette[i % palette.length] }} />
                   <div className="bn-li-text">
                     <div className="bn-li-title">{it.label}</div>
                     {it.group && <div className="bn-li-sub">{it.group}</div>}
@@ -1262,9 +914,7 @@ function BottomNav({ items, moreItems, isActive, onClick }) {
                 </button>
               ))}
               {filtered.length === 0 && (
-                <div className="text-muted small px-3 py-2">
-                  No items match that search.
-                </div>
+                <div className="text-muted small px-3 py-2">No items match that search.</div>
               )}
             </div>
           </div>

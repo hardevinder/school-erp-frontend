@@ -1,11 +1,6 @@
 // src/App.js
 import React, { useEffect } from "react";
-import {
-  BrowserRouter as Router,
-  Routes,
-  Route,
-  Navigate,
-} from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import axios from "axios";
 import { onMessage } from "firebase/messaging";
 import { messaging } from "./firebase/firebaseConfig";
@@ -127,13 +122,26 @@ import useActiveStudent from "./hooks/useActiveStudent";
 
 import StudentTotalDueReport from "./pages/StudentTotalDueReport";
 import DirectPayPage from "./pages/DirectPayPage";
+import GatePass from "./pages/GatePass";
+
+// ✅ NEW: Visitors page
+import Visitors from "./pages/Visitors";
+
+// ✅ Academic Calendar (Coordinator CRUD page)
+import AcademicCalendar from "./pages/AcademicCalendar";
+
+// ✅ Academic Calendar (Read-only view page for everyone)
+import AcademicCalendarView from "./pages/AcademicCalendarView";
 
 // ---------- auth guard ----------
 const RequireRole = ({ roles = [], children }) => {
-  const stored = JSON.parse(localStorage.getItem("roles") || "[]");
-  const userRoles = stored.map((r) => (r || "").toLowerCase());
-  const allowed =
-    roles.length === 0 || roles.some((r) => userRoles.includes(r.toLowerCase()));
+  const singleRole = localStorage.getItem("userRole");
+  const multiRoles = JSON.parse(localStorage.getItem("roles") || "[]");
+  const userRoles = (multiRoles.length ? multiRoles : [singleRole].filter(Boolean)).map((r) =>
+    (r || "").toLowerCase()
+  );
+
+  const allowed = roles.length === 0 || roles.some((r) => userRoles.includes(r.toLowerCase()));
   return allowed ? children : <Navigate to="/dashboard" replace />;
 };
 
@@ -142,9 +150,7 @@ function installGlobalApiShims() {
   const API_BASE = (process.env.REACT_APP_API_URL || "").replace(/\/+$/, "");
 
   const getActiveAdmission = () =>
-    localStorage.getItem("activeStudentAdmission") ||
-    localStorage.getItem("username") ||
-    "";
+    localStorage.getItem("activeStudentAdmission") || localStorage.getItem("username") || "";
 
   const rewriteUrlString = (urlString) => {
     const admission = getActiveAdmission();
@@ -192,10 +198,7 @@ function installGlobalApiShims() {
       config.headers = { ...(config.headers || {}), "X-Active-Student": admission };
     }
 
-    if (config.url) {
-      config.url = rewriteUrlString(config.url);
-    }
-
+    if (config.url) config.url = rewriteUrlString(config.url);
     return config;
   });
 
@@ -209,12 +212,8 @@ function installGlobalApiShims() {
       let urlString = typeof input === "string" ? input : input?.url || "";
       urlString = rewriteUrlString(urlString);
 
-      if (t && !headers.has("Authorization")) {
-        headers.set("Authorization", `Bearer ${t}`);
-      }
-      if (admission && !headers.has("X-Active-Student")) {
-        headers.set("X-Active-Student", admission);
-      }
+      if (t && !headers.has("Authorization")) headers.set("Authorization", `Bearer ${t}`);
+      if (admission && !headers.has("X-Active-Student")) headers.set("X-Active-Student", admission);
 
       if (input instanceof Request) {
         return originalFetch(new Request(urlString, { ...init, headers }), init);
@@ -249,32 +248,63 @@ function App() {
         {/* Public */}
         <Route path="/" element={<Navigate to="/login" replace />} />
         <Route path="/login" element={<Login />} />
+
         {/* Keep public form */}
         <Route path="/enquiry" element={<EnquiryForm />} />
 
-         {/* 🔥 PUBLIC DIRECT PAY PAGE (no login required) */}
-          <Route path="/direct-pay" element={<DirectPayPage />} />
-          {/* agar tum path based wala use karna chahte ho: /student-fee/direct-pay/TPIS-877/101 */}
-          <Route path="/student-fee/direct-pay/*" element={<DirectPayPage />} />
+        {/* 🔥 PUBLIC DIRECT PAY PAGE (no login required) */}
+        <Route path="/direct-pay" element={<DirectPayPage />} />
+        <Route path="/student-fee/direct-pay/*" element={<DirectPayPage />} />
 
         {/* Protected App w/ Layout (TopBar + Sidebar) */}
         <Route element={<AppLayout key={activeAdmission} />}>
           <Route path="/dashboard" element={<RoleAwareDashboard />} />
           <Route path="/edit-profile" element={<EditProfile />} />
 
+          {/* ✅ Academic Calendar (READ-ONLY view for everyone logged-in) */}
+          <Route path="/academic-calendar-view" element={<AcademicCalendarView />} />
+
+          {/* Optional aliases for view */}
+          <Route path="/calendar" element={<Navigate to="/academic-calendar-view" replace />} />
+          <Route path="/academic-calendar/public" element={<Navigate to="/academic-calendar-view" replace />} />
+
+          {/* ✅ Academic Calendar (Coordinator CRUD) */}
+          <Route
+            path="/academic-calendar"
+            element={
+              <RequireRole roles={["superadmin", "admin", "academic_coordinator", "coordinator"]}>
+                <AcademicCalendar />
+              </RequireRole>
+            }
+          />
+          <Route path="/academic-calendars" element={<Navigate to="/academic-calendar" replace />} />
+
+          {/* ✅ Gate Pass */}
+          <Route
+            path="/gate-pass"
+            element={
+              <RequireRole roles={["superadmin", "admin", "frontoffice"]}>
+                <GatePass />
+              </RequireRole>
+            }
+          />
+
+          {/* ✅ Visitors */}
+          <Route
+            path="/visitors"
+            element={
+              <RequireRole roles={["superadmin", "admin", "frontoffice"]}>
+                <Visitors />
+              </RequireRole>
+            }
+          />
+          <Route path="/visitor" element={<Navigate to="/visitors" replace />} />
+
           {/* Chat */}
-          <Route
-            path="/chat"
-            element={<Chat chatId="chat_room_1" currentUserId={currentUserId} />}
-          />
-          <Route
-            path="/chat-page"
-            element={<ChatContainer fullPage currentUserId={currentUserId} />}
-          />
-          <Route
-            path="/chat-page/:contactId"
-            element={<ChatContainer fullPage currentUserId={currentUserId} />}
-          />
+          <Route path="/chat" element={<Chat chatId="chat_room_1" currentUserId={currentUserId} />} />
+          <Route path="/chat-page" element={<ChatContainer fullPage currentUserId={currentUserId} />} />
+          <Route path="/chat-page/:contactId" element={<ChatContainer fullPage currentUserId={currentUserId} />} />
+          <Route path="/chat-page/:contactId" element={<ChatContainer fullPage currentUserId={currentUserId} />} />
 
           {/* Core / Admissions */}
           <Route path="/classes" element={<Classes />} />
@@ -310,7 +340,7 @@ function App() {
           <Route path="/reports/van-fee" element={<VanFeeDetailedReport />} />
           <Route path="/reports/transport-summary" element={<TransportSummary />} />
 
-          {/* ✅ NEW: Student Total Due Report */}
+          {/* ✅ Student Total Due Report */}
           <Route
             path="/reports/student-total-due"
             element={
@@ -366,10 +396,7 @@ function App() {
           <Route path="/substitution-listing" element={<SubstitutionList />} />
           <Route path="/teacher-substitution-listing" element={<TeacherSubstitutionListing />} />
           <Route path="/teacher-substituted-listing" element={<TeacherSubstitutedListing />} />
-          <Route
-            path="/combined-teacher-substitution"
-            element={<TeacherCombinedSubstitutionPage />}
-          />
+          <Route path="/combined-teacher-substitution" element={<TeacherCombinedSubstitutionPage />} />
           <Route path="/lesson-plan" element={<LessonPlan />} />
           <Route path="/mark-attendance" element={<MarkAttendance />} />
           <Route path="/attendance-calendar" element={<AttendanceCalendar />} />
@@ -394,34 +421,19 @@ function App() {
           <Route path="/marks-entry" element={<MarksEntry />} />
           <Route path="/report-builder" element={<ReportBuilder />} />
           <Route path="/student-remarks-entry" element={<StudentRemarksEntry />} />
-          <Route
-            path="/reports/classwise-result-summary"
-            element={<ClasswiseResultSummary />}
-          />
-          <Route
-            path="/reports/result-report-designer"
-            element={<ResultReportDesigner />}
-          />
+          <Route path="/reports/classwise-result-summary" element={<ClasswiseResultSummary />} />
+          <Route path="/reports/result-report-designer" element={<ResultReportDesigner />} />
           <Route path="/grade-schemes" element={<GradeSchemeManagement />} />
-          <Route
-            path="/combined-exam-schemes"
-            element={<CombinedExamSchemeManagement />}
-          />
+          <Route path="/combined-exam-schemes" element={<CombinedExamSchemeManagement />} />
           <Route path="/term-management" element={<TermManagement />} />
           <Route path="/assessment-components" element={<AssessmentComponentManagement />} />
-          <Route
-            path="/reports/final-result-summary"
-            element={<FinalResultSummary />}
-          />
+          <Route path="/reports/final-result-summary" element={<FinalResultSummary />} />
 
           {/* Co-Scholastic */}
           <Route path="/co-scholastic-areas" element={<CoScholasticAreaManagement />} />
           <Route path="/co-scholastic-grades" element={<CoScholasticGradeManagement />} />
           <Route path="/co-scholastic-entry" element={<CoScholasticEntry />} />
-          <Route
-            path="/class-co-scholastic-mapping"
-            element={<ClassCoScholasticMapping />}
-          />
+          <Route path="/class-co-scholastic-mapping" element={<ClassCoScholasticMapping />} />
 
           {/* Report Cards */}
           <Route path="/report-card-formats" element={<ReportCardFormats />} />
@@ -461,7 +473,7 @@ function App() {
             }
           />
 
-          {/* ✅ Transfer Certificates INSIDE layout */}
+          {/* ✅ Transfer Certificates */}
           <Route
             path="/transfer-certificates"
             element={
@@ -470,10 +482,9 @@ function App() {
               </RequireRole>
             }
           />
-          {/* Optional short alias */}
           <Route path="/tc" element={<Navigate to="/transfer-certificates" replace />} />
 
-          {/* ✅ Bonafide Certificates INSIDE layout */}
+          {/* ✅ Bonafide Certificates */}
           <Route
             path="/bonafide-certificates"
             element={
@@ -482,8 +493,9 @@ function App() {
               </RequireRole>
             }
           />
+          <Route path="/bonafide" element={<Navigate to="/bonafide-certificates" replace />} />
 
-          {/* ✅ Fee Certificates INSIDE layout */}
+          {/* ✅ Fee Certificates */}
           <Route
             path="/fee-certificates"
             element={
@@ -493,35 +505,19 @@ function App() {
             }
           />
 
-           {/* ✅ Disciplinary Actions INSIDE layout */}
+          {/* ✅ Disciplinary Actions */}
           <Route
             path="/disciplinary-actions"
             element={
-              <RequireRole
-                roles={[
-                  "admin",
-                  "superadmin",
-                  "academic_coordinator",
-                  "principal",
-                ]}
-              >
+              <RequireRole roles={["admin", "superadmin", "academic_coordinator", "principal"]}>
                 <DisciplinaryActions />
               </RequireRole>
             }
           />
-          {/* Optional short alias */}
-          <Route
-            path="/discipline"
-            element={<Navigate to="/disciplinary-actions" replace />}
-          />
-          {/* Optional short alias */}
-          <Route path="/bonafide" element={<Navigate to="/bonafide-certificates" replace />} />
+          <Route path="/discipline" element={<Navigate to="/disciplinary-actions" replace />} />
 
           {/* Catch-all (inside app) */}
-          <Route
-            path="*"
-            element={<h1 className="container py-4">404: Page Not Found</h1>}
-          />
+          <Route path="*" element={<h1 className="container py-4">404: Page Not Found</h1>} />
         </Route>
 
         {/* Any other URL → login (outside app) */}

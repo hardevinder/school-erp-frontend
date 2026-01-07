@@ -20,12 +20,12 @@ import ChatContainer from "./chat/ChatContainer";
  * Teacher Dashboard — Mobile-first, responsive, attractive + QUICK ACTION TILES
  * - Greeting + date
  * - KPI tiles
- * - NEW: Quick Actions (teacher sidebar items as colorful tiles)
+ * - Quick Actions (teacher sidebar items as colorful tiles) ✅ includes Academic Calendar
  * - Today’s Timetable
  * - Attendance (today)
  * - My Substitutions (today)
  * - Recent Circulars
- * - NEW: Recent Digital Diaries (scrollable)
+ * - Recent Digital Diaries (scrollable)
  * - Collapsible Co-Scholastic & Student Remarks
  * - Floating Chat + Notifications Drawer
  */
@@ -186,13 +186,12 @@ export default function TeacherDashboard() {
     };
   }, [teacherId, todayStr, todayName]);
 
-  // ------- NEW: Load recent digital diaries (dedup across classes) -------
+  // ------- Load recent digital diaries (dedup across classes) -------
   useEffect(() => {
     let cancelled = false;
     const fetchRecent = async () => {
       setRecentDiariesLoading(true);
       try {
-        // pull the first page, show up to 10 grouped items
         const { data } = await api.get("/diaries", {
           params: { page: 1, pageSize: 20, dateFrom: undefined, dateTo: undefined },
         });
@@ -227,7 +226,7 @@ export default function TeacherDashboard() {
     return () => socket.off("newCircular", onNew);
   }, []);
 
-  // ------- Fee notifications to drawer (kept) -------
+  // ------- Fee notifications to drawer -------
   useEffect(() => {
     if (!socket?.on) return;
     const onFee = (data) => {
@@ -270,7 +269,7 @@ export default function TeacherDashboard() {
     });
   };
 
-  // ------- Chat unread + desktop notifications -------
+  // ------- Chat unread + title -------
   useEffect(() => {
     if (!document) return;
     if (chatUnread > 0) document.title = `• (${chatUnread}) ${lastTitleRef.current}`;
@@ -449,8 +448,10 @@ export default function TeacherDashboard() {
             { label: "Marks Entry", icon: "bi-pencil-square", path: "/marks-entry", color: "var(--qa-lime)" },
             { label: "Result Summary", icon: "bi-bar-chart", path: "/reports/classwise-result-summary", color: "var(--qa-rose)" },
             { label: "Report Cards", icon: "bi-printer", path: "/report-card-generator", color: "var(--qa-slate)" },
-            // NEW: Digital Diary entry point
             { label: "Digital Diary", icon: "bi-journal-bookmark", path: "/digital-diary", color: "var(--qa-indigo)" },
+
+            // ✅ NEW: Academic Calendar (View for teachers)
+            { label: "Academic Calendar", icon: "bi-calendar3", path: "/academic-calendar-view", color: "var(--qa-purple)" },
           ],
     [isTeacher]
   );
@@ -511,6 +512,18 @@ export default function TeacherDashboard() {
         </button>
       </div>
 
+      {/* Errors */}
+      {errors.length > 0 && (
+        <div className="alert alert-warning">
+          <div className="fw-semibold mb-1">Some data could not be loaded:</div>
+          <ul className="mb-0">
+            {errors.map((e, i) => (
+              <li key={i}>{e}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {/* KPI cards */}
       <div className="row g-3 mb-3">
         <KpiCard icon="bi-table" label="Today’s Classes" value={kpi.todaysCount} tone="primary" />
@@ -519,7 +532,7 @@ export default function TeacherDashboard() {
         <KpiCard icon="bi-clipboard-check" label="Assignments" value={kpi.assignmentCount} tone="success" />
       </div>
 
-      {/* ===== Quick Actions Tiles (Teacher) ===== */}
+      {/* Quick Actions Tiles */}
       {isTeacher && (
         <section className="mb-3">
           <div className="card shadow-sm">
@@ -589,7 +602,7 @@ export default function TeacherDashboard() {
           </div>
         </div>
 
-        {/* Right column: Attendance + Substitutions + Recent Digital Diaries */}
+        {/* Right column */}
         <div className="col-12 col-xl-6">
           {/* Attendance Today */}
           <div className="card shadow-sm">
@@ -646,7 +659,7 @@ export default function TeacherDashboard() {
             </div>
           </div>
 
-          {/* NEW: Recent Digital Diaries (scrollable mini-feed) */}
+          {/* Recent Digital Diaries */}
           <div className="card shadow-sm mt-3">
             <div className="card-header d-flex align-items-center justify-content-between">
               <h6 className="mb-0">Recent Digital Diaries</h6>
@@ -675,7 +688,7 @@ export default function TeacherDashboard() {
                         <div className="me-2 flex-grow-1">
                           <div className="fw-semibold text-truncate">{d.title}</div>
                           <div className="text-muted small text-truncate-2">{d.content}</div>
-                          {/* class/section chips */}
+
                           {Array.isArray(d.targets) && d.targets.length > 0 ? (
                             <div className="mt-1 d-flex flex-wrap gap-1">
                               {d.targets.slice(0, 6).map((t, idx) => (
@@ -691,15 +704,11 @@ export default function TeacherDashboard() {
                             </div>
                           ) : (
                             <div className="mt-1">
-                              <span className="badge bg-light text-dark border small">
-                                {singleChipName(d)}
-                              </span>
+                              <span className="badge bg-light text-dark border small">{singleChipName(d)}</span>
                             </div>
                           )}
                         </div>
-                        <div className="text-end small text-nowrap text-muted">
-                          {formatWhen(d.date)}
-                        </div>
+                        <div className="text-end small text-nowrap text-muted">{formatWhen(d.date)}</div>
                       </div>
                     </button>
                   ))}
@@ -787,6 +796,7 @@ export default function TeacherDashboard() {
                 Close
               </button>
             </div>
+
             {notifications.length === 0 ? (
               <div className="text-muted">No notifications yet.</div>
             ) : (
@@ -799,16 +809,14 @@ export default function TeacherDashboard() {
                       <small className="text-muted">{new Date(n.createdAt).toLocaleString()}</small>
                       {n.message && <div className="mt-1">{n.message}</div>}
                     </div>
-                    <button
-                      className="btn btn-sm btn-outline-secondary ms-2"
-                      onClick={() => removeNotification(n.id)}
-                    >
+                    <button className="btn btn-sm btn-outline-secondary ms-2" onClick={() => removeNotification(n.id)}>
                       Dismiss
                     </button>
                   </li>
                 ))}
               </ul>
             )}
+
             <button className="btn btn-primary mt-3" onClick={clearAllNotifications}>
               Clear All Notifications
             </button>
@@ -823,19 +831,15 @@ export default function TeacherDashboard() {
 
       {/* Styles */}
       <style>{`
-        /* Header */
         .dashboard-header{
           background: linear-gradient(135deg,#f8f9fa,#eef3ff);
           border: 1px solid #e9ecef;
         }
-
-        /* KPI */
         .kpi-card{ border-radius:12px; }
         .kpi-icon{ width:44px;height:44px;display:flex;align-items:center;justify-content:center;border-radius:10px;font-size:20px; }
         .kpi-value{ font-size:22px;line-height:1; }
         .kpi-label{ font-size:12px;color:#6c757d; }
 
-        /* Quick Actions Grid */
         :root{
           --qa-blue: linear-gradient(135deg,#6ea8fe,#1f6feb);
           --qa-purple: linear-gradient(135deg,#c0b6f2,#845ef7);
@@ -857,6 +861,7 @@ export default function TeacherDashboard() {
         }
         @media(min-width:480px){ .qa-grid{ grid-template-columns: repeat(3, 1fr);} }
         @media(min-width:992px){ .qa-grid{ grid-template-columns: repeat(6, 1fr);} }
+
         .qa-tile{
           position:relative;
           border:0;
@@ -875,6 +880,7 @@ export default function TeacherDashboard() {
         }
         .qa-tile:active{ transform:scale(.98); filter:brightness(.95); }
         .qa-tile:hover{ box-shadow: 0 12px 28px rgba(0,0,0,.18); }
+
         .qa-icon{
           position:absolute; top:10px; right:10px;
           background: rgba(255,255,255,.18);
@@ -884,15 +890,11 @@ export default function TeacherDashboard() {
         }
         .qa-label{ font-weight:600; font-size:14px; line-height:1.2; }
 
-        /* Timetable */
-        .today-card table tfoot{ display:none; }
         .today-card .card-header{ background:#fff; }
 
-        /* Notifications Modal */
         .notifications-overlay{ position:fixed; inset:0; background:rgba(0,0,0,.5); display:flex; align-items:center; justify-content:center; z-index:1055; }
         .notifications-modal{ background:#fff; padding:16px; border-radius:12px; width:min(520px,92vw); box-shadow:0 10px 30px rgba(0,0,0,.25); }
 
-        /* Chat FAB */
         .chat-fab{ position:fixed; right:16px; bottom:16px; z-index:1050; background:#0d6efd; color:#fff; border:0; border-radius:999px; padding:10px 16px; box-shadow:0 8px 20px rgba(13,110,253,.35); width:56px;height:56px; display:flex; align-items:center; justify-content:center; }
         .chat-fab.pulse::after{ content:''; position:absolute; inset:0; border-radius:50%; box-shadow:0 0 0 0 rgba(37,117,252,.6); animation:chatPulse 1.6s infinite; z-index:0; pointer-events:none; }
         @keyframes chatPulse{ 0%{ box-shadow:0 0 0 0 rgba(37,117,252,.6);} 70%{ box-shadow:0 0 0 18px rgba(37,117,252,0);} 100%{ box-shadow:0 0 0 0 rgba(37,117,252,0);} }
@@ -900,7 +902,6 @@ export default function TeacherDashboard() {
 
         @media (min-width:768px){ .kpi-value{ font-size:26px; } }
 
-        /* NEW: Recent Digital Diaries mini-feed */
         .dd-mini-feed{
           max-height: 280px;
           overflow: auto;
@@ -926,18 +927,22 @@ export default function TeacherDashboard() {
 }
 
 /* ------------------------- Small subcomponents ------------------------- */
-function KpiCard({ icon, label, value, tone = "primary" }){
-  const toneClass = {
-    primary: "bg-primary-subtle text-primary",
-    warning: "bg-warning-subtle text-warning",
-    info: "bg-info-subtle text-info",
-    success: "bg-success-subtle text-success",
-  }[tone] || "bg-light text-dark";
+function KpiCard({ icon, label, value, tone = "primary" }) {
+  const toneClass =
+    {
+      primary: "bg-primary-subtle text-primary",
+      warning: "bg-warning-subtle text-warning",
+      info: "bg-info-subtle text-info",
+      success: "bg-success-subtle text-success",
+    }[tone] || "bg-light text-dark";
+
   return (
     <div className="col-6 col-md-3">
       <div className="card shadow-sm h-100 kpi-card">
         <div className="card-body d-flex align-items-center">
-          <div className={`kpi-icon ${toneClass}`}><i className={`bi ${icon}`} /></div>
+          <div className={`kpi-icon ${toneClass}`}>
+            <i className={`bi ${icon}`} />
+          </div>
           <div className="ms-3">
             <div className="kpi-value">{value}</div>
             <div className="kpi-label">{label}</div>
@@ -948,32 +953,61 @@ function KpiCard({ icon, label, value, tone = "primary" }){
   );
 }
 
-function Pill({ text }){
+function Pill({ text }) {
   return <span className="badge bg-light text-dark border fw-normal me-1 mb-1">{text}</span>;
 }
 
-function normalizeDay(val){
-  if(!val) return "";
-  const s=String(val).trim().toLowerCase();
-  const map={ sun:"sunday", sunday:"sunday", mon:"monday", monday:"monday", tue:"tuesday", tues:"tuesday", tuesday:"tuesday", wed:"wednesday", weds:"wednesday", wednesday:"wednesday", thu:"thursday", thur:"thursday", thurs:"thursday", thursday:"thursday", fri:"friday", friday:"friday", sat:"saturday", saturday:"saturday" };
-  const norm=map[s]||s; return norm.charAt(0).toUpperCase()+norm.slice(1);
+function normalizeDay(val) {
+  if (!val) return "";
+  const s = String(val).trim().toLowerCase();
+  const map = {
+    sun: "sunday",
+    sunday: "sunday",
+    mon: "monday",
+    monday: "monday",
+    tue: "tuesday",
+    tues: "tuesday",
+    tuesday: "tuesday",
+    wed: "wednesday",
+    weds: "wednesday",
+    wednesday: "wednesday",
+    thu: "thursday",
+    thur: "thursday",
+    thurs: "thursday",
+    thursday: "thursday",
+    fri: "friday",
+    friday: "friday",
+    sat: "saturday",
+    saturday: "saturday",
+  };
+  const norm = map[s] || s;
+  return norm.charAt(0).toUpperCase() + norm.slice(1);
 }
 
-function ChatFAB({ unread }){
+function ChatFAB({ unread }) {
   return (
     <button
       type="button"
       onClick={() => window.dispatchEvent(new CustomEvent("chat:open-request"))}
-      className={`chat-fab ${unread>0? 'pulse':''}`}
-      title={unread>0? `${unread} unread` : 'Open chat'}
+      className={`chat-fab ${unread > 0 ? "pulse" : ""}`}
+      title={unread > 0 ? `${unread} unread` : "Open chat"}
       aria-label="Open chat"
     >
-      <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        width="26"
+        height="26"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+      >
         <path d="M21 15a4 4 0 0 1-4 4H7l-4 4V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z" />
       </svg>
-      {unread>0 && (
-        <span className="badge bg-danger rounded-pill">{unread>99? '99+' : unread}</span>
-      )}
+      {unread > 0 && <span className="badge bg-danger rounded-pill">{unread > 99 ? "99+" : unread}</span>}
     </button>
   );
 }
@@ -984,24 +1018,23 @@ function normalizeStr(s = "") {
 }
 function attachmentsSignature(arr = []) {
   if (!Array.isArray(arr)) return "";
-  const norm = arr.map(a => ({
+  const norm = arr.map((a) => ({
     n: a?.originalName || a?.name || "",
     u: a?.fileUrl || a?.url || "",
     m: a?.mimeType || a?.kind || "",
     z: a?.size || 0,
   }));
-  return JSON.stringify(norm.sort((a,b)=> (a.n+a.u).localeCompare(b.n+b.u)));
+  return JSON.stringify(norm.sort((a, b) => (a.n + a.u).localeCompare(b.n + b.u)));
 }
 function groupDiaries(items = []) {
   const byKey = new Map();
   for (const d of items) {
-    // If already aggregated by backend with explicit targets, keep as-is
     if (Array.isArray(d.targets) && d.targets.length) {
       byKey.set(`targets-${d.id}`, { ...d, _sourceIds: [d.id] });
       continue;
     }
     const key = [
-      (d.date || "").slice(0,10),
+      (d.date || "").slice(0, 10),
       d.type,
       normalizeStr(d.title),
       normalizeStr(d.content),
@@ -1025,43 +1058,61 @@ function groupDiaries(items = []) {
         targets: [target],
         _sourceIds: [d.id],
         _counts: {
-          views: (d.views?.length ?? d._counts?.views ?? d.seenCount ?? 0),
-          acks:  (d.acknowledgements?.length ?? d._counts?.acks ?? d.ackCount ?? 0),
+          views: d.views?.length ?? d._counts?.views ?? d.seenCount ?? 0,
+          acks: d.acknowledgements?.length ?? d._counts?.acks ?? d.ackCount ?? 0,
         },
       });
     } else {
-      const exists = entry.targets.some(t => t.classId === target.classId && t.sectionId === target.sectionId);
+      const exists = entry.targets.some((t) => t.classId === target.classId && t.sectionId === target.sectionId);
       if (!exists) entry.targets.push(target);
       entry._sourceIds.push(d.id);
-      entry._counts.views += (d.views?.length ?? d._counts?.views ?? d.seenCount ?? 0);
-      entry._counts.acks  += (d.acknowledgements?.length ?? d._counts?.acks ?? d.ackCount ?? 0);
+      entry._counts.views += d.views?.length ?? d._counts?.views ?? d.seenCount ?? 0;
+      entry._counts.acks += d.acknowledgements?.length ?? d._counts?.acks ?? d.ackCount ?? 0;
     }
   }
 
-  return Array.from(byKey.values()).map(x => ({
-    ...x,
-    seenCount: x._counts?.views ?? x.seenCount,
-    ackCount:  x._counts?.acks ?? x.ackCount,
-  })).sort((a,b)=> new Date(b.createdAt || b.date) - new Date(a.createdAt || a.date));
+  return Array.from(byKey.values())
+    .map((x) => ({
+      ...x,
+      seenCount: x._counts?.views ?? x.seenCount,
+      ackCount: x._counts?.acks ?? x.ackCount,
+    }))
+    .sort((a, b) => new Date(b.createdAt || b.date) - new Date(a.createdAt || a.date));
 }
 
-function chipName(t){
+function chipName(t) {
   const cls = t.class?.class_name || t.class?.name || t.classId || t.class?.id;
   const sec = t.section?.section_name || t.section?.name || t.sectionId || t.section?.id;
   return `Class ${cls} - Sec ${sec}`;
 }
-function singleChipName(d){
-  const cls = d.class?.class_name || d.class?.name || d.classId || d.Class?.class_name || d.Class?.name || d.Class?.id || d.class_id;
-  const sec = d.section?.section_name || d.section?.name || d.sectionId || d.Section?.section_name || d.Section?.name || d.Section?.id || d.section_id;
+function singleChipName(d) {
+  const cls =
+    d.class?.class_name ||
+    d.class?.name ||
+    d.classId ||
+    d.Class?.class_name ||
+    d.Class?.name ||
+    d.Class?.id ||
+    d.class_id;
+  const sec =
+    d.section?.section_name ||
+    d.section?.name ||
+    d.sectionId ||
+    d.Section?.section_name ||
+    d.Section?.name ||
+    d.Section?.id ||
+    d.section_id;
   if (!cls && !sec) return "General";
   return `Class ${cls} - Sec ${sec}`;
 }
-function formatWhen(dateStr){
-  try{
+function formatWhen(dateStr) {
+  try {
     const m = moment(dateStr);
     if (!m.isValid()) return "";
     const diffH = moment().diff(m, "hours");
-    if (diffH < 24) return m.fromNow(); // e.g., "2 hours ago"
+    if (diffH < 24) return m.fromNow();
     return m.format("DD MMM, HH:mm");
-  }catch{ return ""; }
+  } catch {
+    return "";
+  }
 }
