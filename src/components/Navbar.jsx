@@ -294,7 +294,6 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
         icon: "bi-list-check",
         isPendingDropdown: true,
       },
-      // ✅ Students added
       { label: "Students", href: "/students", icon: "bi-people" },
       { label: "Cancel", href: "/cancelled-transactions", icon: "bi-trash3" },
     ],
@@ -308,7 +307,6 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
         icon: "bi-list-check",
         isPendingDropdown: true,
       },
-      // ✅ Students added
       { label: "Students", href: "/students", icon: "bi-people" },
       { label: "Cancel", href: "/cancelled-transactions", icon: "bi-trash3" },
     ],
@@ -322,7 +320,6 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
         icon: "bi-list-check",
         isPendingDropdown: true,
       },
-      // ✅ Students added
       { label: "Students", href: "/students", icon: "bi-people" },
       { label: "Cancel", href: "/cancelled-transactions", icon: "bi-trash3" },
     ],
@@ -382,7 +379,7 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
           <Link to="/dashboard" className="navbar-brand d-flex align-items-center gap-2 ms-2">
             <img
               src={brandLogo}
-              alt="Smarto Experiential School logo"
+              alt="Demo Public School logo"
               width={34}
               height={34}
               className="rounded"
@@ -391,7 +388,7 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
                 e.currentTarget.style.display = "none";
               }}
             />
-            <span className="fw-semibold">Smarto Experiential School</span>
+            <span className="fw-semibold">Demo Public School</span>
           </Link>
 
           {/* Student switcher (desktop pills) */}

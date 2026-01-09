@@ -2,13 +2,15 @@ import React from "react";
 import { Navigate } from "react-router-dom";
 import { useRoles } from "../hooks/useRoles";
 
-import Dashboard from "./Dashboard";                                // Admin / Superadmin
-import FrontOfficeDashboard from "./FrontOfficeDashboard";         // ✅ Front Office
-import TeacherDashboard from "./TeacherDashboard";                 // Teacher
-import StudentDashboard from "./StudentDashboard";                 // Student
-import AcademicCoordinatorDashboard from "./AcademicCoordinatorDashboard"; // Coordinator
-import HRDashboard from "./HRDashboard";                           // HR
-// (Accounts handled via redirect only)
+import Dashboard from "./Dashboard";
+import FrontOfficeDashboard from "./FrontOfficeDashboard";
+import TeacherDashboard from "./TeacherDashboard";
+import StudentDashboard from "./StudentDashboard";
+import AcademicCoordinatorDashboard from "./AcademicCoordinatorDashboard";
+import HRDashboard from "./HRDashboard";
+
+// ✅ NEW
+import LibraryDashboard from "./LibraryDashboard";
 
 export default function RoleAwareDashboard() {
   const { activeRole } = useRoles();
@@ -16,7 +18,13 @@ export default function RoleAwareDashboard() {
 
   switch (role) {
     case "frontoffice":
-      return <FrontOfficeDashboard />;   // ✅ NEW
+      return <FrontOfficeDashboard />;
+
+    // ✅ NEW
+    case "librarian":
+    case "library":
+    case "libraryadmin":
+      return <LibraryDashboard />;
 
     case "teacher":
       return <TeacherDashboard />;
@@ -31,7 +39,6 @@ export default function RoleAwareDashboard() {
       return <HRDashboard />;
 
     case "accounts":
-      // Single source of truth
       return <Navigate to="/accounts-dashboard" replace />;
 
     case "admin":

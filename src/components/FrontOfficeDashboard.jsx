@@ -501,9 +501,9 @@ export default function FrontOfficeDashboard() {
                   </tbody>
                 </table>
               </div>
-              <div className="card-footer bg-white border-0 small text-muted">
+              {/* <div className="card-footer bg-white border-0 small text-muted">
                 Note: Visitors list will show once backend route <code>/visitors</code> is mounted.
-              </div>
+              </div> */}
             </div>
           </div>
 

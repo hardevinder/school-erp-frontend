@@ -84,7 +84,11 @@ export default function Sidebar({ headerHeight = 56 }) {
   const isStudent = roleLower === "student";
   const isHR = roleLower === "hr";
   const isAccounts = roleLower === "accounts" || roleLower === "account";
-  const isFrontoffice = roleLower === "frontoffice"; // ✅ NEW
+  const isFrontoffice = roleLower === "frontoffice";
+
+  // ✅ NEW: Librarian role flags
+  const isLibrarian =
+    roleLower === "librarian" || roleLower === "library" || roleLower === "libraryadmin";
 
   const hasAccess = (item) => {
     if (!item?.roles || item.roles.length === 0) return true;
@@ -98,6 +102,105 @@ export default function Sidebar({ headerHeight = 56 }) {
   // ===== MENU GROUPS =====
   const menuGroups = useMemo(() => {
     const groups = [];
+
+    // ✅ LIBRARY MENU (Librarian)
+    if (isLibrarian) {
+      groups.push({
+        heading: "Main",
+        items: [
+          {
+            key: "library-dashboard",
+            label: "Dashboard",
+            icon: "bi-speedometer2",
+            path: "/dashboard",
+            roles: ["librarian", "library", "libraryadmin"],
+          },
+        ],
+      });
+
+      groups.push({
+        heading: "Library",
+        items: [
+          {
+            key: "library-home",
+            label: "Library Dashboard",
+            icon: "bi-journal-bookmark-fill",
+            path: "/library-dashboard", // ✅ create route later (optional)
+            roles: ["librarian", "library", "libraryadmin"],
+          },
+          {
+            key: "library-books",
+            label: "Books Catalog",
+            icon: "bi-book",
+            path: "/library/books", // ✅ create route later
+            roles: ["librarian", "library", "libraryadmin"],
+          },
+          {
+            key: "library-members",
+            label: "Members",
+            icon: "bi-people",
+            path: "/library/members", // ✅ create route later
+            roles: ["librarian", "library", "libraryadmin"],
+          },
+          {
+            key: "library-issue-return",
+            label: "Issue / Return",
+            icon: "bi-arrow-left-right",
+            path: "/library/issue-return", // ✅ create route later
+            roles: ["librarian", "library", "libraryadmin"],
+          },
+          {
+            key: "library-reservations",
+            label: "Reservations",
+            icon: "bi-bookmark-star",
+            path: "/library/reservations", // ✅ create route later
+            roles: ["librarian", "library", "libraryadmin"],
+          },
+          {
+            key: "library-fines",
+            label: "Fines & Dues",
+            icon: "bi-cash-coin",
+            path: "/library/fines", // ✅ create route later
+            roles: ["librarian", "library", "libraryadmin"],
+          },
+          {
+            key: "library-reports",
+            label: "Reports",
+            icon: "bi-graph-up",
+            path: "/library/reports", // ✅ create route later
+            roles: ["librarian", "library", "libraryadmin"],
+          },
+          {
+            key: "library-settings",
+            label: "Library Settings",
+            icon: "bi-gear",
+            path: "/library/settings", // ✅ create route later
+            roles: ["librarian", "library", "libraryadmin"],
+          },
+        ],
+      });
+
+      // Optional: allow librarian to view circulars/chat if you want
+      groups.push({
+        heading: "Quick",
+        items: [
+          {
+            key: "combined-circulars",
+            label: "Circulars",
+            icon: "bi-megaphone",
+            path: "/combined-circulars",
+            roles: ["librarian", "library", "libraryadmin"],
+          },
+          {
+            key: "chat",
+            label: "Chat",
+            icon: "bi-chat-dots",
+            path: "/chat",
+            roles: ["librarian", "library", "libraryadmin"],
+          },
+        ],
+      });
+    }
 
     // ✅ FRONT OFFICE MENU
     if (isFrontoffice) {
@@ -124,9 +227,6 @@ export default function Sidebar({ headerHeight = 56 }) {
             path: "/gate-pass",
             roles: ["frontoffice"],
           },
-
-          // ✅ NEW: Visitors (Frontoffice only)
-          // NOTE: Ensure route exists in App.js e.g. <Route path="/visitors" element={<Visitors />} />
           {
             key: "visitors",
             label: "Visitors",
@@ -134,7 +234,6 @@ export default function Sidebar({ headerHeight = 56 }) {
             path: "/visitors",
             roles: ["frontoffice"],
           },
-
           {
             key: "students",
             label: "Students",
@@ -156,14 +255,6 @@ export default function Sidebar({ headerHeight = 56 }) {
             path: "/transfer-certificates",
             roles: ["frontoffice"],
           },
-          // optional quick utilities (keep only if routes exist)
-          // {
-          //   key: "bonafide-certificates",
-          //   label: "Bonafide Certificates",
-          //   icon: "bi-patch-check",
-          //   path: "/bonafide-certificates",
-          //   roles: ["frontoffice"],
-          // },
         ],
       });
     }
@@ -273,246 +364,83 @@ export default function Sidebar({ headerHeight = 56 }) {
       });
     }
 
+    // ====== ADMIN MENU ======
     if (isAdmin) {
       groups.push({
         heading: "Main",
         items: [
-          {
-            key: "dashboard",
-            label: "Dashboard",
-            icon: "bi-speedometer2",
-            path: "/dashboard",
-          },
-          {
-            key: "combined-circulars",
-            label: "Circulars",
-            icon: "bi-megaphone",
-            path: "/combined-circulars",
-          },
-        ],
-      });
-      groups.push({
-        heading: "Fee Management",
-        items: [
-          {
-            key: "transactions",
-            label: "Collect Fee",
-            icon: "bi-receipt",
-            path: "/transactions",
-          },
-          {
-            key: "cancelledTransactions",
-            label: "Cancelled Transactions",
-            icon: "bi-trash3",
-            path: "/cancelled-transactions",
-          },
-          {
-            key: "dayWiseReport",
-            label: "Fee Report",
-            icon: "bi-calendar",
-            path: "/reports/day-wise",
-          },
-          {
-            key: "dayWiseCategoryReports",
-            label: "Fee Report (New)",
-            icon: "bi-calendar-check",
-            path: "/reports/day-wise-category",
-          },
-          {
-            key: "studentDue",
-            label: "Fee Due Report",
-            icon: "bi-file-earmark-text",
-            path: "/student-due",
-          },
-          {
-            key: "schoolFeeSummary",
-            label: "Fee Summary(New)",
-            icon: "bi-graph-up",
-            path: "/reports/school-fee-summary",
-          },
-          {
-            key: "transportSummary",
-            label: "Transport Summary",
-            icon: "bi-truck-front",
-            path: "/reports/transport-summary",
-          },
-          {
-            key: "concessionReport",
-            label: "Concession Report",
-            icon: "bi-journal-check",
-            path: "/reports/concession",
-          },
-          {
-            key: "vanFeeDetailedReport",
-            label: "Van Fee Report",
-            icon: "bi-truck-front",
-            path: "/reports/van-fee",
-          },
-          {
-            key: "feeStructure",
-            label: "Fee Structure",
-            icon: "bi-cash-coin",
-            path: "/fee-structure",
-          },
-          {
-            key: "transportation",
-            label: "Transportation Cost",
-            icon: "bi-truck",
-            path: "/transportation",
-          },
-          {
-            key: "student-transport",
-            label: "Transport Assignments",
-            icon: "bi-truck",
-            path: "/student-transport",
-          },
-          {
-            key: "feeHeadings",
-            label: "Fee Headings",
-            icon: "bi-bookmark",
-            path: "/fee-headings",
-          },
-          {
-            key: "feeCategory",
-            label: "Fee Category",
-            icon: "bi-tags",
-            path: "/fee-category",
-          },
-          {
-            key: "concessions",
-            label: "Concessions",
-            icon: "bi-percent",
-            path: "/concessions",
-          },
-          {
-            key: "opening-balances",
-            label: "Opening Balances",
-            icon: "bi-clipboard-data",
-            path: "/opening-balances",
-            roles: ["admin", "superadmin"],
-          },
-          {
-            key: "caste-gender-report",
-            label: "Caste/Gender Report",
-            icon: "bi-people-fill",
-            path: "/reports/caste-gender",
-          },
-        ],
-      });
-      groups.push({
-        heading: "Admissions",
-        items: [
-          {
-            key: "students",
-            label: "Admissions",
-            icon: "bi-people",
-            path: "/students",
-          },
-          {
-            key: "enquiries",
-            label: "Enquiries",
-            icon: "bi-person-lines-fill",
-            path: "/enquiries",
-            roles: ["admin", "superadmin"],
-          },
-          {
-            key: "classes",
-            label: "Classes",
-            icon: "bi-list-task",
-            path: "/classes",
-          },
-          {
-            key: "sections",
-            label: "Sections",
-            icon: "bi-grid",
-            path: "/sections",
-          },
-          {
-            key: "sessions",
-            label: "Sessions",
-            icon: "bi-calendar4-week",
-            path: "/sessions",
-          },
+          { key: "dashboard", label: "Dashboard", icon: "bi-speedometer2", path: "/dashboard" },
+          { key: "combined-circulars", label: "Circulars", icon: "bi-megaphone", path: "/combined-circulars" },
         ],
       });
 
-      // 🔹 Certificates group (updated with Disciplinary)
+      groups.push({
+        heading: "Fee Management",
+        items: [
+          { key: "transactions", label: "Collect Fee", icon: "bi-receipt", path: "/transactions" },
+          { key: "cancelledTransactions", label: "Cancelled Transactions", icon: "bi-trash3", path: "/cancelled-transactions" },
+          { key: "dayWiseReport", label: "Fee Report", icon: "bi-calendar", path: "/reports/day-wise" },
+          { key: "dayWiseCategoryReports", label: "Fee Report (New)", icon: "bi-calendar-check", path: "/reports/day-wise-category" },
+          { key: "studentDue", label: "Fee Due Report", icon: "bi-file-earmark-text", path: "/student-due" },
+          { key: "schoolFeeSummary", label: "Fee Summary(New)", icon: "bi-graph-up", path: "/reports/school-fee-summary" },
+          { key: "transportSummary", label: "Transport Summary", icon: "bi-truck-front", path: "/reports/transport-summary" },
+          { key: "concessionReport", label: "Concession Report", icon: "bi-journal-check", path: "/reports/concession" },
+          { key: "vanFeeDetailedReport", label: "Van Fee Report", icon: "bi-truck-front", path: "/reports/van-fee" },
+          { key: "feeStructure", label: "Fee Structure", icon: "bi-cash-coin", path: "/fee-structure" },
+          { key: "transportation", label: "Transportation Cost", icon: "bi-truck", path: "/transportation" },
+          { key: "student-transport", label: "Transport Assignments", icon: "bi-truck", path: "/student-transport" },
+          { key: "feeHeadings", label: "Fee Headings", icon: "bi-bookmark", path: "/fee-headings" },
+          { key: "feeCategory", label: "Fee Category", icon: "bi-tags", path: "/fee-category" },
+          { key: "concessions", label: "Concessions", icon: "bi-percent", path: "/concessions" },
+          { key: "opening-balances", label: "Opening Balances", icon: "bi-clipboard-data", path: "/opening-balances", roles: ["admin", "superadmin"] },
+          { key: "caste-gender-report", label: "Caste/Gender Report", icon: "bi-people-fill", path: "/reports/caste-gender" },
+        ],
+      });
+
+      groups.push({
+        heading: "Admissions",
+        items: [
+          { key: "students", label: "Admissions", icon: "bi-people", path: "/students" },
+          { key: "enquiries", label: "Enquiries", icon: "bi-person-lines-fill", path: "/enquiries", roles: ["admin", "superadmin"] },
+          { key: "classes", label: "Classes", icon: "bi-list-task", path: "/classes" },
+          { key: "sections", label: "Sections", icon: "bi-grid", path: "/sections" },
+          { key: "sessions", label: "Sessions", icon: "bi-calendar4-week", path: "/sessions" },
+        ],
+      });
+
       groups.push({
         heading: "Certificates",
         items: [
-          {
-            key: "transfer-certificates",
-            label: "Transfer Certificates",
-            icon: "bi-award",
-            path: "/transfer-certificates",
-            roles: ["admin", "superadmin"],
-          },
-          {
-            key: "bonafide-certificates",
-            label: "Bonafide Certificates",
-            icon: "bi-patch-check",
-            path: "/bonafide-certificates",
-            roles: ["admin", "superadmin"],
-          },
-          {
-            key: "disciplinary-actions",
-            label: "Disciplinary Actions",
-            icon: "bi-exclamation-octagon",
-            path: "/disciplinary-actions",
-            roles: ["admin", "superadmin", "academic_coordinator"],
-          },
+          { key: "transfer-certificates", label: "Transfer Certificates", icon: "bi-award", path: "/transfer-certificates", roles: ["admin", "superadmin"] },
+          { key: "bonafide-certificates", label: "Bonafide Certificates", icon: "bi-patch-check", path: "/bonafide-certificates", roles: ["admin", "superadmin"] },
+          { key: "disciplinary-actions", label: "Disciplinary Actions", icon: "bi-exclamation-octagon", path: "/disciplinary-actions", roles: ["admin", "superadmin", "academic_coordinator"] },
         ],
       });
 
       groups.push({
         heading: "School Info",
         items: [
-          {
-            key: "schools",
-            label: "Schools",
-            icon: "bi-building",
-            path: "/schools",
-          },
-          {
-            key: "houses",
-            label: "Houses",
-            icon: "bi-house-door",
-            path: "/houses",
-            roles: ["admin", "superadmin"],
-          },
+          { key: "schools", label: "Schools", icon: "bi-building", path: "/schools" },
+          { key: "houses", label: "Houses", icon: "bi-house-door", path: "/houses", roles: ["admin", "superadmin"] },
         ],
       });
+
       groups.push({
         heading: "Leave",
-        items: [
-          {
-            key: "employee-leave-request",
-            label: "Leave Request",
-            icon: "bi-box-arrow-in-down-left",
-            path: "/employee-leave-request",
-          },
-        ],
+        items: [{ key: "employee-leave-request", label: "Leave Request", icon: "bi-box-arrow-in-down-left", path: "/employee-leave-request" }],
       });
     }
 
+    // ====== ACADEMIC COORDINATOR MENU ======
     if (isAcademic) {
       groups.push({
         heading: "Main",
         items: [
-          {
-            key: "dashboard",
-            label: "Dashboard",
-            icon: "bi-speedometer2",
-            path: "/dashboard",
-          },
-          {
-            key: "circulars",
-            label: "Circulars",
-            icon: "bi-megaphone",
-            path: "/combined-circulars",
-          },
+          { key: "dashboard", label: "Dashboard", icon: "bi-speedometer2", path: "/dashboard" },
+          { key: "circulars", label: "Circulars", icon: "bi-megaphone", path: "/combined-circulars" },
         ],
       });
+
       groups.push({
         heading: "Academic",
         items: [
@@ -531,6 +459,7 @@ export default function Sidebar({ headerHeight = 56 }) {
           { key: "caste-gender-report", label: "Caste/Gender Report", icon: "bi-people-fill", path: "/reports/caste-gender" },
         ],
       });
+
       groups.push({
         heading: "Exam Settings",
         items: [
@@ -548,14 +477,12 @@ export default function Sidebar({ headerHeight = 56 }) {
           { key: "assign-report-card-format", label: "Assign Report Format", icon: "bi-link", path: "/assign-report-card-format" },
         ],
       });
+
       groups.push({
         heading: "Leave",
-        items: [
-          { key: "employee-leave-request", label: "Leave Request", icon: "bi-box-arrow-in-down-left", path: "/employee-leave-request" },
-        ],
+        items: [{ key: "employee-leave-request", label: "Leave Request", icon: "bi-box-arrow-in-down-left", path: "/employee-leave-request" }],
       });
 
-      // 🔹 Disciplinary group for Academic Coordinator
       groups.push({
         heading: "Disciplinary",
         items: [
@@ -570,6 +497,7 @@ export default function Sidebar({ headerHeight = 56 }) {
       });
     }
 
+    // ====== HR MENU ======
     if (isHR) {
       groups.push({
         heading: "Main",
@@ -595,6 +523,7 @@ export default function Sidebar({ headerHeight = 56 }) {
       });
     }
 
+    // ====== TEACHER MENU ======
     if (isTeacher) {
       groups.push({
         heading: "Main",
@@ -612,10 +541,12 @@ export default function Sidebar({ headerHeight = 56 }) {
           { key: "my-attendance-calendar", label: "My Attendance", icon: "bi-calendar2-week", path: "/my-attendance-calendar" },
         ],
       });
+
       groups.push({
         heading: "Leave Management",
         items: [{ key: "leave-requests", label: "Leave Requests", icon: "bi-envelope", path: "/leave-requests" }],
       });
+
       groups.push({
         heading: "Academic",
         items: [
@@ -623,6 +554,7 @@ export default function Sidebar({ headerHeight = 56 }) {
           { key: "subjects", label: "Subjects", icon: "bi-book", path: "/subjects" },
         ],
       });
+
       groups.push({
         heading: "Exam",
         items: [
@@ -637,7 +569,7 @@ export default function Sidebar({ headerHeight = 56 }) {
       });
     }
 
-    // STUDENT MENU
+    // ====== STUDENT MENU ======
     if (isStudent) {
       groups.push({
         heading: "Student",
@@ -654,8 +586,8 @@ export default function Sidebar({ headerHeight = 56 }) {
       });
     }
 
+    // Admin inserts User Management group
     if (isAdmin) {
-      // Insert User Management after Main (index 1)
       groups.splice(1, 0, {
         heading: "User Management",
         items: [
@@ -676,6 +608,7 @@ export default function Sidebar({ headerHeight = 56 }) {
     isSuperAdmin,
     isAccounts,
     isFrontoffice,
+    isLibrarian,
     roleLower,
   ]);
 
@@ -723,15 +656,11 @@ export default function Sidebar({ headerHeight = 56 }) {
     hr: ["dashboard", "employees", "employee-attendance", "hr-leave-requests"],
     superadmin: ["dashboard", "users", "reports/day-wise", "transactions", "opening-balances"],
     accounts: ["accounts-dashboard", "transactions", "studentDue", "dayWiseReport"],
-    // ✅ NEW
-    frontoffice: [
-      "frontoffice-dashboard",
-      "gate-pass",
-      "visitors", // ✅ include Visitors in bottom-nav priorities too
-      "enquiries",
-      "students",
-      "transfer-certificates",
-    ],
+    frontoffice: ["frontoffice-dashboard", "gate-pass", "visitors", "enquiries", "students"],
+    // ✅ NEW: Librarian bottom-nav priorities
+    librarian: ["library-dashboard", "library-books", "library-issue-return", "library-members"],
+    library: ["library-dashboard", "library-books", "library-issue-return", "library-members"],
+    libraryadmin: ["library-dashboard", "library-books", "library-issue-return", "library-members"],
   };
 
   const primaryKeys =
@@ -902,9 +831,7 @@ function BottomNav({ items, moreItems, isActive, onClick }) {
                     onClick(it);
                     setOpen(false);
                   }}
-                  style={{
-                    "--item-gradient": sidebarGradients[i % sidebarGradients.length],
-                  }}
+                  style={{ "--item-gradient": sidebarGradients[i % sidebarGradients.length] }}
                 >
                   <i className={`bi ${it.icon}`} style={{ color: palette[i % palette.length] }} />
                   <div className="bn-li-text">
