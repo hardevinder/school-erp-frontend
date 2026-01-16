@@ -7,6 +7,7 @@ import React, {
   useCallback,
 } from "react";
 import api from "../api";
+import { Link, useNavigate } from "react-router-dom"; // ✅ ADDED (no reload navigation)
 
 // Charts
 import { Doughnut, Line, Bar } from "react-chartjs-2";
@@ -148,6 +149,8 @@ const downloadChart = (chartRef, filename = "chart.png") => {
 
 // ---------- COMPONENT ----------
 const Dashboard = () => {
+  const navigate = useNavigate(); // ✅ ADDED
+
   // Sessions
   const [sessions, setSessions] = useState([]);
   const [selectedSessionId, setSelectedSessionId] = useState(null);
@@ -446,7 +449,9 @@ const Dashboard = () => {
   const religionBoysGirls = useMemo(() => {
     const labels = religionCategories;
     const boys = labels.map((r) => Number(religionGrandTotal?.[r]?.Boys || 0));
-    const girls = labels.map((r) => Number(religionGrandTotal?.[r]?.Girls || 0));
+    const girls = labels.map((r) =>
+      Number(religionGrandTotal?.[r]?.Girls || 0)
+    );
     return { labels, boys, girls };
   }, [religionCategories, religionGrandTotal]);
 
@@ -674,32 +679,52 @@ const Dashboard = () => {
   );
 
   /* ------------------------------- UI DATA ------------------------------ */
-  const kpis = [
-    {
-      label: "Fee Received (Session)",
-      value: totalFeeReceived,
-      icon: "bi-cash-coin",
-    },
-    { label: "Van Fee (Session)", value: totalVanFee, icon: "bi-truck" },
-    {
-      label: "Fine (Session)",
-      value: totalFine,
-      icon: "bi-exclamation-triangle",
-    },
-    {
-      label: "Enrollments (Total)",
-      value: totalEnrollments,
-      icon: "bi-people",
-    },
-    { label: "New", value: newEnrollments, icon: "bi-person-plus" },
-    { label: "Old", value: oldEnrollments, icon: "bi-person-check" },
-  ];
+ const kpis = [
+  {
+    label: "Fee Received (Session)",
+    value: totalFeeReceived,
+    icon: "bi-cash-coin",
+    type: "currency",
+  },
+  {
+    label: "Van Fee (Session)",
+    value: totalVanFee,
+    icon: "bi-truck",
+    type: "currency",
+  },
+  {
+    label: "Fine (Session)",
+    value: totalFine,
+    icon: "bi-exclamation-triangle",
+    type: "currency",
+  },
+  {
+    label: "Enrollments (Total)",
+    value: totalEnrollments,
+    icon: "bi-people",
+    type: "count",
+  },
+  {
+    label: "New",
+    value: newEnrollments,
+    icon: "bi-person-plus",
+    type: "count",
+  },
+  {
+    label: "Old",
+    value: oldEnrollments,
+    icon: "bi-person-check",
+    type: "count",
+  },
+];
+
 
   const totalForShare = Object.values(summary).reduce(
     (a, c) => a + (c?.totalFeeReceived || 0),
     0
   );
 
+  // ✅ UPDATED: quick links include both routes
   const quickLinks = [
     {
       label: "Collect Fee",
@@ -738,16 +763,23 @@ const Dashboard = () => {
       gradient: "linear-gradient(135deg, #a855f7, #7c3aed)",
     },
     {
-      label: "Caste/Gender & Religion",
+      label: "Caste & Gender",
       icon: "bi-people-fill",
       href: "/reports/caste-gender",
       gradient: "linear-gradient(135deg, #ef4444, #dc2626)",
     },
+    {
+      label: "Religion & Gender",
+      icon: "bi-people-fill",
+      href: "/reports/religion-gender",
+      gradient: "linear-gradient(135deg, #0ea5e9, #0369a1)",
+    },
   ];
 
+  // ✅ NEW: SPA LinkCard (no page reload)
   const LinkCard = ({ href, icon, label, gradient }) => (
-    <a
-      href={href}
+    <Link
+      to={href}
       className="link-card-ex btn shadow-sm"
       title={label}
       style={{ backgroundImage: gradient }}
@@ -762,7 +794,7 @@ const Dashboard = () => {
           <i className="bi bi-arrow-right" />
         </span>
       </span>
-    </a>
+    </Link>
   );
 
   /* -------------------------------- RENDER ------------------------------- */
@@ -923,13 +955,15 @@ const Dashboard = () => {
                 >
                   Recent Enquiries
                 </h5>
-                <a
-                  href="/enquiries"
+
+                {/* ✅ changed to Link (no reload) */}
+                <Link
+                  to="/enquiries"
                   className="btn btn-sm btn-light text-primary"
                   style={{ fontFamily: "'Inter', sans-serif" }}
                 >
                   View all
-                </a>
+                </Link>
               </div>
               <div className="card-body p-0">
                 {recentEnquiries.length === 0 ? (
@@ -1005,7 +1039,7 @@ const Dashboard = () => {
                               fontWeight: 600,
                             }}
                           >
-                            {formatCurrency(kpi.value)}
+                            {kpi.type === "currency" ? formatCurrency(kpi.value) : intIN(kpi.value)}
                           </div>
                           <span
                             className="small text-white-75"
@@ -1030,7 +1064,9 @@ const Dashboard = () => {
                         </div>
                       </div>
                     </div>
-                    {loading.report && i < 3 ? <div className="kpi-shimmer" /> : null}
+                    {loading.report && i < 3 ? (
+                      <div className="kpi-shimmer" />
+                    ) : null}
                   </div>
                 </div>
               ))}
@@ -1282,14 +1318,24 @@ const Dashboard = () => {
                   Students by Gender
                 </h5>
                 <div className="d-flex gap-2">
-                  <a
-                    href="/reports/caste-gender"
+                  {/* ✅ NEW: both report buttons, and no reload */}
+                  <Link
+                    to="/reports/caste-gender"
                     className="btn btn-sm btn-light shadow-sm"
                     title="Open Caste/Gender Report"
                     aria-label="Open Caste/Gender Report"
                   >
                     <i className="bi bi-box-arrow-up-right" />
-                  </a>
+                  </Link>
+                  <Link
+                    to="/reports/religion-gender"
+                    className="btn btn-sm btn-light shadow-sm"
+                    title="Open Religion/Gender Report"
+                    aria-label="Open Religion/Gender Report"
+                  >
+                    <i className="bi bi-diagram-3" />
+                  </Link>
+
                   <button
                     className="btn btn-sm btn-light shadow-sm"
                     onClick={() =>
@@ -1355,14 +1401,14 @@ const Dashboard = () => {
                   Caste Distribution
                 </h5>
                 <div className="d-flex gap-2">
-                  <a
-                    href="/reports/caste-gender"
+                  <Link
+                    to="/reports/caste-gender"
                     className="btn btn-sm btn-light shadow-sm"
                     title="Open Caste/Gender Report"
                     aria-label="Open Caste/Gender Report"
                   >
                     <i className="bi bi-box-arrow-up-right" />
-                  </a>
+                  </Link>
                   <button
                     className="btn btn-sm btn-light shadow-sm"
                     onClick={() =>
@@ -1428,14 +1474,16 @@ const Dashboard = () => {
                   Religion Distribution
                 </h5>
                 <div className="d-flex gap-2">
-                  <a
-                    href="/reports/caste-gender"
+                  {/* ✅ CHANGE: open religion report (not caste) */}
+                  <Link
+                    to="/reports/religion-gender"
                     className="btn btn-sm btn-light shadow-sm"
-                    title="Open Caste/Gender Report"
-                    aria-label="Open Caste/Gender Report"
+                    title="Open Religion/Gender Report"
+                    aria-label="Open Religion/Gender Report"
                   >
                     <i className="bi bi-box-arrow-up-right" />
-                  </a>
+                  </Link>
+
                   <button
                     className="btn btn-sm btn-light shadow-sm"
                     onClick={() =>
@@ -1720,9 +1768,7 @@ const Dashboard = () => {
 
         {/* Styles */}
         <style>{`
-          * {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-          }
+          * { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
           .dashboard-bg { position: relative; background-attachment: fixed; }
           .dashboard-overlay {
             position: absolute; inset: 0;

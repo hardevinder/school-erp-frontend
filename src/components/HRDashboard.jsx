@@ -1,60 +1,41 @@
-// src/components/HRDashboard.jsx — Employee Attendance–focused, with Absent/On‑Leave (Teachers) highlights
+// src/components/HRDashboard.jsx — Attendance + Latest Leave Request Spotlight
 import React, { useEffect, useMemo, useState } from "react";
 import api from "../api";
+import Swal from "sweetalert2";
 
 export default function HRDashboard() {
   const [date, setDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [employees, setEmployees] = useState([]); // active only
   const [records, setRecords] = useState([]);     // attendance records for selected date
   const [loading, setLoading] = useState(true);
+  const [leaveLoading, setLeaveLoading] = useState(false);
   const [error, setError] = useState(null);
+
   const [search, setSearch] = useState("");
   const [selectedDept, setSelectedDept] = useState("all");
 
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        const res = await api.get("/employees");
-        const all = res?.data?.employees || [];
-        const active = all.filter((e) => (e?.status || "enabled").toLowerCase() !== "disabled");
-        if (mounted) setEmployees(active);
-      } catch (e) {
-        if (mounted) setError(e?.response?.data?.message || e.message || "Failed to load employees");
-      }
-    })();
-    return () => { mounted = false; };
-  }, []);
+  // ✅ Leave requests (latest)
+  const [pendingLeaves, setPendingLeaves] = useState([]);
 
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const res = await api.get(`/employee-attendance?date=${date}`);
-        if (mounted) setRecords(Array.isArray(res?.data?.records) ? res.data.records : []);
-      } catch (e) {
-        if (mounted) setError(e?.response?.data?.message || e.message || "Failed to load attendance");
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    })();
-    return () => { mounted = false; };
-  }, [date]);
+  /* =========================
+     Helpers
+  ========================= */
+  const initials = (name) => {
+    if (!name) return "?";
+    const parts = String(name).trim().split(/\s+/).slice(0, 2);
+    return parts.map((p) => p[0]?.toUpperCase() || "").join("") || "?";
+  };
 
-  const deptList = useMemo(() => {
-    return [
-      "all",
-      ...Array.from(new Set(employees.map((e) => e?.department?.name).filter(Boolean))),
-    ];
-  }, [employees]);
+  const fmtDate = (d) => {
+    if (!d) return "—";
+    // if backend already sends YYYY-MM-DD, keep as-is
+    if (typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
+    const dd = new Date(d);
+    if (Number.isNaN(dd.getTime())) return String(d);
+    return dd.toISOString().split("T")[0];
+  };
 
-  const byId = useMemo(() => {
-    const map = new Map();
-    for (const r of records) map.set(Number(r.employee_id), r);
-    return map;
-  }, [records]);
+  const prettyStatus = (st) => String(st || "—").replace(/_/g, " ");
 
   const isTeacher = (emp) => {
     const roleish = `${emp?.designation || emp?.title || emp?.role || ""}`.toLowerCase();
@@ -72,17 +53,128 @@ export default function HRDashboard() {
     "short_leave",
   ]);
 
+  /* =========================
+     Load employees
+  ========================= */
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const res = await api.get("/employees");
+        const all = res?.data?.employees || [];
+        const active = all.filter((e) => (e?.status || "enabled").toLowerCase() !== "disabled");
+        if (mounted) setEmployees(active);
+      } catch (e) {
+        if (mounted) setError(e?.response?.data?.message || e.message || "Failed to load employees");
+      }
+    })();
+    return () => { mounted = false; };
+  }, []);
+
+  /* =========================
+     Load attendance for date
+  ========================= */
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const res = await api.get(`/employee-attendance?date=${date}`);
+        if (mounted) setRecords(Array.isArray(res?.data?.records) ? res.data.records : []);
+      } catch (e) {
+        if (mounted) setError(e?.response?.data?.message || e.message || "Failed to load attendance");
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    })();
+    return () => { mounted = false; };
+  }, [date]);
+
+  /* =========================
+     Load latest pending leaves
+  ========================= */
+  const fetchPendingLeaves = async () => {
+    setLeaveLoading(true);
+    try {
+      const res = await api.get("/employee-leave-requests/all", {
+        params: { status: "pending" },
+      });
+
+      const rows = Array.isArray(res?.data?.data) ? res.data.data : [];
+
+      // sort newest first (createdAt preferred, otherwise id)
+      const sorted = [...rows].sort((a, b) => {
+        const ta = a?.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const tb = b?.createdAt ? new Date(b.createdAt).getTime() : 0;
+        if (tb !== ta) return tb - ta;
+        return (Number(b?.id) || 0) - (Number(a?.id) || 0);
+      });
+
+      setPendingLeaves(sorted.slice(0, 5));
+    } catch {
+      // keep silent (dashboard should not break)
+      setPendingLeaves([]);
+    } finally {
+      setLeaveLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchPendingLeaves();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleLeaveAction = async (id, action) => {
+    const { value: remarks } = await Swal.fire({
+      title: `${action === "approved" ? "Approve" : "Reject"} Leave?`,
+      input: "textarea",
+      inputLabel: "Remarks (optional)",
+      showCancelButton: true,
+      confirmButtonText: action === "approved" ? "Approve" : "Reject",
+    });
+
+    if (remarks === undefined) return;
+
+    try {
+      await api.patch(`/employee-leave-requests/${id}/status`, {
+        status: action,
+        remarks,
+      });
+      Swal.fire("Success", `Leave request ${action}`, "success");
+      fetchPendingLeaves();
+    } catch (err) {
+      Swal.fire("Error", err.response?.data?.error || "Operation failed", "error");
+    }
+  };
+
+  /* =========================
+     Derived lists
+  ========================= */
+  const deptList = useMemo(() => {
+    return [
+      "all",
+      ...Array.from(new Set(employees.map((e) => e?.department?.name).filter(Boolean))),
+    ];
+  }, [employees]);
+
+  const byId = useMemo(() => {
+    const map = new Map();
+    for (const r of records) map.set(Number(r.employee_id), r);
+    return map;
+  }, [records]);
+
   const filteredEmployees = useMemo(() => {
     const q = search.trim().toLowerCase();
     return employees.filter((e) => {
       if (selectedDept !== "all" && (e?.department?.name !== selectedDept)) return false;
       if (!q) return true;
-      const blob = `${e?.name || ""} ${e?.code || ""} ${e?.designation || ""} ${e?.department?.name || ""}`.toLowerCase();
+      const blob = `${e?.name || ""} ${e?.code || ""} ${e?.employee_id || ""} ${e?.designation || ""} ${e?.department?.name || ""}`.toLowerCase();
       return blob.includes(q);
     });
   }, [employees, search, selectedDept]);
 
-  // —— Derive KPI counts ——
+  // KPIs
   const kpis = useMemo(() => {
     const total = employees.length;
     let present = 0, absent = 0, leave = 0, shortLeave = 0;
@@ -97,18 +189,19 @@ export default function HRDashboard() {
     return { total, present, absent, leave, shortLeave };
   }, [employees, byId]);
 
-  // —— Highlight lists (Teachers) ——
-  const teacherAbsent = useMemo(() => employees.filter((e) => isTeacher(e) && byId.get(e.id)?.status === "absent"), [employees, byId]);
-  const teacherOnLeave = useMemo(() => employees.filter((e) => isTeacher(e) && onLeaveSet.has(byId.get(e.id)?.status || "")), [employees, byId]);
-
-  // —— All absent list (all departments) ——
-  const allAbsent = useMemo(() => employees.filter((e) => byId.get(e.id)?.status === "absent"), [employees, byId]);
-
-  const initials = (name) => {
-    if (!name) return "?";
-    const parts = String(name).trim().split(/\s+/).slice(0, 2);
-    return parts.map((p) => p[0]?.toUpperCase() || "").join("") || "?";
-  };
+  // Highlights
+  const teacherAbsent = useMemo(
+    () => employees.filter((e) => isTeacher(e) && byId.get(e.id)?.status === "absent"),
+    [employees, byId]
+  );
+  const teacherOnLeave = useMemo(
+    () => employees.filter((e) => isTeacher(e) && onLeaveSet.has(byId.get(e.id)?.status || "")),
+    [employees, byId]
+  );
+  const allAbsent = useMemo(
+    () => employees.filter((e) => byId.get(e.id)?.status === "absent"),
+    [employees, byId]
+  );
 
   const shiftDay = (delta) => {
     const d = new Date(date);
@@ -117,26 +210,209 @@ export default function HRDashboard() {
   };
   const goToday = () => setDate(new Date().toISOString().split("T")[0]);
 
+  // Latest leave (spotlight)
+  const latestLeave = pendingLeaves[0] || null;
+  const latestEmpName = latestLeave?.employee?.name || "—";
+  const latestDeptName = latestLeave?.employee?.department?.name || "No Dept";
+  const latestLeaveType = latestLeave?.leaveType?.name || latestLeave?.leave_type?.name || "—";
+
   return (
     <div className="container-fluid px-3 py-2">
       {/* Header */}
-      <div className="d-flex flex-wrap align-items-center justify-content-between mb-3 rounded-4 p-3 shadow-sm" style={{
-        background: "linear-gradient(135deg, #f8fafc, #eef2ff)",
-        border: "1px solid #e5e7eb",
-      }}>
+      <div
+        className="d-flex flex-wrap align-items-center justify-content-between mb-3 rounded-4 p-3 shadow-sm"
+        style={{
+          background: "linear-gradient(135deg, #0ea5e9, #6366f1)",
+          color: "white",
+          border: "1px solid rgba(255,255,255,0.15)",
+        }}
+      >
         <div>
           <h4 className="mb-1 fw-semibold">HR Dashboard</h4>
-          <div className="text-muted small">Daily employee attendance overview</div>
+          <div className="opacity-75 small">Attendance + Leave Requests overview</div>
         </div>
+
         <div className="d-flex flex-wrap gap-2 align-items-end">
           <div>
-            <label className="form-label mb-1 small text-muted">Date</label>
-            <input type="date" className="form-control" value={date} onChange={(e) => setDate(e.target.value)} />
+            <label className="form-label mb-1 small opacity-75">Date</label>
+            <input
+              type="date"
+              className="form-control"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              style={{ borderRadius: 12 }}
+            />
           </div>
           <div className="d-flex gap-2 pb-1">
-            <button className="btn btn-outline-secondary" type="button" onClick={() => shiftDay(-1)}>◀</button>
-            <button className="btn btn-outline-primary" type="button" onClick={goToday}>Today</button>
-            <button className="btn btn-outline-secondary" type="button" onClick={() => shiftDay(1)}>▶</button>
+            <button className="btn btn-light" type="button" onClick={() => shiftDay(-1)}>◀</button>
+            <button className="btn btn-outline-light" type="button" onClick={goToday}>Today</button>
+            <button className="btn btn-light" type="button" onClick={() => shiftDay(1)}>▶</button>
+          </div>
+        </div>
+      </div>
+
+      {/* Spotlight: Latest Leave Request */}
+      <div className="row g-3 mb-4">
+        <div className="col-lg-8">
+          <div className="card shadow-sm rounded-4 h-100 border-0">
+            <div className="card-body">
+              <div className="d-flex align-items-start justify-content-between flex-wrap gap-3">
+                <div>
+                  <div className="text-uppercase small text-muted mb-1">Latest Leave Request</div>
+                  {leaveLoading ? (
+                    <div className="text-muted">Loading leave requests…</div>
+                  ) : !latestLeave ? (
+                    <div className="d-flex align-items-center gap-2">
+                      <span className="badge bg-success">All Clear</span>
+                      <span className="text-muted">No pending leave requests.</span>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="d-flex align-items-center gap-2">
+                        <div
+                          className="rounded-circle d-inline-flex justify-content-center align-items-center"
+                          style={{ width: 44, height: 44, background: "#eef2ff", color: "#3730a3", fontWeight: 800 }}
+                        >
+                          {initials(latestEmpName)}
+                        </div>
+                        <div>
+                          <div className="fw-semibold" style={{ fontSize: 18 }}>
+                            {latestEmpName}
+                          </div>
+                          <div className="text-muted small">
+                            {latestDeptName} · {latestLeave?.employee?.employee_id ? `Code: ${latestLeave.employee.employee_id}` : "—"}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="mt-3 d-flex flex-wrap gap-2">
+                        <span className="badge bg-primary bg-opacity-10 text-primary border border-primary-subtle">
+                          {latestLeaveType}
+                        </span>
+                        <span className="badge bg-warning text-dark">
+                          {fmtDate(latestLeave.start_date)} ↔ {fmtDate(latestLeave.end_date)}
+                        </span>
+                        {latestLeave.is_without_pay ? (
+                          <span className="badge bg-danger bg-opacity-10 text-danger border border-danger-subtle">
+                            Without Pay
+                          </span>
+                        ) : (
+                          <span className="badge bg-success bg-opacity-10 text-success border border-success-subtle">
+                            Paid Leave
+                          </span>
+                        )}
+                        <span className="badge bg-warning text-dark">PENDING</span>
+                      </div>
+
+                      <div className="mt-2 small text-muted">
+                        <span className="fw-semibold">Reason:</span> {latestLeave.reason || "—"}
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {/* Actions */}
+                {latestLeave && (
+                  <div className="d-flex flex-wrap gap-2">
+                    <button
+                      className="btn btn-success rounded-4"
+                      onClick={() => handleLeaveAction(latestLeave.id, "approved")}
+                    >
+                      Approve
+                    </button>
+                    <button
+                      className="btn btn-danger rounded-4"
+                      onClick={() => handleLeaveAction(latestLeave.id, "rejected")}
+                    >
+                      Reject
+                    </button>
+                    <button
+                      className="btn btn-outline-secondary rounded-4"
+                      onClick={fetchPendingLeaves}
+                      title="Refresh leave requests"
+                    >
+                      Refresh
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Recent pending list */}
+              <hr className="my-3" />
+              <div className="d-flex justify-content-between align-items-center">
+                <div className="fw-semibold">Recent Pending Requests</div>
+                <span className="badge bg-secondary">{pendingLeaves.length}</span>
+              </div>
+
+              {leaveLoading ? (
+                <div className="text-muted mt-2">Loading…</div>
+              ) : pendingLeaves.length === 0 ? (
+                <div className="text-muted mt-2">No pending leave requests.</div>
+              ) : (
+                <div className="list-group list-group-flush mt-2">
+                  {pendingLeaves.map((r) => (
+                    <div key={r.id} className="list-group-item px-0 d-flex align-items-center gap-3">
+                      <div
+                        className="rounded-circle d-inline-flex justify-content-center align-items-center flex-shrink-0"
+                        style={{ width: 36, height: 36, background: "#fef9c3", color: "#a16207", fontWeight: 800 }}
+                      >
+                        {initials(r?.employee?.name)}
+                      </div>
+                      <div className="flex-fill">
+                        <div className="fw-semibold">
+                          {r?.employee?.name || "—"}{" "}
+                          <span className="text-muted fw-normal">
+                            · {r?.employee?.department?.name || "No Dept"}
+                          </span>
+                        </div>
+                        <div className="small text-muted">
+                          {r?.leaveType?.name || "Leave"} · {fmtDate(r.start_date)} → {fmtDate(r.end_date)}
+                          {r.is_without_pay ? " · WOP" : ""}
+                        </div>
+                      </div>
+                      <span className="badge bg-warning text-dark">Pending</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Mini KPI strip (looks nicer) */}
+        <div className="col-lg-4">
+          <div className="card shadow-sm rounded-4 border-0 h-100" style={{ background: "linear-gradient(135deg, #f8fafc, #eef2ff)" }}>
+            <div className="card-body">
+              <div className="text-uppercase small text-muted mb-2">Today at a glance</div>
+
+              <div className="d-flex align-items-center justify-content-between border rounded-4 p-3 mb-2 bg-white">
+                <div>
+                  <div className="fw-semibold">Present</div>
+                  <div className="text-muted small">Marked present today</div>
+                </div>
+                <div className="display-6 fw-semibold mb-0">{kpis.present}</div>
+              </div>
+
+              <div className="d-flex align-items-center justify-content-between border rounded-4 p-3 mb-2 bg-white">
+                <div>
+                  <div className="fw-semibold">Absent</div>
+                  <div className="text-muted small">Marked absent today</div>
+                </div>
+                <div className="display-6 fw-semibold mb-0">{kpis.absent}</div>
+              </div>
+
+              <div className="d-flex align-items-center justify-content-between border rounded-4 p-3 bg-white">
+                <div>
+                  <div className="fw-semibold">On Leave</div>
+                  <div className="text-muted small">{kpis.shortLeave ? `${kpis.shortLeave} short leave` : "Leave entries today"}</div>
+                </div>
+                <div className="display-6 fw-semibold mb-0">{kpis.leave}</div>
+              </div>
+
+              <div className="mt-3 small text-muted">
+                Active employees: <span className="fw-semibold">{kpis.total}</span>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -170,46 +446,6 @@ export default function HRDashboard() {
 
       {!loading && !error && (
         <>
-          {/* KPI cards */}
-          <div className="row g-3 mb-4">
-            {[{
-              title: "Total Employees",
-              value: kpis.total,
-              sub: "Active profiles",
-              variant: "secondary"
-            },{
-              title: "Present Today",
-              value: kpis.present,
-              sub: `${kpis.total ? Math.round((kpis.present / kpis.total) * 100) : 0}% of total`,
-              variant: "success"
-            },{
-              title: "Absent Today",
-              value: kpis.absent,
-              sub: `${kpis.total ? Math.round((kpis.absent / kpis.total) * 100) : 0}% of total`,
-              variant: "danger"
-            },{
-              title: "On Leave Today",
-              value: kpis.leave,
-              sub: kpis.shortLeave ? `${kpis.shortLeave} short leave` : "",
-              variant: "warning"
-            }].map((m, i) => (
-              <div className="col-md-6 col-lg-3" key={i}>
-                <div
-                  className={"card border-0 shadow-sm rounded-4 h-100 " + "bg-" + m.variant + " bg-opacity-10"}
-                  style={{ transition: "transform .2s" }}
-                  onMouseEnter={(e) => (e.currentTarget.style.transform = "translateY(-2px)")}
-                  onMouseLeave={(e) => (e.currentTarget.style.transform = "none")}
-                >
-                  <div className="card-body">
-                    <div className="text-uppercase small text-muted mb-1">{m.title}</div>
-                    <div className="display-6 fw-semibold">{m.value}</div>
-                    <div className="mt-1 small text-muted">{m.sub}</div>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-
           {/* Teacher Highlights */}
           <div className="row g-3 mb-4">
             <div className="col-lg-6">
@@ -269,7 +505,7 @@ export default function HRDashboard() {
             </div>
           </div>
 
-          {/* All Absent — across departments (pretty tiles) */}
+          {/* All Absent */}
           <div className="card shadow-sm rounded-4 mb-4">
             <div className="card-header bg-white border-0 fw-semibold d-flex justify-content-between align-items-center">
               <span>All Absent Employees — {date}</span>
@@ -288,7 +524,9 @@ export default function HRDashboard() {
                         </div>
                         <div className="flex-fill">
                           <div className="fw-semibold text-truncate" title={e.name}>{e.name}</div>
-                          <div className="small text-muted text-truncate" title={(e?.department?.name || "-") + " · " + (e?.designation || "-")}>{e?.department?.name || "-"} · {e?.designation || "-"}</div>
+                          <div className="small text-muted text-truncate" title={(e?.department?.name || "-") + " · " + (e?.designation || "-")}>
+                            {e?.department?.name || "-"} · {e?.designation || "-"}
+                          </div>
                         </div>
                         <span className="badge bg-danger">Absent</span>
                       </div>
@@ -299,9 +537,11 @@ export default function HRDashboard() {
             </div>
           </div>
 
-          {/* Directory table (filtered) */}
+          {/* Directory table */}
           <div className="card shadow-sm rounded-4">
-            <div className="card-header bg-white border-0 fw-semibold">Employee Directory — {selectedDept === "all" ? "All Departments" : selectedDept}</div>
+            <div className="card-header bg-white border-0 fw-semibold">
+              Employee Directory — {selectedDept === "all" ? "All Departments" : selectedDept}
+            </div>
             <div className="table-responsive">
               <table className="table table-hover align-middle mb-0">
                 <thead className="table-light">

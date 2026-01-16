@@ -228,11 +228,6 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
     navigate("/dashboard", { replace: true });
   };
 
-  const closeDropdownAnd = (fn) => () => {
-    setDropdownOpen(false);
-    if (typeof fn === "function") fn();
-  };
-
   // Open chat widget when bell is clicked
   const handleBellClick = () => {
     window.dispatchEvent(new Event("chat:open-request"));
@@ -328,7 +323,6 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
         icon: "bi-list-check",
         isPendingDropdown: true,
       },
-      // ✅ Students added for accounts
       { label: "Students", href: "/students", icon: "bi-people" },
       {
         label: "Fee Cert",
@@ -351,7 +345,6 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
         icon: "bi-list-check",
         isPendingDropdown: true,
       },
-      // ✅ Students added for account
       { label: "Students", href: "/students", icon: "bi-people" },
       {
         label: "Fee Cert",
@@ -374,7 +367,6 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
         icon: "bi-list-check",
         isPendingDropdown: true,
       },
-      // ✅ Students added for fee_manager
       { label: "Students", href: "/students", icon: "bi-people" },
       {
         label: "Fee Cert",
@@ -398,11 +390,7 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
     // Teacher
     teacher: [
       { label: "Mark Att.", href: "/mark-attendance", icon: "bi-check2-square" },
-      {
-        label: "TT",
-        href: "/teacher-timetable-display",
-        icon: "bi-table",
-      },
+      { label: "TT", href: "/teacher-timetable-display", icon: "bi-table" },
       { label: "Marks", href: "/marks-entry", icon: "bi-pencil-square" },
       {
         label: "Subs",
@@ -444,11 +432,7 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
         icon: "bi-calendar2-check",
       },
       { label: "Diary", href: "/student-diary", icon: "bi-journal-text" },
-      {
-        label: "Assign",
-        href: "/my-assignments",
-        icon: "bi-journal-check",
-      },
+      { label: "Assign", href: "/my-assignments", icon: "bi-journal-check" },
       { label: "Fees", href: "/student-fee", icon: "bi-cash-coin" },
     ],
     // Parent
@@ -465,14 +449,23 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
   };
 
   const quickLinks = QUICK_LINKS_BY_ROLE[roleLower] || [];
-  const brandLogo = `${process.env.PUBLIC_URL}/images/pts_logo.png`;
+
+  // ✅ UPDATED BRANDING (logo + name)
+  const brandLogo = `${process.env.PUBLIC_URL}/images/SMCISLogo.png`;
+  const brandName = "Seth Malook Chand International School";
 
   return (
     <>
       <nav
-        className="navbar fixed-top navbar-expand-lg navbar-light bg-white border-bottom app-header shadow-sm"
+        className="navbar fixed-top navbar-expand-lg navbar-light border-bottom app-header shadow-sm"
         role="navigation"
-        style={{ zIndex: 3000 }}
+        style={{
+          zIndex: 3000,
+          backgroundImage: `url(${process.env.PUBLIC_URL}/images/SMCIS_Background.jpeg)`,
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+          backgroundRepeat: "no-repeat",
+        }}
       >
         <div className="container-fluid px-3">
           {/* Brand */}
@@ -482,7 +475,7 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
           >
             <img
               src={brandLogo}
-              alt="Pathseekers International School"
+              alt={brandName}
               width={34}
               height={34}
               className="rounded"
@@ -491,9 +484,7 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
                 e.currentTarget.style.display = "none";
               }}
             />
-            <span className="fw-semibold">
-              Pathseekers International School
-            </span>
+            <span className="fw-semibold">{brandName}</span>
           </Link>
 
           {/* Student switcher (desktop pills) */}
@@ -516,9 +507,9 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
                       isActiveStu ? "btn-primary" : "btn-outline-primary"
                     } rounded-pill px-3`}
                     onClick={() => handleStudentSwitch(s.admission_number)}
-                    title={`${s.name} (${
-                      s.class?.name || "—"
-                    }-${s.section?.name || "—"})`}
+                    title={`${s.name} (${s.class?.name || "—"}-${
+                      s.section?.name || "—"
+                    })`}
                     style={{
                       maxWidth: 180,
                       overflow: "hidden",
@@ -591,10 +582,7 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
                           onClick={() => setPendingOpen((v) => !v)}
                         >
                           <span className="ql-icon-wrap">
-                            <i
-                              className={`bi ${q.icon}`}
-                              aria-hidden="true"
-                            />
+                            <i className={`bi ${q.icon}`} aria-hidden="true" />
                           </span>
                           <span className="qlabel">{q.label}</span>
                         </button>
@@ -652,7 +640,10 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
             <button
               type="button"
               className="btn btn-outline-secondary position-relative"
-              onClick={handleBellClick}
+              onClick={() => {
+                window.dispatchEvent(new Event("chat:open-request"));
+                onBellClick();
+              }}
               aria-label="Notifications"
               title="Notifications"
             >
@@ -687,9 +678,7 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
                   }}
                   referrerPolicy="no-referrer"
                 />
-                <span className="d-none d-sm-inline">
-                  {userName || "User"}
-                </span>
+                <span className="d-none d-sm-inline">{userName || "User"}</span>
                 <i
                   className={`bi ${
                     dropdownOpen ? "bi-chevron-up" : "bi-chevron-down"
@@ -727,7 +716,15 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
                 <li>
                   <button
                     className="dropdown-item"
-                    onClick={closeDropdownAnd(handleLogout)}
+                    onClick={() => {
+                      setDropdownOpen(false);
+                      localStorage.removeItem("token");
+                      localStorage.removeItem("roles");
+                      localStorage.removeItem("activeRole");
+                      localStorage.removeItem("family");
+                      localStorage.removeItem("activeStudentAdmission");
+                      navigate("/");
+                    }}
                   >
                     Logout
                   </button>
@@ -796,6 +793,15 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
 
       {/* Little CSS helpers */}
       <style>{`
+        /* Improve readability when background image is used */
+        .app-header {
+          backdrop-filter: saturate(1.1) blur(2px);
+        }
+        .navbar-brand span {
+          color: #0a1f44;
+          text-shadow: 0 1px 2px rgba(255,255,255,0.7);
+        }
+
         /* Keep quick links in one line and compact */
         .quick-links-strip { white-space: nowrap; }
 

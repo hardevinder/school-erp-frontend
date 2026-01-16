@@ -1,4 +1,4 @@
-// File: src/components/Navbar.jsx
+    // File: src/components/Navbar.jsx
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate, Link, useLocation } from "react-router-dom";
 import axios from "axios";
@@ -328,7 +328,6 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
         icon: "bi-list-check",
         isPendingDropdown: true,
       },
-      // ✅ Students added for accounts
       { label: "Students", href: "/students", icon: "bi-people" },
       {
         label: "Fee Cert",
@@ -351,7 +350,6 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
         icon: "bi-list-check",
         isPendingDropdown: true,
       },
-      // ✅ Students added for account
       { label: "Students", href: "/students", icon: "bi-people" },
       {
         label: "Fee Cert",
@@ -374,7 +372,6 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
         icon: "bi-list-check",
         isPendingDropdown: true,
       },
-      // ✅ Students added for fee_manager
       { label: "Students", href: "/students", icon: "bi-people" },
       {
         label: "Fee Cert",
@@ -465,7 +462,10 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
   };
 
   const quickLinks = QUICK_LINKS_BY_ROLE[roleLower] || [];
-  const brandLogo = `${process.env.PUBLIC_URL}/images/pts_logo.png`;
+
+  // ✅ UPDATED BRANDING (logo + name)
+  const brandLogo = `${process.env.PUBLIC_URL}/images/amps_logo.png`;
+  const brandName = "Ashutosh Memorial School";
 
   return (
     <>
@@ -482,7 +482,7 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
           >
             <img
               src={brandLogo}
-              alt="Pathseekers International School"
+              alt={brandName}
               width={34}
               height={34}
               className="rounded"
@@ -491,9 +491,7 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
                 e.currentTarget.style.display = "none";
               }}
             />
-            <span className="fw-semibold">
-              Pathseekers International School
-            </span>
+            <span className="fw-semibold">{brandName}</span>
           </Link>
 
           {/* Student switcher (desktop pills) */}
@@ -591,10 +589,7 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
                           onClick={() => setPendingOpen((v) => !v)}
                         >
                           <span className="ql-icon-wrap">
-                            <i
-                              className={`bi ${q.icon}`}
-                              aria-hidden="true"
-                            />
+                            <i className={`bi ${q.icon}`} aria-hidden="true" />
                           </span>
                           <span className="qlabel">{q.label}</span>
                         </button>
@@ -652,7 +647,10 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
             <button
               type="button"
               className="btn btn-outline-secondary position-relative"
-              onClick={handleBellClick}
+              onClick={() => {
+                window.dispatchEvent(new Event("chat:open-request"));
+                onBellClick();
+              }}
               aria-label="Notifications"
               title="Notifications"
             >
@@ -687,9 +685,7 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
                   }}
                   referrerPolicy="no-referrer"
                 />
-                <span className="d-none d-sm-inline">
-                  {userName || "User"}
-                </span>
+                <span className="d-none d-sm-inline">{userName || "User"}</span>
                 <i
                   className={`bi ${
                     dropdownOpen ? "bi-chevron-up" : "bi-chevron-down"
@@ -727,7 +723,15 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
                 <li>
                   <button
                     className="dropdown-item"
-                    onClick={closeDropdownAnd(handleLogout)}
+                    onClick={() => {
+                      setDropdownOpen(false);
+                      localStorage.removeItem("token");
+                      localStorage.removeItem("roles");
+                      localStorage.removeItem("activeRole");
+                      localStorage.removeItem("family");
+                      localStorage.removeItem("activeStudentAdmission");
+                      navigate("/");
+                    }}
                   >
                     Logout
                   </button>

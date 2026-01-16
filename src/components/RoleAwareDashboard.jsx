@@ -4,13 +4,16 @@ import { useRoles } from "../hooks/useRoles";
 
 import Dashboard from "./Dashboard";
 import FrontOfficeDashboard from "./FrontOfficeDashboard";
+import AdmissionDashboard from "./AdmissionDashboard";
 import TeacherDashboard from "./TeacherDashboard";
 import StudentDashboard from "./StudentDashboard";
 import AcademicCoordinatorDashboard from "./AcademicCoordinatorDashboard";
 import HRDashboard from "./HRDashboard";
 
-// ✅ NEW
 import LibraryDashboard from "./LibraryDashboard";
+
+// ✅ NEW: Transport Dashboard
+import TransportDashboard from "./TransportDashboard";
 
 export default function RoleAwareDashboard() {
   const { activeRole } = useRoles();
@@ -20,7 +23,14 @@ export default function RoleAwareDashboard() {
     case "frontoffice":
       return <FrontOfficeDashboard />;
 
-    // ✅ NEW
+    case "admission":
+      return <AdmissionDashboard />;
+
+    // ✅ NEW: Transport role
+    case "transport":
+      return <TransportDashboard />;
+
+    // ✅ Library
     case "librarian":
     case "library":
     case "libraryadmin":

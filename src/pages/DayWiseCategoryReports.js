@@ -110,40 +110,59 @@ const getUniqueCategories = (pivotedData) => {
 };
 
 // Calculate Category Summary (grouped by feeCategoryName with breakdown by PaymentMode)
+// Calculate Category Summary (grouped by feeCategoryName with breakdown by PaymentMode)
+// ✅ Now counts HDFC as Online
 const calculateCategorySummary = (data) => {
+  const norm = (v) => String(v ?? "").trim().toLowerCase();
+  const isCash = (m) => norm(m) === "cash";
+  const isOnline = (m) => ["online", "hdfc"].includes(norm(m));
+
   const groups = data.reduce((acc, curr) => {
-    const category = curr.feeCategoryName;
+    const category = curr.feeCategoryName || "Unknown";
     if (!acc[category]) {
       acc[category] = {
-        cash: { totalFeeReceived: 0, totalConcession: 0, totalVanFee: 0, totalVanFeeConcession: 0, totalReceived: 0 },
-        online: { totalFeeReceived: 0, totalConcession: 0, totalVanFee: 0, totalVanFeeConcession: 0, totalReceived: 0 }
+        cash: {
+          totalFeeReceived: 0,
+          totalConcession: 0,
+          totalVanFee: 0,
+          totalVanFeeConcession: 0,
+          totalReceived: 0,
+        },
+        online: {
+          totalFeeReceived: 0,
+          totalConcession: 0,
+          totalVanFee: 0,
+          totalVanFeeConcession: 0,
+          totalReceived: 0,
+        },
       };
     }
-    if (curr.PaymentMode === 'Cash') {
-      const fine = Number(curr.totalFine || curr.Fine_Amount || 0);
-      acc[category].cash.totalFeeReceived += Number(curr.totalFeeReceived) || 0;
-      acc[category].cash.totalConcession += Number(curr.totalConcession) || 0;
-      acc[category].cash.totalVanFee += Number(curr.totalVanFee) || 0;
-      acc[category].cash.totalVanFeeConcession += Number(curr.totalVanFeeConcession) || 0;
-      acc[category].cash.totalReceived += 
-        (Number(curr.totalFeeReceived) || 0) +
-        (Number(curr.totalVanFee) || 0) +
-        fine;
-    } else if (curr.PaymentMode === 'Online') {
-      const fine = Number(curr.totalFine || curr.Fine_Amount || 0);
-      acc[category].online.totalFeeReceived += Number(curr.totalFeeReceived) || 0;
-      acc[category].online.totalConcession += Number(curr.totalConcession) || 0;
-      acc[category].online.totalVanFee += Number(curr.totalVanFee) || 0;
-      acc[category].online.totalVanFeeConcession += Number(curr.totalVanFeeConcession) || 0;
-      acc[category].online.totalReceived += 
-        (Number(curr.totalFeeReceived) || 0) +
-        (Number(curr.totalVanFee) || 0) +
-        fine;
+
+    const fine = Number(curr.totalFine || curr.Fine_Amount || 0);
+    const fee = Number(curr.totalFeeReceived) || 0;
+    const conc = Number(curr.totalConcession) || 0;
+    const van = Number(curr.totalVanFee) || 0;
+    const vanConc = Number(curr.totalVanFeeConcession) || 0;
+
+    if (isCash(curr.PaymentMode)) {
+      acc[category].cash.totalFeeReceived += fee;
+      acc[category].cash.totalConcession += conc;
+      acc[category].cash.totalVanFee += van;
+      acc[category].cash.totalVanFeeConcession += vanConc;
+      acc[category].cash.totalReceived += fee + van + fine;
+    } else if (isOnline(curr.PaymentMode)) {
+      // ✅ Online includes HDFC now
+      acc[category].online.totalFeeReceived += fee;
+      acc[category].online.totalConcession += conc;
+      acc[category].online.totalVanFee += van;
+      acc[category].online.totalVanFeeConcession += vanConc;
+      acc[category].online.totalReceived += fee + van + fine;
     }
 
     return acc;
   }, {});
-  return Object.keys(groups).map(category => {
+
+  return Object.keys(groups).map((category) => {
     const cash = groups[category].cash;
     const online = groups[category].online;
     const overall = {
@@ -151,11 +170,12 @@ const calculateCategorySummary = (data) => {
       totalConcession: cash.totalConcession + online.totalConcession,
       totalVanFee: cash.totalVanFee + online.totalVanFee,
       totalVanFeeConcession: cash.totalVanFeeConcession + online.totalVanFeeConcession,
-      totalReceived: cash.totalReceived + online.totalReceived
+      totalReceived: cash.totalReceived + online.totalReceived,
     };
     return { category, cash, online, overall };
   });
 };
+  
 
 const DayWiseReport = () => {
   const [startDate, setStartDate] = useState(null);

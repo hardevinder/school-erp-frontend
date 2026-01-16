@@ -79,7 +79,7 @@ const styles = StyleSheet.create({
 
 // Indian number format without currency symbol
 const formatValue = (val) => {
-  return Number(val) === 0 ? "0" : Number(val).toLocaleString('en-IN');
+  return Number(val) === 0 ? '0' : Number(val).toLocaleString('en-IN');
 };
 
 // dd/MM/yyyy for ISO "yyyy-MM-dd" strings (date range header)
@@ -109,6 +109,30 @@ const chunkArray = (array, chunkSize) => {
   return results;
 };
 
+// ✅ Normalize payment mode so HDFC / UPI / CARD etc are counted in Online summary
+const normalizePaymentMode = (mode = '') => {
+  const m = String(mode).trim().toLowerCase();
+
+  if (m === 'cash' || m.includes('cash')) return 'cash';
+
+  // Treat ALL of these as ONLINE
+  if (
+    m === 'online' ||
+    m === 'hdfc' ||
+    m.includes('hdfc') || // "HDFC SmartGateway", etc.
+    m.includes('smartgateway') ||
+    m.includes('upi') ||
+    m.includes('card') ||
+    m.includes('net') ||
+    m.includes('bank')
+  ) {
+    return 'online';
+  }
+
+  // safe fallback: online
+  return 'online';
+};
+
 // Pivot the aggregated data by Slip_ID using feeCategoryName as dynamic columns.
 // Separate van fee for "Tuition Fee": tuition fee stays in feeCategories, van fee goes to vanFeeTotal.
 const pivotReportData = (data) => {
@@ -131,7 +155,7 @@ const pivotReportData = (data) => {
       acc[slipId].feeCategories[category] = { totalReceived: 0 };
     }
 
-    if (category === "Tuition Fee") {
+    if (category === 'Tuition Fee') {
       acc[slipId].feeCategories[category].totalReceived += Number(curr.totalFeeReceived) || 0;
       acc[slipId].vanFeeTotal += Number(curr.totalVanFee) || 0;
     } else {
@@ -168,7 +192,9 @@ const CollectionTableHeader = ({ feeCategories }) => (
     <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Payment Mode</Text>
     <Text style={[styles.tableHeaderCell, { flex: 2 }]}>Created At</Text>
     {feeCategories.map((cat, idx) => (
-      <Text key={idx} style={[styles.tableHeaderCell, { flex: 1 }]}>{cat}</Text>
+      <Text key={idx} style={[styles.tableHeaderCell, { flex: 1 }]}>
+        {cat}
+      </Text>
     ))}
     <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Van Fee</Text>
     <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Fine</Text>
@@ -223,20 +249,35 @@ const PdfCategoryReport = ({ school, startDate, endDate, aggregatedData = [] }) 
     const cat = curr.feeCategoryName;
     if (!acc[cat]) {
       acc[cat] = {
-        cash: { totalFeeReceived: 0, totalConcession: 0, totalVanFee: 0, totalVanFeeConcession: 0, totalReceived: 0 },
-        online: { totalFeeReceived: 0, totalConcession: 0, totalVanFee: 0, totalVanFeeConcession: 0, totalReceived: 0 },
+        cash: {
+          totalFeeReceived: 0,
+          totalConcession: 0,
+          totalVanFee: 0,
+          totalVanFeeConcession: 0,
+          totalReceived: 0,
+        },
+        online: {
+          totalFeeReceived: 0,
+          totalConcession: 0,
+          totalVanFee: 0,
+          totalVanFeeConcession: 0,
+          totalReceived: 0,
+        },
       };
     }
-    if (curr.PaymentMode === 'Cash') {
-      const fine = Number(curr.totalFine || curr.Fine_Amount || 0);
+
+    const mode = normalizePaymentMode(curr.PaymentMode); // ✅ Cash / Online (HDFC included in Online)
+    const fine = Number(curr.totalFine || curr.Fine_Amount || 0);
+
+    if (mode === 'cash') {
       acc[cat].cash.totalFeeReceived += Number(curr.totalFeeReceived) || 0;
       acc[cat].cash.totalConcession += Number(curr.totalConcession) || 0;
       acc[cat].cash.totalVanFee += Number(curr.totalVanFee) || 0;
       acc[cat].cash.totalVanFeeConcession += Number(curr.totalVanFeeConcession) || 0;
       acc[cat].cash.totalReceived +=
         (Number(curr.totalFeeReceived) || 0) + (Number(curr.totalVanFee) || 0) + fine;
-    } else if (curr.PaymentMode === 'Online') {
-      const fine = Number(curr.totalFine || curr.Fine_Amount || 0);
+    } else {
+      // ✅ Online bucket includes HDFC/HDFC SmartGateway/UPI/Card/NetBanking/etc.
       acc[cat].online.totalFeeReceived += Number(curr.totalFeeReceived) || 0;
       acc[cat].online.totalConcession += Number(curr.totalConcession) || 0;
       acc[cat].online.totalVanFee += Number(curr.totalVanFee) || 0;
@@ -244,8 +285,10 @@ const PdfCategoryReport = ({ school, startDate, endDate, aggregatedData = [] }) 
       acc[cat].online.totalReceived +=
         (Number(curr.totalFeeReceived) || 0) + (Number(curr.totalVanFee) || 0) + fine;
     }
+
     return acc;
   }, {});
+
   const categorySummary = Object.keys(categoryGroups).map((category) => {
     const cash = categoryGroups[category].cash;
     const online = categoryGroups[category].online;
@@ -264,11 +307,11 @@ const PdfCategoryReport = ({ school, startDate, endDate, aggregatedData = [] }) 
   });
 
   // ---- Pagination ----
-  // Collection: 15 records per page (as requested)
+  // Collection: 18 records per page
   const recordsPerPage = 18;
   const paginatedCollection = chunkArray(pivotedData, recordsPerPage);
 
-  // Summary: keep same page sizing for simplicity (also 15 for consistency)
+  // Summary: same page sizing
   const paginatedSummary = chunkArray(categorySummary, recordsPerPage);
 
   return (
@@ -284,7 +327,9 @@ const PdfCategoryReport = ({ school, startDate, endDate, aggregatedData = [] }) 
           {chunkIndex === 0 && (
             <>
               <View style={styles.headerContainer}>
-                <Text style={styles.schoolName}>{school?.name || school?.school_name || 'School Name'}</Text>
+                <Text style={styles.schoolName}>
+                  {school?.name || school?.school_name || 'School Name'}
+                </Text>
                 <Text style={styles.schoolDesc}>{school?.description || school?.address || ''}</Text>
               </View>
               <Text style={styles.dateRange}>
@@ -300,9 +345,11 @@ const PdfCategoryReport = ({ school, startDate, endDate, aggregatedData = [] }) 
             {chunk.map((row, idx) => {
               // Sum the fee category totals, then add van fee and fine for overall
               const categoryTotal = Object.values(row.feeCategories).reduce(
-                (sum, fee) => sum + (fee?.totalReceived || 0), 0
+                (sum, fee) => sum + (fee?.totalReceived || 0),
+                0
               );
-              const overallRowTotal = categoryTotal + (row.vanFeeTotal || 0) + (row.fineAmount || 0);
+              const overallRowTotal =
+                categoryTotal + (row.vanFeeTotal || 0) + (row.fineAmount || 0);
 
               return (
                 <View style={styles.tableRow} key={row.Slip_ID}>
@@ -317,9 +364,7 @@ const PdfCategoryReport = ({ school, startDate, endDate, aggregatedData = [] }) 
                   <Text style={[styles.tableCell, { flex: 1 }]}>{row.PaymentMode}</Text>
 
                   {/* Created At in dd/MM/yyyy */}
-                  <Text style={[styles.tableCell, { flex: 2 }]}>
-                    {formatToDDMMYYYY(row.createdAt)}
-                  </Text>
+                  <Text style={[styles.tableCell, { flex: 2 }]}>{formatToDDMMYYYY(row.createdAt)}</Text>
 
                   {feeCategories.map((cat, i) => {
                     const feeData = row.feeCategories[cat];
@@ -330,8 +375,12 @@ const PdfCategoryReport = ({ school, startDate, endDate, aggregatedData = [] }) 
                     );
                   })}
 
-                  <Text style={[styles.tableCell, { flex: 1 }]}>{formatValue(row.vanFeeTotal)}</Text>
-                  <Text style={[styles.tableCell, { flex: 1 }]}>{formatValue(row.fineAmount || 0)}</Text>
+                  <Text style={[styles.tableCell, { flex: 1 }]}>
+                    {formatValue(row.vanFeeTotal)}
+                  </Text>
+                  <Text style={[styles.tableCell, { flex: 1 }]}>
+                    {formatValue(row.fineAmount || 0)}
+                  </Text>
                   <Text style={[styles.tableCell, { flex: 1 }]}>{formatValue(overallRowTotal)}</Text>
                 </View>
               );
@@ -359,21 +408,18 @@ const PdfCategoryReport = ({ school, startDate, endDate, aggregatedData = [] }) 
             )}
           </View>
 
-          <Text style={styles.pageFooter} render={({ pageNumber, totalPages }) => `${pageNumber} / ${totalPages}`} fixed />
+          <Text
+            style={styles.pageFooter}
+            render={({ pageNumber, totalPages }) => `${pageNumber} / ${totalPages}`}
+            fixed
+          />
         </Page>
       ))}
 
       {/* Category Summary Report Pages */}
       {paginatedSummary.map((chunk, chunkIndex) => (
-        <Page
-          key={`summary-page-${chunkIndex}`}
-          size="A4"
-          orientation="landscape"
-          style={styles.page}
-        >
-          {chunkIndex === 0 && (
-            <Text style={styles.sectionTitle}>Category Summary Report</Text>
-          )}
+        <Page key={`summary-page-${chunkIndex}`} size="A4" orientation="landscape" style={styles.page}>
+          {chunkIndex === 0 && <Text style={styles.sectionTitle}>Category Summary Report</Text>}
 
           <View style={styles.table}>
             <SummaryTableHeader />
@@ -383,15 +429,19 @@ const PdfCategoryReport = ({ school, startDate, endDate, aggregatedData = [] }) 
                 <Text style={[styles.tableCell, { flex: 2 }]}>{formatValue(item.cash.totalFeeReceived)}</Text>
                 <Text style={[styles.tableCell, { flex: 2 }]}>{formatValue(item.online.totalFeeReceived)}</Text>
                 <Text style={[styles.tableCell, { flex: 2 }]}>{formatValue(item.cash.totalFeeReceived + item.online.totalFeeReceived)}</Text>
+
                 <Text style={[styles.tableCell, { flex: 2 }]}>{formatValue(item.cash.totalConcession)}</Text>
                 <Text style={[styles.tableCell, { flex: 2 }]}>{formatValue(item.online.totalConcession)}</Text>
                 <Text style={[styles.tableCell, { flex: 2 }]}>{formatValue(item.cash.totalConcession + item.online.totalConcession)}</Text>
+
                 <Text style={[styles.tableCell, { flex: 2 }]}>{formatValue(item.cash.totalVanFee)}</Text>
                 <Text style={[styles.tableCell, { flex: 2 }]}>{formatValue(item.online.totalVanFee)}</Text>
                 <Text style={[styles.tableCell, { flex: 2 }]}>{formatValue(item.cash.totalVanFee + item.online.totalVanFee)}</Text>
+
                 <Text style={[styles.tableCell, { flex: 2 }]}>{formatValue(item.cash.totalVanFeeConcession)}</Text>
                 <Text style={[styles.tableCell, { flex: 2 }]}>{formatValue(item.online.totalVanFeeConcession)}</Text>
                 <Text style={[styles.tableCell, { flex: 2 }]}>{formatValue(item.cash.totalVanFeeConcession + item.online.totalVanFeeConcession)}</Text>
+
                 <Text style={[styles.tableCell, { flex: 2 }]}>{formatValue(item.cash.totalReceived)}</Text>
                 <Text style={[styles.tableCell, { flex: 2 }]}>{formatValue(item.online.totalReceived)}</Text>
                 <Text style={[styles.tableCell, { flex: 2 }]}>{formatValue(item.cash.totalReceived + item.online.totalReceived)}</Text>
@@ -402,6 +452,7 @@ const PdfCategoryReport = ({ school, startDate, endDate, aggregatedData = [] }) 
             {chunkIndex === paginatedSummary.length - 1 && (
               <View style={styles.tableRow}>
                 <Text style={[styles.tableCell, { flex: 2, fontWeight: 'bold' }]}>Overall Totals</Text>
+
                 <Text style={[styles.tableCell, { flex: 2, fontWeight: 'bold' }]}>
                   {formatValue(categorySummary.reduce((sum, s) => sum + s.cash.totalFeeReceived, 0))}
                 </Text>
@@ -411,6 +462,7 @@ const PdfCategoryReport = ({ school, startDate, endDate, aggregatedData = [] }) 
                 <Text style={[styles.tableCell, { flex: 2, fontWeight: 'bold' }]}>
                   {formatValue(categorySummary.reduce((sum, s) => sum + s.cash.totalFeeReceived + s.online.totalFeeReceived, 0))}
                 </Text>
+
                 <Text style={[styles.tableCell, { flex: 2, fontWeight: 'bold' }]}>
                   {formatValue(categorySummary.reduce((sum, s) => sum + s.cash.totalConcession, 0))}
                 </Text>
@@ -420,6 +472,7 @@ const PdfCategoryReport = ({ school, startDate, endDate, aggregatedData = [] }) 
                 <Text style={[styles.tableCell, { flex: 2, fontWeight: 'bold' }]}>
                   {formatValue(categorySummary.reduce((sum, s) => sum + s.cash.totalConcession + s.online.totalConcession, 0))}
                 </Text>
+
                 <Text style={[styles.tableCell, { flex: 2, fontWeight: 'bold' }]}>
                   {formatValue(categorySummary.reduce((sum, s) => sum + s.cash.totalVanFee, 0))}
                 </Text>
@@ -429,6 +482,7 @@ const PdfCategoryReport = ({ school, startDate, endDate, aggregatedData = [] }) 
                 <Text style={[styles.tableCell, { flex: 2, fontWeight: 'bold' }]}>
                   {formatValue(categorySummary.reduce((sum, s) => sum + s.cash.totalVanFee + s.online.totalVanFee, 0))}
                 </Text>
+
                 <Text style={[styles.tableCell, { flex: 2, fontWeight: 'bold' }]}>
                   {formatValue(categorySummary.reduce((sum, s) => sum + s.cash.totalVanFeeConcession, 0))}
                 </Text>
@@ -438,6 +492,7 @@ const PdfCategoryReport = ({ school, startDate, endDate, aggregatedData = [] }) 
                 <Text style={[styles.tableCell, { flex: 2, fontWeight: 'bold' }]}>
                   {formatValue(categorySummary.reduce((sum, s) => sum + s.cash.totalVanFeeConcession + s.online.totalVanFeeConcession, 0))}
                 </Text>
+
                 <Text style={[styles.tableCell, { flex: 2, fontWeight: 'bold' }]}>
                   {formatValue(categorySummary.reduce((sum, s) => sum + s.cash.totalReceived, 0))}
                 </Text>
@@ -451,7 +506,11 @@ const PdfCategoryReport = ({ school, startDate, endDate, aggregatedData = [] }) 
             )}
           </View>
 
-          <Text style={styles.pageFooter} render={({ pageNumber, totalPages }) => `${pageNumber} / ${totalPages}`} fixed />
+          <Text
+            style={styles.pageFooter}
+            render={({ pageNumber, totalPages }) => `${pageNumber} / ${totalPages}`}
+            fixed
+          />
         </Page>
       ))}
     </Document>

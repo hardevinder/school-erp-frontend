@@ -18,13 +18,15 @@ const ROLE_ORDER = [
   "student",
 ];
 
-// Background candidates (keeps prior choices)
+// ✅ UPDATED: Background candidates -> use amps_background.jpeg
 const BG_CANDIDATES = [
-  `${process.env.PUBLIC_URL}/images/SchooBackground.jpeg`,
-  `${process.env.PUBLIC_URL}/images/SchooBackground.jpeg`,
-  `${process.env.PUBLIC_URL}/image/SchooBackground.jpeg`,
-  `${process.env.PUBLIC_URL}/image/SchooBackground.jpeg`,
+  `${process.env.PUBLIC_URL}/images/amps_background.jpeg`,
+  `${process.env.PUBLIC_URL}/image/amps_background.jpeg`,
 ];
+
+// ✅ UPDATED: Fixed branding (logo + school name)
+const FIXED_SCHOOL_NAME = "Ashutosh Memorial School";
+const FIXED_LOGO = `${process.env.PUBLIC_URL}/images/amps_logo.png`;
 
 function resolveFirstExistingImage(candidates) {
   return new Promise((resolve) => {
@@ -71,10 +73,22 @@ const joinRooms = (user, roles = []) => {
 
 const GoogleIcon = () => (
   <svg width="18" height="18" viewBox="0 0 533.5 544.3" aria-hidden="true">
-    <path fill="#EA4335" d="M533.5 278.4c0-17.4-1.6-34.1-4.7-50.2H272v95.1h147.1c-6.3 34-25 62.8-53.3 82v67h86.2c50.4-46.5 81.5-115 81.5-193.9z"/>
-    <path fill="#34A853" d="M272 544.3c72.3 0 132.9-23.9 177.2-65.1l-86.2-67c-24 16.1-54.6 25.7-91 25.7-69.9 0-129.1-47.2-150.3-110.7H33.7v69.6C77.8 490.3 168.8 544.3 272 544.3z"/>
-    <path fill="#4A90E2" d="M121.7 327.2c-5.1-15.3-8-31.7-8-48.6s2.9-33.3 8-48.6V160.4H33.7C12.7 204.8 0 254.3 0 306.6c0 52.3 12.7 101.8 33.7 146.2l88-65.6z"/>
-    <path fill="#FBBC05" d="M272 107.7c39.2 0 74.5 13.5 102.2 39.9l76.7-76.7C404.8 26.2 344.2 0 272 0 168.8 0 77.8 54 33.7 160.4l88 69.6C142.9 154.9 202.1 107.7 272 107.7z"/>
+    <path
+      fill="#EA4335"
+      d="M533.5 278.4c0-17.4-1.6-34.1-4.7-50.2H272v95.1h147.1c-6.3 34-25 62.8-53.3 82v67h86.2c50.4-46.5 81.5-115 81.5-193.9z"
+    />
+    <path
+      fill="#34A853"
+      d="M272 544.3c72.3 0 132.9-23.9 177.2-65.1l-86.2-67c-24 16.1-54.6 25.7-91 25.7-69.9 0-129.1-47.2-150.3-110.7H33.7v69.6C77.8 490.3 168.8 544.3 272 544.3z"
+    />
+    <path
+      fill="#4A90E2"
+      d="M121.7 327.2c-5.1-15.3-8-31.7-8-48.6s2.9-33.3 8-48.6V160.4H33.7C12.7 204.8 0 254.3 0 306.6c0 52.3 12.7 101.8 33.7 146.2l88-65.6z"
+    />
+    <path
+      fill="#FBBC05"
+      d="M272 107.7c39.2 0 74.5 13.5 102.2 39.9l76.7-76.7C404.8 26.2 344.2 0 272 0 168.8 0 77.8 54 33.7 160.4l88 69.6C142.9 154.9 202.1 107.7 272 107.7z"
+    />
   </svg>
 );
 
@@ -90,7 +104,10 @@ const Login = () => {
 
   const navigate = useNavigate();
   const userInputRef = useRef(null);
-  const apiBase = useMemo(() => process.env.REACT_APP_API_URL?.replace(/\/+$/, ""), []);
+  const apiBase = useMemo(
+    () => process.env.REACT_APP_API_URL?.replace(/\/+$/, ""),
+    []
+  );
 
   // Focus first input
   useEffect(() => {
@@ -108,7 +125,8 @@ const Login = () => {
 
   // Apply stored token from either storage on mount
   useEffect(() => {
-    const token = localStorage.getItem("token") || sessionStorage.getItem("token");
+    const token =
+      localStorage.getItem("token") || sessionStorage.getItem("token");
     if (token) axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
   }, []);
 
@@ -135,7 +153,7 @@ const Login = () => {
           localStorage.removeItem("userId");
           localStorage.removeItem("name");
           localStorage.removeItem("activeRole");
-          localStorage.removeItem("family");                 // NEW
+          localStorage.removeItem("family"); // NEW
           localStorage.removeItem("activeStudentAdmission"); // NEW
           sessionStorage.removeItem("token");
           sessionStorage.removeItem("roles");
@@ -168,8 +186,6 @@ const Login = () => {
         sessionStorage.setItem("userId", user.id);
         sessionStorage.setItem("name", user.name);
       }
-      // set a canonical place so other parts can read (used in your app)
-      // also set axios auth header
       axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
     } catch (e) {
       console.warn("Storage failed", e);
@@ -179,7 +195,6 @@ const Login = () => {
     try {
       if (data.family) {
         localStorage.setItem("family", JSON.stringify(data.family));
-        // default active student is the logged in student; fallback to username
         localStorage.setItem(
           "activeStudentAdmission",
           data.family?.student?.admission_number || user.username
@@ -194,23 +209,24 @@ const Login = () => {
     }
     // --- END NEW ---
 
-    localStorage.removeItem("userRole"); // existing cleanup intent
+    localStorage.removeItem("userRole");
     const defaultActive =
-      ROLE_ORDER.find((r) => roleArrLower.includes(r)) || (roleArrLower[0] || "");
-    // persist activeRole to localStorage (persist UI choice)
+      ROLE_ORDER.find((r) => roleArrLower.includes(r)) ||
+      (roleArrLower[0] || "");
     localStorage.setItem("activeRole", defaultActive);
 
     // If you have FCM token available on window, save it on server
     try {
       const fcm = window.FCMTOKEN;
       if (fcm) {
-        // prefer axios default header for token auth which is set above
-        axios.post(`${apiBase}/users/save-token`, {
-          username: user.username,
-          token: fcm,
-        }).catch((e) => {
-          console.warn("save-token failed", e?.response?.data || e.message);
-        });
+        axios
+          .post(`${apiBase}/users/save-token`, {
+            username: user.username,
+            token: fcm,
+          })
+          .catch((e) => {
+            console.warn("save-token failed", e?.response?.data || e.message);
+          });
       }
     } catch (e) {
       console.warn("save-token call error", e);
@@ -236,11 +252,10 @@ const Login = () => {
       console.warn("joinRooms failed", e);
     }
 
-    // dispatch event for other parts of app to read updated user state
     window.dispatchEvent(new Event("role-changed"));
 
-    // redirect depending on role (accounts -> accounts dashboard)
-    const redirectPath = defaultActive === "accounts" ? "/accounts-dashboard" : "/dashboard";
+    const redirectPath =
+      defaultActive === "accounts" ? "/accounts-dashboard" : "/dashboard";
     navigate(redirectPath, { replace: true });
   };
 
@@ -250,7 +265,11 @@ const Login = () => {
     setLoading(true);
     try {
       const device = navigator.userAgent || "web";
-      const { data } = await axios.post(`${apiBase}/users/login`, { login, password, device });
+      const { data } = await axios.post(`${apiBase}/users/login`, {
+        login,
+        password,
+        device,
+      });
       await afterAuth(data);
     } catch (err) {
       const msg =
@@ -296,7 +315,8 @@ const Login = () => {
   // Optional logout helper (can be moved to Auth context)
   const logout = async () => {
     try {
-      const token = localStorage.getItem("token") || sessionStorage.getItem("token");
+      const token =
+        localStorage.getItem("token") || sessionStorage.getItem("token");
       if (token) {
         try {
           await axios.post(
@@ -304,9 +324,7 @@ const Login = () => {
             {},
             { headers: { Authorization: `Bearer ${token}` } }
           );
-        } catch (e) {
-          // ignore server errors here, proceed to cleanup
-        }
+        } catch (e) {}
       }
     } finally {
       delete axios.defaults.headers.common["Authorization"];
@@ -316,7 +334,7 @@ const Login = () => {
       localStorage.removeItem("userId");
       localStorage.removeItem("name");
       localStorage.removeItem("activeRole");
-      localStorage.removeItem("family");                 // NEW
+      localStorage.removeItem("family"); // NEW
       localStorage.removeItem("activeStudentAdmission"); // NEW
       sessionStorage.removeItem("token");
       sessionStorage.removeItem("roles");
@@ -328,10 +346,10 @@ const Login = () => {
     }
   };
 
-  // School logo + fallback logic
-  const schoolLogoSrc = school?.logo ? `${apiBase}${school.logo}` : `${process.env.PUBLIC_URL}/images/pts_logo.png`;
-  const schoolName = school?.name || "Pathseekers International School";
-  const fallbackLogo = `${process.env.PUBLIC_URL}/images/pts_logo.png`;
+  // ✅ UPDATED: Force logo & name as requested
+  const schoolLogoSrc = FIXED_LOGO;
+  const schoolName = FIXED_SCHOOL_NAME;
+  const fallbackLogo = FIXED_LOGO;
 
   return (
     <div
@@ -341,7 +359,9 @@ const Login = () => {
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        backgroundImage: `linear-gradient(rgba(8,8,18,0.55), rgba(8,8,18,0.8))${bgUrl ? `, url(${bgUrl})` : ""}`,
+        backgroundImage: `linear-gradient(rgba(8,8,18,0.55), rgba(8,8,18,0.8))${
+          bgUrl ? `, url(${bgUrl})` : ""
+        }`,
         backgroundSize: "cover",
         backgroundPosition: "center",
         backgroundRepeat: "no-repeat",
@@ -365,7 +385,9 @@ const Login = () => {
                       }}
                     />
 
-                    <h4 className="mt-2 mb-0 fw-semibold text-white">{schoolName}</h4>
+                    <h4 className="mt-2 mb-0 fw-semibold text-white">
+                      {schoolName}
+                    </h4>
                     <p className="text-white-50 small mb-0">
                       Manage academics, fees, attendance, HR & more.
                     </p>

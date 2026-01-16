@@ -14,6 +14,9 @@ import EditProfile from "./components/EditProfile";
 import Chat from "./components/Chat";
 import ChatContainer from "./components/chat/ChatContainer";
 
+// ✅ NEW: Transport dashboard (optional direct route)
+import TransportDashboard from "./components/TransportDashboard";
+
 // Pages
 import Classes from "./pages/Classes";
 import Sessions from "./pages/Sessions";
@@ -23,6 +26,11 @@ import FeeStructure from "./pages/FeeStructure";
 import FeeHeadings from "./pages/FeeHeadings";
 import Sections from "./pages/Sections";
 import Transportation from "./pages/Transportation";
+
+// ✅ NEW: Transport pages
+import Buses from "./pages/Buses";
+import StudentTransportAssignments from "./pages/StudentTransportAssignments";
+
 import Transactions from "./pages/Transactions/Transactions";
 import CancelledTransactions from "./pages/Transactions/CancelledTransactions";
 import Schools from "./pages/Schools";
@@ -101,6 +109,7 @@ import StudentRemarksEntry from "./pages/StudentRemarksEntry";
 import StudentTransport from "./pages/StudentTransport";
 import OpeningBalances from "./pages/OpeningBalances";
 import CasteGenderReport from "./pages/CasteGenderReport";
+import ReligionGenderReport from "./pages/ReligionGenderReport"; // ✅ ADDED
 import DigitalDiary from "./pages/DigitalDiary";
 import StudentDiary from "./pages/StudentDiary";
 import DiaryDetail from "./pages/DiaryDetail";
@@ -113,6 +122,7 @@ import StudentFeeReport from "./pages/StudentFeeReport";
 // ✅ NEW pages
 import TransferCertificates from "./pages/TransferCertificates";
 import Enquiries from "./pages/Enquiries";
+import Registrations from "./pages/Registrations"; // ✅ ADD THIS
 import BonafideCertificates from "./pages/BonafideCertificates";
 import DisciplinaryActions from "./pages/DisciplinaryActions";
 import FeeCertificates from "./pages/FeeCertificates";
@@ -261,6 +271,16 @@ function App() {
           <Route path="/dashboard" element={<RoleAwareDashboard />} />
           <Route path="/edit-profile" element={<EditProfile />} />
 
+          {/* ✅ NEW: Transport Dashboard (direct route) */}
+          <Route
+            path="/transport-dashboard"
+            element={
+              <RequireRole roles={["transport", "admin", "superadmin", "accounts"]}>
+                <TransportDashboard />
+              </RequireRole>
+            }
+          />
+
           {/* ✅ Academic Calendar (READ-ONLY view for everyone logged-in) */}
           <Route path="/academic-calendar-view" element={<AcademicCalendarView />} />
 
@@ -325,6 +345,27 @@ function App() {
             }
           />
 
+          {/* ✅ Registrations (staff-only) */}
+          <Route
+            path="/registrations"
+            element={
+              <RequireRole
+                roles={[
+                  "superadmin",
+                  "admin",
+                  "admission",
+                  "frontoffice",
+                  "accounts",
+                  "academic_coordinator",
+                  "hr",
+                  "teacher",
+                ]}
+              >
+                <Registrations />
+              </RequireRole>
+            }
+          />
+
           {/* Fee & Reports */}
           <Route path="/fee-structure" element={<FeeStructure />} />
           <Route path="/fee-headings" element={<FeeHeadings />} />
@@ -355,8 +396,37 @@ function App() {
           <Route path="/cancelled-transactions" element={<CancelledTransactions />} />
           <Route path="/receipt/:slipId" element={<ReceiptPrint />} />
 
-          {/* Transport */}
-          <Route path="/transportation" element={<Transportation />} />
+          {/* ✅ Transport: Routes (guarded) */}
+          <Route
+            path="/transportations"
+            element={
+              <RequireRole roles={["transport", "admin", "superadmin", "accounts"]}>
+                <Transportation />
+              </RequireRole>
+            }
+          />
+          {/* Alias (old singular) */}
+          <Route path="/transportation" element={<Navigate to="/transportations" replace />} />
+
+          {/* ✅ Transport: Buses (guarded) */}
+          <Route
+            path="/buses"
+            element={
+              <RequireRole roles={["transport", "admin", "superadmin", "accounts"]}>
+                <Buses />
+              </RequireRole>
+            }
+          />
+
+          {/* ✅ Transport: Student Assignments (guarded) */}
+          <Route
+            path="/student-transport-assignments"
+            element={
+              <RequireRole roles={["transport", "admin", "superadmin", "accounts"]}>
+                <StudentTransportAssignments />
+              </RequireRole>
+            }
+          />
 
           {/* Circulars */}
           <Route path="/combined-circulars" element={<CombinedCirculars />} />
@@ -441,11 +511,13 @@ function App() {
           <Route path="/report-card-generator" element={<ReportCardGenerator />} />
           <Route path="/academic-years" element={<AcademicYearManagement />} />
 
-          {/* Transport */}
+          {/* Transport (older page) */}
           <Route path="/student-transport" element={<StudentTransport />} />
 
           {/* Reports */}
           <Route path="/reports/caste-gender" element={<CasteGenderReport />} />
+          <Route path="/reports/religion-gender" element={<ReligionGenderReport />} />
+          <Route path="/reports/religion" element={<Navigate to="/reports/religion-gender" replace />} />
 
           {/* Digital Diary */}
           <Route path="/digital-diary" element={<DigitalDiary />} />

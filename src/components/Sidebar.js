@@ -86,9 +86,15 @@ export default function Sidebar({ headerHeight = 56 }) {
   const isAccounts = roleLower === "accounts" || roleLower === "account";
   const isFrontoffice = roleLower === "frontoffice";
 
+  // ✅ NEW: Admission role flags
+  const isAdmission = roleLower === "admission";
+
   // ✅ NEW: Librarian role flags
   const isLibrarian =
     roleLower === "librarian" || roleLower === "library" || roleLower === "libraryadmin";
+
+  // ✅ NEW: Transport role flags
+  const isTransport = roleLower === "transport" || roleLower === "transporter";
 
   const hasAccess = (item) => {
     if (!item?.roles || item.roles.length === 0) return true;
@@ -102,6 +108,76 @@ export default function Sidebar({ headerHeight = 56 }) {
   // ===== MENU GROUPS =====
   const menuGroups = useMemo(() => {
     const groups = [];
+
+    // ✅ TRANSPORT MENU (NEW ROLE)
+    if (isTransport) {
+      groups.push({
+        heading: "Main",
+        items: [
+          {
+            key: "transport-dashboard",
+            label: "Dashboard",
+            icon: "bi-speedometer2",
+            path: "/dashboard",
+            roles: ["transport"],
+          },
+        ],
+      });
+
+      groups.push({
+        heading: "Transport",
+        items: [
+          {
+            key: "transport-dashboard-direct",
+            label: "Transport Dashboard",
+            icon: "bi-truck-front-fill",
+            path: "/transport-dashboard",
+            roles: ["transport"],
+          },
+          {
+            key: "transportations",
+            label: "Routes / Cost",
+            icon: "bi-signpost-split",
+            path: "/transportations",
+            roles: ["transport"],
+          },
+          {
+            key: "buses",
+            label: "Buses",
+            icon: "bi-bus-front-fill",
+            path: "/buses",
+            roles: ["transport"],
+          },
+          {
+            key: "student-transport-assignments",
+            label: "Assign Bus to Students",
+            icon: "bi-person-check-fill",
+            path: "/student-transport-assignments",
+            roles: ["transport"],
+          },
+        ],
+      });
+
+      groups.push({
+        heading: "Quick",
+        items: [
+          {
+            key: "combined-circulars",
+            label: "Circulars",
+            icon: "bi-megaphone",
+            path: "/combined-circulars",
+            roles: ["transport"],
+          },
+          {
+            key: "chat",
+            label: "Chat",
+            icon: "bi-chat-dots",
+            path: "/chat",
+            roles: ["transport"],
+          },
+        ],
+      });
+    }
 
     // ✅ LIBRARY MENU (Librarian)
     if (isLibrarian) {
@@ -125,62 +201,61 @@ export default function Sidebar({ headerHeight = 56 }) {
             key: "library-home",
             label: "Library Dashboard",
             icon: "bi-journal-bookmark-fill",
-            path: "/library-dashboard", // ✅ create route later (optional)
+            path: "/library-dashboard",
             roles: ["librarian", "library", "libraryadmin"],
           },
           {
             key: "library-books",
             label: "Books Catalog",
             icon: "bi-book",
-            path: "/library/books", // ✅ create route later
+            path: "/library/books",
             roles: ["librarian", "library", "libraryadmin"],
           },
           {
             key: "library-members",
             label: "Members",
             icon: "bi-people",
-            path: "/library/members", // ✅ create route later
+            path: "/library/members",
             roles: ["librarian", "library", "libraryadmin"],
           },
           {
             key: "library-issue-return",
             label: "Issue / Return",
             icon: "bi-arrow-left-right",
-            path: "/library/issue-return", // ✅ create route later
+            path: "/library/issue-return",
             roles: ["librarian", "library", "libraryadmin"],
           },
           {
             key: "library-reservations",
             label: "Reservations",
             icon: "bi-bookmark-star",
-            path: "/library/reservations", // ✅ create route later
+            path: "/library/reservations",
             roles: ["librarian", "library", "libraryadmin"],
           },
           {
             key: "library-fines",
             label: "Fines & Dues",
             icon: "bi-cash-coin",
-            path: "/library/fines", // ✅ create route later
+            path: "/library/fines",
             roles: ["librarian", "library", "libraryadmin"],
           },
           {
             key: "library-reports",
             label: "Reports",
             icon: "bi-graph-up",
-            path: "/library/reports", // ✅ create route later
+            path: "/library/reports",
             roles: ["librarian", "library", "libraryadmin"],
           },
           {
             key: "library-settings",
             label: "Library Settings",
             icon: "bi-gear",
-            path: "/library/settings", // ✅ create route later
+            path: "/library/settings",
             roles: ["librarian", "library", "libraryadmin"],
           },
         ],
       });
 
-      // Optional: allow librarian to view circulars/chat if you want
       groups.push({
         heading: "Quick",
         items: [
@@ -254,6 +329,56 @@ export default function Sidebar({ headerHeight = 56 }) {
             icon: "bi-award",
             path: "/transfer-certificates",
             roles: ["frontoffice"],
+          },
+        ],
+      });
+    }
+
+    // ✅ ADMISSION MENU (NEW ROLE)
+    if (isAdmission) {
+      groups.push({
+        heading: "Main",
+        items: [
+          {
+            key: "admission-dashboard",
+            label: "Dashboard",
+            icon: "bi-speedometer2",
+            path: "/dashboard",
+            roles: ["admission"],
+          },
+        ],
+      });
+
+      groups.push({
+        heading: "Admissions",
+        items: [
+          {
+            key: "enquiries",
+            label: "Enquiries",
+            icon: "bi-chat-dots",
+            path: "/enquiries",
+            roles: ["admission"],
+          },
+          {
+            key: "registrations",
+            label: "Registrations",
+            icon: "bi-person-plus",
+            path: "/registrations",
+            roles: ["admission"],
+          },
+          {
+            key: "students",
+            label: "Students",
+            icon: "bi-people",
+            path: "/students",
+            roles: ["admission"],
+          },
+          {
+            key: "academic-calendar-view",
+            label: "Academic Calendar",
+            icon: "bi-calendar3",
+            path: "/academic-calendar-view",
+            roles: ["admission"],
           },
         ],
       });
@@ -346,6 +471,30 @@ export default function Sidebar({ headerHeight = 56 }) {
             path: "/reports/concession",
             roles: ["accounts"],
           },
+
+          // ✅ Transport modules (accounts may view/manage)
+          {
+            key: "transportations",
+            label: "Transport Routes / Cost",
+            icon: "bi-signpost-split",
+            path: "/transportations",
+            roles: ["accounts", "admin", "superadmin", "transport"],
+          },
+          {
+            key: "buses",
+            label: "Buses",
+            icon: "bi-bus-front",
+            path: "/buses",
+            roles: ["accounts", "admin", "superadmin", "transport"],
+          },
+          {
+            key: "student-transport-assignments",
+            label: "Bus Assignments",
+            icon: "bi-person-check",
+            path: "/student-transport-assignments",
+            roles: ["accounts", "admin", "superadmin", "transport"],
+          },
+
           {
             key: "feeHeadings",
             label: "Fee Headings",
@@ -387,8 +536,12 @@ export default function Sidebar({ headerHeight = 56 }) {
           { key: "concessionReport", label: "Concession Report", icon: "bi-journal-check", path: "/reports/concession" },
           { key: "vanFeeDetailedReport", label: "Van Fee Report", icon: "bi-truck-front", path: "/reports/van-fee" },
           { key: "feeStructure", label: "Fee Structure", icon: "bi-cash-coin", path: "/fee-structure" },
-          { key: "transportation", label: "Transportation Cost", icon: "bi-truck", path: "/transportation" },
-          { key: "student-transport", label: "Transport Assignments", icon: "bi-truck", path: "/student-transport" },
+
+          // ✅ UPDATED: transport paths
+          { key: "transportations", label: "Transportation Cost", icon: "bi-truck", path: "/transportations" },
+          { key: "buses", label: "Buses", icon: "bi-bus-front", path: "/buses" },
+          { key: "student-transport-assignments", label: "Transport Assignments", icon: "bi-person-check", path: "/student-transport-assignments" },
+
           { key: "feeHeadings", label: "Fee Headings", icon: "bi-bookmark", path: "/fee-headings" },
           { key: "feeCategory", label: "Fee Category", icon: "bi-tags", path: "/fee-category" },
           { key: "concessions", label: "Concessions", icon: "bi-percent", path: "/concessions" },
@@ -400,7 +553,6 @@ export default function Sidebar({ headerHeight = 56 }) {
       groups.push({
         heading: "Admissions",
         items: [
-          { key: "students", label: "Admissions", icon: "bi-people", path: "/students" },
           { key: "enquiries", label: "Enquiries", icon: "bi-person-lines-fill", path: "/enquiries", roles: ["admin", "superadmin"] },
           { key: "classes", label: "Classes", icon: "bi-list-task", path: "/classes" },
           { key: "sections", label: "Sections", icon: "bi-grid", path: "/sections" },
@@ -455,7 +607,10 @@ export default function Sidebar({ headerHeight = 56 }) {
           { key: "substitutionListing", label: "Substitution Listing", icon: "bi-list-ul", path: "/substitution-listing" },
           { key: "studentUserAccounts", label: "Create Student Login", icon: "bi-person-plus", path: "/student-user-accounts" },
           { key: "sessions", label: "Sessions", icon: "bi-calendar4-week", path: "/sessions" },
-          { key: "student-transport", label: "Transport Assignments", icon: "bi-truck", path: "/student-transport" },
+
+          // (Keep old module if still used)
+          { key: "student-transport", label: "Transport (Old)", icon: "bi-truck", path: "/student-transport" },
+
           { key: "caste-gender-report", label: "Caste/Gender Report", icon: "bi-people-fill", path: "/reports/caste-gender" },
         ],
       });
@@ -608,7 +763,9 @@ export default function Sidebar({ headerHeight = 56 }) {
     isSuperAdmin,
     isAccounts,
     isFrontoffice,
+    isAdmission,
     isLibrarian,
+    isTransport,
     roleLower,
   ]);
 
@@ -657,7 +814,13 @@ export default function Sidebar({ headerHeight = 56 }) {
     superadmin: ["dashboard", "users", "reports/day-wise", "transactions", "opening-balances"],
     accounts: ["accounts-dashboard", "transactions", "studentDue", "dayWiseReport"],
     frontoffice: ["frontoffice-dashboard", "gate-pass", "visitors", "enquiries", "students"],
-    // ✅ NEW: Librarian bottom-nav priorities
+    admission: ["admission-dashboard", "enquiries", "registrations", "students"],
+
+    // ✅ NEW: Transport bottom-nav priorities
+    transport: ["transport-dashboard-direct", "transportations", "buses", "student-transport-assignments"],
+    transporter: ["transport-dashboard-direct", "transportations", "buses", "student-transport-assignments"],
+
+    // ✅ Librarian bottom-nav priorities
     librarian: ["library-dashboard", "library-books", "library-issue-return", "library-members"],
     library: ["library-dashboard", "library-books", "library-issue-return", "library-members"],
     libraryadmin: ["library-dashboard", "library-books", "library-issue-return", "library-members"],
