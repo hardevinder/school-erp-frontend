@@ -43,11 +43,52 @@ const fmtDate = (v) => {
   return d.toLocaleDateString("en-IN");
 };
 
+const safeStr = (v) => String(v ?? "").trim();
+
+// Session guess (FY-style, April-March)
+const guessCurrentSession = () => {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = now.getMonth() + 1; // 1..12
+  const startYear = m >= 4 ? y : y - 1;
+  const endYear2 = String((startYear + 1) % 100).padStart(2, "0");
+  return `${startYear}-${endYear2}`; // e.g. 2025-26
+};
+
+const parseSession = (s) => {
+  const m = safeStr(s).match(/^(\d{4})-(\d{2})$/);
+  if (!m) return null;
+  return { start: Number(m[1]), end2: Number(m[2]) };
+};
+
+const shiftSession = (s, delta) => {
+  const p = parseSession(s);
+  if (!p) return guessCurrentSession();
+  const nextStart = p.start + delta;
+  const endYear2 = String((nextStart + 1) % 100).padStart(2, "0");
+  return `${nextStart}-${endYear2}`;
+};
+
+const uniqCount = (arr, keyGetter) => {
+  const set = new Set();
+  for (const x of arr || []) {
+    const k = keyGetter(x);
+    if (k !== null && k !== undefined && k !== "") set.add(String(k));
+  }
+  return set.size;
+};
+
 /* ---------------- Component ---------------- */
 export default function TransportDashboard() {
   const navigate = useNavigate();
   const { isAdmin, isSuperadmin, isAccounts, isTransport } = useMemo(getRoleFlags, []);
   const canUse = isTransport || isAdmin || isSuperadmin || isAccounts;
+
+  // Session (shared with Transportation page)
+  const [session, setSession] = useState(() => {
+    const saved = safeStr(localStorage.getItem("academic_session"));
+    return saved || guessCurrentSession();
+  });
 
   // State
   const [routes, setRoutes] = useState([]);
@@ -76,48 +117,67 @@ export default function TransportDashboard() {
   const ASSIGN_BASE = "/student-transport-assignments";
   const STUDENTS_BASE = "/students";
 
+  // centralized api config for session
+  const sessionCfg = useMemo(
+    () => ({
+      params: { session },
+      headers: { "x-session": session },
+    }),
+    [session]
+  );
+
   /* ---------------- Fetchers ---------------- */
   const fetchRoutes = useCallback(async () => {
     if (!canUse) return;
     setLoading((s) => ({ ...s, routes: true }));
     try {
-      const res = await api.get(ROUTES_BASE);
+      const res = await api.get(ROUTES_BASE, sessionCfg);
       const list = asArray(res.data);
       setRoutes(Array.isArray(list) ? list : []);
       setError("");
       setLastUpdated(new Date());
     } catch (e) {
       console.error("fetchRoutes error:", e);
-      setError(e?.response?.data?.message || "Failed to load transport routes.");
+      setError(e?.response?.data?.message || e?.response?.data?.error || "Failed to load transport routes.");
     } finally {
       setLoading((s) => ({ ...s, routes: false }));
     }
-  }, [canUse]);
+  }, [canUse, sessionCfg]);
 
   const fetchBuses = useCallback(async () => {
     if (!canUse) return;
     setLoading((s) => ({ ...s, buses: true }));
     try {
-      const res = await api.get(BUSES_BASE);
+      // buses may or may not be session-wise; sending session header is harmless
+      const res = await api.get(BUSES_BASE, sessionCfg);
       const list = asArray(res.data);
       setBuses(Array.isArray(list) ? list : []);
       setError("");
       setLastUpdated(new Date());
     } catch (e) {
       console.error("fetchBuses error:", e);
-      setError(e?.response?.data?.message || "Failed to load buses.");
+      setError(e?.response?.data?.message || e?.response?.data?.error || "Failed to load buses.");
     } finally {
       setLoading((s) => ({ ...s, buses: false }));
     }
-  }, [canUse]);
+  }, [canUse, sessionCfg]);
 
   const fetchRecentAssignments = useCallback(async () => {
     if (!canUse) return;
     setLoading((s) => ({ ...s, assignments: true }));
     try {
-      const res = await api.get(ASSIGN_BASE, { params: { active: true } });
+      const res = await api.get(ASSIGN_BASE, {
+        ...sessionCfg,
+        params: { ...sessionCfg.params, active: true },
+      });
       const list = asArray(res.data);
       const arr = Array.isArray(list) ? list : [];
+      // newest first if timestamps exist
+      arr.sort((a, b) => {
+        const da = new Date(a?.createdAt || a?.updatedAt || 0).getTime();
+        const db = new Date(b?.createdAt || b?.updatedAt || 0).getTime();
+        return db - da;
+      });
       setRecentAssignments(arr.slice(0, 10));
       setError("");
       setLastUpdated(new Date());
@@ -128,7 +188,7 @@ export default function TransportDashboard() {
     } finally {
       setLoading((s) => ({ ...s, assignments: false }));
     }
-  }, [canUse]);
+  }, [canUse, sessionCfg]);
 
   // For KPI: Students with transport (fallback)
   const [studentsWithTransportCount, setStudentsWithTransportCount] = useState(0);
@@ -137,8 +197,11 @@ export default function TransportDashboard() {
     if (!canUse) return;
     setLoading((s) => ({ ...s, students: true }));
     try {
-      // Try using active assignments count first (more accurate)
-      const resA = await api.get(ASSIGN_BASE, { params: { active: true } });
+      // Try using active assignments (more accurate)
+      const resA = await api.get(ASSIGN_BASE, {
+        ...sessionCfg,
+        params: { ...sessionCfg.params, active: true },
+      });
       const listA = asArray(resA.data);
       if (Array.isArray(listA) && listA.length) {
         // distinct student ids
@@ -149,7 +212,7 @@ export default function TransportDashboard() {
       }
 
       // Fallback: count from students list (bus_service is '1' / true)
-      const resS = await api.get(STUDENTS_BASE);
+      const resS = await api.get(STUDENTS_BASE, sessionCfg);
       const listS = asArray(resS.data);
       const arr = Array.isArray(listS) ? listS : [];
       const count = arr.filter((s) => {
@@ -165,7 +228,7 @@ export default function TransportDashboard() {
     } finally {
       setLoading((s) => ({ ...s, students: false }));
     }
-  }, [canUse]);
+  }, [canUse, sessionCfg]);
 
   const refreshAll = useCallback(() => {
     fetchRoutes();
@@ -175,8 +238,10 @@ export default function TransportDashboard() {
   }, [fetchRoutes, fetchBuses, fetchRecentAssignments, fetchStudentsWithTransport]);
 
   useEffect(() => {
+    if (!canUse) return;
+    localStorage.setItem("academic_session", session);
     refreshAll();
-  }, [refreshAll]);
+  }, [refreshAll, session, canUse]);
 
   // Auto refresh
   useEffect(() => {
@@ -201,8 +266,14 @@ export default function TransportDashboard() {
   }, [buses]);
 
   const routeKpis = useMemo(() => {
+    // we are already session-wise from API
     const total = routes.length;
-    return { total };
+    const withFine = routes.filter((r) => Number(r?.finePercentage || 0) > 0 || !!r?.fineStartDate).length;
+    const uniqVillages = uniqCount(
+      routes,
+      (r) => safeStr(r?.Villages).toLowerCase() // rough uniqueness (string)
+    );
+    return { total, withFine, uniqVillages };
   }, [routes]);
 
   const quickLinks = useMemo(
@@ -212,43 +283,43 @@ export default function TransportDashboard() {
         icon: "bi-signpost-split",
         href: "/transportations",
         gradient: "linear-gradient(135deg, #0ea5e9, #0369a1)",
+        desc: "Manage routes & fines",
       },
       {
         label: "Buses",
         icon: "bi-bus-front",
         href: "/buses",
         gradient: "linear-gradient(135deg, #22c55e, #16a34a)",
+        desc: "Fleet & status",
       },
       {
         label: "Assign Students",
         icon: "bi-person-check",
         href: "/student-transport-assignments",
         gradient: "linear-gradient(135deg, #6366f1, #4338ca)",
+        desc: "Pickup / Drop mapping",
       },
       {
         label: "Bus Attendance",
         icon: "bi-check2-square",
         href: "/transport-attendance", // create later
         gradient: "linear-gradient(135deg, #f59e0b, #b45309)",
+        desc: "Daily tracking",
       },
     ],
     []
   );
 
+  const busy = loading.routes || loading.buses || loading.assignments || loading.students;
+
   const kpiTiles = useMemo(
     () => [
-      { title: "Total Routes", value: routeKpis.total, variant: "info" },
+      { title: "Routes (Session)", value: routeKpis.total, variant: "info" },
+      { title: "Routes with Fine", value: routeKpis.withFine, variant: "warning" },
       { title: "Total Buses", value: busKpis.total, variant: "success" },
       { title: "Active Buses", value: busKpis.active, variant: "primary" },
-      { title: "Students w/ Transport", value: studentsWithTransportCount, variant: "warning" },
-      { title: "Recent Assignments", value: recentAssignments.length, variant: "secondary" },
-      {
-        title: "Open Assign Module",
-        value: "Go",
-        variant: "dark",
-        isLink: true,
-        href: "/student-transport-assignments",
-      },
+      { title: "Students w/ Transport", value: studentsWithTransportCount, variant: "secondary" },
+      { title: "Recent Assignments", value: recentAssignments.length, variant: "dark" },
     ],
     [routeKpis, busKpis, studentsWithTransportCount, recentAssignments]
   );
@@ -274,21 +345,62 @@ export default function TransportDashboard() {
         {/* Header */}
         <div className="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3 rounded-4 p-3 shadow-sm bg-white">
           <div>
-            <h4 className="mb-1 fw-semibold">Transport Dashboard</h4>
+            <h4 className="mb-1 fw-semibold d-flex align-items-center gap-2">
+              Transport Dashboard
+              <span className="badge text-bg-light border" title="Selected session">
+                Session: {session}
+              </span>
+              {busy ? (
+                <span className="badge text-bg-warning" title="Auto refreshing">
+                  Updating…
+                </span>
+              ) : (
+                <span className="badge text-bg-success" title="Up to date">
+                  Live
+                </span>
+              )}
+            </h4>
+
             <div className="text-muted small">
               Routes · Buses · Assignments{" · "}
               {lastUpdated ? `Last updated: ${lastUpdated.toLocaleString("en-IN")}` : "—"}
             </div>
           </div>
 
-          <div className="d-flex gap-2">
+          <div className="d-flex flex-wrap gap-2 align-items-center">
+            {/* Session control */}
+            <div className="d-flex align-items-center gap-2">
+              <button
+                className="btn btn-outline-secondary shadow-sm"
+                title="Previous session"
+                onClick={() => setSession((s) => shiftSession(s, -1))}
+              >
+                ◀
+              </button>
+              <input
+                className="form-control shadow-sm"
+                style={{ width: 140 }}
+                value={session}
+                onChange={(e) => setSession(e.target.value)}
+                placeholder="2025-26"
+              />
+              <button
+                className="btn btn-outline-secondary shadow-sm"
+                title="Next session"
+                onClick={() => setSession((s) => shiftSession(s, +1))}
+              >
+                ▶
+              </button>
+            </div>
+
             <button
               className={`btn btn-outline-${autoRefresh ? "secondary" : "success"} shadow-sm`}
               onClick={() => setAutoRefresh((v) => !v)}
             >
               {autoRefresh ? "Pause Auto-Refresh" : "Resume Auto-Refresh"}
             </button>
-            <button className="btn btn-primary shadow-sm" onClick={refreshAll}>
+
+            <button className="btn btn-primary shadow-sm" onClick={refreshAll} disabled={busy}>
               <i className="bi bi-arrow-clockwise me-1" /> Refresh
             </button>
           </div>
@@ -315,6 +427,7 @@ export default function TransportDashboard() {
                 to={q.href}
                 className="btn w-100 text-white shadow-sm rounded-4 p-3 d-flex align-items-center gap-3"
                 style={{ backgroundImage: q.gradient, textDecoration: "none" }}
+                state={{ session }} // optional: if your route reads location.state
               >
                 <span
                   className="d-inline-grid place-items-center rounded-circle"
@@ -329,7 +442,7 @@ export default function TransportDashboard() {
                 </span>
                 <div className="text-start">
                   <div className="fw-semibold">{q.label}</div>
-                  <div className="small opacity-75">Open</div>
+                  <div className="small opacity-75">{q.desc}</div>
                 </div>
                 <div className="ms-auto">
                   <i className="bi bi-arrow-right fs-5 opacity-75" />
@@ -345,18 +458,12 @@ export default function TransportDashboard() {
             <div key={i} className="col-12 col-sm-6 col-lg-3">
               <div
                 className={`card border-0 shadow-sm rounded-4 h-100 bg-${k.variant} bg-opacity-10`}
-                style={{ cursor: k.isLink ? "pointer" : "default" }}
-                onClick={k.isLink ? () => navigate(k.href) : undefined}
-                title={k.isLink ? "Open Transport Assignments" : undefined}
+                style={{ cursor: "default" }}
               >
                 <div className="card-body">
                   <div className="text-uppercase small text-muted mb-1">{k.title}</div>
                   <div className="display-6 fw-semibold">{k.value}</div>
-                  <div className="small text-muted">
-                    {loading.routes || loading.buses || loading.assignments || loading.students
-                      ? "Updating…"
-                      : "Live snapshot"}
-                  </div>
+                  <div className="small text-muted">{busy ? "Updating…" : "Live snapshot"}</div>
                 </div>
               </div>
             </div>
@@ -368,10 +475,23 @@ export default function TransportDashboard() {
           <div className="col-12">
             <div className="card shadow-sm rounded-4">
               <div className="card-header bg-white border-0 d-flex justify-content-between align-items-center">
-                <div className="fw-semibold">Recent Student Transport Assignments</div>
-                <Link className="btn btn-sm btn-outline-primary" to="/student-transport-assignments">
-                  Open module
-                </Link>
+                <div className="fw-semibold d-flex align-items-center gap-2">
+                  Recent Student Transport Assignments
+                  <span className="badge text-bg-light border">Session: {session}</span>
+                </div>
+
+                <div className="d-flex gap-2">
+                  <button
+                    className="btn btn-sm btn-outline-secondary"
+                    onClick={() => navigate("/transportations")}
+                    title="Open Routes"
+                  >
+                    Routes
+                  </button>
+                  <Link className="btn btn-sm btn-outline-primary" to="/student-transport-assignments">
+                    Open module
+                  </Link>
+                </div>
               </div>
 
               <div className="table-responsive">
@@ -422,8 +542,14 @@ export default function TransportDashboard() {
                 </table>
               </div>
 
-              <div className="card-footer bg-white border-0 small text-muted">
-                Tip: Use <strong>Assign Students</strong> module to set Pickup/Drop buses with effective dates.
+              <div className="card-footer bg-white border-0 small text-muted d-flex flex-wrap justify-content-between gap-2">
+                <div>
+                  Tip: Use <strong>Assign Students</strong> to set Pickup/Drop buses with effective dates.
+                </div>
+                <div>
+                  Auto-refresh: <strong>{autoRefresh ? "On" : "Off"}</strong> · Polling:{" "}
+                  <code>{POLLING_INTERVAL / 1000}s</code>
+                </div>
               </div>
             </div>
           </div>
@@ -431,12 +557,16 @@ export default function TransportDashboard() {
 
         {/* Styles */}
         <style>{`
-          .card { animation: fadeInUp .5s ease-out; }
-          @keyframes fadeInUp { from { opacity: 0; transform: translateY(12px);} to { opacity: 1; transform: translateY(0);} }
+          .card { animation: fadeInUp .45s ease-out; }
+          @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+          }
           code { background: rgba(0,0,0,.04); padding: 2px 6px; border-radius: 8px; }
+          .place-items-center { display: grid; place-items: center; }
         `}</style>
 
-        {/* Bootstrap Icons */}
+        {/* Bootstrap Icons (if not already globally included) */}
         <link
           rel="stylesheet"
           href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css"
