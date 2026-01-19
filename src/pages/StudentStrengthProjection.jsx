@@ -143,13 +143,17 @@ const StudentStrengthProjection = () => {
         }
 
         // ✅ Sessions preselect: From = latest, To = next after latest (if exists) else same
+        // ✅ Sessions preselect: From = id=1, To = next after 1 (else same)
         if (ses?.length) {
-          const sorted = ses.slice().sort((a, b) => nInt(a.id) - nInt(b.id));
-          const latest = pickLatestById(sorted);
-          const next = pickNextAfter(sorted, latest.id);
-          setFromSessionId(latest?.id != null ? String(latest.id) : "");
-          setToSessionId(next?.id != null ? String(next.id) : "");
+        const sorted = ses.slice().sort((a, b) => nInt(a.id) - nInt(b.id));
+
+        const from1 = sorted.find((s) => String(s.id) === "1") || sorted[0];
+        const next = pickNextAfter(sorted, from1?.id);
+
+        setFromSessionId(from1?.id != null ? String(from1.id) : "");
+        setToSessionId(next?.id != null ? String(next.id) : (from1?.id != null ? String(from1.id) : ""));
         }
+
 
         setDefaultsReady(true);
       } catch (e) {
