@@ -163,7 +163,10 @@ export default function AdmissionDashboard() {
     return { total, paid, admitted };
   }, [recentRegistrations]);
 
-  // ✅ UPDATED: Students quick-link removed
+  // ✅ NEW: Projection report link (same as App.js)
+  const PROJECTION_HREF = "/reports/student-strength-projection";
+
+  // ✅ UPDATED: Added Projection Report quick-link
   const quickLinks = useMemo(
     () => [
       {
@@ -179,6 +182,12 @@ export default function AdmissionDashboard() {
         gradient: "linear-gradient(135deg, #22c55e, #16a34a)",
       },
       {
+        label: "Projection Report",
+        icon: "bi-graph-up-arrow",
+        href: PROJECTION_HREF,
+        gradient: "linear-gradient(135deg, #f97316, #ea580c)",
+      },
+      {
         label: "Academic Calendar",
         icon: "bi-calendar3",
         href: "/academic-calendar-view",
@@ -188,6 +197,7 @@ export default function AdmissionDashboard() {
     []
   );
 
+  // ✅ UPDATED: Added KPI tile "Projection Report"
   const kpiTiles = useMemo(
     () => [
       { title: "Recent Enquiries", value: enqKpis.total, variant: "info" },
@@ -195,7 +205,7 @@ export default function AdmissionDashboard() {
       { title: "Recent Registrations", value: regKpis.total, variant: "success" },
       { title: "Paid (Recent)", value: regKpis.paid, variant: "primary" },
       { title: "Admitted (Recent)", value: regKpis.admitted, variant: "warning" },
-      { title: "Open Registrations", value: "Go", variant: "dark", isLink: true, href: "/registrations" },
+      { title: "Projection Report", value: "Open", variant: "dark", isLink: true, href: PROJECTION_HREF },
     ],
     [enqKpis, regKpis]
   );
@@ -294,7 +304,7 @@ export default function AdmissionDashboard() {
                 className={`card border-0 shadow-sm rounded-4 h-100 bg-${k.variant} bg-opacity-10`}
                 style={{ cursor: k.isLink ? "pointer" : "default" }}
                 onClick={k.isLink ? () => navigate(k.href) : undefined}
-                title={k.isLink ? "Open Registrations" : undefined}
+                title={k.isLink ? "Open module" : undefined}
               >
                 <div className="card-body">
                   <div className="text-uppercase small text-muted mb-1">{k.title}</div>
@@ -400,15 +410,11 @@ export default function AdmissionDashboard() {
                           </td>
                           <td>{safe(r.class_applied)}</td>
                           <td>
-                            <span className={`badge ${badgeClassForRegStatus(r.status)}`}>
-                              {safe(r.status)}
-                            </span>
+                            <span className={`badge ${badgeClassForRegStatus(r.status)}`}>{safe(r.status)}</span>
                           </td>
                           <td className="text-muted">{safe(r.registration_fee)}</td>
                           <td>
-                            <span className={`badge ${badgeClassForFee(r.fee_status)}`}>
-                              {safe(r.fee_status)}
-                            </span>
+                            <span className={`badge ${badgeClassForFee(r.fee_status)}`}>{safe(r.fee_status)}</span>
                           </td>
                           <td className="text-muted">{fmtDate(r.registration_date)}</td>
                         </tr>

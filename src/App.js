@@ -143,6 +143,9 @@ import AcademicCalendar from "./pages/AcademicCalendar";
 // ✅ Academic Calendar (Read-only view page for everyone)
 import AcademicCalendarView from "./pages/AcademicCalendarView";
 
+import StudentStrengthProjection from "./pages/StudentStrengthProjection";
+
+
 // ---------- auth guard ----------
 const RequireRole = ({ roles = [], children }) => {
   const singleRole = localStorage.getItem("userRole");
@@ -576,6 +579,27 @@ function App() {
               </RequireRole>
             }
           />
+
+          {/* ✅ Projection Report (Next Session Strength) */}
+          <Route
+            path="/reports/student-strength-projection"
+            element={
+              <RequireRole
+                roles={[
+                  "superadmin",
+                  "admin",
+                  "academic_coordinator",
+                  "admission",
+                  "frontoffice",
+                  "accounts",
+                  "teacher",
+                ]}
+              >
+                <StudentStrengthProjection />
+              </RequireRole>
+            }
+          />
+
 
           {/* ✅ Disciplinary Actions */}
           <Route

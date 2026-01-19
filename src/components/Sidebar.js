@@ -3,6 +3,7 @@ import React, { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import "bootstrap/dist/css/bootstrap.min.css";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useRoles } from "../hooks/useRoles";
+
 import "./Sidebar.css";
 
 const DESKTOP_BP = 992; // Bootstrap lg
@@ -350,38 +351,48 @@ export default function Sidebar({ headerHeight = 56 }) {
       });
 
       groups.push({
-        heading: "Admissions",
-        items: [
-          {
-            key: "enquiries",
-            label: "Enquiries",
-            icon: "bi-chat-dots",
-            path: "/enquiries",
-            roles: ["admission"],
-          },
-          {
-            key: "registrations",
-            label: "Registrations",
-            icon: "bi-person-plus",
-            path: "/registrations",
-            roles: ["admission"],
-          },
-          {
-            key: "students",
-            label: "Students",
-            icon: "bi-people",
-            path: "/students",
-            roles: ["admission"],
-          },
-          {
-            key: "academic-calendar-view",
-            label: "Academic Calendar",
-            icon: "bi-calendar3",
-            path: "/academic-calendar-view",
-            roles: ["admission"],
-          },
-        ],
-      });
+          heading: "Admissions",
+          items: [
+            {
+              key: "enquiries",
+              label: "Enquiries",
+              icon: "bi-chat-dots",
+              path: "/enquiries",
+              roles: ["admission"],
+            },
+            {
+              key: "registrations",
+              label: "Registrations",
+              icon: "bi-person-plus",
+              path: "/registrations",
+              roles: ["admission"],
+            },
+            {
+              key: "students",
+              label: "Students",
+              icon: "bi-people",
+              path: "/students",
+              roles: ["admission"],
+            },
+            {
+              key: "academic-calendar-view",
+              label: "Academic Calendar",
+              icon: "bi-calendar3",
+              path: "/academic-calendar-view",
+              roles: ["admission"],
+            },
+
+            // ✅ NEW: Next Session Projection (Admission only)
+            {
+              key: "student-strength-projection",
+              label: "Next Session Projection",
+              icon: "bi-bar-chart-steps",
+              path: "/reports/student-strength-projection",
+              roles: ["admission"],
+            },
+          ],
+        });
+
     }
 
     // ====== ACCOUNTS-ONLY MENU (Fee focus) ======
@@ -814,7 +825,7 @@ export default function Sidebar({ headerHeight = 56 }) {
     superadmin: ["dashboard", "users", "reports/day-wise", "transactions", "opening-balances"],
     accounts: ["accounts-dashboard", "transactions", "studentDue", "dayWiseReport"],
     frontoffice: ["frontoffice-dashboard", "gate-pass", "visitors", "enquiries", "students"],
-    admission: ["admission-dashboard", "enquiries", "registrations", "students"],
+    admission: ["admission-dashboard", "enquiries", "student-strength-projection", "students"],
 
     // ✅ NEW: Transport bottom-nav priorities
     transport: ["transport-dashboard-direct", "transportations", "buses", "student-transport-assignments"],
