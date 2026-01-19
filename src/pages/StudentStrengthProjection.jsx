@@ -23,16 +23,23 @@ const getRoleFlags = () => {
 };
 
 /* ---------------- Helpers ---------------- */
-const safeArr = (d) => (Array.isArray(d) ? d : d?.rows || d?.data || d?.items || d?.results || []);
+const safeArr = (d) =>
+  Array.isArray(d) ? d : d?.rows || d?.data || d?.items || d?.results || [];
+
 const nInt = (v, fb = 0) => {
   const n = Number(v);
   return Number.isFinite(n) ? Math.floor(n) : fb;
 };
+
 const clampNonNeg = (v) => Math.max(0, nInt(v, 0));
 const fmtInt = (n) => String(Math.round(Number(n || 0)));
 
-const pickFirstById = (arr) => arr.slice().sort((a, b) => nInt(a.id) - nInt(b.id))[0];
-const pickLatestById = (arr) => arr.slice().sort((a, b) => nInt(a.id) - nInt(b.id))[arr.length - 1];
+const pickFirstById = (arr) =>
+  arr.slice().sort((a, b) => nInt(a.id) - nInt(b.id))[0];
+
+const pickLatestById = (arr) =>
+  arr.slice().sort((a, b) => nInt(a.id) - nInt(b.id))[arr.length - 1];
+
 const pickNextAfter = (sortedAsc, id) => {
   const idx = sortedAsc.findIndex((x) => String(x.id) === String(id));
   return idx >= 0 ? sortedAsc[idx + 1] || sortedAsc[idx] : sortedAsc[sortedAsc.length - 1];
@@ -84,10 +91,18 @@ const StudentStrengthProjection = () => {
   const [defaultsReady, setDefaultsReady] = useState(false);
   const [didAutoPreview, setDidAutoPreview] = useState(false);
 
-  const prettySession = (id) => sessions.find((s) => String(s.id) === String(id))?.name || (id ? String(id) : "-");
-  const prettySchool = (id) => schools.find((s) => String(s.id) === String(id))?.name || (id ? String(id) : "-");
+  const prettySession = (id) =>
+    sessions.find((s) => String(s.id) === String(id))?.name || (id ? String(id) : "-");
 
-  /* ---------------- Query params (FIX: backend expects new_admissions) ---------------- */
+  const prettySchool = (id) =>
+    schools.find((s) => String(s.id) === String(id))?.name || (id ? String(id) : "-");
+
+  /* ---------------- IMPORTANT: your API baseURL is api-pits.edubridgeerp.in (NO /api) ----------------
+     So we will ALWAYS call /api/... from this page only.
+  ---------------------------------------------------------------------------------------------------- */
+  const API_PREFIX = "/api";
+
+  /* ---------------- Query params (backend expects new_admissions) ---------------- */
   const buildQueryParams = () => {
     const params = new URLSearchParams();
     if (schoolId) params.set("school_id", schoolId);
@@ -103,14 +118,12 @@ const StudentStrengthProjection = () => {
   /* ---------------- Fetch dropdowns ---------------- */
   const fetchSchools = async () => {
     const { data } = await api.get("/schools");
-    const arr = safeArr(data).length ? safeArr(data) : Array.isArray(data) ? data : [];
-    return arr;
+    return safeArr(data).length ? safeArr(data) : Array.isArray(data) ? data : [];
   };
 
   const fetchSessions = async () => {
     const { data } = await api.get("/sessions");
-    const arr = safeArr(data).length ? safeArr(data) : Array.isArray(data) ? data : [];
-    return arr;
+    return safeArr(data).length ? safeArr(data) : Array.isArray(data) ? data : [];
   };
 
   useEffect(() => {
@@ -129,12 +142,11 @@ const StudentStrengthProjection = () => {
           if (first?.id != null) setSchoolId(String(first.id));
         }
 
-        // ✅ Session preselect: From = latest, To = next after latest (if exists) else same
+        // ✅ Sessions preselect: From = latest, To = next after latest (if exists) else same
         if (ses?.length) {
           const sorted = ses.slice().sort((a, b) => nInt(a.id) - nInt(b.id));
           const latest = pickLatestById(sorted);
           const next = pickNextAfter(sorted, latest.id);
-
           setFromSessionId(latest?.id != null ? String(latest.id) : "");
           setToSessionId(next?.id != null ? String(next.id) : "");
         }
@@ -149,7 +161,7 @@ const StudentStrengthProjection = () => {
     })();
   }, [canView]);
 
-  /* ---------------- Preview (axios includes token) ---------------- */
+  /* ---------------- Preview (token via axios interceptor) ---------------- */
   const fetchPreview = async () => {
     if (!fromSessionId || !toSessionId) {
       return Swal.fire("Required", "Please select From Session and To Session.", "warning");
@@ -158,13 +170,8 @@ const StudentStrengthProjection = () => {
       setLoading(true);
       const qs = buildQueryParams();
 
-      // If your api baseURL already includes /api, don't double it
-      const base = String(api?.defaults?.baseURL || "");
-      const path = base.includes("/api")
-        ? `/student-strength/preview?${qs}`
-        : `/api/student-strength/preview?${qs}`;
-
-      const { data } = await api.get(path);
+      // ✅ FIX: Always include /api prefix on this page
+      const { data } = await api.get(`${API_PREFIX}/student-strength/preview?${qs}`);
       setReport(data);
     } catch (e) {
       console.error("fetchPreview", e);
@@ -174,7 +181,7 @@ const StudentStrengthProjection = () => {
     }
   };
 
-  // ✅ Auto preview when defaults are ready
+  // ✅ Auto preview once defaults are ready
   useEffect(() => {
     if (!defaultsReady) return;
     if (didAutoPreview) return;
@@ -184,7 +191,7 @@ const StudentStrengthProjection = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [defaultsReady, didAutoPreview, fromSessionId, toSessionId]);
 
-  /* ---------------- Downloads (TOKEN SAFE) ---------------- */
+  /* ---------------- Downloads (TOKEN SAFE via axios blob) ---------------- */
   const downloadFile = async (type) => {
     if (!fromSessionId || !toSessionId) {
       return Swal.fire("Required", "Please select From Session and To Session.", "warning");
@@ -193,13 +200,10 @@ const StudentStrengthProjection = () => {
       setLoading(true);
       const qs = buildQueryParams();
 
-      const base = String(api?.defaults?.baseURL || "");
-      const pathRoot = base.includes("/api") ? "" : "/api";
-
       const url =
         type === "pdf"
-          ? `${pathRoot}/student-strength/pdf?${qs}`
-          : `${pathRoot}/student-strength/excel?${qs}`;
+          ? `${API_PREFIX}/student-strength/pdf?${qs}`
+          : `${API_PREFIX}/student-strength/excel?${qs}`;
 
       const resp = await api.get(url, { responseType: "blob" });
 
@@ -213,7 +217,9 @@ const StudentStrengthProjection = () => {
       console.error("downloadFile", e);
       const msg =
         e?.response?.data?.message ||
-        (e?.response?.status === 401 ? "Unauthorized (token missing/expired). Please login again." : "Download failed.");
+        (e?.response?.status === 401
+          ? "Unauthorized (token missing/expired). Please login again."
+          : "Download failed.");
       Swal.fire("Error", msg, "error");
     } finally {
       setLoading(false);
@@ -227,6 +233,7 @@ const StudentStrengthProjection = () => {
       [className]: clampNonNeg(value),
     }));
   };
+
   const resetAdmissions = () => setNewAdmissions({});
 
   /* ---------------- Derived rows ---------------- */
@@ -249,7 +256,9 @@ const StudentStrengthProjection = () => {
         <div className="card shadow-sm">
           <div className="card-body">
             <h3 className="mb-1">Next Session Projection Report</h3>
-            <div className="alert alert-warning mt-3 mb-0">You don&apos;t have permission to view this report.</div>
+            <div className="alert alert-warning mt-3 mb-0">
+              You don&apos;t have permission to view this report.
+            </div>
           </div>
         </div>
       </div>
@@ -286,7 +295,8 @@ const StudentStrengthProjection = () => {
             </span>
           </div>
           <div className="text-muted mt-1" style={{ fontSize: 13 }}>
-            Current: <b>{prettySession(fromSessionId)}</b> → Next: <b>{prettySession(toSessionId)}</b>
+            Current: <b>{prettySession(fromSessionId)}</b> → Next:{" "}
+            <b>{prettySession(toSessionId)}</b>
             {!!meta?.school?.name && (
               <>
                 {" "}
@@ -395,13 +405,9 @@ const StudentStrengthProjection = () => {
         <div className="col-md-3">
           <div className="card shadow-sm h-100">
             <div className="card-body">
-              <div className="text-muted" style={{ fontSize: 12 }}>
-                Current Total
-              </div>
+              <div className="text-muted" style={{ fontSize: 12 }}>Current Total</div>
               <div style={{ fontSize: 26, fontWeight: 800 }}>{fmtInt(totals.current_total)}</div>
-              <div className="text-muted" style={{ fontSize: 12 }}>
-                Session: {prettySession(fromSessionId)}
-              </div>
+              <div className="text-muted" style={{ fontSize: 12 }}>Session: {prettySession(fromSessionId)}</div>
             </div>
           </div>
         </div>
@@ -409,13 +415,9 @@ const StudentStrengthProjection = () => {
         <div className="col-md-3">
           <div className="card shadow-sm h-100">
             <div className="card-body">
-              <div className="text-muted" style={{ fontSize: 12 }}>
-                Pass-out (Last Class)
-              </div>
+              <div className="text-muted" style={{ fontSize: 12 }}>Pass-out (Last Class)</div>
               <div style={{ fontSize: 26, fontWeight: 800 }}>{fmtInt(totals.pass_out)}</div>
-              <div className="text-muted" style={{ fontSize: 12 }}>
-                Not carried forward
-              </div>
+              <div className="text-muted" style={{ fontSize: 12 }}>Not carried forward</div>
             </div>
           </div>
         </div>
@@ -423,13 +425,9 @@ const StudentStrengthProjection = () => {
         <div className="col-md-3">
           <div className="card shadow-sm h-100 border">
             <div className="card-body">
-              <div className="text-muted" style={{ fontSize: 12 }}>
-                New Admissions (edited)
-              </div>
+              <div className="text-muted" style={{ fontSize: 12 }}>New Admissions (edited)</div>
               <div style={{ fontSize: 26, fontWeight: 800 }}>{fmtInt(admissionsTotal)}</div>
-              <div className="text-muted" style={{ fontSize: 12 }}>
-                Used in client-side totals
-              </div>
+              <div className="text-muted" style={{ fontSize: 12 }}>Client-side total</div>
             </div>
           </div>
         </div>
@@ -437,15 +435,11 @@ const StudentStrengthProjection = () => {
         <div className="col-md-3">
           <div className="card shadow-sm h-100 border border-success">
             <div className="card-body">
-              <div className="text-muted" style={{ fontSize: 12 }}>
-                Next Session Total
-              </div>
+              <div className="text-muted" style={{ fontSize: 12 }}>Next Session Total</div>
               <div style={{ fontSize: 26, fontWeight: 900 }}>
                 {fmtInt(recomputedNextTotal || totals.next_total)}
               </div>
-              <div className="text-muted" style={{ fontSize: 12 }}>
-                Session: {prettySession(toSessionId)}
-              </div>
+              <div className="text-muted" style={{ fontSize: 12 }}>Session: {prettySession(toSessionId)}</div>
             </div>
           </div>
         </div>
@@ -472,9 +466,7 @@ const StudentStrengthProjection = () => {
                 <th style={{ width: 70 }}>#</th>
                 <th>Class</th>
                 <th className="text-end">Current</th>
-                <th className="text-end" style={{ width: 170 }}>
-                  New Admissions
-                </th>
+                <th className="text-end" style={{ width: 170 }}>New Admissions</th>
                 <th className="text-end">Next</th>
                 <th>Basis</th>
               </tr>
@@ -541,18 +533,10 @@ const StudentStrengthProjection = () => {
             {rows.length > 0 && (
               <tfoot>
                 <tr>
-                  <td colSpan="2" className="text-end">
-                    <b>Total</b>
-                  </td>
-                  <td className="text-end">
-                    <b>{fmtInt(totals.current_total)}</b>
-                  </td>
-                  <td className="text-end">
-                    <b>{fmtInt(admissionsTotal)}</b>
-                  </td>
-                  <td className="text-end">
-                    <b>{fmtInt(recomputedNextTotal || totals.next_total)}</b>
-                  </td>
+                  <td colSpan="2" className="text-end"><b>Total</b></td>
+                  <td className="text-end"><b>{fmtInt(totals.current_total)}</b></td>
+                  <td className="text-end"><b>{fmtInt(admissionsTotal)}</b></td>
+                  <td className="text-end"><b>{fmtInt(recomputedNextTotal || totals.next_total)}</b></td>
                   <td></td>
                 </tr>
               </tfoot>
