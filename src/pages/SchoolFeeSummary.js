@@ -1,4 +1,10 @@
-// ======== PART 1/4: Imports, Helpers, and Basic Setup ========
+// SchoolFeeSummary.jsx
+// ✅ Updated for Session-wise reporting + nicer UI
+// - Adds Session dropdown (auto-picks active session)
+// - Sends session_id to summary + modal + transport + opening balances
+// - Refresh now refreshes selected session data
+// - Adds PDF export button (uses existing PdfSchoolFeeSummary component)
+// - Fixes initial-load race (fetchSessions -> then load everything with that session)
 
 import React, { useEffect, useMemo, useState } from "react";
 import {
@@ -21,10 +27,9 @@ import Swal from "sweetalert2";
 import "./SchoolFeeSummary.css";
 
 // ---------- Helpers ----------
-const formatCurrency = (value) =>
-  `₹${Number(value || 0).toLocaleString("en-IN")}`;
-const currencyPlain = (value) =>
-  `₹${Number(value || 0).toLocaleString("en-IN")}`;
+const formatCurrency = (value) => `₹${Number(value || 0).toLocaleString("en-IN")}`;
+const currencyPlain = (value) => `₹${Number(value || 0).toLocaleString("en-IN")}`;
+const safeNum = (v) => Number(v || 0);
 
 // Concurrency helper for async loops
 const withConcurrency = async (items, limit, worker) => {
@@ -42,7 +47,6 @@ const withConcurrency = async (items, limit, worker) => {
   return results;
 };
 
-// ================= Component =================
 const SchoolFeeSummary = () => {
   const [summary, setSummary] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -81,6 +85,10 @@ const SchoolFeeSummary = () => {
   // NEW: how many rows to show in modal
   const [modalDisplayCount, setModalDisplayCount] = useState(10);
 
+  const activeSession = useMemo(() => {
+    return sessions.find((s) => Number(s.id) === Number(activeSessionId)) || null;
+  }, [sessions, activeSessionId]);
+
   // ---------------- Fetchers ----------------
   const fetchSchool = async () => {
     try {
@@ -91,6 +99,7 @@ const SchoolFeeSummary = () => {
     }
   };
 
+  // ✅ Return the chosen session id (fix initial-load race)
   const fetchSessions = async () => {
     try {
       const res = await api.get("/sessions");
@@ -100,10 +109,14 @@ const SchoolFeeSummary = () => {
         ? res.data.data
         : [];
       setSessions(data);
+
       const active = data.find((s) => s.is_active) || data[0];
-      if (active) setActiveSessionId(active.id);
+      const sid = active ? Number(active.id) : null;
+      if (sid) setActiveSessionId(sid);
+      return sid;
     } catch (e) {
       console.error("Session fetch error", e);
+      return null;
     }
   };
 
@@ -132,11 +145,8 @@ const SchoolFeeSummary = () => {
 
       const tmap = new Map();
       rows.forEach((stu) => {
-        const totalPending = (stu.heads || []).reduce(
-          (a, h) => a + Number(h.pending || 0),
-          0
-        );
-        tmap.set(stu.student_id, {
+        const totalPending = (stu.heads || []).reduce((a, h) => a + safeNum(h.pending), 0);
+        tmap.set(Number(stu.student_id), {
           totalPending,
           heads: stu.heads || [],
         });
@@ -149,28 +159,29 @@ const SchoolFeeSummary = () => {
     }
   };
 
-// ======== END OF PART 1/4 ========
-// ======== PART 2/4: Fetch Summary, OB Data & Grand Totals ========
-
-  // -------- Fee Summary --------
-  const fetchFeeSummary = async () => {
+  // -------- Fee Summary (SESSION-WISE) --------
+  const fetchFeeSummary = async (sid) => {
     setLoading(true);
     setError("");
     try {
-      const res = await api.get("/feedue/school-fee-summary");
-      const sorted = (res.data || []).sort((a, b) => Number(a.id) - Number(b.id));
+      const params = {};
+      if (sid) params.session_id = sid; // ✅ session filter
+      const res = await api.get("/feedue/school-fee-summary", { params });
+
+      const sorted = (res.data || []).sort((a, b) => Number(a.id || 0) - Number(b.id || 0));
       const merged = sorted.map((r) => ({ ...r, vanFeeDue: 0 }));
       setSummary(merged);
     } catch (err) {
       console.error("Error fetching summary:", err);
       setError("Failed to load fee summary.");
+      setSummary([]);
     } finally {
       setLoading(false);
     }
   };
 
-  // -------- Opening Balances --------
-  const fetchOpeningBalanceSummary = async () => {
+  // -------- Opening Balances (session-aware if backend supports) --------
+  const fetchOpeningBalanceSummary = async (sid) => {
     try {
       const limit = 500;
       let page = 1;
@@ -180,21 +191,25 @@ const SchoolFeeSummary = () => {
       let genericTotal = 0;
 
       do {
-        const params = { page, limit, session_id: activeSessionId || undefined };
+        const params = { page, limit };
+        if (sid) params.session_id = sid;
         const { data } = await api.get("/opening-balances", { params });
+
         const rows = Array.isArray(data?.rows)
           ? data.rows
           : Array.isArray(data)
           ? data
           : [];
         total = Number(data?.total || rows.length);
+
         rows.forEach((r) => {
-          const amt = Number(r.amount || 0);
+          const amt = safeNum(r.amount);
           if (r.type === "fee" && r.fee_head_id) {
             byHead[r.fee_head_id] = (byHead[r.fee_head_id] || 0) + amt;
           } else if (r.type === "van") vanTotal += amt;
           else if (r.type === "generic") genericTotal += amt;
         });
+
         page++;
       } while ((page - 1) * limit < total);
 
@@ -203,17 +218,32 @@ const SchoolFeeSummary = () => {
       setObGenericTotal(genericTotal);
     } catch (e) {
       console.error("OB fetch error:", e);
+      setObByHeadId({});
+      setObVanTotal(0);
+      setObGenericTotal(0);
     }
   };
 
-  // -------- Combine summary + van dues after both fetched --------
+  // -------- Refresh button (reload current session) --------
+  const refreshAll = async () => {
+    const sid = activeSessionId;
+    await Promise.all([
+      fetchFeeSummary(sid),
+      fetchTransportPending(sid),
+      fetchOpeningBalanceSummary(sid),
+      fetchFeeHeadings(),
+      fetchSchool(),
+    ]);
+  };
+
+  // -------- Merge summary + van dues after both fetched --------
   useEffect(() => {
     if (summary.length > 0 && transportData.length > 0) {
       const allStudents = transportData.map((t) => ({
         id: t.student_id,
-        pending: (t.heads || []).reduce((a, h) => a + Number(h.pending || 0), 0),
+        pending: (t.heads || []).reduce((a, h) => a + safeNum(h.pending), 0),
       }));
-      const totalVanDue = allStudents.reduce((a, s) => a + s.pending, 0);
+      const totalVanDue = allStudents.reduce((a, s) => a + safeNum(s.pending), 0);
 
       const merged = summary.map((head) => ({
         ...head,
@@ -221,18 +251,18 @@ const SchoolFeeSummary = () => {
       }));
       setSummary(merged);
     }
-  }, [summary.length, transportData.length]);
+  }, [summary.length, transportData.length]); // keep your original dependency style
 
   // -------- Grand Totals for main table --------
   const grandTotals = useMemo(() => {
     return summary.reduce(
       (acc, item) => ({
-        totalDue: acc.totalDue + (item.totalDue || 0),
-        totalReceived: acc.totalReceived + (item.totalReceived || 0),
-        totalConcession: acc.totalConcession + (item.totalConcession || 0),
-        totalRemainingDue: acc.totalRemainingDue + (item.totalRemainingDue || 0),
-        vanFeeReceived: acc.vanFeeReceived + (item.vanFeeReceived || 0),
-        vanFeeDue: acc.vanFeeDue + (item.vanFeeDue || 0),
+        totalDue: acc.totalDue + safeNum(item.totalDue),
+        totalReceived: acc.totalReceived + safeNum(item.totalReceived),
+        totalConcession: acc.totalConcession + safeNum(item.totalConcession),
+        totalRemainingDue: acc.totalRemainingDue + safeNum(item.totalRemainingDue),
+        vanFeeReceived: acc.vanFeeReceived + safeNum(item.vanFeeReceived),
+        vanFeeDue: acc.vanFeeDue + safeNum(item.vanFeeDue),
       }),
       {
         totalDue: 0,
@@ -245,20 +275,29 @@ const SchoolFeeSummary = () => {
     );
   }, [summary]);
 
-  // -------- Initial Load --------
+  // -------- Initial Load (fixed) --------
   useEffect(() => {
     (async () => {
-      await Promise.all([fetchSessions(), fetchSchool(), fetchFeeHeadings()]);
-      await fetchFeeSummary();
-      await fetchTransportPending(activeSessionId);
+      const sid = await fetchSessions(); // ✅ get real session id now
+      await Promise.all([fetchSchool(), fetchFeeHeadings()]);
+      await Promise.all([
+        fetchFeeSummary(sid),
+        fetchTransportPending(sid),
+        fetchOpeningBalanceSummary(sid),
+      ]);
     })();
   }, []);
 
+  // -------- On session change: reload session-wise data --------
   useEffect(() => {
-    if (activeSessionId) {
-      fetchOpeningBalanceSummary();
-      fetchTransportPending(activeSessionId);
-    }
+    if (!activeSessionId) return;
+    (async () => {
+      await Promise.all([
+        fetchFeeSummary(activeSessionId),
+        fetchTransportPending(activeSessionId),
+        fetchOpeningBalanceSummary(activeSessionId),
+      ]);
+    })();
   }, [activeSessionId]);
 
   // -------- OB Breakdown Table --------
@@ -266,9 +305,7 @@ const SchoolFeeSummary = () => {
     const fromFeeHeadings = Object.fromEntries(
       (feeHeadings || []).map((fh) => [String(fh.id), fh.fee_heading])
     );
-    const fromSummary = Object.fromEntries(
-      (summary || []).map((s) => [String(s.id), s.fee_heading])
-    );
+    const fromSummary = Object.fromEntries((summary || []).map((s) => [String(s.id), s.fee_heading]));
 
     const nameById = new Proxy(fromFeeHeadings, {
       get(target, prop) {
@@ -280,28 +317,20 @@ const SchoolFeeSummary = () => {
     const feeRows = Object.entries(obByHeadId || {}).map(([fid, amt]) => ({
       key: `fee-${fid}`,
       label: nameById[String(fid)] || `Unknown Head (#${fid})`,
-      amount: Number(amt || 0),
+      amount: safeNum(amt),
     }));
 
     feeRows.sort((a, b) => String(a.label).localeCompare(String(b.label)));
 
     const rows = [...feeRows];
-    if (obVanTotal > 0)
-      rows.push({ key: "van", label: "Van (Opening Balance)", amount: obVanTotal });
+    if (obVanTotal > 0) rows.push({ key: "van", label: "Van (Opening Balance)", amount: obVanTotal });
     if (obGenericTotal > 0)
-      rows.push({
-        key: "generic",
-        label: "Generic (Opening Balance)",
-        amount: obGenericTotal,
-      });
+      rows.push({ key: "generic", label: "Generic (Opening Balance)", amount: obGenericTotal });
 
     setObBreakdown(rows);
   }, [summary, feeHeadings, obByHeadId, obVanTotal, obGenericTotal]);
 
-// ======== END OF PART 2/4 ========
-/// ======== PART 3/4: Modal Logic, Van Merge, and WhatsApp Data ========
-
-  // ---------------- Modal Logic ----------------
+  // ===== Modal Logic (SESSION-WISE) =====
   const handleCountClick = async (feeHeadingId, status, headingName) => {
     setSelectedFeeHeadingId(feeHeadingId);
     setSelectedStatus(status);
@@ -310,12 +339,13 @@ const SchoolFeeSummary = () => {
     setLoadingDetails(true);
     setSearch("");
     setSelectedHeads(new Set([headingName]));
-    setModalDisplayCount(10); // show only 10 initially
+    setModalDisplayCount(10);
 
     try {
-      const res = await api.get("/feedue-status/fee-heading-wise-students", {
-        params: { feeHeadingId, status },
-      });
+      const params = { feeHeadingId, status };
+      if (activeSessionId) params.session_id = activeSessionId; // ✅ session filter
+
+      const res = await api.get("/feedue-status/fee-heading-wise-students", { params });
       const rawData = Array.isArray(res?.data?.data) ? res.data.data : [];
 
       // unique by student id
@@ -350,13 +380,11 @@ const SchoolFeeSummary = () => {
         // Academic heads + fine
         (student.feeDetails || []).forEach((fd) => {
           const headName = fd.fee_heading;
-          const due = Number(fd.due || 0);
-          const paid = Number(fd.paid || 0);
-          const concession = Number(fd.concession || 0);
-          const fine = Number(fd.fineAmount || 0);
-          const remaining = Number(
-            fd.remaining ?? (due - (paid + concession))
-          );
+          const due = safeNum(fd.due);
+          const paid = safeNum(fd.paid);
+          const concession = safeNum(fd.concession);
+          const fine = safeNum(fd.fineAmount);
+          const remaining = safeNum(fd.remaining ?? (due - (paid + concession)));
 
           row[`${headName} - Remaining`] = remaining;
           row[`${headName} - Fine`] = fine;
@@ -367,7 +395,7 @@ const SchoolFeeSummary = () => {
         if (transport && Array.isArray(transport.heads)) {
           transport.heads.forEach((vh) => {
             const label = `${vh.fee_heading_name} (Transport)`;
-            const pending = Number(vh.pending || 0);
+            const pending = safeNum(vh.pending);
             row[`${label} - Remaining`] = pending;
             row[`${label} - Fine`] = 0;
           });
@@ -391,6 +419,7 @@ const SchoolFeeSummary = () => {
       });
 
       const academicOrder = (feeHeadings || [])
+        .slice()
         .sort((a, b) => Number(a.id) - Number(b.id))
         .map((f) => f.fee_heading);
 
@@ -421,9 +450,7 @@ const SchoolFeeSummary = () => {
       ];
 
       if (sortedHeadNames.length !== allHeadsMap.size) {
-        const remaining = Array.from(allHeadsMap.keys()).filter(
-          (n) => !sortedHeadNames.includes(n)
-        );
+        const remaining = Array.from(allHeadsMap.keys()).filter((n) => !sortedHeadNames.includes(n));
         remaining.sort((a, b) => a.localeCompare(b));
         sortedHeadNames.push(...remaining);
       }
@@ -438,8 +465,6 @@ const SchoolFeeSummary = () => {
   };
 
   // ---------------- Filters and Totals ----------------
-
-  // this is the FULL filtered list
   const filteredAllDetails = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return studentDetails;
@@ -453,7 +478,6 @@ const SchoolFeeSummary = () => {
     );
   }, [search, studentDetails]);
 
-  // this is only what we SHOW (first 10, then more on scroll)
   const visibleDetails = useMemo(() => {
     return filteredAllDetails.slice(0, modalDisplayCount);
   }, [filteredAllDetails, modalDisplayCount]);
@@ -475,11 +499,11 @@ const SchoolFeeSummary = () => {
     headNames.forEach((head) => {
       totals[head] = { remaining: 0, fine: 0 };
     });
-    // IMPORTANT: totals should be for ALL filtered, not just visible
+
     filteredAllDetails.forEach((stu) => {
       headNames.forEach((head) => {
-        totals[head].remaining += Number(stu[`${head} - Remaining`] || 0);
-        totals[head].fine += Number(stu[`${head} - Fine`] || 0);
+        totals[head].remaining += safeNum(stu[`${head} - Remaining`]);
+        totals[head].fine += safeNum(stu[`${head} - Fine`]);
       });
     });
     return totals;
@@ -487,19 +511,13 @@ const SchoolFeeSummary = () => {
 
   const grandTotal = useMemo(() => {
     return Array.from(selectedHeads).reduce((sum, head) => {
-      return (
-        sum +
-        (columnTotals[head]?.remaining || 0) +
-        (columnTotals[head]?.fine || 0)
-      );
+      return sum + safeNum(columnTotals[head]?.remaining) + safeNum(columnTotals[head]?.fine);
     }, 0);
   }, [columnTotals, selectedHeads]);
 
-  // load more on scroll
   const handleModalScroll = (e) => {
     const el = e.target;
-    const isBottom =
-      el.scrollTop + el.clientHeight >= el.scrollHeight - 10;
+    const isBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 10;
     if (isBottom) {
       setModalDisplayCount((prev) => {
         const next = prev + 10;
@@ -513,7 +531,6 @@ const SchoolFeeSummary = () => {
     const baseFixedCols = ["#", "Name", "Admission No", "Class"];
     const phoneCols = ["Father Phone", "Mother Phone"];
 
-    // export should use ALL filtered, not only visible
     const excelRows = filteredAllDetails.map((stu, idx) => {
       const row = {
         "#": idx + 1,
@@ -525,8 +542,8 @@ const SchoolFeeSummary = () => {
       let overall = 0;
       headNames.forEach((head) => {
         if (!selectedHeads.has(head)) return;
-        const amt = Number(stu[`${head} - Remaining`] || 0);
-        const fine = Number(stu[`${head} - Fine`] || 0);
+        const amt = safeNum(stu[`${head} - Remaining`]);
+        const fine = safeNum(stu[`${head} - Fine`]);
         overall += amt + fine;
         row[`${head} Amount`] = amt;
         row[`${head} Fine`] = fine;
@@ -540,9 +557,7 @@ const SchoolFeeSummary = () => {
 
     const headerCols = [
       ...baseFixedCols,
-      ...headNames.flatMap((h) =>
-        selectedHeads.has(h) ? [`${h} Amount`, `${h} Fine`] : []
-      ),
+      ...headNames.flatMap((h) => (selectedHeads.has(h) ? [`${h} Amount`, `${h} Fine`] : [])),
       "Overall Total",
       ...phoneCols,
     ];
@@ -550,24 +565,39 @@ const SchoolFeeSummary = () => {
     const worksheet = XLSX.utils.json_to_sheet(excelRows, { header: headerCols });
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Students");
-    const excelBuffer = XLSX.write(workbook, {
-      bookType: "xlsx",
-      type: "array",
-    });
+    const excelBuffer = XLSX.write(workbook, { bookType: "xlsx", type: "array" });
     const blob = new Blob([excelBuffer], { type: "application/octet-stream" });
-    saveAs(
-      blob,
-      `${selectedHeadingName}_${selectedStatus}_Students.xlsx`.replace(
-        /\s+/g,
-        "_"
-      )
-    );
+
+    const sessLabel = activeSession?.name ? `_${activeSession.name}` : "";
+    saveAs(blob, `${selectedHeadingName}_${selectedStatus}_Students${sessLabel}.xlsx`.replace(/\s+/g, "_"));
   };
 
-// ======== END OF PART 3/4 ========
+  // ---------------- PDF Export (Main Summary) ----------------
+  const exportSummaryPdf = async () => {
+    try {
+      const sessName = activeSession?.name || "";
+      const fileName = `School_Fee_Summary${sessName ? "_" + sessName : ""}.pdf`.replace(/\s+/g, "_");
 
-// ======== PART 4/4: Main Table, Modal UI, and WhatsApp ========
+      const doc = (
+        <PdfSchoolFeeSummary
+          school={school}
+          session={activeSession}
+          summary={summary}
+          grandTotals={grandTotals}
+          obBreakdown={obBreakdown}
+          generatedAt={new Date().toLocaleString("en-IN")}
+        />
+      );
 
+      const blob = await pdf(doc).toBlob();
+      saveAs(blob, fileName);
+    } catch (e) {
+      console.error("PDF export error:", e);
+      Swal.fire({ icon: "error", title: "PDF Error", text: "Unable to generate PDF." });
+    }
+  };
+
+  // ---------------- WhatsApp ----------------
   const sendWhatsAppBatch = async () => {
     if (selectedHeads.size === 0) {
       await Swal.fire({
@@ -582,7 +612,6 @@ const SchoolFeeSummary = () => {
     setShowModal(false);
     await new Promise((r) => setTimeout(r, 200));
 
-    // use ALL filtered students here
     const count = filteredAllDetails.length;
 
     const confirm = await Swal.fire({
@@ -600,14 +629,15 @@ const SchoolFeeSummary = () => {
       Swal.showLoading();
 
       const payload = {
+        session_id: activeSessionId || undefined, // ✅ send for logging/trace (optional backend use)
         students: filteredAllDetails
           .map((s) => {
             const included = [];
             let overall = 0;
 
             Array.from(selectedHeads).forEach((head) => {
-              const amount = Number(s[`${head} - Remaining`] || 0);
-              const fine = Number(s[`${head} - Fine`] || 0);
+              const amount = safeNum(s[`${head} - Remaining`]);
+              const fine = safeNum(s[`${head} - Fine`]);
               if (amount <= 0 && fine <= 0) return;
               const total = amount + fine;
               overall += total;
@@ -619,14 +649,16 @@ const SchoolFeeSummary = () => {
             const lines = [
               `*Dear Parent/Guardian of ${s.name},*`,
               ``,
-              `This is a kind reminder from *${school?.name || "Your School"}* regarding the pending fees:`,
+              `This is a kind reminder from *${school?.name || "Your School"}* regarding the pending fees${
+                activeSession?.name ? ` for *Session ${activeSession.name}*` : ""
+              }:`,
               ``,
               `*Fee Details:*`,
               ...included.map(
                 (i) =>
-                  `• ${i.head} — Amount: ${currencyPlain(
-                    i.amount
-                  )}${i.fine > 0 ? ` | Fine: ${currencyPlain(i.fine)}` : ""}`
+                  `• ${i.head} — Amount: ${currencyPlain(i.amount)}${
+                    i.fine > 0 ? ` | Fine: ${currencyPlain(i.fine)}` : ""
+                  }`
               ),
               ``,
               `*Total Pending:* *${currencyPlain(overall)}*`,
@@ -644,7 +676,7 @@ const SchoolFeeSummary = () => {
             return {
               id: s.id ?? s.admissionNumber,
               name: s.name,
-              phone: "919417873297", // test number
+              phone: "919417873297", // ⚠️ test number (keep or replace)
               admissionNumber: s.admissionNumber,
               className: s.className,
               breakdown: included,
@@ -693,14 +725,54 @@ const SchoolFeeSummary = () => {
     }
   };
 
+  // ---------------- UI helpers ----------------
+  const sessionPill = useMemo(() => {
+    if (!activeSession) return null;
+    return (
+      <Badge bg={activeSession.is_active ? "success" : "secondary"} className="px-3 py-2 rounded-pill">
+        Session: {activeSession.name}
+        {activeSession.is_active ? " (Active)" : ""}
+      </Badge>
+    );
+  }, [activeSession]);
+
   // ---------------- Render ----------------
   return (
     <Container className="mt-4">
-      <div className="d-flex justify-content-between align-items-center mb-3">
-        <h2 className="m-0">School Fee Summary</h2>
-        <div className="d-flex gap-2">
-          <Button variant="outline-secondary" onClick={() => fetchFeeSummary()}>
-            Refresh
+      {/* Header Row */}
+      <div className="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-2 mb-3">
+        <div>
+          <h2 className="m-0">School Fee Summary</h2>
+          <div className="mt-1 d-flex flex-wrap gap-2 align-items-center">
+            {sessionPill}
+            {school?.name ? <Badge bg="info" className="px-3 py-2 rounded-pill">{school.name}</Badge> : null}
+          </div>
+        </div>
+
+        <div className="d-flex flex-wrap gap-2 align-items-center">
+          {/* Session selector */}
+          <div style={{ minWidth: 220 }}>
+            <Form.Select
+              value={activeSessionId || ""}
+              onChange={(e) => setActiveSessionId(Number(e.target.value))}
+              disabled={!sessions.length}
+              title="Select session"
+            >
+              {!sessions.length ? <option value="">Loading sessions...</option> : null}
+              {sessions.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name} {s.is_active ? "• Active" : ""}
+                </option>
+              ))}
+            </Form.Select>
+          </div>
+
+          <Button variant="outline-secondary" onClick={refreshAll} disabled={loading}>
+            {loading ? "Refreshing..." : "Refresh"}
+          </Button>
+
+          <Button variant="outline-primary" onClick={exportSummaryPdf} disabled={!summary.length}>
+            PDF
           </Button>
         </div>
       </div>
@@ -708,7 +780,13 @@ const SchoolFeeSummary = () => {
       {/* Opening Balances */}
       {obBreakdown.length > 0 && (
         <div className="mb-4">
-          <h5 className="fw-bold text-primary mb-3">Opening Balances</h5>
+          <div className="d-flex align-items-center justify-content-between">
+            <h5 className="fw-bold text-primary mb-3">Opening Balances</h5>
+            <Badge bg="light" text="dark" className="px-3 py-2 rounded-pill border">
+              Total: <span className="fw-bold">{formatCurrency(obBreakdown.reduce((a, r) => a + safeNum(r.amount), 0))}</span>
+            </Badge>
+          </div>
+
           <div className="rounded border p-2 bg-light">
             <Table striped bordered hover size="sm" className="mb-0">
               <thead className="bg-secondary-subtle">
@@ -735,12 +813,7 @@ const SchoolFeeSummary = () => {
                     Total
                   </td>
                   <td className="text-end fw-bold text-success">
-                    {formatCurrency(
-                      obBreakdown.reduce(
-                        (a, r) => a + Number(r.amount || 0),
-                        0
-                      )
-                    )}
+                    {formatCurrency(obBreakdown.reduce((a, r) => a + safeNum(r.amount), 0))}
                   </td>
                 </tr>
               </tbody>
@@ -755,7 +828,9 @@ const SchoolFeeSummary = () => {
           <Spinner animation="border" />
         </div>
       ) : error ? (
-        <Alert variant="danger">{error}</Alert>
+        <Alert variant="danger" className="mb-0">
+          {error}
+        </Alert>
       ) : (
         <div className="overflow-x-auto">
           <Table striped bordered hover>
@@ -775,59 +850,76 @@ const SchoolFeeSummary = () => {
                 <th>Van Students</th>
               </tr>
             </thead>
+
             <tbody>
               {summary.map((item, i) => {
                 const totalStudents =
-                  (item.studentsPaidFull || 0) +
-                  (item.studentsPaidPartial || 0) +
-                  (item.studentsPending || 0);
+                  safeNum(item.studentsPaidFull) + safeNum(item.studentsPaidPartial) + safeNum(item.studentsPending);
+
+                const isVanRow = String(item.fee_heading || "").toLowerCase() === "van fee";
+
                 return (
-                  <tr key={item.id}>
+                  <tr key={`${item.id || "x"}-${i}`} className={isVanRow ? "table-warning" : ""}>
                     <td>{i + 1}</td>
-                    <td>{item.fee_heading}</td>
+                    <td className="fw-semibold">{item.fee_heading}</td>
                     <td>{formatCurrency(item.totalDue)}</td>
                     <td>{formatCurrency(item.totalReceived)}</td>
                     <td>{formatCurrency(item.totalConcession)}</td>
-                    <td className="text-danger">
-                      {formatCurrency(item.totalRemainingDue)}
-                    </td>
+                    <td className="text-danger fw-semibold">{formatCurrency(item.totalRemainingDue)}</td>
+
                     <td>
-                      <span
-                        className="count-chip chip-success"
-                        onClick={() =>
-                          handleCountClick(item.id, "full", item.fee_heading)
-                        }
-                      >
-                        {item.studentsPaidFull}
-                      </span>
+                      {item.studentsPaidFull == null ? (
+                        "—"
+                      ) : (
+                        <span
+                          className="count-chip chip-success"
+                          onClick={() => handleCountClick(item.id, "full", item.fee_heading)}
+                          role="button"
+                          title="View fully paid students"
+                        >
+                          {item.studentsPaidFull}
+                        </span>
+                      )}
                     </td>
+
                     <td>
-                      <span
-                        className="count-chip chip-warning"
-                        onClick={() =>
-                          handleCountClick(item.id, "partial", item.fee_heading)
-                        }
-                      >
-                        {item.studentsPaidPartial}
-                      </span>
+                      {item.studentsPaidPartial == null ? (
+                        "—"
+                      ) : (
+                        <span
+                          className="count-chip chip-warning"
+                          onClick={() => handleCountClick(item.id, "partial", item.fee_heading)}
+                          role="button"
+                          title="View partially paid students"
+                        >
+                          {item.studentsPaidPartial}
+                        </span>
+                      )}
                     </td>
+
                     <td>
-                      <span
-                        className="count-chip chip-danger"
-                        onClick={() =>
-                          handleCountClick(item.id, "unpaid", item.fee_heading)
-                        }
-                      >
-                        {item.studentsPending}
-                      </span>
+                      {item.studentsPending == null ? (
+                        "—"
+                      ) : (
+                        <span
+                          className="count-chip chip-danger"
+                          onClick={() => handleCountClick(item.id, "unpaid", item.fee_heading)}
+                          role="button"
+                          title="View unpaid students"
+                        >
+                          {item.studentsPending}
+                        </span>
+                      )}
                     </td>
-                    <td>{totalStudents}</td>
+
+                    <td>{item.studentsPaidFull == null ? "—" : totalStudents}</td>
                     <td>{formatCurrency(item.vanFeeReceived || 0)}</td>
-                    <td>{item.vanStudents || "—"}</td>
+                    <td>{item.vanStudents ?? "—"}</td>
                   </tr>
                 );
               })}
             </tbody>
+
             <tfoot>
               <tr className="fw-bold">
                 <td colSpan={2}>Grand Total</td>
@@ -835,9 +927,7 @@ const SchoolFeeSummary = () => {
                 <td>{formatCurrency(grandTotals.totalReceived)}</td>
                 <td>{formatCurrency(grandTotals.totalConcession)}</td>
                 <td>{formatCurrency(grandTotals.totalRemainingDue)}</td>
-                <td colSpan={2}></td>
-                <td></td>
-                <td></td>
+                <td colSpan={4}></td>
                 <td>{formatCurrency(grandTotals.vanFeeReceived)}</td>
                 <td></td>
               </tr>
@@ -857,8 +947,14 @@ const SchoolFeeSummary = () => {
         <Modal.Header closeButton>
           <Modal.Title>
             Students — {selectedStatus?.toUpperCase()} ({selectedHeadingName})
+            {activeSession?.name ? (
+              <Badge bg="light" text="dark" className="ms-2 border">
+                Session {activeSession.name}
+              </Badge>
+            ) : null}
           </Modal.Title>
         </Modal.Header>
+
         <Modal.Body className="modal-body-fixed">
           {/* Controls */}
           <div className="modal-controls">
@@ -868,13 +964,13 @@ const SchoolFeeSummary = () => {
                 value={search}
                 onChange={(e) => {
                   setSearch(e.target.value);
-                  setModalDisplayCount(10); // reset to 10 when searching
+                  setModalDisplayCount(10);
                 }}
-                placeholder="Type name or class..."
+                placeholder="Type name, class, admission no..."
               />
             </InputGroup>
 
-            <div className="d-flex gap-2">
+            <div className="d-flex gap-2 flex-wrap">
               <Button variant="outline-primary" size="sm" onClick={selectAllHeads}>
                 Select All
               </Button>
@@ -890,88 +986,96 @@ const SchoolFeeSummary = () => {
             </div>
           </div>
 
-          {/* Scrollable table (now loads more on scroll) */}
-          <div className="scrollable-table" onScroll={handleModalScroll}>
-            <Table striped bordered hover className="modal-table">
-              <thead>
-                <tr>
-                  <th className="slc slc-1">#</th>
-                  <th className="slc slc-2">Name</th>
-                  <th className="slc slc-3">Admission No</th>
-                  <th className="slc slc-4">Class</th>
-                  {headNames.map((head) => (
-                    <th key={head} className="feehead-header">
-                      <div className="d-flex align-items-center justify-content-between">
-                        <span>{head}</span>
-                        <Form.Check
-                          type="checkbox"
-                          checked={selectedHeads.has(head)}
-                          onChange={() => toggleHead(head)}
-                        />
-                      </div>
-                    </th>
-                  ))}
-                  <th className="sticky-overall">Overall</th>
-                  <th className="slc slc-5">Father Phone</th>
-                  <th className="slc slc-6">Mother Phone</th>
-                </tr>
-              </thead>
+          {loadingDetails ? (
+            <div className="text-center py-4">
+              <Spinner animation="border" />
+            </div>
+          ) : (
+            <div className="scrollable-table" onScroll={handleModalScroll}>
+              <Table striped bordered hover className="modal-table">
+                <thead>
+                  <tr>
+                    <th className="slc slc-1">#</th>
+                    <th className="slc slc-2">Name</th>
+                    <th className="slc slc-3">Admission No</th>
+                    <th className="slc slc-4">Class</th>
+                    {headNames.map((head) => (
+                      <th key={head} className="feehead-header">
+                        <div className="d-flex align-items-center justify-content-between gap-2">
+                          <span title={head} style={{ maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis" }}>
+                            {head}
+                          </span>
+                          <Form.Check
+                            type="checkbox"
+                            checked={selectedHeads.has(head)}
+                            onChange={() => toggleHead(head)}
+                            title="Include in totals/export/WhatsApp"
+                          />
+                        </div>
+                      </th>
+                    ))}
+                    <th className="sticky-overall">Overall</th>
+                    <th className="slc slc-5">Father Phone</th>
+                    <th className="slc slc-6">Mother Phone</th>
+                  </tr>
+                </thead>
 
-              <tbody>
-                {visibleDetails.map((stu, idx) => {
-                  let overall = 0;
-                  headNames.forEach((h) => {
-                    if (!selectedHeads.has(h)) return;
-                    const amt = Number(stu[`${h} - Remaining`] || 0);
-                    const fine = Number(stu[`${h} - Fine`] || 0);
-                    overall += amt + fine;
-                  });
-                  return (
-                    <tr key={idx}>
-                      <td className="slc slc-1">{idx + 1}</td>
-                      <td className="slc slc-2">{stu.name}</td>
-                      <td className="slc slc-3">{stu.admissionNumber}</td>
-                      <td className="slc slc-4">{stu.className}</td>
-                      {headNames.map((h) => {
-                        const amt = Number(stu[`${h} - Remaining`] || 0);
-                        const fine = Number(stu[`${h} - Fine`] || 0);
-                        return <td key={h}>{formatCurrency(amt + fine)}</td>;
-                      })}
-                      <td className="sticky-overall text-danger fw-bold">
-                        {formatCurrency(overall)}
-                      </td>
-                      <td className="slc slc-5">{stu.fatherPhone || ""}</td>
-                      <td className="slc slc-6">{stu.motherPhone || ""}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
+                <tbody>
+                  {visibleDetails.map((stu, idx) => {
+                    let overall = 0;
+                    headNames.forEach((h) => {
+                      if (!selectedHeads.has(h)) return;
+                      const amt = safeNum(stu[`${h} - Remaining`]);
+                      const fine = safeNum(stu[`${h} - Fine`]);
+                      overall += amt + fine;
+                    });
 
-              <tfoot>
-                <tr className="table-total-row sticky-footer">
-                  <td className="slc slc-1" colSpan={4}>
-                    Total (All Selected)
-                  </td>
-                  {headNames.map((h) => {
-                    const tot =
-                      (columnTotals[h]?.remaining || 0) +
-                      (columnTotals[h]?.fine || 0);
-                    return <td key={h}>{formatCurrency(tot)}</td>;
+                    return (
+                      <tr key={`${stu.id}-${idx}`}>
+                        <td className="slc slc-1">{idx + 1}</td>
+                        <td className="slc slc-2">{stu.name}</td>
+                        <td className="slc slc-3">{stu.admissionNumber}</td>
+                        <td className="slc slc-4">{stu.className}</td>
+                        {headNames.map((h) => {
+                          const amt = safeNum(stu[`${h} - Remaining`]);
+                          const fine = safeNum(stu[`${h} - Fine`]);
+                          const tot = amt + fine;
+                          return (
+                            <td key={h} title={tot > 0 ? `Amount: ${formatCurrency(amt)} | Fine: ${formatCurrency(fine)}` : ""}>
+                              {formatCurrency(tot)}
+                            </td>
+                          );
+                        })}
+                        <td className="sticky-overall text-danger fw-bold">{formatCurrency(overall)}</td>
+                        <td className="slc slc-5">{stu.fatherPhone || ""}</td>
+                        <td className="slc slc-6">{stu.motherPhone || ""}</td>
+                      </tr>
+                    );
                   })}
-                  <td className="sticky-overall fw-bold text-danger">
-                    {formatCurrency(grandTotal)}
-                  </td>
-                  <td></td>
-                  <td></td>
-                </tr>
-              </tfoot>
-            </Table>
-          </div>
+                </tbody>
+
+                <tfoot>
+                  <tr className="table-total-row sticky-footer">
+                    <td className="slc slc-1" colSpan={4}>
+                      Total (All Selected)
+                    </td>
+                    {headNames.map((h) => {
+                      const tot = safeNum(columnTotals[h]?.remaining) + safeNum(columnTotals[h]?.fine);
+                      return <td key={h}>{formatCurrency(tot)}</td>;
+                    })}
+                    <td className="sticky-overall fw-bold text-danger">{formatCurrency(grandTotal)}</td>
+                    <td></td>
+                    <td></td>
+                  </tr>
+                </tfoot>
+              </Table>
+            </div>
+          )}
         </Modal.Body>
 
         <Modal.Footer>
           <small className="text-muted">
-            Scroll horizontally to view all fee heads.
+            Showing <b>{visibleDetails.length}</b> of <b>{filteredAllDetails.length}</b> students. Scroll down to load more.
           </small>
           <Button variant="secondary" onClick={() => setShowModal(false)}>
             Close
@@ -983,5 +1087,3 @@ const SchoolFeeSummary = () => {
 };
 
 export default SchoolFeeSummary;
-
-// ======== END OF PART 4/4 ========
