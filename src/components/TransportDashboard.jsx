@@ -16,7 +16,7 @@ const getRoleFlags = () => {
     isAdmin: roles.includes("admin"),
     isSuperadmin: roles.includes("superadmin"),
     isAccounts: roles.includes("accounts"),
-    isTransport: roles.includes("transport"),
+    isTransport: roles.includes("transport") || roles.includes("transport_admin"),
   };
 };
 
@@ -24,10 +24,25 @@ const getRoleFlags = () => {
 const asArray = (d) => {
   if (Array.isArray(d)) return d;
   if (!d) return [];
-  return d.rows || d.items || d.results || d.data || [];
+  // ✅ added common keys (staff is important for /transport-staff)
+  return (
+    d.staff ||
+    d.routes ||
+    d.buses ||
+    d.assignments ||
+    d.students ||
+    d.employees ||
+    d.rows ||
+    d.items ||
+    d.results ||
+    d.data ||
+    []
+  );
 };
 
 const safe = (v, fb = "—") => (v === null || v === undefined || v === "" ? fb : String(v));
+const safeStr = (v) => String(v ?? "").trim();
+const lower = (v) => safeStr(v).toLowerCase();
 
 const fmtDateTime = (v) => {
   if (!v) return "—";
@@ -42,8 +57,6 @@ const fmtDate = (v) => {
   if (isNaN(d.getTime())) return String(v);
   return d.toLocaleDateString("en-IN");
 };
-
-const safeStr = (v) => String(v ?? "").trim();
 
 // Session guess (FY-style, April-March)
 const guessCurrentSession = () => {
@@ -78,6 +91,80 @@ const uniqCount = (arr, keyGetter) => {
   return set.size;
 };
 
+/* ---------------- UI helpers ---------------- */
+const StatPill = ({ label, value, tone = "secondary", to }) => {
+  const content = (
+    <span
+      className={`badge rounded-pill text-bg-${tone} bg-opacity-75`}
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 8,
+        padding: "10px 12px",
+        border: "1px solid rgba(0,0,0,.06)",
+      }}
+      title={label}
+    >
+      <span style={{ opacity: 0.9 }}>{label}</span>
+      <span className="fw-semibold">{value}</span>
+      <i className="bi bi-arrow-right-short" style={{ opacity: 0.9 }} />
+    </span>
+  );
+
+  if (!to) return content;
+
+  return (
+    <Link to={to} style={{ textDecoration: "none" }}>
+      {content}
+    </Link>
+  );
+};
+
+const Tile = ({ title, value, variant = "secondary", hint, to }) => {
+  const body = (
+    <div
+      className={`card border-0 shadow-sm rounded-4 h-100 bg-${variant} bg-opacity-10`}
+      style={{
+        cursor: to ? "pointer" : "default",
+        transition: "transform .12s ease, box-shadow .12s ease",
+      }}
+    >
+      <div className="card-body">
+        <div className="d-flex justify-content-between gap-2">
+          <div className="text-uppercase small text-muted mb-1">{title}</div>
+          {to ? (
+            <span className="badge text-bg-light border" style={{ height: "fit-content" }}>
+              Open <i className="bi bi-box-arrow-up-right ms-1" />
+            </span>
+          ) : null}
+        </div>
+
+        <div className="display-6 fw-semibold" style={{ lineHeight: 1.1 }}>
+          {value}
+        </div>
+
+        <div className="small text-muted mt-1">{hint || "Live snapshot"}</div>
+
+        {to ? (
+          <div className="mt-3">
+            <span className={`btn btn-sm btn-outline-${variant === "dark" ? "dark" : "secondary"}`}>
+              View details
+            </span>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+
+  return to ? (
+    <Link to={to} style={{ textDecoration: "none", color: "inherit" }}>
+      {body}
+    </Link>
+  ) : (
+    body
+  );
+};
+
 /* ---------------- Component ---------------- */
 export default function TransportDashboard() {
   const navigate = useNavigate();
@@ -95,11 +182,22 @@ export default function TransportDashboard() {
   const [buses, setBuses] = useState([]);
   const [recentAssignments, setRecentAssignments] = useState([]);
 
+  // ✅ NEW: Staff counts
+  const [staffCounts, setStaffCounts] = useState({
+    total: 0,
+    drivers: 0,
+    conductors: 0,
+    activeStaff: 0,
+    inactiveStaff: 0,
+    userDisabled: 0,
+  });
+
   const [loading, setLoading] = useState({
     routes: false,
     buses: false,
     assignments: false,
     students: false,
+    staff: false,
   });
 
   const [error, setError] = useState("");
@@ -116,6 +214,7 @@ export default function TransportDashboard() {
   const BUSES_BASE = "/buses";
   const ASSIGN_BASE = "/student-transport-assignments";
   const STUDENTS_BASE = "/students";
+  const STAFF_BASE = "/transport-staff";
 
   // centralized api config for session
   const sessionCfg = useMemo(
@@ -138,7 +237,11 @@ export default function TransportDashboard() {
       setLastUpdated(new Date());
     } catch (e) {
       console.error("fetchRoutes error:", e);
-      setError(e?.response?.data?.message || e?.response?.data?.error || "Failed to load transport routes.");
+      setError(
+        e?.response?.data?.message ||
+          e?.response?.data?.error ||
+          "Failed to load transport routes."
+      );
     } finally {
       setLoading((s) => ({ ...s, routes: false }));
     }
@@ -148,7 +251,6 @@ export default function TransportDashboard() {
     if (!canUse) return;
     setLoading((s) => ({ ...s, buses: true }));
     try {
-      // buses may or may not be session-wise; sending session header is harmless
       const res = await api.get(BUSES_BASE, sessionCfg);
       const list = asArray(res.data);
       setBuses(Array.isArray(list) ? list : []);
@@ -172,7 +274,6 @@ export default function TransportDashboard() {
       });
       const list = asArray(res.data);
       const arr = Array.isArray(list) ? list : [];
-      // newest first if timestamps exist
       arr.sort((a, b) => {
         const da = new Date(a?.createdAt || a?.updatedAt || 0).getTime();
         const db = new Date(b?.createdAt || b?.updatedAt || 0).getTime();
@@ -183,7 +284,6 @@ export default function TransportDashboard() {
       setLastUpdated(new Date());
     } catch (e) {
       console.error("fetchRecentAssignments error:", e);
-      // Not fatal; show empty
       setRecentAssignments([]);
     } finally {
       setLoading((s) => ({ ...s, assignments: false }));
@@ -197,21 +297,20 @@ export default function TransportDashboard() {
     if (!canUse) return;
     setLoading((s) => ({ ...s, students: true }));
     try {
-      // Try using active assignments (more accurate)
+      // Prefer assignments
       const resA = await api.get(ASSIGN_BASE, {
         ...sessionCfg,
         params: { ...sessionCfg.params, active: true },
       });
       const listA = asArray(resA.data);
       if (Array.isArray(listA) && listA.length) {
-        // distinct student ids
         const uniq = new Set(listA.map((x) => x.student_id).filter(Boolean));
         setStudentsWithTransportCount(uniq.size);
         setLastUpdated(new Date());
         return;
       }
 
-      // Fallback: count from students list (bus_service is '1' / true)
+      // fallback: students flag
       const resS = await api.get(STUDENTS_BASE, sessionCfg);
       const listS = asArray(resS.data);
       const arr = Array.isArray(listS) ? listS : [];
@@ -230,12 +329,67 @@ export default function TransportDashboard() {
     }
   }, [canUse, sessionCfg]);
 
+  // ✅ Staff counts
+  const fetchStaffCounts = useCallback(async () => {
+    if (!canUse) return;
+    setLoading((s) => ({ ...s, staff: true }));
+    try {
+      const res = await api.get(STAFF_BASE, sessionCfg);
+      // IMPORTANT: response shape is { staff: [...] }
+      const list = res?.data?.staff || asArray(res.data);
+      const arr = Array.isArray(list) ? list : [];
+
+      let drivers = 0;
+      let conductors = 0;
+      let activeStaff = 0;
+      let inactiveStaff = 0;
+      let userDisabled = 0;
+
+      for (const r of arr) {
+        const t = lower(r?.staff_type);
+        if (t === "driver") drivers++;
+        if (t === "conductor") conductors++;
+
+        const staffStatus = lower(r?.status); // TransportStaff.status
+        if (staffStatus === "inactive") inactiveStaff++;
+        else activeStaff++;
+
+        const userStatus = lower(r?.user?.status); // User.status
+        if (userStatus === "disabled") userDisabled++;
+      }
+
+      setStaffCounts({
+        total: arr.length,
+        drivers,
+        conductors,
+        activeStaff,
+        inactiveStaff,
+        userDisabled,
+      });
+
+      setLastUpdated(new Date());
+    } catch (e) {
+      console.error("fetchStaffCounts error:", e);
+      setStaffCounts({
+        total: 0,
+        drivers: 0,
+        conductors: 0,
+        activeStaff: 0,
+        inactiveStaff: 0,
+        userDisabled: 0,
+      });
+    } finally {
+      setLoading((s) => ({ ...s, staff: false }));
+    }
+  }, [canUse, sessionCfg]);
+
   const refreshAll = useCallback(() => {
     fetchRoutes();
     fetchBuses();
     fetchRecentAssignments();
     fetchStudentsWithTransport();
-  }, [fetchRoutes, fetchBuses, fetchRecentAssignments, fetchStudentsWithTransport]);
+    fetchStaffCounts();
+  }, [fetchRoutes, fetchBuses, fetchRecentAssignments, fetchStudentsWithTransport, fetchStaffCounts]);
 
   useEffect(() => {
     if (!canUse) return;
@@ -254,9 +408,18 @@ export default function TransportDashboard() {
     timersRef.current.buses = setInterval(fetchBuses, POLLING_INTERVAL);
     timersRef.current.assign = setInterval(fetchRecentAssignments, POLLING_INTERVAL);
     timersRef.current.students = setInterval(fetchStudentsWithTransport, POLLING_INTERVAL);
+    timersRef.current.staff = setInterval(fetchStaffCounts, POLLING_INTERVAL);
 
     return () => Object.values(timersRef.current || {}).forEach(clearInterval);
-  }, [autoRefresh, canUse, fetchRoutes, fetchBuses, fetchRecentAssignments, fetchStudentsWithTransport]);
+  }, [
+    autoRefresh,
+    canUse,
+    fetchRoutes,
+    fetchBuses,
+    fetchRecentAssignments,
+    fetchStudentsWithTransport,
+    fetchStaffCounts,
+  ]);
 
   /* ---------------- Derived KPI ---------------- */
   const busKpis = useMemo(() => {
@@ -266,15 +429,16 @@ export default function TransportDashboard() {
   }, [buses]);
 
   const routeKpis = useMemo(() => {
-    // we are already session-wise from API
     const total = routes.length;
-    const withFine = routes.filter((r) => Number(r?.finePercentage || 0) > 0 || !!r?.fineStartDate).length;
-    const uniqVillages = uniqCount(
-      routes,
-      (r) => safeStr(r?.Villages).toLowerCase() // rough uniqueness (string)
-    );
+    const withFine = routes.filter(
+      (r) => Number(r?.finePercentage || 0) > 0 || !!r?.fineStartDate
+    ).length;
+    const uniqVillages = uniqCount(routes, (r) => safeStr(r?.Villages).toLowerCase());
     return { total, withFine, uniqVillages };
   }, [routes]);
+
+  const busy =
+    loading.routes || loading.buses || loading.assignments || loading.students || loading.staff;
 
   const quickLinks = useMemo(
     () => [
@@ -283,45 +447,52 @@ export default function TransportDashboard() {
         icon: "bi-signpost-split",
         href: "/transportations",
         gradient: "linear-gradient(135deg, #0ea5e9, #0369a1)",
-        desc: "Manage routes & fines",
+        desc: `Routes: ${routeKpis.total} · Fine: ${routeKpis.withFine}`,
       },
       {
         label: "Buses",
         icon: "bi-bus-front",
         href: "/buses",
         gradient: "linear-gradient(135deg, #22c55e, #16a34a)",
-        desc: "Fleet & status",
+        desc: `Total: ${busKpis.total} · Active: ${busKpis.active}`,
       },
       {
         label: "Assign Students",
         icon: "bi-person-check",
         href: "/student-transport-assignments",
         gradient: "linear-gradient(135deg, #6366f1, #4338ca)",
-        desc: "Pickup / Drop mapping",
+        desc: `Live: ${studentsWithTransportCount} students`,
       },
       {
-        label: "Bus Attendance",
-        icon: "bi-check2-square",
-        href: "/transport-attendance", // create later
-        gradient: "linear-gradient(135deg, #f59e0b, #b45309)",
-        desc: "Daily tracking",
+        label: "Drivers / Conductors",
+        icon: "bi-person-badge",
+        href: "/transport-staff",
+        gradient: "linear-gradient(135deg, #ef4444, #b91c1c)",
+        desc: `Drivers: ${staffCounts.drivers} · Conductors: ${staffCounts.conductors}`,
       },
     ],
-    []
+    [routeKpis.total, routeKpis.withFine, busKpis.total, busKpis.active, studentsWithTransportCount, staffCounts]
   );
 
-  const busy = loading.routes || loading.buses || loading.assignments || loading.students;
-
-  const kpiTiles = useMemo(
+  const tiles = useMemo(
     () => [
-      { title: "Routes (Session)", value: routeKpis.total, variant: "info" },
-      { title: "Routes with Fine", value: routeKpis.withFine, variant: "warning" },
-      { title: "Total Buses", value: busKpis.total, variant: "success" },
-      { title: "Active Buses", value: busKpis.active, variant: "primary" },
-      { title: "Students w/ Transport", value: studentsWithTransportCount, variant: "secondary" },
-      { title: "Recent Assignments", value: recentAssignments.length, variant: "dark" },
+      { title: "Routes (Session)", value: routeKpis.total, variant: "info", to: "/transportations" },
+      { title: "Routes with Fine", value: routeKpis.withFine, variant: "warning", to: "/transportations" },
+      { title: "Unique Villages", value: routeKpis.uniqVillages, variant: "secondary", to: "/transportations" },
+
+      { title: "Total Buses", value: busKpis.total, variant: "success", to: "/buses" },
+      { title: "Active Buses", value: busKpis.active, variant: "primary", to: "/buses" },
+
+      { title: "Students w/ Transport", value: studentsWithTransportCount, variant: "dark", to: "/student-transport-assignments" },
+
+      { title: "Drivers", value: staffCounts.drivers, variant: "danger", to: "/transport-staff" },
+      { title: "Conductors", value: staffCounts.conductors, variant: "danger", to: "/transport-staff" },
+      { title: "Staff Total", value: staffCounts.total, variant: "secondary", to: "/transport-staff" },
+      { title: "Staff Inactive", value: staffCounts.inactiveStaff, variant: "warning", to: "/transport-staff" },
+      { title: "User Disabled", value: staffCounts.userDisabled, variant: "warning", to: "/transport-staff" },
+      { title: "Recent Assignments", value: recentAssignments.length, variant: "secondary", to: "/student-transport-assignments" },
     ],
-    [routeKpis, busKpis, studentsWithTransportCount, recentAssignments]
+    [routeKpis, busKpis, studentsWithTransportCount, staffCounts, recentAssignments.length]
   );
 
   if (!canUse) {
@@ -343,66 +514,81 @@ export default function TransportDashboard() {
     >
       <div className="container-fluid px-4 py-3">
         {/* Header */}
-        <div className="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3 rounded-4 p-3 shadow-sm bg-white">
-          <div>
-            <h4 className="mb-1 fw-semibold d-flex align-items-center gap-2">
-              Transport Dashboard
-              <span className="badge text-bg-light border" title="Selected session">
-                Session: {session}
-              </span>
-              {busy ? (
-                <span className="badge text-bg-warning" title="Auto refreshing">
-                  Updating…
-                </span>
-              ) : (
-                <span className="badge text-bg-success" title="Up to date">
-                  Live
-                </span>
-              )}
-            </h4>
+        <div className="rounded-4 p-3 shadow-sm bg-white mb-3">
+          <div className="d-flex flex-wrap align-items-start justify-content-between gap-3">
+            <div>
+              <div className="d-flex flex-wrap align-items-center gap-2">
+                <h4 className="mb-0 fw-semibold d-flex align-items-center gap-2">
+                  <i className="bi bi-bus-front-fill" style={{ opacity: 0.85 }} />
+                  Transport Dashboard
+                </h4>
 
-            <div className="text-muted small">
-              Routes · Buses · Assignments{" · "}
-              {lastUpdated ? `Last updated: ${lastUpdated.toLocaleString("en-IN")}` : "—"}
-            </div>
-          </div>
+                <span className="badge text-bg-light border" title="Selected session">
+                  Session: {session}
+                </span>
 
-          <div className="d-flex flex-wrap gap-2 align-items-center">
-            {/* Session control */}
-            <div className="d-flex align-items-center gap-2">
-              <button
-                className="btn btn-outline-secondary shadow-sm"
-                title="Previous session"
-                onClick={() => setSession((s) => shiftSession(s, -1))}
-              >
-                ◀
-              </button>
-              <input
-                className="form-control shadow-sm"
-                style={{ width: 140 }}
-                value={session}
-                onChange={(e) => setSession(e.target.value)}
-                placeholder="2025-26"
-              />
-              <button
-                className="btn btn-outline-secondary shadow-sm"
-                title="Next session"
-                onClick={() => setSession((s) => shiftSession(s, +1))}
-              >
-                ▶
-              </button>
+                {busy ? (
+                  <span className="badge text-bg-warning" title="Refreshing">
+                    Updating…
+                  </span>
+                ) : (
+                  <span className="badge text-bg-success" title="Up to date">
+                    Live
+                  </span>
+                )}
+              </div>
+
+              <div className="text-muted small mt-1">
+                Routes · Buses · Assignments · Staff{" · "}
+                {lastUpdated ? `Last updated: ${lastUpdated.toLocaleString("en-IN")}` : "—"}
+              </div>
+
+              {/* Tiny summary pills */}
+              <div className="d-flex flex-wrap gap-2 mt-3">
+                <StatPill label="Drivers" value={staffCounts.drivers} tone="danger" to="/transport-staff" />
+                <StatPill label="Conductors" value={staffCounts.conductors} tone="danger" to="/transport-staff" />
+                <StatPill label="Buses Active" value={busKpis.active} tone="primary" to="/buses" />
+                <StatPill label="Routes" value={routeKpis.total} tone="info" to="/transportations" />
+              </div>
             </div>
 
-            <button
-              className={`btn btn-outline-${autoRefresh ? "secondary" : "success"} shadow-sm`}
-              onClick={() => setAutoRefresh((v) => !v)}
-            >
-              {autoRefresh ? "Pause Auto-Refresh" : "Resume Auto-Refresh"}
-            </button>
+            <div className="d-flex flex-wrap gap-2 align-items-center">
+              {/* Session control */}
+              <div className="d-flex align-items-center gap-2">
+                <button
+                  className="btn btn-outline-secondary shadow-sm"
+                  title="Previous session"
+                  onClick={() => setSession((s) => shiftSession(s, -1))}
+                >
+                  ◀
+                </button>
+                <input
+                  className="form-control shadow-sm"
+                  style={{ width: 140 }}
+                  value={session}
+                  onChange={(e) => setSession(e.target.value)}
+                  placeholder="2025-26"
+                />
+                <button
+                  className="btn btn-outline-secondary shadow-sm"
+                  title="Next session"
+                  onClick={() => setSession((s) => shiftSession(s, +1))}
+                >
+                  ▶
+                </button>
+              </div>
 
-            <button className="btn btn-primary shadow-sm" onClick={refreshAll} disabled={busy}>
-              <i className="bi bi-arrow-clockwise me-1" /> Refresh
-            </button>
+              <button
+                className={`btn btn-outline-${autoRefresh ? "secondary" : "success"} shadow-sm`}
+                onClick={() => setAutoRefresh((v) => !v)}
+              >
+                {autoRefresh ? "Pause Auto-Refresh" : "Resume Auto-Refresh"}
+              </button>
+
+              <button className="btn btn-primary shadow-sm" onClick={refreshAll} disabled={busy}>
+                <i className="bi bi-arrow-clockwise me-1" /> Refresh
+              </button>
+            </div>
           </div>
         </div>
 
@@ -427,7 +613,7 @@ export default function TransportDashboard() {
                 to={q.href}
                 className="btn w-100 text-white shadow-sm rounded-4 p-3 d-flex align-items-center gap-3"
                 style={{ backgroundImage: q.gradient, textDecoration: "none" }}
-                state={{ session }} // optional: if your route reads location.state
+                state={{ session }}
               >
                 <span
                   className="d-inline-grid place-items-center rounded-circle"
@@ -452,20 +638,17 @@ export default function TransportDashboard() {
           ))}
         </div>
 
-        {/* KPIs */}
+        {/* KPI tiles (more “dashboard-y”, clickable) */}
         <div className="row g-3 mb-4">
-          {kpiTiles.map((k, i) => (
+          {tiles.map((t, i) => (
             <div key={i} className="col-12 col-sm-6 col-lg-3">
-              <div
-                className={`card border-0 shadow-sm rounded-4 h-100 bg-${k.variant} bg-opacity-10`}
-                style={{ cursor: "default" }}
-              >
-                <div className="card-body">
-                  <div className="text-uppercase small text-muted mb-1">{k.title}</div>
-                  <div className="display-6 fw-semibold">{k.value}</div>
-                  <div className="small text-muted">{busy ? "Updating…" : "Live snapshot"}</div>
-                </div>
-              </div>
+              <Tile
+                title={t.title}
+                value={t.value}
+                variant={t.variant}
+                hint={busy ? "Updating…" : "Click to open"}
+                to={t.to}
+              />
             </div>
           ))}
         </div>
@@ -473,14 +656,14 @@ export default function TransportDashboard() {
         {/* Recent Assignments */}
         <div className="row g-4">
           <div className="col-12">
-            <div className="card shadow-sm rounded-4">
-              <div className="card-header bg-white border-0 d-flex justify-content-between align-items-center">
+            <div className="card shadow-sm rounded-4 overflow-hidden">
+              <div className="card-header bg-white border-0 d-flex flex-wrap justify-content-between align-items-center gap-2">
                 <div className="fw-semibold d-flex align-items-center gap-2">
                   Recent Student Transport Assignments
                   <span className="badge text-bg-light border">Session: {session}</span>
                 </div>
 
-                <div className="d-flex gap-2">
+                <div className="d-flex gap-2 flex-wrap">
                   <button
                     className="btn btn-sm btn-outline-secondary"
                     onClick={() => navigate("/transportations")}
@@ -489,7 +672,13 @@ export default function TransportDashboard() {
                     Routes
                   </button>
                   <Link className="btn btn-sm btn-outline-primary" to="/student-transport-assignments">
-                    Open module
+                    Assignments
+                  </Link>
+                  <Link className="btn btn-sm btn-outline-success" to="/buses">
+                    Buses
+                  </Link>
+                  <Link className="btn btn-sm btn-outline-danger" to="/transport-staff">
+                    Staff
                   </Link>
                 </div>
               </div>
@@ -544,7 +733,7 @@ export default function TransportDashboard() {
 
               <div className="card-footer bg-white border-0 small text-muted d-flex flex-wrap justify-content-between gap-2">
                 <div>
-                  Tip: Use <strong>Assign Students</strong> to set Pickup/Drop buses with effective dates.
+                  Tip: Use <strong>Assignments</strong> to set Pickup/Drop buses with effective dates.
                 </div>
                 <div>
                   Auto-refresh: <strong>{autoRefresh ? "On" : "Off"}</strong> · Polling:{" "}
@@ -564,6 +753,7 @@ export default function TransportDashboard() {
           }
           code { background: rgba(0,0,0,.04); padding: 2px 6px; border-radius: 8px; }
           .place-items-center { display: grid; place-items: center; }
+          a:hover .card { transform: translateY(-2px); box-shadow: 0 12px 28px rgba(0,0,0,.10); }
         `}</style>
 
         {/* Bootstrap Icons (if not already globally included) */}

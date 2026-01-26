@@ -1,5 +1,5 @@
 // src/pages/Registrations.jsx
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import api from "../api";
 import Swal from "sweetalert2";
 
@@ -7,7 +7,9 @@ import Swal from "sweetalert2";
 const getRoleFlags = () => {
   const singleRole = localStorage.getItem("userRole");
   const multiRoles = JSON.parse(localStorage.getItem("roles") || "[]");
-  const roles = multiRoles.length ? multiRoles : [singleRole].filter(Boolean);
+  const roles = (multiRoles.length ? multiRoles : [singleRole].filter(Boolean)).map((r) =>
+    String(r || "").toLowerCase()
+  );
 
   const isAdmin = roles.includes("admin");
   const isSuperadmin = roles.includes("superadmin");
@@ -16,7 +18,7 @@ const getRoleFlags = () => {
   const isAccounts = roles.includes("accounts");
   const isCoordinator = roles.includes("academic_coordinator");
 
-  // View allowed: admin, superadmin, admission/frontoffice, accounts, coordinator, hr, teacher (as per backend route file)
+  // View allowed
   const canView =
     isAdmin ||
     isSuperadmin ||
@@ -26,22 +28,22 @@ const getRoleFlags = () => {
     roles.includes("hr") ||
     roles.includes("teacher");
 
-  // Full CRUD (create/edit details): admin/superadmin/admission/frontoffice (and others you allowed in CRUD_ROLES)
+  // Full CRUD details
   const canEditDetails =
     isAdmin ||
     isSuperadmin ||
     isAdmission ||
     isCoordinator ||
     roles.includes("hr") ||
-    roles.includes("teacher"); // matches your CRUD_ROLES; remove if you don't want teacher/hr edits
+    roles.includes("teacher");
 
-  // Fee update only: accounts + admin-like
+  // Fee update only
   const canUpdateFee = isAccounts || isAdmin || isSuperadmin;
 
-  // Status update: admission/frontoffice/coordinator/admin-like
+  // Status update
   const canUpdateStatus = isAdmission || isCoordinator || isAdmin || isSuperadmin;
 
-  // Delete only: admin-like (backend restricts to admin/superadmin)
+  // Delete only
   const canDelete = isAdmin || isSuperadmin;
 
   return {
@@ -81,14 +83,8 @@ const emptyForm = {
 
 const Registrations = () => {
   const flags = useMemo(getRoleFlags, []);
-  const {
-    canView,
-    canEditDetails,
-    canUpdateFee,
-    canUpdateStatus,
-    canDelete,
-    isSuperadmin,
-  } = flags;
+  const { canView, canEditDetails, canUpdateFee, canUpdateStatus, canDelete, isSuperadmin } =
+    flags;
 
   const [rows, setRows] = useState([]);
   const [form, setForm] = useState({ ...emptyForm });
@@ -99,16 +95,27 @@ const Registrations = () => {
 
   const [feeModalOpen, setFeeModalOpen] = useState(false);
   const [statusModalOpen, setStatusModalOpen] = useState(false);
+
   const [feeForm, setFeeForm] = useState({
     registration_fee: "",
     fee_status: "unpaid",
     payment_ref: "",
     remarks: "",
   });
+
   const [statusForm, setStatusForm] = useState({
     status: "registered",
     remarks: "",
   });
+
+  // ✅ export/import/next-no states
+  const fileRef = useRef(null);
+  const [importing, setImporting] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const [suggesting, setSuggesting] = useState(false);
+  const [printingId, setPrintingId] = useState(null);
+
+  const [regNoSuggestion, setRegNoSuggestion] = useState("");
 
   // ---- API base path ------------------------------------------------------
   // If you mounted as app.use("/registrations", ...) then keep "/registrations"
@@ -125,16 +132,41 @@ const Registrations = () => {
     }
   };
 
+  // ✅ get next registration no (optional helper)
+  const fetchNextRegNo = async (sessionValue) => {
+    try {
+      const session = String(sessionValue || "").trim();
+      if (!session) {
+        setRegNoSuggestion("");
+        return;
+      }
+      setSuggesting(true);
+
+      const { data } = await api.get(`${BASE}/next-no`, {
+        params: { academic_session: session },
+      });
+
+      const suggestion = data?.suggestion || "";
+      setRegNoSuggestion(suggestion);
+    } catch (err) {
+      console.error("next-no failed:", err);
+      setRegNoSuggestion("");
+    } finally {
+      setSuggesting(false);
+    }
+  };
+
   const openCreate = () => {
     setEditingRow(null);
     setForm({ ...emptyForm });
+    setRegNoSuggestion("");
     setShowModal(true);
   };
 
   const openEdit = (row) => {
     setEditingRow(row);
+    setRegNoSuggestion("");
 
-    // Map row → form (keep safe)
     setForm({
       ...emptyForm,
       ...row,
@@ -153,8 +185,17 @@ const Registrations = () => {
 
   const saveRegistration = async () => {
     try {
-      if (!form.student_name.trim() || !form.phone.trim() || !form.class_applied.trim() || !form.academic_session.trim()) {
-        Swal.fire("Error", "Student name, phone, class applied, and academic session are required.", "error");
+      if (
+        !form.student_name.trim() ||
+        !form.phone.trim() ||
+        !form.class_applied.trim() ||
+        !form.academic_session.trim()
+      ) {
+        Swal.fire(
+          "Error",
+          "Student name, phone, class applied, and academic session are required.",
+          "error"
+        );
         return;
       }
 
@@ -165,7 +206,11 @@ const Registrations = () => {
         class_applied: form.class_applied.trim(),
         academic_session: form.academic_session.trim(),
         email: form.email?.trim() ? form.email.trim() : null,
-        registration_no: form.registration_no?.trim() ? form.registration_no.trim() : undefined,
+
+        registration_no: form.registration_no?.trim()
+          ? form.registration_no.trim()
+          : undefined, // backend auto if undefined/empty
+
         registration_fee: form.registration_fee === "" ? null : Number(form.registration_fee),
       };
 
@@ -183,13 +228,13 @@ const Registrations = () => {
 
       setEditingRow(null);
       setForm({ ...emptyForm });
+      setRegNoSuggestion("");
       setShowModal(false);
       fetchRegistrations();
     } catch (error) {
       console.error("Error saving registration:", error);
       const msg =
-        error?.response?.data?.message ||
-        "Failed to save registration. Please check inputs.";
+        error?.response?.data?.message || "Failed to save registration. Please check inputs.";
       Swal.fire("Error", msg, "error");
     }
   };
@@ -199,7 +244,7 @@ const Registrations = () => {
       return Swal.fire("Forbidden", "Only Admin/Superadmin can delete.", "warning");
     }
 
-    Swal.fire({
+    const confirm = await Swal.fire({
       title: "Are you sure?",
       text: "You won't be able to revert this!",
       icon: "warning",
@@ -208,18 +253,18 @@ const Registrations = () => {
       confirmButtonText: "Yes, delete it!",
       allowOutsideClick: false,
       allowEscapeKey: false,
-    }).then(async (result) => {
-      if (result.isConfirmed) {
-        try {
-          await api.delete(`${BASE}/${id}`);
-          Swal.fire("Deleted!", "Registration deleted.", "success");
-          fetchRegistrations();
-        } catch (error) {
-          console.error("Error deleting registration:", error);
-          Swal.fire("Error", "Failed to delete registration.", "error");
-        }
-      }
     });
+
+    if (!confirm.isConfirmed) return;
+
+    try {
+      await api.delete(`${BASE}/${id}`);
+      Swal.fire("Deleted!", "Registration deleted.", "success");
+      fetchRegistrations();
+    } catch (error) {
+      console.error("Error deleting registration:", error);
+      Swal.fire("Error", "Failed to delete registration.", "error");
+    }
   };
 
   const openFeeModal = (row) => {
@@ -289,6 +334,156 @@ const Registrations = () => {
     }
   };
 
+  // ✅ Export Excel (download)
+  const exportExcel = async () => {
+    try {
+      setDownloading(true);
+
+      const resp = await api.get(`${BASE}/export`, { responseType: "blob" });
+      const blob = new Blob([resp.data], {
+        type:
+          resp.headers?.["content-type"] ||
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
+
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+
+      const cd = resp.headers?.["content-disposition"] || "";
+      const match = cd.match(/filename="?([^"]+)"?/i);
+      a.download = match?.[1] || "Registrations.xlsx";
+
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("export failed:", err);
+      Swal.fire("Error", "Failed to export Excel.", "error");
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  // ✅ Import Excel
+  const importExcel = async (file) => {
+    if (!file) return;
+
+    const ok =
+      file.name.toLowerCase().endsWith(".xlsx") || file.name.toLowerCase().endsWith(".xls");
+
+    if (!ok) {
+      Swal.fire("Invalid", "Please upload .xlsx or .xls file.", "warning");
+      if (fileRef.current) fileRef.current.value = "";
+      return;
+    }
+
+    const confirm = await Swal.fire({
+      title: "Import Registrations?",
+      text: "This will add new registrations from the Excel file.",
+      icon: "question",
+      showCancelButton: true,
+      confirmButtonText: "Yes, import",
+      allowOutsideClick: false,
+      allowEscapeKey: false,
+    });
+
+    if (!confirm.isConfirmed) {
+      if (fileRef.current) fileRef.current.value = "";
+      return;
+    }
+
+    try {
+      setImporting(true);
+
+      const fd = new FormData();
+      fd.append("file", file);
+
+      const { data } = await api.post(`${BASE}/import`, fd, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+
+      const imported = data?.message || "Import completed.";
+
+      const dupCount = Array.isArray(data?.duplicates) ? data.duplicates.length : 0;
+      const invalidCount = Array.isArray(data?.invalid) ? data.invalid.length : 0;
+
+      let html = `<div style="text-align:left">
+        <div><b>${imported}</b></div>
+        <div style="margin-top:8px">Duplicates skipped: <b>${dupCount}</b></div>
+        <div>Invalid rows skipped: <b>${invalidCount}</b></div>
+      </div>`;
+
+      // show small preview of issues (first 5 each)
+      if (dupCount > 0 || invalidCount > 0) {
+        const dPrev = (data.duplicates || []).slice(0, 5);
+        const iPrev = (data.invalid || []).slice(0, 5);
+
+        const listHtml = (arr, title) => {
+          if (!arr.length) return "";
+          const items = arr
+            .map(
+              (x) =>
+                `<li>${x?.error || "Issue"}${
+                  x?.registration_no ? ` (RegNo: ${x.registration_no})` : ""
+                }</li>`
+            )
+            .join("");
+          return `<div style="margin-top:10px"><b>${title} (showing up to 5)</b><ul>${items}</ul></div>`;
+        };
+
+        html += listHtml(dPrev, "Duplicates");
+        html += listHtml(iPrev, "Invalid");
+      }
+
+      await Swal.fire({
+        title: "Import Result",
+        html,
+        icon: "success",
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+      });
+
+      fetchRegistrations();
+    } catch (err) {
+      console.error("import failed:", err);
+      const msg = err?.response?.data?.message || "Failed to import Excel.";
+      Swal.fire("Error", msg, "error");
+    } finally {
+      setImporting(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  };
+
+  // ✅ NEW: Print Registration Form PDF
+  const printForm = async (row) => {
+    try {
+      if (!row?.id) return;
+      setPrintingId(row.id);
+
+      const resp = await api.get(`${BASE}/${row.id}/print`, { responseType: "blob" });
+
+      const blob = new Blob([resp.data], { type: "application/pdf" });
+      const url = window.URL.createObjectURL(blob);
+
+      // open in new tab
+      window.open(url, "_blank", "noopener,noreferrer");
+
+      // cleanup later
+      setTimeout(() => {
+        try {
+          window.URL.revokeObjectURL(url);
+        } catch (_) {}
+      }, 60_000);
+    } catch (err) {
+      console.error("print failed:", err);
+      Swal.fire("Error", "Failed to open print form (PDF).", "error");
+    } finally {
+      setPrintingId(null);
+    }
+  };
+
   // Search filter
   const filtered = useMemo(() => {
     if (!search) return rows;
@@ -320,9 +515,7 @@ const Registrations = () => {
     return (
       <div className="container mt-4">
         <h1>Registrations</h1>
-        <div className="alert alert-warning">
-          You don&apos;t have permission to view registrations.
-        </div>
+        <div className="alert alert-warning">You don&apos;t have permission to view registrations.</div>
       </div>
     );
   }
@@ -331,12 +524,52 @@ const Registrations = () => {
     <div className="container mt-4">
       <h1>Registrations Management</h1>
 
-      {/* Add Button */}
-      {canEditDetails && (
-        <button className="btn btn-success mb-3" onClick={openCreate}>
-          Add Registration
+      {/* Top actions */}
+      <div className="d-flex flex-wrap gap-2 align-items-center mb-3">
+        {canEditDetails && (
+          <button className="btn btn-success" onClick={openCreate}>
+            Add Registration
+          </button>
+        )}
+
+        {/* Export */}
+        <button
+          className="btn btn-outline-primary"
+          onClick={exportExcel}
+          disabled={downloading}
+          title="Export registrations to Excel"
+        >
+          {downloading ? "Exporting..." : "Export Excel"}
         </button>
-      )}
+
+        {/* Import */}
+        {(flags.isAdmin || flags.isSuperadmin || flags.isAdmission || flags.isAccounts) && (
+          <div className="d-flex align-items-center gap-2">
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".xlsx,.xls"
+              className="form-control"
+              style={{ maxWidth: 260 }}
+              disabled={importing}
+              onChange={(e) => importExcel(e.target.files?.[0])}
+            />
+            <button
+              className="btn btn-outline-success"
+              disabled={importing}
+              onClick={() => {
+                if (!fileRef.current?.files?.[0]) {
+                  Swal.fire("Choose file", "Please select an Excel file first.", "info");
+                  return;
+                }
+                importExcel(fileRef.current.files[0]);
+              }}
+            >
+              {importing ? "Importing..." : "Import Excel"}
+            </button>
+          </div>
+        )}
+      </div>
 
       {/* Search */}
       <div className="mb-3">
@@ -363,9 +596,7 @@ const Registrations = () => {
             <th>Fee</th>
             <th>Fee Status</th>
             <th>Date</th>
-            {(canEditDetails || canUpdateFee || canUpdateStatus || canDelete) && (
-              <th>Actions</th>
-            )}
+            {(canEditDetails || canUpdateFee || canUpdateStatus || canDelete) && <th>Actions</th>}
           </tr>
         </thead>
         <tbody>
@@ -378,51 +609,42 @@ const Registrations = () => {
               <td>{r.class_applied || "-"}</td>
               <td>{r.academic_session || "-"}</td>
               <td>{r.status || "-"}</td>
-              <td>
-                {r.registration_fee !== null && r.registration_fee !== undefined
-                  ? r.registration_fee
-                  : "-"}
-              </td>
+              <td>{r.registration_fee !== null && r.registration_fee !== undefined ? r.registration_fee : "-"}</td>
               <td>{r.fee_status || "-"}</td>
-              <td>
-                {r.registration_date
-                  ? new Date(r.registration_date).toLocaleDateString()
-                  : "-"}
-              </td>
+              <td>{r.registration_date ? new Date(r.registration_date).toLocaleDateString() : "-"}</td>
+
               {(canEditDetails || canUpdateFee || canUpdateStatus || canDelete) && (
-                <td>
+                <td className="d-flex flex-wrap gap-2">
+                  {/* ✅ NEW: PRINT */}
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => printForm(r)}
+                    disabled={printingId === r.id}
+                    title="Open Registration Form PDF"
+                  >
+                    {printingId === r.id ? "Opening..." : "Print"}
+                  </button>
+
                   {canEditDetails && (
-                    <button
-                      className="btn btn-primary btn-sm me-2"
-                      onClick={() => openEdit(r)}
-                    >
+                    <button className="btn btn-primary btn-sm" onClick={() => openEdit(r)}>
                       Edit
                     </button>
                   )}
 
                   {canUpdateStatus && (
-                    <button
-                      className="btn btn-warning btn-sm me-2"
-                      onClick={() => openStatusModal(r)}
-                    >
+                    <button className="btn btn-warning btn-sm" onClick={() => openStatusModal(r)}>
                       Status
                     </button>
                   )}
 
                   {canUpdateFee && (
-                    <button
-                      className="btn btn-info btn-sm me-2"
-                      onClick={() => openFeeModal(r)}
-                    >
+                    <button className="btn btn-info btn-sm" onClick={() => openFeeModal(r)}>
                       Fee
                     </button>
                   )}
 
                   {isSuperadmin && canDelete && (
-                    <button
-                      className="btn btn-danger btn-sm"
-                      onClick={() => deleteRegistration(r.id)}
-                    >
+                    <button className="btn btn-danger btn-sm" onClick={() => deleteRegistration(r.id)}>
                       Delete
                     </button>
                   )}
@@ -434,11 +656,7 @@ const Registrations = () => {
           {filtered.length === 0 && (
             <tr>
               <td
-                colSpan={
-                  (canEditDetails || canUpdateFee || canUpdateStatus || canDelete)
-                    ? 11
-                    : 10
-                }
+                colSpan={canEditDetails || canUpdateFee || canUpdateStatus || canDelete ? 11 : 10}
                 className="text-center"
               >
                 No registrations found
@@ -450,21 +668,12 @@ const Registrations = () => {
 
       {/* MAIN MODAL (Create / Edit) */}
       {showModal && (
-        <div
-          className="modal show d-block"
-          style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
-        >
+        <div className="modal show d-block" style={{ backgroundColor: "rgba(0,0,0,0.5)" }}>
           <div className="modal-dialog modal-lg">
             <div className="modal-content">
               <div className="modal-header">
-                <h5 className="modal-title">
-                  {editingRow ? "Edit Registration" : "Add Registration"}
-                </h5>
-                <button
-                  type="button"
-                  className="btn-close"
-                  onClick={() => setShowModal(false)}
-                ></button>
+                <h5 className="modal-title">{editingRow ? "Edit Registration" : "Add Registration"}</h5>
+                <button type="button" className="btn-close" onClick={() => setShowModal(false)}></button>
               </div>
 
               <div className="modal-body">
@@ -474,25 +683,54 @@ const Registrations = () => {
                     <label className="form-label">Registration No (optional)</label>
                     <input
                       type="text"
-                      className="form-control mb-3"
+                      className="form-control"
                       placeholder="Auto if empty"
                       value={form.registration_no || ""}
-                      onChange={(e) =>
-                        setForm({ ...form, registration_no: e.target.value })
-                      }
+                      onChange={(e) => setForm({ ...form, registration_no: e.target.value })}
                     />
+                    {/* suggestion line */}
+                    {!editingRow && !form.registration_no?.trim() && (
+                      <div className="form-text">
+                        {suggesting ? (
+                          <span>Checking next reg no...</span>
+                        ) : regNoSuggestion ? (
+                          <span>
+                            Suggested: <b>{regNoSuggestion}</b>
+                            <button
+                              type="button"
+                              className="btn btn-link btn-sm ms-2 p-0"
+                              onClick={() => setForm((p) => ({ ...p, registration_no: regNoSuggestion }))}
+                            >
+                              Use
+                            </button>
+                          </span>
+                        ) : (
+                          <span>Leave blank to auto-generate.</span>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   <div className="col-md-4">
                     <label className="form-label">Academic Session *</label>
                     <input
                       type="text"
-                      className="form-control mb-3"
+                      className="form-control"
                       placeholder="e.g. 2025-26"
                       value={form.academic_session || ""}
-                      onChange={(e) =>
-                        setForm({ ...form, academic_session: e.target.value })
-                      }
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setForm({ ...form, academic_session: v });
+
+                        // fetch suggestion when user types session (only for create)
+                        if (!editingRow) {
+                          if (String(v).trim().length >= 4) fetchNextRegNo(v);
+                          else setRegNoSuggestion("");
+                        }
+                      }}
+                      onBlur={() => {
+                        if (!editingRow) fetchNextRegNo(form.academic_session);
+                      }}
                     />
                   </div>
 
@@ -500,15 +738,15 @@ const Registrations = () => {
                     <label className="form-label">Class Applied *</label>
                     <input
                       type="text"
-                      className="form-control mb-3"
+                      className="form-control"
                       placeholder="e.g. Nursery"
                       value={form.class_applied || ""}
-                      onChange={(e) =>
-                        setForm({ ...form, class_applied: e.target.value })
-                      }
+                      onChange={(e) => setForm({ ...form, class_applied: e.target.value })}
                     />
                   </div>
                 </div>
+
+                <hr />
 
                 {/* Row 2 */}
                 <div className="row">
@@ -518,9 +756,7 @@ const Registrations = () => {
                       type="text"
                       className="form-control mb-3"
                       value={form.student_name || ""}
-                      onChange={(e) =>
-                        setForm({ ...form, student_name: e.target.value })
-                      }
+                      onChange={(e) => setForm({ ...form, student_name: e.target.value })}
                     />
                   </div>
 
@@ -553,9 +789,7 @@ const Registrations = () => {
                       type="text"
                       className="form-control mb-3"
                       value={form.father_name || ""}
-                      onChange={(e) =>
-                        setForm({ ...form, father_name: e.target.value })
-                      }
+                      onChange={(e) => setForm({ ...form, father_name: e.target.value })}
                     />
                   </div>
 
@@ -565,9 +799,7 @@ const Registrations = () => {
                       type="text"
                       className="form-control mb-3"
                       value={form.mother_name || ""}
-                      onChange={(e) =>
-                        setForm({ ...form, mother_name: e.target.value })
-                      }
+                      onChange={(e) => setForm({ ...form, mother_name: e.target.value })}
                     />
                   </div>
 
@@ -592,9 +824,9 @@ const Registrations = () => {
                       onChange={(e) => setForm({ ...form, gender: e.target.value })}
                     >
                       <option value="">Select</option>
-                      <option value="male">Male</option>
-                      <option value="female">Female</option>
-                      <option value="other">Other</option>
+                      <option value="Male">Male</option>
+                      <option value="Female">Female</option>
+                      <option value="Other">Other</option>
                     </select>
                   </div>
 
@@ -604,9 +836,7 @@ const Registrations = () => {
                       type="datetime-local"
                       className="form-control mb-3"
                       value={form.registration_date || ""}
-                      onChange={(e) =>
-                        setForm({ ...form, registration_date: e.target.value })
-                      }
+                      onChange={(e) => setForm({ ...form, registration_date: e.target.value })}
                     />
                   </div>
 
@@ -658,19 +888,12 @@ const Registrations = () => {
 
       {/* FEE MODAL */}
       {feeModalOpen && (
-        <div
-          className="modal show d-block"
-          style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
-        >
+        <div className="modal show d-block" style={{ backgroundColor: "rgba(0,0,0,0.5)" }}>
           <div className="modal-dialog">
             <div className="modal-content">
               <div className="modal-header">
                 <h5 className="modal-title">Update Fee</h5>
-                <button
-                  type="button"
-                  className="btn-close"
-                  onClick={() => setFeeModalOpen(false)}
-                ></button>
+                <button type="button" className="btn-close" onClick={() => setFeeModalOpen(false)}></button>
               </div>
 
               <div className="modal-body">
@@ -679,18 +902,14 @@ const Registrations = () => {
                   type="number"
                   className="form-control mb-3"
                   value={feeForm.registration_fee}
-                  onChange={(e) =>
-                    setFeeForm({ ...feeForm, registration_fee: e.target.value })
-                  }
+                  onChange={(e) => setFeeForm({ ...feeForm, registration_fee: e.target.value })}
                 />
 
                 <label className="form-label">Fee Status</label>
                 <select
                   className="form-control mb-3"
                   value={feeForm.fee_status}
-                  onChange={(e) =>
-                    setFeeForm({ ...feeForm, fee_status: e.target.value })
-                  }
+                  onChange={(e) => setFeeForm({ ...feeForm, fee_status: e.target.value })}
                 >
                   <option value="unpaid">Unpaid</option>
                   <option value="paid">Paid</option>
@@ -701,9 +920,7 @@ const Registrations = () => {
                   type="text"
                   className="form-control mb-3"
                   value={feeForm.payment_ref}
-                  onChange={(e) =>
-                    setFeeForm({ ...feeForm, payment_ref: e.target.value })
-                  }
+                  onChange={(e) => setFeeForm({ ...feeForm, payment_ref: e.target.value })}
                 />
 
                 <label className="form-label">Remarks</label>
@@ -711,9 +928,7 @@ const Registrations = () => {
                   className="form-control"
                   rows={2}
                   value={feeForm.remarks}
-                  onChange={(e) =>
-                    setFeeForm({ ...feeForm, remarks: e.target.value })
-                  }
+                  onChange={(e) => setFeeForm({ ...feeForm, remarks: e.target.value })}
                 />
               </div>
 
@@ -732,19 +947,12 @@ const Registrations = () => {
 
       {/* STATUS MODAL */}
       {statusModalOpen && (
-        <div
-          className="modal show d-block"
-          style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
-        >
+        <div className="modal show d-block" style={{ backgroundColor: "rgba(0,0,0,0.5)" }}>
           <div className="modal-dialog">
             <div className="modal-content">
               <div className="modal-header">
                 <h5 className="modal-title">Update Status</h5>
-                <button
-                  type="button"
-                  className="btn-close"
-                  onClick={() => setStatusModalOpen(false)}
-                ></button>
+                <button type="button" className="btn-close" onClick={() => setStatusModalOpen(false)}></button>
               </div>
 
               <div className="modal-body">
@@ -752,9 +960,7 @@ const Registrations = () => {
                 <select
                   className="form-control mb-3"
                   value={statusForm.status}
-                  onChange={(e) =>
-                    setStatusForm({ ...statusForm, status: e.target.value })
-                  }
+                  onChange={(e) => setStatusForm({ ...statusForm, status: e.target.value })}
                 >
                   <option value="registered">Registered</option>
                   <option value="selected">Selected</option>
@@ -767,9 +973,7 @@ const Registrations = () => {
                   className="form-control"
                   rows={2}
                   value={statusForm.remarks}
-                  onChange={(e) =>
-                    setStatusForm({ ...statusForm, remarks: e.target.value })
-                  }
+                  onChange={(e) => setStatusForm({ ...statusForm, remarks: e.target.value })}
                 />
               </div>
 

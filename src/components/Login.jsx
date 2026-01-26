@@ -18,8 +18,15 @@ const ROLE_ORDER = [
   "student",
 ];
 
-// ✅ Demo School Background (fixed)
-const BG_CANDIDATES = [`${process.env.PUBLIC_URL}/images/DemoBackground.png`];
+// ✅ UPDATED: Background candidates -> SMCIS_Background.jpeg
+const BG_CANDIDATES = [
+  `${process.env.PUBLIC_URL}/images/SMCIS_Background.jpeg`,
+  `${process.env.PUBLIC_URL}/image/SMCIS_Background.jpeg`,
+];
+
+// ✅ UPDATED: Fixed branding (logo + school name)
+const FIXED_SCHOOL_NAME = "Seth Malook Chand International School";
+const FIXED_LOGO = `${process.env.PUBLIC_URL}/images/SMCISLogo.png`;
 
 function resolveFirstExistingImage(candidates) {
   return new Promise((resolve) => {
@@ -88,6 +95,7 @@ const GoogleIcon = () => (
 const Login = () => {
   const [login, setLogin] = useState("");
   const [password, setPassword] = useState("");
+  const [school, setSchool] = useState(null);
   const [bgUrl, setBgUrl] = useState(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -105,6 +113,15 @@ const Login = () => {
   useEffect(() => {
     userInputRef.current?.focus();
   }, []);
+
+  // fetch school info (optional, kept as-is)
+  useEffect(() => {
+    if (!apiBase) return;
+    axios
+      .get(`${apiBase}/schools`)
+      .then((res) => res.data?.length && setSchool(res.data[0]))
+      .catch(() => {});
+  }, [apiBase]);
 
   // Apply stored token from either storage on mount
   useEffect(() => {
@@ -128,6 +145,7 @@ const Login = () => {
       (err) => {
         const status = err?.response?.status;
         if (status === 401) {
+          // cleanup and redirect to login
           delete axios.defaults.headers.common["Authorization"];
           localStorage.removeItem("token");
           localStorage.removeItem("roles");
@@ -173,7 +191,7 @@ const Login = () => {
       console.warn("Storage failed", e);
     }
 
-    // persist family
+    // persist family for navbar/student switcher
     try {
       if (data.family) {
         localStorage.setItem("family", JSON.stringify(data.family));
@@ -192,10 +210,11 @@ const Login = () => {
 
     localStorage.removeItem("userRole");
     const defaultActive =
-      ROLE_ORDER.find((r) => roleArrLower.includes(r)) || (roleArrLower[0] || "");
+      ROLE_ORDER.find((r) => roleArrLower.includes(r)) ||
+      (roleArrLower[0] || "");
     localStorage.setItem("activeRole", defaultActive);
 
-    // Save FCM token if present
+    // Save FCM token (if available)
     try {
       const fcm = window.FCMTOKEN;
       if (fcm) {
@@ -212,7 +231,7 @@ const Login = () => {
       console.warn("save-token call error", e);
     }
 
-    // Setup socket auth
+    // Setup socket auth: attach token to socket and (re)connect
     try {
       if (token) {
         socket.auth = { token };
@@ -223,7 +242,7 @@ const Login = () => {
       console.warn("socket auth setup failed", e);
     }
 
-    // Join rooms
+    // Join relevant rooms for notifications
     try {
       joinRooms(user, roleArrLower);
     } catch (e) {
@@ -290,10 +309,44 @@ const Login = () => {
     }
   };
 
-  // ✅ Demo assets (fixed)
-  const fallbackLogo = `${process.env.PUBLIC_URL}/images/DemoLogo.png`;
-  const schoolLogoSrc = `${process.env.PUBLIC_URL}/images/DemoLogo.png`;
-  const schoolName = "DEMO PUBLIC SCHOOL";
+  // Optional logout helper (kept)
+  const logout = async () => {
+    try {
+      const token =
+        localStorage.getItem("token") || sessionStorage.getItem("token");
+      if (token) {
+        try {
+          await axios.post(
+            `${apiBase}/users/logout`,
+            {},
+            { headers: { Authorization: `Bearer ${token}` } }
+          );
+        } catch (e) {}
+      }
+    } finally {
+      delete axios.defaults.headers.common["Authorization"];
+      localStorage.removeItem("token");
+      localStorage.removeItem("roles");
+      localStorage.removeItem("username");
+      localStorage.removeItem("userId");
+      localStorage.removeItem("name");
+      localStorage.removeItem("activeRole");
+      localStorage.removeItem("family");
+      localStorage.removeItem("activeStudentAdmission");
+      sessionStorage.removeItem("token");
+      sessionStorage.removeItem("roles");
+      try {
+        socket.disconnect();
+      } catch (e) {}
+      window.dispatchEvent(new Event("user-logged-out"));
+      navigate("/login", { replace: true });
+    }
+  };
+
+  // ✅ Force logo & name as requested
+  const schoolLogoSrc = FIXED_LOGO;
+  const schoolName = FIXED_SCHOOL_NAME;
+  const fallbackLogo = FIXED_LOGO;
 
   return (
     <div
@@ -329,13 +382,17 @@ const Login = () => {
                       }}
                     />
 
-                    <h4 className="mt-2 mb-0 fw-semibold text-white">{schoolName}</h4>
+                    <h4 className="mt-2 mb-0 fw-semibold text-white">
+                      {schoolName}
+                    </h4>
                     <p className="text-white-50 small mb-0">
-                      Smart school ERP for academics, fees, attendance, HR & more.
+                      Manage academics, fees, attendance, HR & more.
                     </p>
                   </div>
 
-                  {error && <div className="alert alert-danger py-2">{error}</div>}
+                  {error && (
+                    <div className="alert alert-danger py-2">{error}</div>
+                  )}
 
                   <h5 className="fw-semibold mb-2 text-white">Sign in</h5>
                   <p className="text-white-50 mb-4">
@@ -353,14 +410,16 @@ const Login = () => {
                         className="form-control form-control-lg"
                         value={login}
                         onChange={(e) => setLogin(e.target.value)}
-                        placeholder="e.g., admin@school.com or admin01"
+                        placeholder="e.g., principal@school.edu or admin01"
                         autoComplete="username"
                         required
                       />
                     </div>
 
                     <div className="mb-2">
-                      <label className="form-label text-white-75">Password</label>
+                      <label className="form-label text-white-75">
+                        Password
+                      </label>
                       <div className="input-group input-group-lg">
                         <input
                           type={showPass ? "text" : "password"}

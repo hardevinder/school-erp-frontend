@@ -799,16 +799,15 @@ const Dashboard = () => {
 
   /* -------------------------------- RENDER ------------------------------- */
   return (
-    <div
-      className="dashboard-bg"
-      style={{
-        backgroundImage:
-          "linear-gradient(135deg, rgba(99, 102, 241, 0.15), rgba(34, 197, 94, 0.15), rgba(245, 158, 11, 0.15)), url(/images/SchooBackground.jpeg)",
-        backgroundSize: "cover",
-        backgroundPosition: "center",
-        minHeight: "100vh",
-      }}
-    >
+        <div
+          className="dashboard-bg"
+          style={{
+            backgroundImage:
+              "linear-gradient(135deg, rgba(99, 102, 241, 0.15), rgba(34, 197, 94, 0.15), rgba(245, 158, 11, 0.15))",
+            minHeight: "100vh",
+          }}
+        >
+
       <div className="dashboard-overlay" />
 
       <div

@@ -144,6 +144,9 @@ import AcademicCalendar from "./pages/AcademicCalendar";
 import AcademicCalendarView from "./pages/AcademicCalendarView";
 
 import StudentStrengthProjection from "./pages/StudentStrengthProjection";
+// ✅ NEW: Transport Staff (Drivers/Conductors)
+import TransportStaff from "./pages/TransportStaff";
+
 
 
 // ---------- auth guard ----------
@@ -337,6 +340,16 @@ function App() {
           <Route path="/students" element={<Student />} />
           <Route path="/sections" element={<Sections />} />
           <Route path="/schools" element={<Schools />} />
+          {/* ✅ Transport: Drivers / Conductors (guarded) */}
+          <Route
+            path="/transport-staff"
+            element={
+              <RequireRole roles={["transport", "transport_admin", "admin", "superadmin", "accounts"]}>
+                <TransportStaff />
+              </RequireRole>
+            }
+          />
+
 
           {/* Enquiries (admin) */}
           <Route

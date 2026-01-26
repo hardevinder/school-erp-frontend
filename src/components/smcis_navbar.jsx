@@ -1,4 +1,3 @@
-// File: src/components/Navbar.jsx
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate, Link, useLocation } from "react-router-dom";
 import axios from "axios";
@@ -196,8 +195,8 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
     localStorage.removeItem("token");
     localStorage.removeItem("roles");
     localStorage.removeItem("activeRole");
-    localStorage.removeItem("family"); // ensure cleanup
-    localStorage.removeItem("activeStudentAdmission"); // ensure cleanup
+    localStorage.removeItem("family");
+    localStorage.removeItem("activeStudentAdmission");
     navigate("/");
   };
 
@@ -263,7 +262,6 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
 
   // ---------- ROLE-BASED QUICK LINKS ----------
   const QUICK_LINKS_BY_ROLE = {
-    // Admin & Superadmin
     admin: [
       { label: "Collect", href: "/transactions", icon: "bi-cash-stack" },
       { label: "Fee Due", href: "/student-due", icon: "bi-receipt" },
@@ -312,7 +310,6 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
       { label: "Enquiries", href: "/enquiries", icon: "bi-inbox" },
       { label: "Tracking", href: "/users-tracking", icon: "bi-activity" },
     ],
-    // Accounts
     accounts: [
       { label: "Collect", href: "/transactions", icon: "bi-cash-stack" },
       { label: "Fee Due", href: "/student-due", icon: "bi-receipt" },
@@ -329,11 +326,7 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
         href: "/fee-certificates",
         icon: "bi-file-earmark-text",
       },
-      {
-        label: "Cancel",
-        href: "/cancelled-transactions",
-        icon: "bi-trash3",
-      },
+      { label: "Cancel", href: "/cancelled-transactions", icon: "bi-trash3" },
     ],
     account: [
       { label: "Collect", href: "/transactions", icon: "bi-cash-stack" },
@@ -351,11 +344,7 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
         href: "/fee-certificates",
         icon: "bi-file-earmark-text",
       },
-      {
-        label: "Cancel",
-        href: "/cancelled-transactions",
-        icon: "bi-trash3",
-      },
+      { label: "Cancel", href: "/cancelled-transactions", icon: "bi-trash3" },
     ],
     fee_manager: [
       { label: "Collect", href: "/transactions", icon: "bi-cash-stack" },
@@ -373,13 +362,8 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
         href: "/fee-certificates",
         icon: "bi-file-earmark-text",
       },
-      {
-        label: "Cancel",
-        href: "/cancelled-transactions",
-        icon: "bi-trash3",
-      },
+      { label: "Cancel", href: "/cancelled-transactions", icon: "bi-trash3" },
     ],
-    // Academic Coordinator
     academic_coordinator: [
       { label: "TT", href: "/combined-timetable", icon: "bi-table" },
       { label: "Students", href: "/students", icon: "bi-people" },
@@ -387,7 +371,6 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
       { label: "Subs", href: "/substitution", icon: "bi-arrow-repeat" },
       { label: "Exams", href: "/exams", icon: "bi-journal-bookmark" },
     ],
-    // Teacher
     teacher: [
       { label: "Mark Att.", href: "/mark-attendance", icon: "bi-check2-square" },
       { label: "TT", href: "/teacher-timetable-display", icon: "bi-table" },
@@ -399,7 +382,6 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
       },
       { label: "Assign", href: "/assignments", icon: "bi-clipboard" },
     ],
-    // HR
     hr: [
       { label: "Employees", href: "/employees", icon: "bi-person-badge" },
       {
@@ -423,7 +405,6 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
         icon: "bi-calendar-check",
       },
     ],
-    // Student
     student: [
       { label: "Home", href: "/dashboard", icon: "bi-house" },
       {
@@ -435,7 +416,6 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
       { label: "Assign", href: "/my-assignments", icon: "bi-journal-check" },
       { label: "Fees", href: "/student-fee", icon: "bi-cash-coin" },
     ],
-    // Parent
     parent: [
       { label: "Home", href: "/dashboard", icon: "bi-house" },
       {
@@ -461,10 +441,7 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
         role="navigation"
         style={{
           zIndex: 3000,
-          backgroundImage: `url(${process.env.PUBLIC_URL}/images/SMCIS_Background.jpeg)`,
-          backgroundSize: "cover",
-          backgroundPosition: "center",
-          backgroundRepeat: "no-repeat",
+          backgroundColor: "#ffffff", // ✅ WHITE BACKGROUND (IMAGE REMOVED)
         }}
       >
         <div className="container-fluid px-3">
@@ -561,7 +538,6 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
             {quickLinks.length > 0 && (
               <div className="d-flex align-items-center gap-2 gap-sm-3 me-2 quick-links-strip">
                 {quickLinks.map((q) => {
-                  // Special case: Pendings dropdown (two pending pages)
                   if (q.isPendingDropdown) {
                     const pendingActive =
                       isActive("/reports/school-fee-summary") ||
@@ -614,7 +590,6 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
                     );
                   }
 
-                  // Default quick-link card
                   const active = isActive(q.href);
                   return (
                     <Link
@@ -640,10 +615,7 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
             <button
               type="button"
               className="btn btn-outline-secondary position-relative"
-              onClick={() => {
-                window.dispatchEvent(new Event("chat:open-request"));
-                onBellClick();
-              }}
+              onClick={handleBellClick}
               aria-label="Notifications"
               title="Notifications"
             >
@@ -793,13 +765,14 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
 
       {/* Little CSS helpers */}
       <style>{`
-        /* Improve readability when background image is used */
+        /* ✅ Removed background image effect: keep clean white */
         .app-header {
-          backdrop-filter: saturate(1.1) blur(2px);
+          background-color: #ffffff !important;
         }
+
         .navbar-brand span {
           color: #0a1f44;
-          text-shadow: 0 1px 2px rgba(255,255,255,0.7);
+          text-shadow: none; /* ✅ was for image readability */
         }
 
         /* Keep quick links in one line and compact */
@@ -879,6 +852,9 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
 
         /* Dark mode tweaks */
         @media (prefers-color-scheme: dark) {
+          .app-header { background-color: #111 !important; }
+          .navbar-brand span { color: #e9ecef; }
+
           .quick-link-icon { color: #e9ecef !important; }
           .quick-link-icon .ql-icon-wrap {
             background: linear-gradient(145deg, #2a2f36, #23272e);
