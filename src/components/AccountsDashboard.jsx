@@ -45,13 +45,11 @@ export default function AccountsDashboard() {
   return (
     <div
       className="accounts-tiles-bg"
-      style={{
-        backgroundImage:
-          "linear-gradient(135deg, rgba(34,197,94,0.12), rgba(59,130,246,0.12), rgba(245,158,11,0.12)), url(/images/SchooBackground.jpeg)",
-        backgroundSize: "cover",
-        backgroundPosition: "center",
+        style={{
+        background: "linear-gradient(135deg, #f8fafc, #eef2ff)",
         minHeight: "100vh",
       }}
+
     >
       <div className="accounts-tiles-overlay" />
 

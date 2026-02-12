@@ -12,8 +12,11 @@ import HRDashboard from "./HRDashboard";
 
 import LibraryDashboard from "./LibraryDashboard";
 
-// ✅ NEW: Transport Dashboard
+// ✅ Transport Dashboard
 import TransportDashboard from "./TransportDashboard";
+
+// ✅ NEW: Examination Dashboard
+import ExaminationDashboard from "./ExaminationDashboard";
 
 export default function RoleAwareDashboard() {
   const { activeRole } = useRoles();
@@ -26,9 +29,12 @@ export default function RoleAwareDashboard() {
     case "admission":
       return <AdmissionDashboard />;
 
-    // ✅ NEW: Transport role
     case "transport":
       return <TransportDashboard />;
+
+    // ✅ NEW: Examination role
+    case "examination":
+      return <ExaminationDashboard />;
 
     // ✅ Library
     case "librarian":

@@ -1,10 +1,18 @@
-    // File: src/components/Navbar.jsx
+// src/components/Navbar.js
+
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate, Link, useLocation } from "react-router-dom";
 import axios from "axios";
 import "bootstrap/dist/css/bootstrap.min.css";
 import { FaBell } from "react-icons/fa";
 import { useRoles } from "../hooks/useRoles";
+
+/* ================= BRANDING ================= */
+
+const BRAND_NAME = "NEW MILTON PUBLIC SCHOOL";
+const BRAND_LOGO = `${process.env.PUBLIC_URL}/images/milton_logo.png`;
+
+/* ========================================== */
 
 const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
   const navigate = useNavigate();
@@ -17,25 +25,21 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
   );
   const [userName, setUserName] = useState("");
 
-  // NEW: Pendings dropdown state
+  // NEW: Pendings dropdown state (kept for parity)
   const [pendingOpen, setPendingOpen] = useState(false);
 
   // NEW: family + active student admission for switcher
   const [family, setFamily] = useState(null);
-  const [activeStudentAdmission, setActiveStudentAdmission] = useState(
-    () =>
-      localStorage.getItem("activeStudentAdmission") ||
-      localStorage.getItem("username") ||
-      ""
+  const [activeStudentAdmission, setActiveStudentAdmission] = useState(() =>
+    localStorage.getItem("activeStudentAdmission") ||
+    localStorage.getItem("username") ||
+    ""
   );
 
   const { roles = [], activeRole, changeRole } = useRoles();
 
   // --- role helpers ---
   const roleLower = (activeRole || "").toLowerCase();
-  const isSuperAdmin =
-    roleLower === "superadmin" || roleLower === "super_admin";
-  const isAdmin = isSuperAdmin || roleLower === "admin";
   const isStudent = roleLower === "student";
   const isParent = roleLower === "parent";
 
@@ -196,8 +200,8 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
     localStorage.removeItem("token");
     localStorage.removeItem("roles");
     localStorage.removeItem("activeRole");
-    localStorage.removeItem("family"); // ensure cleanup
-    localStorage.removeItem("activeStudentAdmission"); // ensure cleanup
+    localStorage.removeItem("family");
+    localStorage.removeItem("activeStudentAdmission");
     navigate("/");
   };
 
@@ -206,10 +210,14 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
     const handleClickOutside = (e) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
         setDropdownOpen(false);
+        setPendingOpen(false);
       }
     };
     const handleEsc = (e) => {
-      if (e.key === "Escape") setDropdownOpen(false);
+      if (e.key === "Escape") {
+        setDropdownOpen(false);
+        setPendingOpen(false);
+      }
     };
     document.addEventListener("mousedown", handleClickOutside);
     document.addEventListener("keydown", handleEsc);
@@ -226,11 +234,6 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
     window.dispatchEvent(new Event("role-changed"));
     setDropdownOpen(false);
     navigate("/dashboard", { replace: true });
-  };
-
-  const closeDropdownAnd = (fn) => () => {
-    setDropdownOpen(false);
-    if (typeof fn === "function") fn();
   };
 
   // Open chat widget when bell is clicked
@@ -266,213 +269,18 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
     }
   };
 
-  // ---------- ROLE-BASED QUICK LINKS ----------
-  const QUICK_LINKS_BY_ROLE = {
-    // Admin & Superadmin
-    admin: [
-      { label: "Collect", href: "/transactions", icon: "bi-cash-stack" },
-      { label: "Fee Due", href: "/student-due", icon: "bi-receipt" },
-      {
-        label: "Pendings",
-        href: "/reports/school-fee-summary",
-        icon: "bi-list-check",
-        isPendingDropdown: true,
-      },
-      { label: "Day", href: "/reports/day-wise", icon: "bi-calendar2-check" },
-      {
-        label: "Transport",
-        href: "/reports/transport-summary",
-        icon: "bi-truck",
-      },
-      { label: "Students", href: "/students", icon: "bi-people" },
-      {
-        label: "Fee Cert",
-        href: "/fee-certificates",
-        icon: "bi-file-earmark-text",
-      },
-      { label: "Enquiries", href: "/enquiries", icon: "bi-inbox" },
-      { label: "Tracking", href: "/users-tracking", icon: "bi-activity" },
-    ],
-    superadmin: [
-      { label: "Collect", href: "/transactions", icon: "bi-cash-stack" },
-      { label: "Fee Due", href: "/student-due", icon: "bi-receipt" },
-      {
-        label: "Pendings",
-        href: "/reports/school-fee-summary",
-        icon: "bi-list-check",
-        isPendingDropdown: true,
-      },
-      { label: "Day", href: "/reports/day-wise", icon: "bi-calendar2-check" },
-      {
-        label: "Transport",
-        href: "/reports/transport-summary",
-        icon: "bi-truck",
-      },
-      { label: "Students", href: "/students", icon: "bi-people" },
-      {
-        label: "Fee Cert",
-        href: "/fee-certificates",
-        icon: "bi-file-earmark-text",
-      },
-      { label: "Enquiries", href: "/enquiries", icon: "bi-inbox" },
-      { label: "Tracking", href: "/users-tracking", icon: "bi-activity" },
-    ],
-    // Accounts
-    accounts: [
-      { label: "Collect", href: "/transactions", icon: "bi-cash-stack" },
-      { label: "Fee Due", href: "/student-due", icon: "bi-receipt" },
-      { label: "Day", href: "/reports/day-wise", icon: "bi-calendar2-check" },
-      {
-        label: "Pendings",
-        href: "/reports/school-fee-summary",
-        icon: "bi-list-check",
-        isPendingDropdown: true,
-      },
-      { label: "Students", href: "/students", icon: "bi-people" },
-      {
-        label: "Fee Cert",
-        href: "/fee-certificates",
-        icon: "bi-file-earmark-text",
-      },
-      {
-        label: "Cancel",
-        href: "/cancelled-transactions",
-        icon: "bi-trash3",
-      },
-    ],
-    account: [
-      { label: "Collect", href: "/transactions", icon: "bi-cash-stack" },
-      { label: "Fee Due", href: "/student-due", icon: "bi-receipt" },
-      { label: "Day", href: "/reports/day-wise", icon: "bi-calendar2-check" },
-      {
-        label: "Pendings",
-        href: "/reports/school-fee-summary",
-        icon: "bi-list-check",
-        isPendingDropdown: true,
-      },
-      { label: "Students", href: "/students", icon: "bi-people" },
-      {
-        label: "Fee Cert",
-        href: "/fee-certificates",
-        icon: "bi-file-earmark-text",
-      },
-      {
-        label: "Cancel",
-        href: "/cancelled-transactions",
-        icon: "bi-trash3",
-      },
-    ],
-    fee_manager: [
-      { label: "Collect", href: "/transactions", icon: "bi-cash-stack" },
-      { label: "Fee Due", href: "/student-due", icon: "bi-receipt" },
-      { label: "Day", href: "/reports/day-wise", icon: "bi-calendar2-check" },
-      {
-        label: "Pendings",
-        href: "/reports/school-fee-summary",
-        icon: "bi-list-check",
-        isPendingDropdown: true,
-      },
-      { label: "Students", href: "/students", icon: "bi-people" },
-      {
-        label: "Fee Cert",
-        href: "/fee-certificates",
-        icon: "bi-file-earmark-text",
-      },
-      {
-        label: "Cancel",
-        href: "/cancelled-transactions",
-        icon: "bi-trash3",
-      },
-    ],
-    // Academic Coordinator
-    academic_coordinator: [
-      { label: "TT", href: "/combined-timetable", icon: "bi-table" },
-      { label: "Students", href: "/students", icon: "bi-people" },
-      { label: "Assign", href: "/teacher-assignment", icon: "bi-person-check" },
-      { label: "Subs", href: "/substitution", icon: "bi-arrow-repeat" },
-      { label: "Exams", href: "/exams", icon: "bi-journal-bookmark" },
-    ],
-    // Teacher
-    teacher: [
-      { label: "Mark Att.", href: "/mark-attendance", icon: "bi-check2-square" },
-      {
-        label: "TT",
-        href: "/teacher-timetable-display",
-        icon: "bi-table",
-      },
-      { label: "Marks", href: "/marks-entry", icon: "bi-pencil-square" },
-      {
-        label: "Subs",
-        href: "/combined-teacher-substitution",
-        icon: "bi-arrow-repeat",
-      },
-      { label: "Assign", href: "/assignments", icon: "bi-clipboard" },
-    ],
-    // HR
-    hr: [
-      { label: "Employees", href: "/employees", icon: "bi-person-badge" },
-      {
-        label: "Att.",
-        href: "/employee-attendance",
-        icon: "bi-person-check-fill",
-      },
-      {
-        label: "Summary",
-        href: "/employee-attendance-summary",
-        icon: "bi-calendar-range",
-      },
-      {
-        label: "Leave Req",
-        href: "/hr-leave-requests",
-        icon: "bi-clipboard-check",
-      },
-      {
-        label: "Balances",
-        href: "/employee-leave-balances",
-        icon: "bi-calendar-check",
-      },
-    ],
-    // Student
-    student: [
-      { label: "Home", href: "/dashboard", icon: "bi-house" },
-      {
-        label: "Attend.",
-        href: "/student-attendance",
-        icon: "bi-calendar2-check",
-      },
-      { label: "Diary", href: "/student-diary", icon: "bi-journal-text" },
-      {
-        label: "Assign",
-        href: "/my-assignments",
-        icon: "bi-journal-check",
-      },
-      { label: "Fees", href: "/student-fee", icon: "bi-cash-coin" },
-    ],
-    // Parent
-    parent: [
-      { label: "Home", href: "/dashboard", icon: "bi-house" },
-      {
-        label: "Attend.",
-        href: "/student-attendance",
-        icon: "bi-calendar2-check",
-      },
-      { label: "Diary", href: "/student-diary", icon: "bi-journal-text" },
-      { label: "Fees", href: "/student-fee", icon: "bi-cash-coin" },
-    ],
-  };
-
-  const quickLinks = QUICK_LINKS_BY_ROLE[roleLower] || [];
-
-  // ✅ UPDATED BRANDING (logo + name)
-  const brandLogo = `${process.env.PUBLIC_URL}/images/amps_logo.png`;
-  const brandName = "Ashutosh Memorial School";
+  // (Optional) keep quick links empty here; you can add later
+  const quickLinks = [];
 
   return (
     <>
       <nav
-        className="navbar fixed-top navbar-expand-lg navbar-light bg-white border-bottom app-header shadow-sm"
+        className="navbar fixed-top navbar-expand-lg navbar-light border-bottom app-header shadow-sm"
         role="navigation"
-        style={{ zIndex: 3000 }}
+        style={{
+          zIndex: 3000,
+          backgroundColor: "#ffffff",
+        }}
       >
         <div className="container-fluid px-3">
           {/* Brand */}
@@ -481,8 +289,8 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
             className="navbar-brand d-flex align-items-center gap-2 ms-2"
           >
             <img
-              src={brandLogo}
-              alt={brandName}
+              src={BRAND_LOGO}
+              alt={BRAND_NAME}
               width={34}
               height={34}
               className="rounded"
@@ -491,7 +299,7 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
                 e.currentTarget.style.display = "none";
               }}
             />
-            <span className="fw-semibold">{brandName}</span>
+            <span className="fw-semibold">{BRAND_NAME}</span>
           </Link>
 
           {/* Student switcher (desktop pills) */}
@@ -514,9 +322,9 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
                       isActiveStu ? "btn-primary" : "btn-outline-primary"
                     } rounded-pill px-3`}
                     onClick={() => handleStudentSwitch(s.admission_number)}
-                    title={`${s.name} (${
-                      s.class?.name || "—"
-                    }-${s.section?.name || "—"})`}
+                    title={`${s.name} (${s.class?.name || "—"}-${
+                      s.section?.name || "—"
+                    })`}
                     style={{
                       maxWidth: 180,
                       overflow: "hidden",
@@ -564,64 +372,10 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
             className="ms-auto d-flex align-items-center gap-2 me-3"
             ref={dropdownRef}
           >
-            {/* Quick links strip */}
+            {/* Quick links strip (kept, even if empty now) */}
             {quickLinks.length > 0 && (
               <div className="d-flex align-items-center gap-2 gap-sm-3 me-2 quick-links-strip">
                 {quickLinks.map((q) => {
-                  // Special case: Pendings dropdown (two pending pages)
-                  if (q.isPendingDropdown) {
-                    const pendingActive =
-                      isActive("/reports/school-fee-summary") ||
-                      isActive("/reports/student-total-due");
-
-                    return (
-                      <div
-                        key="pending-dropdown"
-                        className="dropdown quick-link-dropdown"
-                        onMouseEnter={() => setPendingOpen(true)}
-                        onMouseLeave={() => setPendingOpen(false)}
-                      >
-                        <button
-                          type="button"
-                          className={`btn btn-link p-0 border-0 text-decoration-none text-center small quick-link-icon ${
-                            pendingActive ? "ql-active" : ""
-                          }`}
-                          onClick={() => setPendingOpen((v) => !v)}
-                        >
-                          <span className="ql-icon-wrap">
-                            <i className={`bi ${q.icon}`} aria-hidden="true" />
-                          </span>
-                          <span className="qlabel">{q.label}</span>
-                        </button>
-                        <ul
-                          className={`dropdown-menu dropdown-menu-end shadow-sm ${
-                            pendingOpen ? "show" : ""
-                          }`}
-                        >
-                          <li>
-                            <Link
-                              className="dropdown-item small"
-                              to="/reports/school-fee-summary"
-                              onClick={() => setPendingOpen(false)}
-                            >
-                              Fee Heading Wise Pending
-                            </Link>
-                          </li>
-                          <li>
-                            <Link
-                              className="dropdown-item small"
-                              to="/reports/student-total-due"
-                              onClick={() => setPendingOpen(false)}
-                            >
-                              Student Wise Pending Till Date
-                            </Link>
-                          </li>
-                        </ul>
-                      </div>
-                    );
-                  }
-
-                  // Default quick-link card
                   const active = isActive(q.href);
                   return (
                     <Link
@@ -647,10 +401,7 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
             <button
               type="button"
               className="btn btn-outline-secondary position-relative"
-              onClick={() => {
-                window.dispatchEvent(new Event("chat:open-request"));
-                onBellClick();
-              }}
+              onClick={handleBellClick}
               aria-label="Notifications"
               title="Notifications"
             >
@@ -725,12 +476,7 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
                     className="dropdown-item"
                     onClick={() => {
                       setDropdownOpen(false);
-                      localStorage.removeItem("token");
-                      localStorage.removeItem("roles");
-                      localStorage.removeItem("activeRole");
-                      localStorage.removeItem("family");
-                      localStorage.removeItem("activeStudentAdmission");
-                      navigate("/");
+                      handleLogout();
                     }}
                   >
                     Logout
@@ -798,9 +544,17 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
         </div>
       </nav>
 
-      {/* Little CSS helpers */}
+      {/* Little CSS helpers (same vibe as your first navbar) */}
       <style>{`
-        /* Keep quick links in one line and compact */
+        .app-header {
+          background-color: #ffffff !important;
+        }
+
+        .navbar-brand span {
+          color: #0a1f44;
+          text-shadow: none;
+        }
+
         .quick-links-strip { white-space: nowrap; }
 
         .quick-link-icon {
@@ -839,7 +593,6 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
           letter-spacing: .3px;
         }
 
-        /* Hover state */
         .quick-link-icon:hover {
           color: #0d6efd !important;
           transform: translateY(-2px) scale(1.05);
@@ -850,7 +603,6 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
           box-shadow: 0 4px 8px rgba(13,110,253,.2);
         }
 
-        /* Active route state */
         .quick-link-icon.ql-active {
           color: #0b5ed7 !important;
         }
@@ -860,23 +612,10 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
           box-shadow: 0 0 0 3px rgba(13,110,253,.2), 0 4px 10px rgba(13,110,253,.25);
         }
 
-        /* Pendings dropdown behaviour */
-        .quick-link-dropdown .dropdown-menu {
-          min-width: 260px;
-          padding: 0.25rem 0;
-        }
-        .quick-link-dropdown .dropdown-item {
-          font-size: 0.8rem;
-          padding: 0.35rem 0.8rem;
-        }
-
-        /* Tighten pill buttons a bit */
-        @media (min-width: 992px) {
-          .btn.rounded-pill { line-height: 1.1; }
-        }
-
-        /* Dark mode tweaks */
         @media (prefers-color-scheme: dark) {
+          .app-header { background-color: #111 !important; }
+          .navbar-brand span { color: #e9ecef; }
+
           .quick-link-icon { color: #e9ecef !important; }
           .quick-link-icon .ql-icon-wrap {
             background: linear-gradient(145deg, #2a2f36, #23272e);

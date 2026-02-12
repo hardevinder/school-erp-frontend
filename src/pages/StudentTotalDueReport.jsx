@@ -2,21 +2,21 @@
 "use client";
 
 /**
- * ✅ FULL UPDATED FILE (SESSION-WISE + FAST + MORE WONDERFUL UI)
+ * ✅ Student Total Due Report (Session-wise, Fast, Professional UI)
  *
- * What improved:
+ * Improvements included:
  * ✅ Session selector (session-wise everywhere)
- * ✅ Much faster: avoids 3x calls per fee head (full/partial/unpaid) by using ONE status="any" call per head (backend must support)
- * ✅ If backend DOES NOT support status="any", it auto-falls back to old logic
- * ✅ Better UX: Session pill, refresh, clear filters, “Expand all / Collapse all”
- * ✅ Better performance: memoized maps, less re-renders, safer progress updates
+ * ✅ FAST mode: uses status="any" (auto fallback to full/partial/unpaid if backend doesn't support)
+ * ✅ Till Date selector (can be future e.g. cover up to March)
+ * ✅ Totals, Overdue/Upcoming status, Excel export and WhatsApp all follow selected Till Date
+ * ✅ WhatsApp sends:
+ *    - tillDate = selected Till Date
+ *    - dueDate  = MAX PREVIOUS DUE DATE relative to selected Till Date (latest dueDate <= tillDate)
  *
- * IMPORTANT BACKEND CHANGE (recommended for speed):
- * - Update controller `getFeeHeadingWiseStudentDetails` to accept:
- *   status = "any"  -> return ALL students for that fee head (full/partial/unpaid)
- *   (and in each feeDetails row, include dueDate + nextFineDate as you already do)
+ * IMPORTANT BACKEND NOTE:
+ * - If whatsappController enforces "dueDate must be future", then allow past/today dueDate.
  *
- * APIs used here:
+ * APIs used:
  * - GET  /sessions
  * - GET  /schools
  * - GET  /fee-headings
@@ -102,13 +102,12 @@ const parseDateOnly = (input) => {
   return new Date(dt.getFullYear(), dt.getMonth(), dt.getDate(), 0, 0, 0, 0);
 };
 
-const isFutureDate = (input) => {
-  const d = parseDateOnly(input);
-  if (!d) return false;
-  const today = new Date();
-  const t = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0);
-  return d.getTime() > t.getTime();
+const toStartOfDay = (dt) => {
+  if (!dt) return null;
+  return new Date(dt.getFullYear(), dt.getMonth(), dt.getDate(), 0, 0, 0, 0);
 };
+
+const isValidISODate = (s) => !!parseDateOnly(s);
 
 // ✅ Extract ONLY installment due date (do NOT mix fine keys here)
 const extractInstallmentDueDate = (obj) => {
@@ -182,16 +181,13 @@ const extractFineDate = (obj) => {
   return s.length > 10 ? s.slice(0, 10) : s;
 };
 
-// Head-level overdue check
-const isHeadOverdue = (head) => {
+// ✅ Head-level due check (based on selected tillDate)
+const isHeadDueTillDate = (head, tillDateISO) => {
   const remaining = Number(head.remaining || 0) || 0;
-  const fine = Number(head.fine || 0) || 0;
+  if (remaining <= 0) return false;
 
-  // Opening Balance -> overdue if pending
-  if (head.isOpeningBalance) return remaining > 0;
-
-  // If fine already applied and remaining pending -> overdue
-  if (fine > 0 && remaining > 0) return true;
+  // Opening Balance -> always due if pending
+  if (head.isOpeningBalance) return true;
 
   const dueStr = head.dueDate; // installment due date only
   if (!dueStr) return false;
@@ -199,16 +195,13 @@ const isHeadOverdue = (head) => {
   const due = parseDateOnly(dueStr);
   if (!due) return false;
 
-  const today = new Date();
-  const t = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0);
-
-  return remaining > 0 && due.getTime() <= t.getTime();
+  const ref = toStartOfDay(parseDateOnly(tillDateISO)) || toStartOfDay(new Date());
+  return due.getTime() <= ref.getTime();
 };
 
-// Next upcoming installment due date (future only)
-const computeNextFutureDueDate = (heads) => {
-  const today = new Date();
-  const t = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0);
+// Next upcoming installment due date (relative future only)
+const computeNextFutureDueDate = (heads, tillDateISO) => {
+  const ref = toStartOfDay(parseDateOnly(tillDateISO)) || toStartOfDay(new Date());
 
   let best = null;
   let bestTime = null;
@@ -221,10 +214,10 @@ const computeNextFutureDueDate = (heads) => {
     const ds = h.dueDate;
     if (!ds) return;
 
-    const d = parseDateOnly(ds);
+    const d = toStartOfDay(parseDateOnly(ds));
     if (!d) return;
 
-    if (d.getTime() <= t.getTime()) return; // future only
+    if (d.getTime() <= ref.getTime()) return; // future only relative to tillDate
 
     if (bestTime === null || d.getTime() < bestTime) {
       bestTime = d.getTime();
@@ -235,10 +228,9 @@ const computeNextFutureDueDate = (heads) => {
   return best;
 };
 
-// Next upcoming fine apply date (future only)
-const computeNextFutureFineDate = (heads) => {
-  const today = new Date();
-  const t = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0);
+// Next upcoming fine apply date (relative future only)
+const computeNextFutureFineDate = (heads, tillDateISO) => {
+  const ref = toStartOfDay(parseDateOnly(tillDateISO)) || toStartOfDay(new Date());
 
   let best = null;
   let bestTime = null;
@@ -251,10 +243,10 @@ const computeNextFutureFineDate = (heads) => {
     const ds = h.nextFineDate;
     if (!ds) return;
 
-    const d = parseDateOnly(ds);
+    const d = toStartOfDay(parseDateOnly(ds));
     if (!d) return;
 
-    if (d.getTime() <= t.getTime()) return; // future only
+    if (d.getTime() <= ref.getTime()) return; // future only relative to tillDate
 
     if (bestTime === null || d.getTime() < bestTime) {
       bestTime = d.getTime();
@@ -263,6 +255,36 @@ const computeNextFutureFineDate = (heads) => {
   });
 
   return best;
+};
+
+// ✅ MAX PREVIOUS installment due date (latest <= tillDate) among pending heads
+const computeMaxPreviousDueDate = (heads, tillDateISO) => {
+  const ref = toStartOfDay(parseDateOnly(tillDateISO)) || toStartOfDay(new Date());
+
+  let best = "";
+  let bestTime = null;
+
+  (heads || []).forEach((h) => {
+    const remaining = Number(h.remaining || 0) || 0;
+    if (remaining <= 0) return;
+    if (h.isOpeningBalance) return;
+
+    const ds = h.dueDate; // installment due date only
+    if (!ds) return;
+
+    const d = toStartOfDay(parseDateOnly(ds));
+    if (!d) return;
+
+    // previous relative to tillDate
+    if (d.getTime() > ref.getTime()) return;
+
+    if (bestTime === null || d.getTime() > bestTime) {
+      bestTime = d.getTime();
+      best = ds;
+    }
+  });
+
+  return best; // YYYY-MM-DD
 };
 
 // ================= Component =================
@@ -288,6 +310,9 @@ const StudentTotalDueReport = () => {
   const [classFilter, setClassFilter] = useState("all");
   const [pendingFilter, setPendingFilter] = useState("all");
 
+  // ✅ Till Date selector (can be future)
+  const [tillDate, setTillDate] = useState(() => toISODate(new Date()));
+
   const [waSending, setWaSending] = useState(() => new Set());
   const [waAllSending, setWaAllSending] = useState(false);
   const [waAllProgress, setWaAllProgress] = useState({ done: 0, total: 0, skipped: 0 });
@@ -307,6 +332,12 @@ const StudentTotalDueReport = () => {
       aliveRef.current = false;
     };
   }, []);
+
+  // sanitize tillDate (never invalid)
+  useEffect(() => {
+    if (!isValidISODate(tillDate)) setTillDate(toISODate(new Date()));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tillDate]);
 
   // ---------------- Fetchers ----------------
   const fetchSchool = async () => {
@@ -411,7 +442,9 @@ const StudentTotalDueReport = () => {
       // Fallback path: old 3-status calls per head
       const statusesFallback = ["full", "partial", "unpaid"];
       const combosFallback = [];
-      (feeHeadings || []).forEach((fh) => statusesFallback.forEach((status) => combosFallback.push({ feeHeadingId: fh.id, status })));
+      (feeHeadings || []).forEach((fh) =>
+        statusesFallback.forEach((status) => combosFallback.push({ feeHeadingId: fh.id, status }))
+      );
 
       const studentMap = new Map();
 
@@ -430,12 +463,7 @@ const StudentTotalDueReport = () => {
             sectionName: student.sectionName || student.section || "",
             fatherPhone: student.fatherPhone || "",
             motherPhone: student.motherPhone || "",
-            phone:
-              student.phone ||
-              student.parentPhone ||
-              student.fatherPhone ||
-              student.motherPhone ||
-              "",
+            phone: student.phone || student.parentPhone || student.fatherPhone || student.motherPhone || "",
             heads: [],
           });
         } else {
@@ -446,7 +474,8 @@ const StudentTotalDueReport = () => {
           if (!aggExisting.name && student.name) aggExisting.name = student.name;
           if (!aggExisting.admissionNumber && student.admissionNumber) aggExisting.admissionNumber = student.admissionNumber;
           if (!aggExisting.className && student.className) aggExisting.className = student.className;
-          if (!aggExisting.sectionName && (student.sectionName || student.section)) aggExisting.sectionName = student.sectionName || student.section;
+          if (!aggExisting.sectionName && (student.sectionName || student.section))
+            aggExisting.sectionName = student.sectionName || student.section;
           if (!aggExisting.fatherPhone && student.fatherPhone) aggExisting.fatherPhone = student.fatherPhone;
           if (!aggExisting.motherPhone && student.motherPhone) aggExisting.motherPhone = student.motherPhone;
           if (!aggExisting.phone && (student.phone || student.parentPhone)) aggExisting.phone = student.phone || student.parentPhone;
@@ -516,16 +545,13 @@ const StudentTotalDueReport = () => {
       try {
         if (combosFast.length > 0) {
           usedFast = true;
-          // ✅ concurrency 4 -> safe
           await withConcurrency(combosFast, 4, worker);
         }
       } catch (e) {
-        // if backend rejects "any", fallback
         usedFast = false;
       }
 
       if (!usedFast) {
-        // fallback to old status loop
         const workerFallback = async ({ feeHeadingId, status }) => {
           const res = await api.get("/feedue-status/fee-heading-wise-students", {
             params: { feeHeadingId, status, session_id: activeSessionId },
@@ -586,7 +612,6 @@ const StudentTotalDueReport = () => {
                 nextFineDate: null,
               };
 
-              // place after academic same head (if exists)
               const academicIndex = agg.heads.findIndex((h) => !h.isTransport && h.name === baseHeadName);
               if (academicIndex >= 0) agg.heads.splice(academicIndex + 1, 0, head);
               else agg.heads.push(head);
@@ -639,7 +664,7 @@ const StudentTotalDueReport = () => {
         });
       }
 
-      // Totals
+      // Totals (tillDate-based)
       const studentsArr = Array.from(studentMap.values()).map((s) => {
         const totalDueAllTime = (s.heads || []).reduce((sum, h) => {
           const remaining = Number(h.remaining || 0);
@@ -648,7 +673,7 @@ const StudentTotalDueReport = () => {
         }, 0);
 
         const totalDueTillDate = (s.heads || []).reduce((sum, h) => {
-          if (!isHeadOverdue(h)) return sum;
+          if (!isHeadDueTillDate(h, tillDate)) return sum;
           const remaining = Number(h.remaining || 0);
           const fine = Number(h.fine || 0);
           return sum + remaining + fine;
@@ -689,18 +714,13 @@ const StudentTotalDueReport = () => {
 
   // ======== WhatsApp ========
 
-  const computeOverdueFineTotal = (heads) =>
-    (heads || []).reduce((sum, h) => (isHeadOverdue(h) ? sum + Number(h.fine || 0) : sum), 0);
+  const computeFineTotalTillDate = (heads) =>
+    (heads || []).reduce((sum, h) => (isHeadDueTillDate(h, tillDate) ? sum + Number(h.fine || 0) : sum), 0);
 
-  // WhatsApp date: next future fine date (preferred), else next future due date
+  // ✅ WhatsApp dueDate: MAX PREVIOUS DUE DATE relative to selected tillDate
   const computeWhatsAppDueDate = (heads) => {
-    const fineDate = computeNextFutureFineDate(heads || []);
-    if (fineDate && isFutureDate(fineDate)) return fineDate;
-
-    const dueDate = computeNextFutureDueDate(heads || []);
-    if (dueDate && isFutureDate(dueDate)) return dueDate;
-
-    return "";
+    const prev = computeMaxPreviousDueDate(heads || [], tillDate);
+    return prev || "";
   };
 
   const getWhatsAppTargets = (stu, recipientMode) => {
@@ -743,7 +763,7 @@ const StudentTotalDueReport = () => {
 
     try {
       const classSection = stu.sectionName ? `${stu.className} / ${stu.sectionName}` : stu.className || "";
-      const fineOverdue = computeOverdueFineTotal(stu.heads || []);
+      const fineTill = computeFineTotalTillDate(stu.heads || []);
       const dueDateToSend = computeWhatsAppDueDate(stu.heads || []);
       const receiptNo = stu.admissionNumber || "-";
 
@@ -751,10 +771,10 @@ const StudentTotalDueReport = () => {
         await api.post("/whatsapp/fee-reminder", {
           to: t.to,
           name: stu.name || "",
-          tillDate: toISODate(new Date()),
+          tillDate: tillDate, // ✅ selected till date (can be future)
           receiptNo,
           amount: String(Math.round(Number(stu.totalDueTillDate || 0))),
-          fine: String(Math.round(Number(fineOverdue || 0))),
+          fine: String(Math.round(Number(fineTill || 0))),
           dueDate: dueDateToSend || "",
           grade: classSection || "-",
           session_id: activeSessionId, // optional if your WA endpoint uses it
@@ -848,7 +868,7 @@ const StudentTotalDueReport = () => {
     if (!feeHeadings.length) return;
     buildStudentReport();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSessionId, feeHeadings.length, transportMap]);
+  }, [activeSessionId, feeHeadings.length, transportMap, tillDate]);
 
   // Dropdown options
   const classOptions = useMemo(() => {
@@ -918,6 +938,7 @@ const StudentTotalDueReport = () => {
         Phone: stu.phone || "",
         "Father Phone": stu.fatherPhone || "",
         "Mother Phone": stu.motherPhone || "",
+        "Till Date": tillDate,
         "Total Due Till Date": Number(stu.totalDueTillDate || 0),
         "Total Due (All Heads)": Number(stu.totalDueAllTime || 0),
         Status: Number(stu.totalDueTillDate || 0) > 0 ? "Pending" : "Clear",
@@ -933,10 +954,10 @@ const StudentTotalDueReport = () => {
       const cs = stu.sectionName ? `${stu.className} / ${stu.sectionName}` : stu.className;
 
       (stu.heads || []).forEach((h) => {
-        const overdue = isHeadOverdue(h);
+        const isDueTill = isHeadDueTillDate(h, tillDate);
         const remaining = Number(h.remaining || 0);
         const fine = Number(h.fine || 0);
-        const headDueTillDate = overdue ? remaining + fine : 0;
+        const headDueTillDate = isDueTill ? remaining + fine : 0;
 
         headRows.push({
           "Student Name": stu.name,
@@ -947,9 +968,10 @@ const StudentTotalDueReport = () => {
           Remaining: remaining,
           Fine: fine,
           "Due Till Date (Head)": headDueTillDate,
-          Status: overdue ? "Overdue" : remaining > 0 ? "Upcoming" : "Cleared",
+          Status: isDueTill ? "Due Till Date" : remaining > 0 ? "Upcoming" : "Cleared",
           "Due Date": h.dueDate || "",
           "Next Fine Date": h.nextFineDate || "",
+          "Till Date": tillDate,
         });
       });
     });
@@ -964,7 +986,7 @@ const StudentTotalDueReport = () => {
 
     const todayStr = new Date().toISOString().slice(0, 10);
     const sess = activeSession?.name ? String(activeSession.name).replace(/\s+/g, "_") : `session_${activeSessionId}`;
-    saveAs(blob, `Student_Total_Due_${sess}_${todayStr}.xlsx`);
+    saveAs(blob, `Student_Total_Due_${sess}_Till_${tillDate}_${todayStr}.xlsx`);
   };
 
   const toggleExpand = (id) => {
@@ -1016,11 +1038,15 @@ const StudentTotalDueReport = () => {
                 Session: {activeSession?.name || activeSessionId}
               </Badge>
             )}
+            <Badge bg="secondary" pill>
+              Till Date: {tillDate}
+            </Badge>
           </div>
         </div>
 
-        {/* Session Selector */}
+        {/* Controls */}
         <div className="d-flex gap-2 align-items-center flex-wrap">
+          {/* Session Selector */}
           <Form.Select
             size="sm"
             value={activeSessionId || ""}
@@ -1038,6 +1064,12 @@ const StudentTotalDueReport = () => {
               ))
             )}
           </Form.Select>
+
+          {/* Till Date */}
+          <InputGroup size="sm" style={{ minWidth: 220 }}>
+            <InputGroup.Text>Till Date</InputGroup.Text>
+            <Form.Control type="date" value={tillDate} onChange={(e) => setTillDate(toISODate(e.target.value))} />
+          </InputGroup>
 
           <Button
             variant="outline-secondary"
@@ -1074,20 +1106,10 @@ const StudentTotalDueReport = () => {
             </div>
 
             <div className="d-flex flex-wrap gap-2 align-items-center">
-              <Button
-                variant="outline-primary"
-                size="sm"
-                onClick={expandAll}
-                disabled={!filteredStudents.length}
-              >
+              <Button variant="outline-primary" size="sm" onClick={expandAll} disabled={!filteredStudents.length}>
                 Expand All
               </Button>
-              <Button
-                variant="outline-secondary"
-                size="sm"
-                onClick={collapseAll}
-                disabled={!expandedIds.size}
-              >
+              <Button variant="outline-secondary" size="sm" onClick={collapseAll} disabled={!expandedIds.size}>
                 Collapse All
               </Button>
             </div>
@@ -1152,13 +1174,16 @@ const StudentTotalDueReport = () => {
                   "WhatsApp All (Pending)"
                 )}
               </Button>
-              {waAllSending && (
-                <div className="small text-muted mt-1">
-                  Skipped (no Father No): {waAllProgress.skipped}
-                </div>
-              )}
+              {waAllSending && <div className="small text-muted mt-1">Skipped (no Father No): {waAllProgress.skipped}</div>}
             </div>
           </div>
+        </div>
+
+        {/* Quick hints row */}
+        <div className="d-flex flex-wrap gap-2 mt-3 small text-muted">
+          <span>• “Due Till Date” means installment due date ≤ selected Till Date.</span>
+          <span>• Upcoming means pending but due date is after Till Date.</span>
+          <span>• WhatsApp uses selected Till Date + max previous due date (≤ Till Date).</span>
         </div>
       </div>
 
@@ -1198,11 +1223,7 @@ const StudentTotalDueReport = () => {
                 const motherOk = !!digitsOnly(stu.motherPhone);
 
                 const canSend =
-                  recipient === "father"
-                    ? fatherOk
-                    : recipient === "mother"
-                    ? motherOk
-                    : fatherOk || motherOk;
+                  recipient === "father" ? fatherOk : recipient === "mother" ? motherOk : fatherOk || motherOk;
 
                 const tooltipText =
                   recipient === "father"
@@ -1344,16 +1365,22 @@ const StudentTotalDueReport = () => {
                                   <th className="text-end">Remaining</th>
                                   <th className="text-end">Fine</th>
                                   <th className="text-end">Due Till Date (Head)</th>
-                                  <th style={{ width: "110px" }}>Status</th>
+                                  <th style={{ width: "130px" }}>Status</th>
                                 </tr>
                               </thead>
 
                               <tbody>
                                 {stu.heads.map((h, idx) => {
-                                  const overdue = isHeadOverdue(h);
+                                  const isDueTill = isHeadDueTillDate(h, tillDate);
                                   const remaining = Number(h.remaining || 0);
                                   const fine = Number(h.fine || 0);
-                                  const headDueTillDate = overdue ? remaining + fine : 0;
+                                  const headDueTillDate = isDueTill ? remaining + fine : 0;
+
+                                  const statusText = isDueTill
+                                    ? "Due Till Date"
+                                    : remaining > 0
+                                    ? "Upcoming"
+                                    : "Cleared";
 
                                   return (
                                     <tr key={idx}>
@@ -1364,8 +1391,8 @@ const StudentTotalDueReport = () => {
                                       <td className="text-end">{formatCurrency(fine)}</td>
                                       <td className="text-end fw-semibold">{formatCurrency(headDueTillDate)}</td>
                                       <td>
-                                        {overdue ? (
-                                          <Badge bg="danger">Overdue</Badge>
+                                        {isDueTill ? (
+                                          <Badge bg="danger">Due Till Date</Badge>
                                         ) : remaining > 0 ? (
                                           <Badge bg="warning" text="dark">
                                             Upcoming
@@ -1373,6 +1400,10 @@ const StudentTotalDueReport = () => {
                                         ) : (
                                           <Badge bg="success">Cleared</Badge>
                                         )}
+                                        <div className="small text-muted mt-1">
+                                          {h.isOpeningBalance ? "Opening" : ""}
+                                          {!h.isOpeningBalance && remaining > 0 && isDueTill ? "" : ""}
+                                        </div>
                                       </td>
                                     </tr>
                                   );

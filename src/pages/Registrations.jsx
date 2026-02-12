@@ -6,9 +6,19 @@ import Swal from "sweetalert2";
 // ---- role helpers ---------------------------------------------------------
 const getRoleFlags = () => {
   const singleRole = localStorage.getItem("userRole");
-  const multiRoles = JSON.parse(localStorage.getItem("roles") || "[]");
+
+  // ✅ safer parse for roles
+  const raw = localStorage.getItem("roles");
+  let multiRoles = [];
+  try {
+    const parsed = JSON.parse(raw || "[]");
+    multiRoles = Array.isArray(parsed) ? parsed : [];
+  } catch {
+    multiRoles = [];
+  }
+
   const roles = (multiRoles.length ? multiRoles : [singleRole].filter(Boolean)).map((r) =>
-    String(r || "").toLowerCase()
+    String(r || "").toLowerCase().trim()
   );
 
   const isAdmin = roles.includes("admin");
@@ -81,6 +91,18 @@ const emptyForm = {
   remarks: "",
 };
 
+// ✅ helper: robust time getter for "recent first"
+const getRegTime = (r) => {
+  const val =
+    r?.registration_date ||
+    r?.createdAt ||
+    r?.created_at ||
+    r?.updatedAt ||
+    r?.updated_at;
+  const d = new Date(val);
+  return Number.isNaN(d.getTime()) ? 0 : d.getTime();
+};
+
 const Registrations = () => {
   const flags = useMemo(getRoleFlags, []);
   const { canView, canEditDetails, canUpdateFee, canUpdateStatus, canDelete, isSuperadmin } =
@@ -118,14 +140,17 @@ const Registrations = () => {
   const [regNoSuggestion, setRegNoSuggestion] = useState("");
 
   // ---- API base path ------------------------------------------------------
-  // If you mounted as app.use("/registrations", ...) then keep "/registrations"
-  // If you mounted as app.use("/api/registrations", ...) then change to "/api/registrations"
   const BASE = "/registrations";
 
   const fetchRegistrations = async () => {
     try {
       const { data } = await api.get(BASE);
-      setRows(Array.isArray(data) ? data : []);
+      const arr = Array.isArray(data) ? data : [];
+
+      // ✅ force recent first (top to bottom)
+      arr.sort((a, b) => getRegTime(b) - getRegTime(a));
+
+      setRows(arr);
     } catch (error) {
       console.error("Error fetching registrations:", error);
       Swal.fire("Error", "Failed to fetch registrations.", "error");
@@ -467,10 +492,8 @@ const Registrations = () => {
       const blob = new Blob([resp.data], { type: "application/pdf" });
       const url = window.URL.createObjectURL(blob);
 
-      // open in new tab
       window.open(url, "_blank", "noopener,noreferrer");
 
-      // cleanup later
       setTimeout(() => {
         try {
           window.URL.revokeObjectURL(url);
@@ -484,25 +507,30 @@ const Registrations = () => {
     }
   };
 
-  // Search filter
+  // Search filter (✅ keeps newest-first too)
   const filtered = useMemo(() => {
-    if (!search) return rows;
-    const q = search.toLowerCase();
-    return rows.filter((r) => {
-      const hay = [
-        r.registration_no,
-        r.student_name,
-        r.phone,
-        r.class_applied,
-        r.academic_session,
-        r.status,
-        r.fee_status,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-      return hay.includes(q);
-    });
+    const base = !search
+      ? [...rows]
+      : rows.filter((r) => {
+          const q = search.toLowerCase();
+          const hay = [
+            r.registration_no,
+            r.student_name,
+            r.phone,
+            r.class_applied,
+            r.academic_session,
+            r.status,
+            r.fee_status,
+          ]
+            .filter(Boolean)
+            .join(" ")
+            .toLowerCase();
+          return hay.includes(q);
+        });
+
+    // ✅ always recent top to bottom
+    base.sort((a, b) => getRegTime(b) - getRegTime(a));
+    return base;
   }, [rows, search]);
 
   useEffect(() => {
@@ -609,13 +637,14 @@ const Registrations = () => {
               <td>{r.class_applied || "-"}</td>
               <td>{r.academic_session || "-"}</td>
               <td>{r.status || "-"}</td>
-              <td>{r.registration_fee !== null && r.registration_fee !== undefined ? r.registration_fee : "-"}</td>
+              <td>
+                {r.registration_fee !== null && r.registration_fee !== undefined ? r.registration_fee : "-"}
+              </td>
               <td>{r.fee_status || "-"}</td>
               <td>{r.registration_date ? new Date(r.registration_date).toLocaleDateString() : "-"}</td>
 
               {(canEditDetails || canUpdateFee || canUpdateStatus || canDelete) && (
                 <td className="d-flex flex-wrap gap-2">
-                  {/* ✅ NEW: PRINT */}
                   <button
                     className="btn btn-secondary btn-sm"
                     onClick={() => printForm(r)}
@@ -688,7 +717,6 @@ const Registrations = () => {
                       value={form.registration_no || ""}
                       onChange={(e) => setForm({ ...form, registration_no: e.target.value })}
                     />
-                    {/* suggestion line */}
                     {!editingRow && !form.registration_no?.trim() && (
                       <div className="form-text">
                         {suggesting ? (
@@ -722,7 +750,6 @@ const Registrations = () => {
                         const v = e.target.value;
                         setForm({ ...form, academic_session: v });
 
-                        // fetch suggestion when user types session (only for create)
                         if (!editingRow) {
                           if (String(v).trim().length >= 4) fetchNextRegNo(v);
                           else setRegNoSuggestion("");
@@ -855,7 +882,6 @@ const Registrations = () => {
                   </div>
                 </div>
 
-                {/* Address + Remarks */}
                 <label className="form-label">Address</label>
                 <textarea
                   className="form-control mb-3"

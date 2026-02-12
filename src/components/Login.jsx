@@ -18,15 +18,15 @@ const ROLE_ORDER = [
   "student",
 ];
 
-// ✅ UPDATED: Background candidates -> SMCIS_Background.jpeg
+// ✅ UPDATED: Background candidates -> use amps_background.jpeg
 const BG_CANDIDATES = [
-  `${process.env.PUBLIC_URL}/images/SMCIS_Background.jpeg`,
-  `${process.env.PUBLIC_URL}/image/SMCIS_Background.jpeg`,
+  `${process.env.PUBLIC_URL}/images/amps_background.jpeg`,
+  `${process.env.PUBLIC_URL}/image/amps_background.jpeg`,
 ];
 
 // ✅ UPDATED: Fixed branding (logo + school name)
-const FIXED_SCHOOL_NAME = "Seth Malook Chand International School";
-const FIXED_LOGO = `${process.env.PUBLIC_URL}/images/SMCISLogo.png`;
+const FIXED_SCHOOL_NAME = "Ashutosh Memorial School";
+const FIXED_LOGO = `${process.env.PUBLIC_URL}/images/amps_logo.png`;
 
 function resolveFirstExistingImage(candidates) {
   return new Promise((resolve) => {
@@ -114,7 +114,7 @@ const Login = () => {
     userInputRef.current?.focus();
   }, []);
 
-  // fetch school info (optional, kept as-is)
+  // fetch school info
   useEffect(() => {
     if (!apiBase) return;
     axios
@@ -153,8 +153,8 @@ const Login = () => {
           localStorage.removeItem("userId");
           localStorage.removeItem("name");
           localStorage.removeItem("activeRole");
-          localStorage.removeItem("family");
-          localStorage.removeItem("activeStudentAdmission");
+          localStorage.removeItem("family"); // NEW
+          localStorage.removeItem("activeStudentAdmission"); // NEW
           sessionStorage.removeItem("token");
           sessionStorage.removeItem("roles");
           window.dispatchEvent(new Event("user-logged-out"));
@@ -191,7 +191,7 @@ const Login = () => {
       console.warn("Storage failed", e);
     }
 
-    // persist family for navbar/student switcher
+    // --- NEW: persist family for navbar/student switcher ---
     try {
       if (data.family) {
         localStorage.setItem("family", JSON.stringify(data.family));
@@ -207,6 +207,7 @@ const Login = () => {
     } catch (e) {
       console.warn("Failed to store family", e);
     }
+    // --- END NEW ---
 
     localStorage.removeItem("userRole");
     const defaultActive =
@@ -214,7 +215,7 @@ const Login = () => {
       (roleArrLower[0] || "");
     localStorage.setItem("activeRole", defaultActive);
 
-    // Save FCM token (if available)
+    // If you have FCM token available on window, save it on server
     try {
       const fcm = window.FCMTOKEN;
       if (fcm) {
@@ -235,7 +236,9 @@ const Login = () => {
     try {
       if (token) {
         socket.auth = { token };
-        if (socket.connected) socket.disconnect();
+        if (socket.connected) {
+          socket.disconnect();
+        }
         socket.connect();
       }
     } catch (e) {
@@ -309,7 +312,7 @@ const Login = () => {
     }
   };
 
-  // Optional logout helper (kept)
+  // Optional logout helper (can be moved to Auth context)
   const logout = async () => {
     try {
       const token =
@@ -331,8 +334,8 @@ const Login = () => {
       localStorage.removeItem("userId");
       localStorage.removeItem("name");
       localStorage.removeItem("activeRole");
-      localStorage.removeItem("family");
-      localStorage.removeItem("activeStudentAdmission");
+      localStorage.removeItem("family"); // NEW
+      localStorage.removeItem("activeStudentAdmission"); // NEW
       sessionStorage.removeItem("token");
       sessionStorage.removeItem("roles");
       try {
@@ -343,7 +346,7 @@ const Login = () => {
     }
   };
 
-  // ✅ Force logo & name as requested
+  // ✅ UPDATED: Force logo & name as requested
   const schoolLogoSrc = FIXED_LOGO;
   const schoolName = FIXED_SCHOOL_NAME;
   const fallbackLogo = FIXED_LOGO;
@@ -390,9 +393,7 @@ const Login = () => {
                     </p>
                   </div>
 
-                  {error && (
-                    <div className="alert alert-danger py-2">{error}</div>
-                  )}
+                  {error && <div className="alert alert-danger py-2">{error}</div>}
 
                   <h5 className="fw-semibold mb-2 text-white">Sign in</h5>
                   <p className="text-white-50 mb-4">
@@ -417,9 +418,7 @@ const Login = () => {
                     </div>
 
                     <div className="mb-2">
-                      <label className="form-label text-white-75">
-                        Password
-                      </label>
+                      <label className="form-label text-white-75">Password</label>
                       <div className="input-group input-group-lg">
                         <input
                           type={showPass ? "text" : "password"}

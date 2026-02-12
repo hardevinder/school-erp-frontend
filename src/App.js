@@ -13,6 +13,8 @@ import RoleAwareDashboard from "./components/RoleAwareDashboard";
 import EditProfile from "./components/EditProfile";
 import Chat from "./components/Chat";
 import ChatContainer from "./components/chat/ChatContainer";
+import ExaminationDashboard from "./components/ExaminationDashboard";
+
 
 // ✅ NEW: Transport dashboard (optional direct route)
 import TransportDashboard from "./components/TransportDashboard";
@@ -352,14 +354,15 @@ function App() {
 
 
           {/* Enquiries (admin) */}
-          <Route
+         <Route
             path="/enquiries"
             element={
-              <RequireRole roles={["admin", "superadmin"]}>
+              <RequireRole roles={["admin", "superadmin", "admissions", "admission", "frontoffice"]}>
                 <Enquiries />
               </RequireRole>
             }
           />
+
 
           {/* ✅ Registrations (staff-only) */}
           <Route
@@ -540,6 +543,16 @@ function App() {
           <Route path="/diary-feed" element={<DigitalDiary />} />
           <Route path="/student-diary" element={<StudentDiary />} />
           <Route path="/diary/:id" element={<DiaryDetail />} />
+
+          <Route
+            path="/exam-dashboard"
+            element={
+              <RequireRole roles={["examination", "academic_coordinator", "admin", "superadmin", "principal"]}>
+                <ExaminationDashboard />
+              </RequireRole>
+            }
+          />
+
 
           {/* Accounts Dashboard */}
           <Route

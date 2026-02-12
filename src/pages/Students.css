@@ -102,3 +102,76 @@
 .vtabs-grid .full-row {
   grid-column: 1 / -1;
 }
+
+/* ===== Students compact UI ===== */
+
+.students-topbar {
+  padding: 4px 2px;
+}
+
+.students-stats-strip {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.students-stat.mini {
+  flex: 1 1 180px;
+  border-radius: 12px;
+  padding: 8px 10px;
+  border: 1px solid rgba(0,0,0,0.06);
+  box-shadow: 0 1px 6px rgba(0,0,0,0.04);
+  background: #fff;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.students-stat.mini .num {
+  font-size: 1.25rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.students-stat.mini .lbl {
+  font-size: 0.8rem;
+  font-weight: 700;
+  opacity: 0.75;
+}
+
+.students-stat.green { background: linear-gradient(135deg,#dcfce7 0%,#bbf7d0 100%); }
+.students-stat.red   { background: linear-gradient(135deg,#fee2e2 0%,#fecaca 100%); }
+.students-stat.blue  { background: linear-gradient(135deg,#e0f2fe 0%,#bae6fd 100%); }
+
+.students-table thead th {
+  font-size: 0.82rem;
+  padding-top: 8px !important;
+  padding-bottom: 8px !important;
+}
+
+.students-table tbody td {
+  padding-top: 6px !important;
+  padding-bottom: 6px !important;
+  vertical-align: middle;
+}
+
+.students-badge {
+  font-size: 0.72rem;
+  padding: 0.28rem 0.45rem;
+}
+
+.students-name-compact {
+  font-size: 0.95rem;
+  line-height: 1.1;
+}
+
+.students-compact-sub {
+  font-size: 0.78rem;
+  line-height: 1.1;
+  margin-top: 2px;
+}
+
+.students-filters-row .form-select,
+.students-filters-row .form-control {
+  min-height: 32px;
+}

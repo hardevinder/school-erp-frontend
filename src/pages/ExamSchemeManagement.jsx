@@ -11,15 +11,16 @@ import {
   arrayMove,
   SortableContext,
   verticalListSortingStrategy,
-  useSortable
+  useSortable,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 
 // Sortable row component
 function SortableRow({ scheme, onEdit, onDelete, onToggleLock, onDuplicate }) {
-  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({
-    id: scheme.id.toString(),
-  });
+  const { attributes, listeners, setNodeRef, transform, transition } =
+    useSortable({
+      id: scheme.id.toString(),
+    });
   const style = { transform: CSS.Transform.toString(transform), transition };
 
   return (
@@ -105,7 +106,7 @@ const ExamSchemeManagement = () => {
     subject_id: "",
     term_id: "",
     component_id: "",
-    weightage_percent: ""
+    weightage_percent: "",
   });
   const [isEditing, setIsEditing] = useState(false);
   const [showModal, setShowModal] = useState(false);
@@ -113,6 +114,7 @@ const ExamSchemeManagement = () => {
   useEffect(() => {
     fetchDropdowns();
     fetchSchemes();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const fetchDropdowns = async () => {
@@ -149,11 +151,12 @@ const ExamSchemeManagement = () => {
     if (scheme) {
       setFormData({
         id: scheme.id,
-        class_id: scheme.class_id,
-        subject_id: scheme.subject_id,
-        term_id: scheme.term_id,
-        component_id: scheme.component_id,
-        weightage_percent: scheme.weightage_percent.toString(),
+        // ✅ normalize to string for select values
+        class_id: String(scheme.class_id ?? ""),
+        subject_id: String(scheme.subject_id ?? ""),
+        term_id: String(scheme.term_id ?? ""),
+        component_id: String(scheme.component_id ?? ""),
+        weightage_percent: String(scheme.weightage_percent ?? ""),
       });
       setIsEditing(true);
     } else {
@@ -170,14 +173,15 @@ const ExamSchemeManagement = () => {
     setShowModal(true);
   };
 
+  // ✅ Duplicate modal: keep all fields filled, user can change only subject
   const openDuplicateModal = (scheme) => {
     setFormData({
       id: null, // new copy record
-      class_id: scheme.class_id,
-      subject_id: scheme.subject_id,
-      term_id: scheme.term_id,
-      component_id: scheme.component_id,
-      weightage_percent: scheme.weightage_percent.toString(),
+      class_id: String(scheme.class_id ?? ""),
+      subject_id: String(scheme.subject_id ?? ""),
+      term_id: String(scheme.term_id ?? ""),
+      component_id: String(scheme.component_id ?? ""),
+      weightage_percent: String(scheme.weightage_percent ?? ""),
     });
     setIsEditing(false);
     setShowModal(true);
@@ -189,22 +193,28 @@ const ExamSchemeManagement = () => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
 
   const handleSubmit = async () => {
+    // ✅ normalize payload (prevents empty/number mismatch issues)
+    const payload = {
+      ...formData,
+      class_id: String(formData.class_id || ""),
+      subject_id: String(formData.subject_id || ""),
+      term_id: String(formData.term_id || ""),
+      component_id: String(formData.component_id || ""),
+      weightage_percent: String(formData.weightage_percent || ""),
+    };
+
     const { class_id, subject_id, term_id, component_id, weightage_percent } =
-      formData;
-    if (
-      !class_id ||
-      !subject_id ||
-      !term_id ||
-      !component_id ||
-      !weightage_percent
-    ) {
+      payload;
+
+    if (!class_id || !subject_id || !term_id || !component_id || !weightage_percent) {
       return Swal.fire("Warning", "Please fill all fields.", "warning");
     }
+
     try {
       if (isEditing) {
-        await api.put(`/exam-schemes/${formData.id}`, formData);
+        await api.put(`/exam-schemes/${payload.id}`, payload);
       } else {
-        await api.post("/exam-schemes", formData);
+        await api.post("/exam-schemes", payload);
       }
       Swal.fire("Success", "Saved successfully.", "success");
       closeModal();
@@ -223,6 +233,7 @@ const ExamSchemeManagement = () => {
       confirmButtonText: "Delete",
     });
     if (!result.isConfirmed) return;
+
     try {
       await api.delete(`/exam-schemes/${id}`);
       Swal.fire("Deleted", "Scheme removed.", "success");
@@ -242,6 +253,7 @@ const ExamSchemeManagement = () => {
       confirmButtonText: `Yes, ${action}`,
     });
     if (!result.isConfirmed) return;
+
     try {
       await api.patch(`/exam-schemes/${scheme.id}/lock`, {
         is_locked: !scheme.is_locked,
@@ -259,10 +271,13 @@ const ExamSchemeManagement = () => {
 
   const handleDragEnd = async ({ active, over }) => {
     if (!over || active.id === over.id) return;
+
     const oldIndex = schemes.findIndex((s) => s.id.toString() === active.id);
     const newIndex = schemes.findIndex((s) => s.id.toString() === over.id);
+
     const reordered = arrayMove(schemes, oldIndex, newIndex);
     setSchemes(reordered);
+
     try {
       await api.post("/exam-schemes/reorder", {
         schemes: reordered.map((item, idx) => ({
@@ -296,6 +311,7 @@ const ExamSchemeManagement = () => {
               </option>
             ))}
           </select>
+
           <select
             name="subject_id"
             value={filters.subject_id}
@@ -309,10 +325,12 @@ const ExamSchemeManagement = () => {
               </option>
             ))}
           </select>
+
           <Button variant="primary" onClick={applyFilters}>
             Apply Filters
           </Button>
         </div>
+
         <Button variant="success" onClick={() => openModal()}>
           ➕ Add Scheme
         </Button>
@@ -339,6 +357,7 @@ const ExamSchemeManagement = () => {
                     <th>Actions</th>
                   </tr>
                 </thead>
+
                 <tbody>
                   {schemes.map((s) => (
                     <SortableRow
@@ -364,6 +383,7 @@ const ExamSchemeManagement = () => {
             {isEditing ? "✏️ Edit Scheme" : "➕ Add / Duplicate Scheme"}
           </Modal.Title>
         </Modal.Header>
+
         <Modal.Body>
           <div className="row g-2">
             <div className="col-12 col-md-6">
@@ -376,12 +396,13 @@ const ExamSchemeManagement = () => {
               >
                 <option value="">Select Class</option>
                 {classes.map((c) => (
-                  <option key={c.id} value={c.id}>
+                  <option key={c.id} value={String(c.id)}>
                     {c.class_name}
                   </option>
                 ))}
               </select>
             </div>
+
             <div className="col-12 col-md-6">
               <label>Subject</label>
               <select
@@ -392,12 +413,13 @@ const ExamSchemeManagement = () => {
               >
                 <option value="">Select Subject</option>
                 {subjects.map((s) => (
-                  <option key={s.id} value={s.id}>
+                  <option key={s.id} value={String(s.id)}>
                     {s.name}
                   </option>
                 ))}
               </select>
             </div>
+
             <div className="col-12 col-md-6">
               <label>Term</label>
               <select
@@ -408,12 +430,13 @@ const ExamSchemeManagement = () => {
               >
                 <option value="">Select Term</option>
                 {terms.map((t) => (
-                  <option key={t.id} value={t.id}>
+                  <option key={t.id} value={String(t.id)}>
                     {t.name}
                   </option>
                 ))}
               </select>
             </div>
+
             <div className="col-12 col-md-6">
               <label>Component</label>
               <select
@@ -424,12 +447,13 @@ const ExamSchemeManagement = () => {
               >
                 <option value="">Select Component</option>
                 {components.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.abbreviation} - {c.name}
+                  <option key={c.id} value={String(c.id)}>
+                    {c.abbreviation ? `${c.abbreviation} - ${c.name}` : c.name}
                   </option>
                 ))}
               </select>
             </div>
+
             <div className="col-12 col-md-6">
               <label>Weightage (%)</label>
               <input
@@ -443,6 +467,7 @@ const ExamSchemeManagement = () => {
             </div>
           </div>
         </Modal.Body>
+
         <Modal.Footer>
           <Button variant="secondary" onClick={closeModal}>
             Cancel

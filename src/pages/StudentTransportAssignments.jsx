@@ -1,5 +1,5 @@
 // src/pages/StudentTransportAssignments.jsx
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import api from "../api";
 import Swal from "sweetalert2";
 import "./Transportation.css";
@@ -32,21 +32,10 @@ const StudentTransportAssignments = () => {
   // ✅ Route filter to show only students of that route
   const [selectedRouteFilterId, setSelectedRouteFilterId] = useState("");
 
-  const [selectedStudentId, setSelectedStudentId] = useState("");
-  const [pickupBusId, setPickupBusId] = useState("");
-  const [dropBusId, setDropBusId] = useState("");
-  const [pickupRouteId, setPickupRouteId] = useState("");
-  const [dropRouteId, setDropRouteId] = useState("");
-  const [effectiveFrom, setEffectiveFrom] = useState(
-    new Date().toISOString().slice(0, 10)
-  );
-
   const [loading, setLoading] = useState(false);
 
-  // Optional: show current assignment in form header
+  // used for dialog current assignment preview
   const [activeAssignment, setActiveAssignment] = useState(null);
-
-  const studentSelectRef = useRef(null);
 
   // -------------------- Load dropdown data --------------------
   const fetchStudents = async () => {
@@ -81,138 +70,37 @@ const StudentTransportAssignments = () => {
   }, []);
 
   // -------------------- Active assignment fetch --------------------
-  const fetchActiveAssignment = async (studentId) => {
+  const fetchActiveAssignment = async (studentId, dateStr) => {
     if (!studentId) {
       setActiveAssignment(null);
-      return;
+      return null;
     }
     try {
       const res = await api.get(
         `/student-transport-assignments/student/${studentId}/active`,
-        { params: { date: effectiveFrom } }
+        { params: { date: dateStr } }
       );
-      setActiveAssignment(res.data || null);
+      const data = res.data || null;
+      setActiveAssignment(data);
+      return data;
     } catch (e) {
       setActiveAssignment(null);
+      return null;
     }
   };
 
-  useEffect(() => {
-    if (selectedStudentId) fetchActiveAssignment(selectedStudentId);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedStudentId, effectiveFrom]);
-
-  // ✅ If route filter changes and selected student is not in filtered list, reset selection
-  useEffect(() => {
-    if (!selectedStudentId) return;
-    const stillVisible = students.some((s) => {
-      if (!selectedRouteFilterId)
-        return String(s.id) === String(selectedStudentId);
-      return (
-        String(s.id) === String(selectedStudentId) &&
-        String(s?.route_id || "") === String(selectedRouteFilterId)
-      );
-    });
-    if (!stillVisible) {
-      setSelectedStudentId("");
-      setActiveAssignment(null);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedRouteFilterId]);
-
-  // -------------------- Assign action --------------------
-  const handleAssign = async () => {
-    if (!selectedStudentId) {
-      return Swal.fire("Validation", "Please select a student.", "warning");
-    }
-    if (!effectiveFrom) {
-      return Swal.fire(
-        "Validation",
-        "Please select Effective From date.",
-        "warning"
-      );
-    }
-
-    const payload = {
-      student_id: Number(selectedStudentId),
-      pickup_bus_id: pickupBusId ? Number(pickupBusId) : null,
-      drop_bus_id: dropBusId ? Number(dropBusId) : null,
-      pickup_route_id: pickupRouteId ? Number(pickupRouteId) : null,
-      drop_route_id: dropRouteId ? Number(dropRouteId) : null,
-      effective_from: effectiveFrom,
-    };
-
-    const ok = await Swal.fire({
-      title: "Assign Transport?",
-      html: `
-        <div style="text-align:left">
-          <p><b>Student ID:</b> ${payload.student_id}</p>
-          <p><b>Pickup Bus:</b> ${payload.pickup_bus_id ?? "—"}</p>
-          <p><b>Drop Bus:</b> ${payload.drop_bus_id ?? "—"}</p>
-          <p><b>Effective From:</b> ${payload.effective_from}</p>
-          <small>This will close existing active assignment (if any) and create a new one.</small>
-        </div>
-      `,
-      icon: "question",
-      showCancelButton: true,
-      confirmButtonText: "Yes, Assign",
-      allowOutsideClick: false,
-      allowEscapeKey: false,
-    });
-
-    if (!ok.isConfirmed) return;
-
-    setLoading(true);
-    try {
-      const res = await api.post(
-        "/student-transport-assignments/assign",
-        payload
-      );
-      Swal.fire(
-        "Assigned!",
-        res?.data?.message || "Transport assigned successfully.",
-        "success"
-      );
-      await fetchActiveAssignment(selectedStudentId);
-    } catch (e) {
-      console.error("Assign error:", e);
-      const msg =
-        e?.response?.data?.error ||
-        e?.response?.data?.message ||
-        e?.response?.data?.details ||
-        "Failed to assign transport.";
-      Swal.fire("Error", msg, "error");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // -------------------- Search helpers --------------------
-  // ✅ Search + Route Filter together
-  const filteredStudents = students.filter((s) => {
-    const q = safeStr(search).toLowerCase();
-    const name = safeStr(s?.name).toLowerCase();
-    const adm = safeStr(s?.admission_number).toLowerCase();
-
-    const textOk = !q || name.includes(q) || adm.includes(q);
-
-    const routeOk =
-      !selectedRouteFilterId ||
-      String(s?.route_id || "") === String(selectedRouteFilterId);
-
-    return textOk && routeOk;
-  });
-
+  // -------------------- helpers: names/labels --------------------
   const findBusNo = (id) => {
     const b = buses.find((x) => String(x.id) === String(id));
     return b ? safeStr(b.bus_no) : "—";
   };
 
-  const findRouteName = (id) => {
-    const r = routes.find((x) => String(x.id) === String(id));
-    return r
-      ? safeStr(r.RouteName || r.Villages || r.village || r.villages)
-      : "—";
+  const getStudentLabel = (studentId) => {
+    const s = students.find((x) => String(x.id) === String(studentId));
+    if (!s) return `ID: ${safeStr(studentId) || "—"}`;
+    const nm = safeStr(s?.name) || "—";
+    const adm = safeStr(s?.admission_number);
+    return `${nm}${adm ? ` (${adm})` : ""}`;
   };
 
   const formatRouteLabel = (r) => {
@@ -227,7 +115,7 @@ const StudentTransportAssignments = () => {
   };
 
   const formatStudentRoute = (s) => {
-    // ✅ Prefer API-provided route_name/route_cost if present
+    // Prefer API-provided route_name/route_cost if present
     if (s?.route_name) {
       return `${safeStr(s.route_name)}${
         s.route_cost != null && String(s.route_cost).trim() !== ""
@@ -236,11 +124,13 @@ const StudentTransportAssignments = () => {
       }`;
     }
     // fallback to lookup by route_id
-    const routeObj = routes.find((r) => String(r.id) === String(s?.route_id || ""));
+    const routeObj = routes.find(
+      (r) => String(r.id) === String(s?.route_id || "")
+    );
     return routeObj ? formatRouteLabel(routeObj) : "—";
   };
 
-  // ✅ helper: class/section display (your API returns class_name & section_name directly)
+  // class/section display
   const getClassName = (s) =>
     safeStr(s?.class_name || s?.Class?.class_name || s?.ClassName || "") || "—";
 
@@ -248,6 +138,311 @@ const StudentTransportAssignments = () => {
     safeStr(
       s?.section_name || s?.Section?.section_name || s?.SectionName || ""
     ) || "—";
+
+  // -------------------- PROFESSIONAL DIALOG (SweetAlert2) --------------------
+  const openAssignDialog = async (studentId) => {
+    if (!studentId) {
+      return Swal.fire("Validation", "Please select a student.", "warning");
+    }
+
+    const defaultEff = new Date().toISOString().slice(0, 10);
+
+    // fetch current active assignment for preview + defaults
+    const current = await fetchActiveAssignment(studentId, defaultEff);
+
+    const curPickupBus = current?.pickup_bus_id ? String(current.pickup_bus_id) : "";
+    const curDropBus = current?.drop_bus_id ? String(current.drop_bus_id) : "";
+    const curPickupRoute = current?.pickup_route_id ? String(current.pickup_route_id) : "";
+    const curDropRoute = current?.drop_route_id ? String(current.drop_route_id) : "";
+
+    const busOptionsHtml = buses
+      .filter((b) => b.active !== false)
+      .map((b) => {
+        const label = `${safeStr(b.bus_no)}${b.reg_no ? ` (${b.reg_no})` : ""}`;
+        return `<option value="${b.id}">${label}</option>`;
+      })
+      .join("");
+
+    const routeOptionsHtml = routes
+      .map((r) => {
+        const label = safeStr(
+          r.RouteName || r.Villages || r.village || r.villages
+        );
+        return `<option value="${r.id}">${label}</option>`;
+      })
+      .join("");
+
+    const result = await Swal.fire({
+      title: "Transport Assignment",
+      icon: "info",
+
+      position: "center",
+      focusConfirm: false,
+      scrollbarPadding: false,
+
+      showCancelButton: true,
+      confirmButtonText: "Save Assignment",
+      cancelButtonText: "Cancel",
+
+      allowOutsideClick: false,
+      allowEscapeKey: false,
+      width: 760,
+
+      willOpen: () => {
+        document.body.style.overflow = "hidden";
+      },
+      willClose: () => {
+        document.body.style.overflow = "";
+      },
+
+      customClass: {
+        title: "swal-title-compact",
+        popup: "swal-transport-card",
+        confirmButton: "btn btn-success",
+        cancelButton: "btn btn-outline-secondary",
+        actions: "swal-actions-row",
+      },
+      buttonsStyling: false,
+
+      html: `
+        <style>
+          .swal-transport-card{
+            padding: 16px 16px 14px 16px !important;
+            border-radius: 14px !important;
+          }
+          .swal-title-compact{
+            font-size: 18px !important;
+            margin: 6px 0 10px 0 !important;
+          }
+          .swal-actions-row{
+            gap: 10px !important;
+          }
+          .ta-head{
+            display:flex;
+            justify-content:space-between;
+            align-items:flex-start;
+            gap:12px;
+            padding: 10px 12px;
+            border: 1px solid rgba(0,0,0,0.08);
+            border-radius: 12px;
+            background: rgba(0,0,0,0.03);
+            margin-bottom: 12px;
+            text-align:left;
+          }
+          .ta-student{
+            font-weight: 700;
+            font-size: 14px;
+          }
+          .ta-sub{
+            font-size: 12px;
+            opacity: 0.85;
+            margin-top: 4px;
+            line-height: 1.35;
+          }
+          .ta-grid{
+            display:grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            text-align:left;
+          }
+          .ta-field label{
+            display:block;
+            font-size: 12px;
+            font-weight: 700;
+            margin: 0 0 6px 0;
+          }
+          .ta-field select, .ta-field input{
+            width: 100%;
+            height: 40px;
+            border-radius: 10px;
+            border: 1px solid rgba(0,0,0,0.14);
+            padding: 8px 10px;
+            outline: none;
+          }
+          .ta-field select:focus, .ta-field input:focus{
+            border-color: rgba(0,0,0,0.35);
+          }
+          .ta-full{
+            grid-column: 1 / span 2;
+          }
+          .ta-note{
+            margin-top: 8px;
+            font-size: 12px;
+            opacity: 0.85;
+            padding: 10px 12px;
+            border-left: 4px solid rgba(25,135,84,0.55);
+            background: rgba(25,135,84,0.06);
+            border-radius: 10px;
+          }
+          .ta-pill{
+            display:inline-block;
+            padding: 2px 8px;
+            border-radius: 999px;
+            font-size: 11px;
+            background: rgba(0,0,0,0.06);
+            border: 1px solid rgba(0,0,0,0.10);
+            margin-left: 6px;
+          }
+          @media (max-width: 620px){
+            .ta-grid{ grid-template-columns: 1fr; }
+            .ta-full{ grid-column: auto; }
+          }
+        </style>
+
+        <div class="ta-head">
+          <div>
+            <div class="ta-student">${safeStr(getStudentLabel(studentId))}</div>
+            <div class="ta-sub">
+              Current assignment:
+              <span class="ta-pill">Pickup: <b>${findBusNo(
+                current?.pickup_bus_id
+              )}</b></span>
+              <span class="ta-pill">Drop: <b>${findBusNo(
+                current?.drop_bus_id
+              )}</b></span>
+              <span class="ta-pill">From: <b>${safeStr(
+                current?.effective_from || "—"
+              )}</b></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="ta-grid">
+          <div class="ta-field">
+            <label>Pickup Bus</label>
+            <select id="sw_pickupBus">
+              <option value="">-- Select --</option>
+              ${busOptionsHtml}
+            </select>
+          </div>
+
+          <div class="ta-field">
+            <label>Drop Bus</label>
+            <select id="sw_dropBus">
+              <option value="">-- Select --</option>
+              ${busOptionsHtml}
+            </select>
+          </div>
+
+          <div class="ta-field">
+            <label>Pickup Route (optional)</label>
+            <select id="sw_pickupRoute">
+              <option value="">-- Select --</option>
+              ${routeOptionsHtml}
+            </select>
+          </div>
+
+          <div class="ta-field">
+            <label>Drop Route (optional)</label>
+            <select id="sw_dropRoute">
+              <option value="">-- Select --</option>
+              ${routeOptionsHtml}
+            </select>
+          </div>
+
+          <div class="ta-field ta-full">
+            <label>Effective From</label>
+            <input id="sw_eff" type="date" value="${defaultEff}" />
+            <div class="ta-note">
+              Saving will close any existing active assignment for this student and create a new one.
+            </div>
+          </div>
+        </div>
+      `,
+
+      didOpen: () => {
+        const pb = document.getElementById("sw_pickupBus");
+        const db = document.getElementById("sw_dropBus");
+        const pr = document.getElementById("sw_pickupRoute");
+        const dr = document.getElementById("sw_dropRoute");
+        const popup = Swal.getPopup();
+
+        // defaults from current assignment
+        if (pb) pb.value = curPickupBus || "";
+        if (db) db.value = curDropBus || "";
+        if (pr) pr.value = curPickupRoute || "";
+        if (dr) dr.value = curDropRoute || "";
+
+        if (popup) popup.scrollTop = 0;
+      },
+
+      preConfirm: () => {
+        const pb = document.getElementById("sw_pickupBus")?.value || "";
+        const db = document.getElementById("sw_dropBus")?.value || "";
+        const pr = document.getElementById("sw_pickupRoute")?.value || "";
+        const dr = document.getElementById("sw_dropRoute")?.value || "";
+        const eff = document.getElementById("sw_eff")?.value || "";
+
+        if (!eff) {
+          Swal.showValidationMessage("Please select Effective From date.");
+          return false;
+        }
+
+        if (!pb && !db) {
+          Swal.showValidationMessage(
+            "Please select at least Pickup Bus or Drop Bus."
+          );
+          return false;
+        }
+
+        return { pb, db, pr, dr, eff };
+      },
+    });
+
+    if (!result.isConfirmed) return;
+
+    const { pb, db, pr, dr, eff } = result.value || {};
+
+    const payload = {
+      student_id: Number(studentId),
+      pickup_bus_id: pb ? Number(pb) : null,
+      drop_bus_id: db ? Number(db) : null,
+      pickup_route_id: pr ? Number(pr) : null,
+      drop_route_id: dr ? Number(dr) : null,
+      effective_from: eff,
+    };
+
+    setLoading(true);
+    try {
+      const res = await api.post(
+        "/student-transport-assignments/assign",
+        payload
+      );
+      Swal.fire(
+        "Saved",
+        res?.data?.message || "Transport assignment saved successfully.",
+        "success"
+      );
+
+      // refresh current assignment preview state
+      await fetchActiveAssignment(studentId, eff);
+    } catch (e) {
+      console.error("Assign error:", e);
+      const msg =
+        e?.response?.data?.error ||
+        e?.response?.data?.message ||
+        e?.response?.data?.details ||
+        "Failed to save transport assignment.";
+      Swal.fire("Error", msg, "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // -------------------- Search helpers --------------------
+  const filteredStudents = students.filter((s) => {
+    const q = safeStr(search).toLowerCase();
+    const name = safeStr(s?.name).toLowerCase();
+    const adm = safeStr(s?.admission_number).toLowerCase();
+
+    const textOk = !q || name.includes(q) || adm.includes(q);
+
+    const routeOk =
+      !selectedRouteFilterId ||
+      String(s?.route_id || "") === String(selectedRouteFilterId);
+
+    return textOk && routeOk;
+  });
 
   // -------------------- UI --------------------
   return (
@@ -260,7 +455,7 @@ const StudentTransportAssignments = () => {
           onClick={async () => {
             try {
               await Promise.all([fetchStudents(), fetchBuses(), fetchRoutes()]);
-              Swal.fire("Refreshed", "Dropdown data refreshed.", "success");
+              Swal.fire("Refreshed", "Data refreshed.", "success");
             } catch (e) {
               Swal.fire("Error", "Failed to refresh data.", "error");
             }
@@ -270,9 +465,9 @@ const StudentTransportAssignments = () => {
         </button>
       </div>
 
-      {/* Search + Route Filter + Select student */}
+      {/* ✅ Keep only Route Filter + Search */}
       <div className="row g-3 mb-3">
-        <div className="col-md-4">
+        <div className="col-md-6">
           <label className="form-label">Filter by Route (Village — Cost)</label>
           <select
             className="form-select"
@@ -291,169 +486,20 @@ const StudentTransportAssignments = () => {
           </small>
         </div>
 
-        <div className="col-md-4">
-          <label className="form-label">Search Student (Name / Admission No)</label>
+        <div className="col-md-6">
+          <label className="form-label">
+            Search Student (Name / Admission No)
+          </label>
           <input
             className="form-control"
             placeholder="Search..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
-          <small className="text-muted">Tip: Filter route first, then search.</small>
-        </div>
-
-        <div className="col-md-4">
-          <label className="form-label">Select Student</label>
-          <select
-            ref={studentSelectRef}
-            className="form-select"
-            value={selectedStudentId}
-            onChange={(e) => setSelectedStudentId(e.target.value)}
-          >
-            <option value="">-- Select --</option>
-            {filteredStudents.map((s) => (
-              <option key={s.id} value={s.id}>
-                {safeStr(s?.name)}{" "}
-                {s?.admission_number ? `(${s.admission_number})` : ""}
-              </option>
-            ))}
-          </select>
-          {!!selectedRouteFilterId && (
-            <small className="text-muted">Showing students of selected route only.</small>
-          )}
         </div>
       </div>
 
-      {/* Current active assignment preview */}
-      {selectedStudentId && (
-        <div className="alert alert-info">
-          <div className="d-flex justify-content-between flex-wrap gap-2">
-            <div>
-              <b>Current Active Assignment:</b>{" "}
-              {activeAssignment ? (
-                <>
-                  Pickup: <b>{findBusNo(activeAssignment.pickup_bus_id)}</b> | Drop:{" "}
-                  <b>{findBusNo(activeAssignment.drop_bus_id)}</b> | From:{" "}
-                  <b>{safeStr(activeAssignment.effective_from)}</b>
-                  {activeAssignment.pickup_route_id || activeAssignment.drop_route_id ? (
-                    <>
-                      {" "}
-                      | Routes: Pickup <b>{findRouteName(activeAssignment.pickup_route_id)}</b>, Drop{" "}
-                      <b>{findRouteName(activeAssignment.drop_route_id)}</b>
-                    </>
-                  ) : null}
-                </>
-              ) : (
-                <span>No active assignment found.</span>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Assignment Form */}
-      <div className="card p-3 mb-3">
-        <div className="row g-3">
-          <div className="col-md-3">
-            <label className="form-label">Pickup Bus</label>
-            <select
-              className="form-select"
-              value={pickupBusId}
-              onChange={(e) => setPickupBusId(e.target.value)}
-            >
-              <option value="">-- Select --</option>
-              {buses
-                .filter((b) => b.active !== false)
-                .map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {safeStr(b.bus_no)} {b.reg_no ? `(${b.reg_no})` : ""}
-                  </option>
-                ))}
-            </select>
-          </div>
-
-          <div className="col-md-3">
-            <label className="form-label">Drop Bus</label>
-            <select
-              className="form-select"
-              value={dropBusId}
-              onChange={(e) => setDropBusId(e.target.value)}
-            >
-              <option value="">-- Select --</option>
-              {buses
-                .filter((b) => b.active !== false)
-                .map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {safeStr(b.bus_no)} {b.reg_no ? `(${b.reg_no})` : ""}
-                  </option>
-                ))}
-            </select>
-          </div>
-
-          <div className="col-md-3">
-            <label className="form-label">Pickup Route (optional)</label>
-            <select
-              className="form-select"
-              value={pickupRouteId}
-              onChange={(e) => setPickupRouteId(e.target.value)}
-            >
-              <option value="">-- Select --</option>
-              {routes.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {safeStr(r.RouteName || r.Villages || r.village || r.villages)}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="col-md-3">
-            <label className="form-label">Drop Route (optional)</label>
-            <select
-              className="form-select"
-              value={dropRouteId}
-              onChange={(e) => setDropRouteId(e.target.value)}
-            >
-              <option value="">-- Select --</option>
-              {routes.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {safeStr(r.RouteName || r.Villages || r.village || r.villages)}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="col-md-3">
-            <label className="form-label">Effective From</label>
-            <input
-              type="date"
-              className="form-control"
-              value={effectiveFrom}
-              onChange={(e) => setEffectiveFrom(e.target.value)}
-            />
-          </div>
-
-          <div className="col-md-9 d-flex align-items-end justify-content-end gap-2">
-            <button
-              className="btn btn-outline-secondary"
-              onClick={() => {
-                setPickupBusId("");
-                setDropBusId("");
-                setPickupRouteId("");
-                setDropRouteId("");
-              }}
-              disabled={loading}
-            >
-              Clear
-            </button>
-
-            <button className="btn btn-success" onClick={handleAssign} disabled={loading}>
-              {loading ? "Assigning..." : "Assign Transport"}
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Optional: quick table view of students filtered */}
+      {/* Students table */}
       <div className="card p-3">
         <div className="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
           <h5 className="m-0">Students (Filtered)</h5>
@@ -472,7 +518,7 @@ const StudentTransportAssignments = () => {
                 <th>Class</th>
                 <th>Section</th>
                 <th>Route</th>
-                <th>Quick Assign</th>
+                <th>Assign</th>
               </tr>
             </thead>
             <tbody>
@@ -481,23 +527,17 @@ const StudentTransportAssignments = () => {
                   <td>{idx + 1}</td>
                   <td>{safeStr(s?.name)}</td>
                   <td>{safeStr(s?.admission_number) || "—"}</td>
-
-                  {/* ✅ FIXED: class_name/section_name are direct fields in API */}
                   <td>{getClassName(s)}</td>
                   <td>{getSectionName(s)}</td>
-
-                  {/* ✅ FIXED: prefer route_name/route_cost from API */}
                   <td>{formatStudentRoute(s)}</td>
 
                   <td>
                     <button
-                      className="btn btn-sm btn-outline-primary"
-                      onClick={() => {
-                        setSelectedStudentId(String(s.id));
-                        window.scrollTo({ top: 0, behavior: "smooth" });
-                      }}
+                      className="btn btn-sm btn-primary"
+                      disabled={loading}
+                      onClick={() => openAssignDialog(String(s.id))}
                     >
-                      Select
+                      Assign
                     </button>
                   </td>
                 </tr>

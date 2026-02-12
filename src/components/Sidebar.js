@@ -97,6 +97,9 @@ export default function Sidebar({ headerHeight = 56 }) {
   // ✅ NEW: Transport role flags
   const isTransport = roleLower === "transport" || roleLower === "transporter";
 
+  // ✅ NEW: Examination role flags
+  const isExamination = roleLower === "examination";
+
   const hasAccess = (item) => {
     if (!item?.roles || item.roles.length === 0) return true;
     if (isSuperAdmin) return true;
@@ -109,6 +112,78 @@ export default function Sidebar({ headerHeight = 56 }) {
   // ===== MENU GROUPS =====
   const menuGroups = useMemo(() => {
     const groups = [];
+
+  // ✅ EXAMINATION MENU (NEW ROLE)
+    if (isExamination) {
+      groups.push({
+        heading: "Main",
+        items: [
+          {
+            key: "exam-dashboard",
+            label: "Examination Dashboard",
+            icon: "bi-speedometer2",
+            // ✅ keep it consistent with your App.js (you already have /dashboard)
+            // If you actually create /exam-dashboard route later, change this back.
+            path: "/dashboard",
+            roles: ["examination"],
+          },
+          {
+            key: "circulars",
+            label: "Circulars",
+            icon: "bi-megaphone",
+            path: "/combined-circulars",
+            roles: ["examination"],
+          },
+        ],
+      });
+
+      groups.push({
+        heading: "Examination",
+        items: [
+          // ✅ NEW: Subjects (you asked to add in sidebar too)
+          { key: "subjects", label: "Subjects", icon: "bi-book", path: "/subjects", roles: ["examination"] },
+
+          { key: "exams", label: "Exams", icon: "bi-journal-bookmark", path: "/exams", roles: ["examination"] },
+          { key: "exam-schemes", label: "Exam Schemes", icon: "bi-card-checklist", path: "/exam-schemes", roles: ["examination"] },
+          { key: "exam-schedules", label: "Exam Schedule", icon: "bi-calendar2-check", path: "/exam-schedules", roles: ["examination"] },
+
+          { key: "assessment-components", label: "Assessment Components", icon: "bi-diagram-3", path: "/assessment-components", roles: ["examination"] },
+          { key: "term-management", label: "Terms", icon: "bi-calendar3-range", path: "/term-management", roles: ["examination"] },
+          { key: "grade-schemes", label: "Grade Schemes", icon: "bi-ui-checks", path: "/grade-schemes", roles: ["examination"] },
+
+          // ✅ NEW: Incharge Assignment (you asked to add in sidebar)
+          { key: "incharge-assignment", label: "Incharge Assignment", icon: "bi-person-badge", path: "/incharge-assignment", roles: ["examination"] },
+
+          // Co-scholastic
+          { key: "co-scholastic-areas", label: "Co-Scholastic Areas", icon: "bi-easel3", path: "/co-scholastic-areas", roles: ["examination"] },
+          { key: "co-scholastic-grades", label: "Co-Scholastic Grades", icon: "bi-star", path: "/co-scholastic-grades", roles: ["examination"] },
+          { key: "class-co-scholastic-mapping", label: "Class Co-Scholastic Mapping", icon: "bi-grid-3x3-gap", path: "/class-co-scholastic-mapping", roles: ["examination"] },
+          // ✅ FIX: key typo (was "coscholastic-entry" but route is "/co-scholastic-entry")
+          { key: "co-scholastic-entry", label: "Co-Scholastic Entry", icon: "bi-stars", path: "/co-scholastic-entry", roles: ["examination"] },
+
+          // Marks / Results
+          { key: "roll-numbers", label: "Roll Numbers", icon: "bi-list-ol", path: "/roll-numbers", roles: ["examination"] },
+          { key: "marks-entry", label: "Marks Entry", icon: "bi-pencil-square", path: "/marks-entry", roles: ["examination"] },
+          { key: "classwise-result-summary", label: "Result Summary", icon: "bi-bar-chart", path: "/reports/classwise-result-summary", roles: ["examination"] },
+          { key: "final-result-summary", label: "Final Result Summary", icon: "bi-bar-chart-line", path: "/reports/final-result-summary", roles: ["examination"] },
+
+          // Report cards
+          { key: "report-card-formats", label: "Report Card Formats", icon: "bi-file-earmark-font", path: "/report-card-formats", roles: ["examination"] },
+          { key: "assign-report-card-format", label: "Assign Report Format", icon: "bi-link", path: "/assign-report-card-format", roles: ["examination"] },
+          { key: "student-remarks-entry", label: "Student Remarks Entry", icon: "bi-chat-square-text", path: "/student-remarks-entry", roles: ["examination"] },
+          { key: "report-card-generator", label: "Print Report Cards", icon: "bi-printer", path: "/report-card-generator", roles: ["examination"] },
+        ],
+      });
+
+      groups.push({
+        heading: "Quick",
+        items: [
+          { key: "chat", label: "Chat", icon: "bi-chat-dots", path: "/chat", roles: ["examination"] },
+          { key: "academic-calendar-view", label: "Academic Calendar", icon: "bi-calendar3", path: "/academic-calendar-view", roles: ["examination"] },
+        ],
+      });
+    }
+
 
     // ✅ TRANSPORT MENU (NEW ROLE)
     if (isTransport) {
@@ -351,48 +426,47 @@ export default function Sidebar({ headerHeight = 56 }) {
       });
 
       groups.push({
-          heading: "Admissions",
-          items: [
-            {
-              key: "enquiries",
-              label: "Enquiries",
-              icon: "bi-chat-dots",
-              path: "/enquiries",
-              roles: ["admission"],
-            },
-            {
-              key: "registrations",
-              label: "Registrations",
-              icon: "bi-person-plus",
-              path: "/registrations",
-              roles: ["admission"],
-            },
-            {
-              key: "students",
-              label: "Students",
-              icon: "bi-people",
-              path: "/students",
-              roles: ["admission"],
-            },
-            {
-              key: "academic-calendar-view",
-              label: "Academic Calendar",
-              icon: "bi-calendar3",
-              path: "/academic-calendar-view",
-              roles: ["admission"],
-            },
+        heading: "Admissions",
+        items: [
+          {
+            key: "enquiries",
+            label: "Enquiries",
+            icon: "bi-chat-dots",
+            path: "/enquiries",
+            roles: ["admission"],
+          },
+          {
+            key: "registrations",
+            label: "Registrations",
+            icon: "bi-person-plus",
+            path: "/registrations",
+            roles: ["admission"],
+          },
+          {
+            key: "students",
+            label: "Students",
+            icon: "bi-people",
+            path: "/students",
+            roles: ["admission"],
+          },
+          {
+            key: "academic-calendar-view",
+            label: "Academic Calendar",
+            icon: "bi-calendar3",
+            path: "/academic-calendar-view",
+            roles: ["admission"],
+          },
 
-            // ✅ NEW: Next Session Projection (Admission only)
-            {
-              key: "student-strength-projection",
-              label: "Next Session Projection",
-              icon: "bi-bar-chart-steps",
-              path: "/reports/student-strength-projection",
-              roles: ["admission"],
-            },
-          ],
-        });
-
+          // ✅ Next Session Projection (Admission only)
+          {
+            key: "student-strength-projection",
+            label: "Next Session Projection",
+            icon: "bi-bar-chart-steps",
+            path: "/reports/student-strength-projection",
+            roles: ["admission"],
+          },
+        ],
+      });
     }
 
     // ====== ACCOUNTS-ONLY MENU (Fee focus) ======
@@ -483,7 +557,7 @@ export default function Sidebar({ headerHeight = 56 }) {
             roles: ["accounts"],
           },
 
-          // ✅ Transport modules (accounts may view/manage)
+          // Transport modules (accounts may view/manage)
           {
             key: "transportations",
             label: "Transport Routes / Cost",
@@ -548,7 +622,7 @@ export default function Sidebar({ headerHeight = 56 }) {
           { key: "vanFeeDetailedReport", label: "Van Fee Report", icon: "bi-truck-front", path: "/reports/van-fee" },
           { key: "feeStructure", label: "Fee Structure", icon: "bi-cash-coin", path: "/fee-structure" },
 
-          // ✅ UPDATED: transport paths
+          // transport paths
           { key: "transportations", label: "Transportation Cost", icon: "bi-truck", path: "/transportations" },
           { key: "buses", label: "Buses", icon: "bi-bus-front", path: "/buses" },
           { key: "student-transport-assignments", label: "Transport Assignments", icon: "bi-person-check", path: "/student-transport-assignments" },
@@ -618,10 +692,7 @@ export default function Sidebar({ headerHeight = 56 }) {
           { key: "substitutionListing", label: "Substitution Listing", icon: "bi-list-ul", path: "/substitution-listing" },
           { key: "studentUserAccounts", label: "Create Student Login", icon: "bi-person-plus", path: "/student-user-accounts" },
           { key: "sessions", label: "Sessions", icon: "bi-calendar4-week", path: "/sessions" },
-
-          // (Keep old module if still used)
           { key: "student-transport", label: "Transport (Old)", icon: "bi-truck", path: "/student-transport" },
-
           { key: "caste-gender-report", label: "Caste/Gender Report", icon: "bi-people-fill", path: "/reports/caste-gender" },
         ],
       });
@@ -777,6 +848,7 @@ export default function Sidebar({ headerHeight = 56 }) {
     isAdmission,
     isLibrarian,
     isTransport,
+    isExamination,
     roleLower,
   ]);
 
@@ -827,7 +899,10 @@ export default function Sidebar({ headerHeight = 56 }) {
     frontoffice: ["frontoffice-dashboard", "gate-pass", "visitors", "enquiries", "students"],
     admission: ["admission-dashboard", "enquiries", "student-strength-projection", "students"],
 
-    // ✅ NEW: Transport bottom-nav priorities
+    // ✅ NEW: Examination bottom-nav priorities
+    examination: ["exam-dashboard", "exams", "exam-schemes", "marks-entry", "report-card-generator"],
+
+    // ✅ Transport bottom-nav priorities
     transport: ["transport-dashboard-direct", "transportations", "buses", "student-transport-assignments"],
     transporter: ["transport-dashboard-direct", "transportations", "buses", "student-transport-assignments"],
 
@@ -837,11 +912,8 @@ export default function Sidebar({ headerHeight = 56 }) {
     libraryadmin: ["library-dashboard", "library-books", "library-issue-return", "library-members"],
   };
 
-  const primaryKeys =
-    PRIMARY_BY_ROLE[roleLower] || allItems.slice(0, 4).map((i) => i.key);
-  const primaryItems = allItems
-    .filter((i) => primaryKeys.includes(i.key))
-    .slice(0, 5);
+  const primaryKeys = PRIMARY_BY_ROLE[roleLower] || allItems.slice(0, 4).map((i) => i.key);
+  const primaryItems = allItems.filter((i) => primaryKeys.includes(i.key)).slice(0, 5);
   const moreItems = allItems.filter((i) => !primaryKeys.includes(i.key));
 
   // Mobile: bottom nav
@@ -886,9 +958,7 @@ export default function Sidebar({ headerHeight = 56 }) {
           {filteredGroups.map((group, gi) => (
             <div key={gi}>
               {isExpanded && (
-                <h6 className="group-heading text-uppercase px-3 mt-3 mb-1">
-                  {group.heading}
-                </h6>
+                <h6 className="group-heading text-uppercase px-3 mt-3 mb-1">{group.heading}</h6>
               )}
               <ul className="nav flex-column">
                 {group.items.map((item, ii) => {
@@ -902,9 +972,7 @@ export default function Sidebar({ headerHeight = 56 }) {
                       title={!isExpanded ? item.label : undefined}
                       role="button"
                       tabIndex={0}
-                      onKeyDown={(e) =>
-                        (e.key === "Enter" || e.key === " ") && handleMenuClick(item)
-                      }
+                      onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && handleMenuClick(item)}
                       style={{ "--item-gradient": gradient }}
                     >
                       <span className="active-indicator" />

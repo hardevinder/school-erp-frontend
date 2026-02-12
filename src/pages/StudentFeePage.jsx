@@ -356,6 +356,89 @@ const StudentFeePage = () => {
     }
   };
 
+  // =========================
+  // ✅ NEW: Receipt PDF print/download (Protected)
+  // =========================
+  const printReceiptPdf = async (slipId) => {
+    if (!slipId) return;
+
+    // If your backend does not allow parent role on /me/receipt route,
+    // you'll get 403. We'll show a nice message.
+    const endpoint = isAdminish
+      ? `/StudentsApp/receipt/${slipId}/pdf`
+      : `/StudentsApp/me/receipt/${slipId}/pdf`;
+
+    try {
+      Swal.fire({
+        title: "Preparing receipt…",
+        text: "Downloading PDF",
+        allowOutsideClick: false,
+        didOpen: () => Swal.showLoading(),
+      });
+
+      // Important: blob so we can send Authorization header via axios
+      const res = await api.get(endpoint, { responseType: "blob" });
+
+      const blob = new Blob([res.data], { type: "application/pdf" });
+      const url = window.URL.createObjectURL(blob);
+
+      const w = window.open(url, "_blank", "noopener");
+      if (!w) {
+        Swal.close();
+        window.URL.revokeObjectURL(url);
+        return Swal.fire({
+          icon: "error",
+          title: "Popup blocked",
+          text: "Please allow popups to open and print the receipt PDF.",
+        });
+      }
+
+      // Try auto-print once PDF is loaded
+      const tryPrint = () => {
+        try {
+          w.focus();
+          w.print();
+        } catch {}
+      };
+
+      // Some browsers need a delay
+      w.onload = () => setTimeout(tryPrint, 300);
+
+      // Fallback timer print
+      setTimeout(tryPrint, 1200);
+
+      // cleanup blob url
+      setTimeout(() => {
+        try {
+          window.URL.revokeObjectURL(url);
+        } catch {}
+      }, 60_000);
+
+      Swal.close();
+    } catch (e) {
+      console.error("printReceiptPdf error:", e);
+
+      const status = e?.response?.status;
+
+      Swal.close();
+
+      if (status === 403) {
+        return Swal.fire({
+          icon: "error",
+          title: "Not allowed",
+          text:
+            "You are not allowed to download this receipt. (If you are a parent, ask admin to enable parent receipt access.)",
+        });
+      }
+
+      return Swal.fire({
+        icon: "error",
+        title: "Failed to download receipt",
+        text: "Please try again later.",
+      });
+    }
+  };
+
   // ------------- Payment utilities (popup + gateway) -------------
   const openBlankWindowForPayment = () => {
     try {
@@ -860,8 +943,6 @@ const StudentFeePage = () => {
       });
 
       const orderData = orderRes.data || {};
-
-      // Save last order/vendorOrderId locally
       saveLastOrderId(orderData);
 
       const paymentPageUrl =
@@ -1485,6 +1566,7 @@ const StudentFeePage = () => {
 
               {/* Summary */}
               <Tab eventKey="summary" title="Summary">
+                {/* (unchanged summary tab content) */}
                 <div className="row g-3">
                   <div className="col-12 col-lg-6">
                     <div className="card h-100 shadow-sm rounded-4">
@@ -1582,7 +1664,7 @@ const StudentFeePage = () => {
                     </div>
                   </div>
 
-                  {/* At-a-glance user info */}
+                  {/* Student info */}
                   <div className="col-12 col-lg-6">
                     <div className="card h-100 shadow-sm rounded-4">
                       <div className="card-header bg-primary text-white text-center fw-semibold">
@@ -1646,6 +1728,7 @@ const StudentFeePage = () => {
                               <th>Concession</th>
                               <th>Fine</th>
                               <th>Van Fee</th>
+                              <th style={{ width: 110 }}>Receipt</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -1678,6 +1761,18 @@ const StudentFeePage = () => {
                                 <td>{formatINR(txn.Concession)}</td>
                                 <td>{formatINR(txn.Fine ?? txn.LateFee ?? txn.FineAmount ?? 0)}</td>
                                 <td>{formatINR(txn.VanFee || 0)}</td>
+
+                                <td className="text-center">
+                                  <button
+                                    type="button"
+                                    className="btn btn-sm btn-outline-primary"
+                                    onClick={() => printReceiptPdf(txn.Slip_ID)}
+                                    title="Open & Print Receipt PDF"
+                                  >
+                                    <i className="bi bi-printer me-1" />
+                                    Print
+                                  </button>
+                                </td>
                               </tr>
                             ))}
                           </tbody>

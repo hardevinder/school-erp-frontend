@@ -1,11 +1,63 @@
-import React, { useEffect, useState } from "react";
+// src/pages/ClassCoScholasticMapping.jsx
+import React, { useEffect, useRef, useState } from "react";
 import api from "../api";
 import Swal from "sweetalert2";
 import { Modal, Button } from "react-bootstrap";
+import * as XLSX from "xlsx";
 
 /** 👇 Backend ke hisaab se list endpoint (NO /list) */
 const LIST_ENDPOINT = "/class-co-scholastic-areas";
+const IMPORT_ENDPOINT = "/class-co-scholastic-areas/import";
 
+/* =========================
+ * Helpers
+ * ========================= */
+const strId = (v) => (v === null || v === undefined ? "" : String(v));
+
+const pickId = (
+  obj,
+  keys = ["id", "class_id", "area_id", "term_id", "ClassId", "AreaId", "TermId"]
+) => {
+  if (!obj) return "";
+  for (const k of keys) {
+    const v = obj?.[k];
+    if (v !== null && v !== undefined && String(v).trim() !== "") return String(v);
+  }
+  return "";
+};
+
+const toIntOrNull = (v) => {
+  const s = String(v ?? "").trim();
+  if (!s) return null;
+  const n = Number(s);
+  return Number.isFinite(n) && n > 0 ? n : null;
+};
+
+// normalize dropdown arrays to always have .id (stringable) + label fields
+const normalizeClasses = (arr) =>
+  (Array.isArray(arr) ? arr : []).map((c) => ({
+    ...c,
+    id: c?.id ?? c?.class_id ?? c?.ClassId, // ✅ important
+    class_name: c?.class_name ?? c?.name ?? c?.class ?? c?.title ?? c?.className ?? "",
+  }));
+
+const normalizeAreas = (arr) =>
+  (Array.isArray(arr) ? arr : []).map((a) => ({
+    ...a,
+    id: a?.id ?? a?.area_id ?? a?.AreaId,
+    name: a?.name ?? a?.title ?? a?.area_name ?? "",
+  }));
+
+const normalizeTerms = (arr) =>
+  (Array.isArray(arr) ? arr : []).map((t) => ({
+    ...t,
+    id: t?.id ?? t?.term_id ?? t?.TermId,
+    name: t?.name ?? t?.title ?? t?.term_name ?? "",
+  }));
+
+/* =========================
+ * Component
+ * ========================= */
 const ClassCoScholasticMapping = () => {
   const [mappings, setMappings] = useState([]);
   const [classes, setClasses] = useState([]);
@@ -22,12 +74,17 @@ const ClassCoScholasticMapping = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [showModal, setShowModal] = useState(false);
 
+  // Import
+  const fileRef = useRef(null);
+  const [importing, setImporting] = useState(false);
+
   useEffect(() => {
     loadDropdowns();
     fetchMappings();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 🔽 Load dropdown values
+  // 🔽 Load dropdown values (with normalization)
   async function loadDropdowns() {
     try {
       const [cRes, aRes, tRes] = await Promise.all([
@@ -35,9 +92,10 @@ const ClassCoScholasticMapping = () => {
         api.get("/co-scholastic-areas"),
         api.get("/terms"),
       ]);
-      setClasses(cRes.data || []);
-      setAreas(aRes.data || []);
-      setTerms(tRes.data || []);
+
+      setClasses(normalizeClasses(cRes.data));
+      setAreas(normalizeAreas(aRes.data));
+      setTerms(normalizeTerms(tRes.data));
     } catch (e) {
       console.error(e);
       Swal.fire("Error", "Failed to load dropdowns.", "error");
@@ -56,39 +114,56 @@ const ClassCoScholasticMapping = () => {
     }
   }
 
+  // ✅ Edit/Add modal
   function openModal(mapping = null) {
     if (mapping) {
       setFormData({
-        id: mapping.id,
-        class_id: String(
+        id: mapping.id ?? null,
+        class_id: strId(
           mapping.class_id ||
-            mapping.class?.id ||
-            mapping.Class?.id ||
-            ""
+            pickId(mapping.class, ["id", "class_id", "ClassId"]) ||
+            pickId(mapping.Class, ["id", "class_id", "ClassId"])
         ),
-        area_id: String(
+        area_id: strId(
           mapping.area_id ||
-            mapping.area?.id ||
-            mapping.Area?.id ||
-            ""
+            pickId(mapping.area, ["id", "area_id", "AreaId"]) ||
+            pickId(mapping.Area, ["id", "area_id", "AreaId"])
         ),
-        term_id: String(
+        term_id: strId(
           mapping.term_id ||
-            mapping.term?.id ||
-            mapping.Term?.id ||
-            ""
+            pickId(mapping.term, ["id", "term_id", "TermId"]) ||
+            pickId(mapping.Term, ["id", "term_id", "TermId"])
         ),
       });
       setIsEditing(true);
     } else {
-      setFormData({
-        id: null,
-        class_id: "",
-        area_id: "",
-        term_id: "",
-      });
+      setFormData({ id: null, class_id: "", area_id: "", term_id: "" });
       setIsEditing(false);
     }
+    setShowModal(true);
+  }
+
+  // ✅ Duplicate modal
+  function openDuplicateModal(mapping) {
+    setFormData({
+      id: null,
+      class_id: strId(
+        mapping.class_id ||
+          pickId(mapping.class, ["id", "class_id", "ClassId"]) ||
+          pickId(mapping.Class, ["id", "class_id", "ClassId"])
+      ),
+      area_id: strId(
+        mapping.area_id ||
+          pickId(mapping.area, ["id", "area_id", "AreaId"]) ||
+          pickId(mapping.Area, ["id", "area_id", "AreaId"])
+      ),
+      term_id: strId(
+        mapping.term_id ||
+          pickId(mapping.term, ["id", "term_id", "TermId"]) ||
+          pickId(mapping.Term, ["id", "term_id", "TermId"])
+      ),
+    });
+    setIsEditing(false);
     setShowModal(true);
   }
 
@@ -100,33 +175,30 @@ const ClassCoScholasticMapping = () => {
 
   // 💾 Create / Update mapping
   async function handleSubmit() {
-    const { class_id, area_id, term_id } = formData;
+    const payload = {
+      ...formData,
+      class_id: strId(formData.class_id),
+      area_id: strId(formData.area_id),
+      term_id: strId(formData.term_id),
+    };
+
+    const { class_id, area_id, term_id } = payload;
+
     if (!class_id || !area_id || !term_id) {
-      return Swal.fire(
-        "Warning",
-        "Please select Class, Area, and Term.",
-        "warning"
-      );
+      return Swal.fire("Warning", "Please select Class, Area, and Term.", "warning");
     }
 
     try {
-      if (isEditing && formData.id != null) {
-        await api.put(
-          `/class-co-scholastic-areas/${formData.id}`,
-          formData
-        );
+      if (isEditing && payload.id != null) {
+        await api.put(`/class-co-scholastic-areas/${payload.id}`, payload);
       } else {
-        await api.post("/class-co-scholastic-areas", formData);
+        await api.post("/class-co-scholastic-areas", payload);
       }
       Swal.fire("Success", "Saved successfully.", "success");
       closeModal();
       fetchMappings();
     } catch (e) {
-      Swal.fire(
-        "Error",
-        e?.response?.data?.message || "Failed to save.",
-        "error"
-      );
+      Swal.fire("Error", e?.response?.data?.message || "Failed to save.", "error");
     }
   }
 
@@ -140,29 +212,198 @@ const ClassCoScholasticMapping = () => {
       confirmButtonText: "Delete",
     });
     if (!result.isConfirmed) return;
+
     try {
       await api.delete(`/class-co-scholastic-areas/${id}`);
+      Swal.fire("Deleted", "Mapping removed.", "success");
       fetchMappings();
     } catch (e) {
-      Swal.fire(
-        "Error",
-        e?.response?.data?.message || "Failed to delete.",
-        "error"
-      );
+      Swal.fire("Error", e?.response?.data?.message || "Failed to delete.", "error");
     }
   }
+
+  /* ============================================================
+   * ✅ Import handler (2nd sheet priority)
+   * Sheet2 preferred -> if missing/empty -> import all sheets
+   * Supported headers:
+   * - class_id/area_id/term_id
+   * - classId/areaId/termId
+   * - Class/Area/Term (numeric IDs)
+   * ============================================================ */
+  const onPickImportFile = () => fileRef.current?.click();
+
+  const parseRowsFromSheet = (json) => {
+    const rows = [];
+    for (const r of json) {
+      const class_id =
+        toIntOrNull(r.class_id) ??
+        toIntOrNull(r.classId) ??
+        toIntOrNull(r.Class) ??
+        toIntOrNull(r.CLASS);
+
+      const area_id =
+        toIntOrNull(r.area_id) ??
+        toIntOrNull(r.areaId) ??
+        toIntOrNull(r.Area) ??
+        toIntOrNull(r.AREA);
+
+      const term_id =
+        toIntOrNull(r.term_id) ??
+        toIntOrNull(r.termId) ??
+        toIntOrNull(r.Term) ??
+        toIntOrNull(r.TERM);
+
+      rows.push({ class_id, area_id, term_id });
+    }
+    return rows;
+  };
+
+  const sheetToJson = (wb, sheetName) => {
+    if (!sheetName) return [];
+    const ws = wb.Sheets?.[sheetName];
+    if (!ws) return [];
+    return XLSX.utils.sheet_to_json(ws, { defval: "" });
+  };
+
+  const collectRowsFromAllSheets = (wb) => {
+    let all = [];
+    for (const name of wb.SheetNames || []) {
+      const json = sheetToJson(wb, name);
+      if (!json.length) continue;
+      all = all.concat(parseRowsFromSheet(json));
+    }
+    return all;
+  };
+
+  const handleImportFileChange = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow same file re-select
+    if (!file) return;
+
+    try {
+      setImporting(true);
+
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: "array" });
+
+      // ✅ prefer 2nd sheet
+      const sheet2Name = wb.SheetNames?.[1];
+      const sheet1Name = wb.SheetNames?.[0];
+
+      let json = sheetToJson(wb, sheet2Name);
+      let sourceLabel = sheet2Name ? `Sheet 2: "${sheet2Name}"` : "Sheet 2 (missing)";
+
+      // fallback: if sheet2 empty/missing -> try all sheets
+      if (!json.length) {
+        const allRows = collectRowsFromAllSheets(wb);
+        if (!allRows.length) {
+          return Swal.fire("Warning", "No rows found in any sheet.", "warning");
+        }
+
+        const confirmAll = await Swal.fire({
+          title: "Import mappings?",
+          html:
+            `Sheet2 is empty/missing. Importing from <b>ALL sheets</b>.<br/>` +
+            `Sheets: <b>${(wb.SheetNames || []).join(", ") || "-"}</b><br/>` +
+            `Total rows found: <b>${allRows.length}</b>`,
+          icon: "question",
+          showCancelButton: true,
+          confirmButtonText: "Import",
+        });
+
+        if (!confirmAll.isConfirmed) return;
+
+        const res = await api.post(IMPORT_ENDPOINT, { rows: allRows });
+        const summary = res?.data?.summary || {};
+        const created = summary.created ?? 0;
+        const skipped = summary.skipped_duplicates ?? 0;
+        const invalid = summary.invalid ?? 0;
+
+        await Swal.fire({
+          icon: created > 0 ? "success" : "info",
+          title: "Import completed",
+          html:
+            `<div style="text-align:left">` +
+            `<div>✅ Created: <b>${created}</b></div>` +
+            `<div>⏭️ Skipped (duplicates): <b>${skipped}</b></div>` +
+            `<div>⚠️ Invalid: <b>${invalid}</b></div>` +
+            `</div>`,
+        });
+
+        fetchMappings();
+        return;
+      }
+
+      // normal path: sheet2 rows
+      const rows = parseRowsFromSheet(json);
+
+      const confirm = await Swal.fire({
+        title: "Import mappings?",
+        html:
+          `Source: <b>${sourceLabel}</b><br/>` +
+          `Rows found: <b>${rows.length}</b><br/>` +
+          (sheet1Name ? `Sheet1: "${sheet1Name}" (ignored)` : ""),
+        icon: "question",
+        showCancelButton: true,
+        confirmButtonText: "Import",
+      });
+
+      if (!confirm.isConfirmed) return;
+
+      const res = await api.post(IMPORT_ENDPOINT, { rows });
+
+      const summary = res?.data?.summary || {};
+      const created = summary.created ?? 0;
+      const skipped = summary.skipped_duplicates ?? 0;
+      const invalid = summary.invalid ?? 0;
+
+      await Swal.fire({
+        icon: created > 0 ? "success" : "info",
+        title: "Import completed",
+        html:
+          `<div style="text-align:left">` +
+          `<div>✅ Created: <b>${created}</b></div>` +
+          `<div>⏭️ Skipped (duplicates): <b>${skipped}</b></div>` +
+          `<div>⚠️ Invalid: <b>${invalid}</b></div>` +
+          `</div>`,
+      });
+
+      fetchMappings();
+    } catch (err) {
+      console.error(err);
+      Swal.fire("Error", err?.response?.data?.message || "Import failed.", "error");
+    } finally {
+      setImporting(false);
+    }
+  };
 
   return (
     <div className="container mt-4">
       <div className="d-flex align-items-center justify-content-between flex-wrap gap-2">
         <h2 className="m-0">🎯 Class Co-Scholastic Area Mapping</h2>
+
         <div className="d-flex gap-2">
           <Button variant="outline-secondary" onClick={fetchMappings}>
             Refresh
           </Button>
+
+          {/* ✅ Import button */}
+          <Button variant="outline-primary" onClick={onPickImportFile} disabled={importing}>
+            {importing ? "Importing..." : "⬆️ Import (Sheet2)"}
+          </Button>
+
           <Button variant="success" onClick={() => openModal()}>
             ➕ Add Mapping
           </Button>
+
+          {/* hidden input */}
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".xlsx,.xls,.csv"
+            style={{ display: "none" }}
+            onChange={handleImportFileChange}
+          />
         </div>
       </div>
 
@@ -176,9 +417,10 @@ const ClassCoScholasticMapping = () => {
                   <th>Class</th>
                   <th>Co-Scholastic Area</th>
                   <th>Term</th>
-                  <th style={{ width: 160 }}>Actions</th>
+                  <th style={{ width: 200 }}>Actions</th>
                 </tr>
               </thead>
+
               <tbody>
                 {mappings.length === 0 ? (
                   <tr>
@@ -193,16 +435,28 @@ const ClassCoScholasticMapping = () => {
                       <td>{m.class?.class_name || m.Class?.class_name || "-"}</td>
                       <td>{m.area?.name || m.Area?.name || "-"}</td>
                       <td>{m.term?.name || m.Term?.name || "-"}</td>
+
                       <td className="text-nowrap">
+                        <button
+                          className="btn btn-sm btn-outline-info me-2"
+                          onClick={() => openDuplicateModal(m)}
+                          title="Duplicate Mapping"
+                        >
+                          📄
+                        </button>
+
                         <button
                           className="btn btn-sm btn-warning me-2"
                           onClick={() => openModal(m)}
+                          title="Edit Mapping"
                         >
                           Edit
                         </button>
+
                         <button
                           className="btn btn-sm btn-danger"
                           onClick={() => handleDelete(m.id)}
+                          title="Delete Mapping"
                         >
                           Delete
                         </button>
@@ -219,10 +473,9 @@ const ClassCoScholasticMapping = () => {
       {/* Modal */}
       <Modal show={showModal} onHide={closeModal} centered>
         <Modal.Header closeButton>
-          <Modal.Title>
-            {isEditing ? "✏️ Edit Mapping" : "➕ Add Mapping"}
-          </Modal.Title>
+          <Modal.Title>{isEditing ? "✏️ Edit Mapping" : "➕ Add / Duplicate Mapping"}</Modal.Title>
         </Modal.Header>
+
         <Modal.Body>
           <div className="row g-2">
             <div className="col-12 col-md-6">
@@ -235,8 +488,8 @@ const ClassCoScholasticMapping = () => {
               >
                 <option value="">Select Class</option>
                 {classes.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.class_name}
+                  <option key={strId(c.id)} value={strId(c.id)}>
+                    {c.class_name || "-"}
                   </option>
                 ))}
               </select>
@@ -252,8 +505,8 @@ const ClassCoScholasticMapping = () => {
               >
                 <option value="">Select Area</option>
                 {areas.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.name}
+                  <option key={strId(a.id)} value={strId(a.id)}>
+                    {a.name || "-"}
                   </option>
                 ))}
               </select>
@@ -269,20 +522,21 @@ const ClassCoScholasticMapping = () => {
               >
                 <option value="">Select Term</option>
                 {terms.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name}
+                  <option key={strId(t.id)} value={strId(t.id)}>
+                    {t.name || "-"}
                   </option>
                 ))}
               </select>
             </div>
           </div>
         </Modal.Body>
+
         <Modal.Footer className="d-flex justify-content-between">
           <Button variant="secondary" onClick={closeModal}>
             Cancel
           </Button>
           <Button variant="primary" onClick={handleSubmit}>
-            {isEditing ? "Update" : "Create"}
+            {isEditing ? "Update" : "Save"}
           </Button>
         </Modal.Footer>
       </Modal>
