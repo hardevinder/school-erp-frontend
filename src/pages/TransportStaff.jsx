@@ -2,19 +2,21 @@
 import React, { useEffect, useMemo, useState } from "react";
 import api from "../api";
 import Swal from "sweetalert2";
-import "./Transportation.css"; // reuse same css (or create TransportStaff.css)
+import "./Transportation.css";
 
 /* ---------------- role helpers ---------------- */
 const getRoleFlags = () => {
   const singleRole = localStorage.getItem("userRole");
   const multiRoles = JSON.parse(localStorage.getItem("roles") || "[]");
   const roles = multiRoles.length ? multiRoles : [singleRole].filter(Boolean);
+
+  const isTransport = roles.includes("transport") || roles.includes("transport_admin");
   return {
     roles,
     isAdmin: roles.includes("admin"),
     isSuperadmin: roles.includes("superadmin"),
     isAccounts: roles.includes("accounts"),
-    isTransport: roles.includes("transport") || roles.includes("transport_admin"),
+    isTransport,
   };
 };
 
@@ -32,9 +34,9 @@ const TransportStaff = () => {
 
   const [staff, setStaff] = useState([]);
   const [search, setSearch] = useState("");
-  const [typeFilter, setTypeFilter] = useState(""); // driver|conductor|""
-  const [userStatusFilter, setUserStatusFilter] = useState(""); // active|disabled|""
-  const [staffStatusFilter, setStaffStatusFilter] = useState(""); // active|inactive|""
+  const [typeFilter, setTypeFilter] = useState("");
+  const [userStatusFilter, setUserStatusFilter] = useState("");
+  const [staffStatusFilter, setStaffStatusFilter] = useState("");
 
   const fetchStaff = async () => {
     try {
@@ -59,6 +61,189 @@ const TransportStaff = () => {
   }, []);
 
   const handleRefresh = () => fetchStaff();
+
+  /* =========================================================
+     ✅ SWEETALERT COMPACT STYLES (3 columns + scroll body)
+     ✅ FIX: Generate button text wrap (Gener / ate)
+  ========================================================== */
+  const injectSwalCompactStyles = () => {
+    if (document.getElementById("swal-transport-compact-style")) return;
+
+    const style = document.createElement("style");
+    style.id = "swal-transport-compact-style";
+    style.innerHTML = `
+      .swal-transport-compact-popup{
+        width: min(880px, 96vw) !important;
+        padding: 12px !important;
+      }
+      .swal-transport-compact-title{
+        font-size: 18px !important;
+        margin: 0 0 6px 0 !important;
+      }
+      .swal-transport-compact-html{
+        padding: 0 !important;
+        margin: 0 !important;
+      }
+      .ts-modal-body{
+        max-height: min(62vh, 520px);
+        overflow: auto;
+        padding: 10px 6px 4px 6px;
+      }
+      .ts-grid{
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+      }
+      @media (max-width: 980px){
+        .ts-grid{ grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      }
+      @media (max-width: 620px){
+        .ts-grid{ grid-template-columns: 1fr; }
+      }
+      .ts-field label{
+        display:block;
+        font-size: 11px;
+        opacity: .8;
+        margin-bottom: 4px;
+      }
+      .ts-input, .ts-select{
+        width: 100%;
+        height: 36px;
+        padding: 7px 10px;
+        border: 1px solid rgba(0,0,0,.15);
+        border-radius: 10px;
+        outline: none;
+        font-size: 13px;
+      }
+      .ts-input:focus, .ts-select:focus{
+        border-color: rgba(0,0,0,.35);
+        box-shadow: 0 0 0 3px rgba(0,0,0,.06);
+      }
+      .ts-full{ grid-column: 1 / -1; }
+      .ts-note{
+        font-size: 12px;
+        opacity: .8;
+        margin-top: 6px;
+      }
+      .ts-divider{
+        grid-column: 1 / -1;
+        height: 1px;
+        background: rgba(0,0,0,.10);
+        margin: 2px 0;
+      }
+      .swal2-actions{ margin-top: 10px !important; }
+      .swal2-confirm, .swal2-cancel, .swal2-deny{
+        padding: 8px 16px !important;
+        border-radius: 10px !important;
+      }
+
+      .ts-inline{
+        display:flex;
+        gap:8px;
+        align-items:center;
+      }
+
+      /* ✅ input should take remaining space */
+      .ts-inline .ts-input{
+        flex: 1 1 auto;
+        min-width: 0;
+      }
+
+      /* ✅ FIX Generate button wrap + big text */
+      .ts-inline button{
+        flex: 0 0 auto;
+        min-width: 92px;
+        height: 36px;
+        padding: 0 10px;
+        border-radius: 10px;
+        border: 1px solid rgba(0,0,0,.15);
+        background: #fff;
+        cursor: pointer;
+        white-space: nowrap;
+        font-size: 12px;
+        line-height: 1;
+      }
+      .ts-inline button:hover{
+        background: rgba(0,0,0,.04);
+      }
+    `;
+    document.head.appendChild(style);
+  };
+
+  /* ---------------- reset password ---------------- */
+  const handleResetPassword = async (row) => {
+    if (!canManage) return Swal.fire("Forbidden", "Access denied.", "warning");
+
+    injectSwalCompactStyles();
+
+    const u = row?.user || {};
+    const display = safeStr(u?.name) || safeStr(u?.username) || "Staff";
+
+    const result = await Swal.fire({
+      title: `Reset Password (${display})`,
+      showCancelButton: true,
+      confirmButtonText: "Update",
+      customClass: {
+        popup: "swal-transport-compact-popup",
+        title: "swal-transport-compact-title",
+        htmlContainer: "swal-transport-compact-html",
+      },
+      html: `
+        <div class="ts-modal-body">
+          <div class="ts-grid">
+
+            <div class="ts-field ts-full">
+              <label>New Password</label>
+              <div class="ts-inline">
+                <input id="new_password" type="text" class="ts-input" placeholder="Enter new password" />
+                <button type="button" id="gen_pw_btn" title="Generate">Generate</button>
+              </div>
+              <div class="ts-note">Tip: you can use last 4 digits + @123 (example: 9876@123)</div>
+            </div>
+
+          </div>
+        </div>
+      `,
+      didOpen: () => {
+        const btn = document.getElementById("gen_pw_btn");
+        const inp = document.getElementById("new_password");
+        if (btn && inp) {
+          btn.onclick = () => {
+            const phone = safeStr(row?.phone);
+            const last4 = phone ? phone.slice(-4) : "1234";
+            inp.value = `${last4}@123`;
+            inp.focus();
+          };
+        }
+      },
+      preConfirm: () => {
+        const pw = safeStr(document.getElementById("new_password")?.value);
+        if (!pw) {
+          Swal.showValidationMessage("Password is required.");
+          return false;
+        }
+        if (pw.length < 4) {
+          Swal.showValidationMessage("Password too short.");
+          return false;
+        }
+        return { password: pw };
+      },
+    });
+
+    if (!result.isConfirmed) return;
+
+    try {
+      await api.patch(`/transport-staff/${row.id}/password`, result.value);
+      Swal.fire("Updated!", "Password updated successfully.", "success");
+    } catch (err) {
+      console.error("Reset password error:", err);
+      const msg =
+        err?.response?.data?.error ||
+        err?.response?.data?.message ||
+        "Failed to update password.";
+      Swal.fire("Error", msg, "error");
+    }
+  };
 
   /* ---------------- delete ---------------- */
   const handleDelete = async (row) => {
@@ -87,111 +272,19 @@ const TransportStaff = () => {
         Swal.fire("Deleted!", "Transport staff profile deleted.", "success");
         fetchStaff();
       } else if (result.isDenied) {
-        if (!isSuperadmin) {
-          return Swal.fire("Forbidden", "Only Super Admin can delete user account.", "warning");
-        }
+        // ✅ transport role can delete user too
         await api.delete(`/transport-staff/${row.id}?deleteUser=true`);
         Swal.fire("Deleted!", "Profile + user account deleted.", "success");
         fetchStaff();
       }
     } catch (err) {
       console.error("Delete transport staff error:", err);
-      const msg =
-        err?.response?.data?.error ||
-        err?.response?.data?.message ||
-        "Failed to delete.";
+      const msg = err?.response?.data?.error || err?.response?.data?.message || "Failed to delete.";
       Swal.fire("Error", msg, "error");
     }
   };
 
-  /* =========================================================
-     ✅ SWEETALERT COMPACT STYLES (3 columns + scroll body)
-     - Smaller width for laptops
-     - Body scrolls, buttons always visible
-  ========================================================== */
-  const injectSwalCompactStyles = () => {
-    if (document.getElementById("swal-transport-compact-style")) return;
-
-    const style = document.createElement("style");
-    style.id = "swal-transport-compact-style";
-    style.innerHTML = `
-      .swal-transport-compact-popup{
-        width: min(880px, 96vw) !important;
-        padding: 12px !important;
-      }
-      .swal-transport-compact-title{
-        font-size: 18px !important;
-        margin: 0 0 6px 0 !important;
-      }
-      .swal-transport-compact-html{
-        padding: 0 !important;
-        margin: 0 !important;
-      }
-      /* Scrollable body inside modal */
-      .ts-modal-body{
-        max-height: min(62vh, 520px);
-        overflow: auto;
-        padding: 10px 6px 4px 6px;
-      }
-      .ts-grid{
-        display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 10px;
-      }
-      @media (max-width: 980px){
-        .ts-grid{ grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      }
-      @media (max-width: 620px){
-        .ts-grid{ grid-template-columns: 1fr; }
-      }
-
-      .ts-field label{
-        display:block;
-        font-size: 11px;
-        opacity: .8;
-        margin-bottom: 4px;
-      }
-      .ts-input, .ts-select{
-        width: 100%;
-        height: 36px;
-        padding: 7px 10px;
-        border: 1px solid rgba(0,0,0,.15);
-        border-radius: 10px;
-        outline: none;
-        font-size: 13px;
-      }
-      .ts-input:focus, .ts-select:focus{
-        border-color: rgba(0,0,0,.35);
-        box-shadow: 0 0 0 3px rgba(0,0,0,.06);
-      }
-      .ts-full{
-        grid-column: 1 / -1;
-      }
-      .ts-note{
-        font-size: 12px;
-        opacity: .8;
-        margin-top: 6px;
-      }
-      .ts-divider{
-        grid-column: 1 / -1;
-        height: 1px;
-        background: rgba(0,0,0,.10);
-        margin: 2px 0;
-      }
-
-      /* Footer button area compact */
-      .swal2-actions{
-        margin-top: 10px !important;
-      }
-      .swal2-confirm, .swal2-cancel{
-        padding: 8px 16px !important;
-        border-radius: 10px !important;
-      }
-    `;
-    document.head.appendChild(style);
-  };
-
-  /* ---------------- add (3 columns, compact height) ---------------- */
+  /* ---------------- add ---------------- */
   const handleAdd = async () => {
     if (!canManage) return Swal.fire("Forbidden", "Access denied.", "warning");
 
@@ -256,7 +349,11 @@ const TransportStaff = () => {
 
             <div class="ts-field">
               <label>Password</label>
-              <input id="password" type="text" class="ts-input" placeholder="Optional" />
+              <div class="ts-inline">
+                <input id="password" type="text" class="ts-input" placeholder="Optional (auto if empty)" />
+                <button type="button" id="gen_pw_btn" title="Generate">Generate</button>
+              </div>
+              <div class="ts-note">If empty, system can auto-generate (phone last4 + @123).</div>
             </div>
 
             <div class="ts-field">
@@ -285,6 +382,11 @@ const TransportStaff = () => {
             </div>
 
             <div class="ts-field">
+              <label>Disable Reason (if disabled)</label>
+              <input id="disableReason" class="ts-input" placeholder="Optional" />
+            </div>
+
+            <div class="ts-field">
               <label>&nbsp;</label>
               <div class="ts-note">
                 Role auto-assign: <b>driver</b> / <b>conductor</b>
@@ -294,6 +396,18 @@ const TransportStaff = () => {
           </div>
         </div>
       `,
+      didOpen: () => {
+        const btn = document.getElementById("gen_pw_btn");
+        if (btn) {
+          btn.onclick = () => {
+            const phone = safeStr(document.getElementById("phone")?.value);
+            const last4 = phone ? phone.slice(-4) : "1234";
+            const pwInput = document.getElementById("password");
+            if (pwInput) pwInput.value = `${last4}@123`;
+            pwInput?.focus?.();
+          };
+        }
+      },
       preConfirm: async () => {
         const staff_type = document.getElementById("staff_type").value;
         const username = document.getElementById("username").value;
@@ -318,6 +432,9 @@ const TransportStaff = () => {
           license_no: toNull(document.getElementById("license_no").value),
           license_expiry: document.getElementById("license_expiry").value || null,
         };
+
+        const dr = safeStr(document.getElementById("disableReason")?.value);
+        if (payload.status === "disabled" && dr) payload.disableReason = dr;
 
         if (payload.staff_type === "driver" && !payload.license_no) {
           const ask = await Swal.fire({
@@ -351,7 +468,7 @@ const TransportStaff = () => {
     });
   };
 
-  /* ---------------- edit (3 columns, compact height) ---------------- */
+  /* ---------------- edit ---------------- */
   const handleEdit = async (row) => {
     if (!canManage) return Swal.fire("Forbidden", "Access denied.", "warning");
 
@@ -441,23 +558,11 @@ const TransportStaff = () => {
               <input id="license_expiry" type="date" class="ts-input" value="${expiry}" />
             </div>
 
-            <div class="ts-field">
-              <label>&nbsp;</label>
-              <div class="ts-note">
-                ${isSuperadmin ? "If disabling, you can add reason below." : "Role stays unchanged."}
-              </div>
+            <div class="ts-field ts-full">
+              <label>Disable Reason (optional)</label>
+              <input id="disableReason" class="ts-input" placeholder="Reason..." />
+              <div class="ts-note">If you set User Status = Disabled, reason will be saved.</div>
             </div>
-
-            ${
-              isSuperadmin
-                ? `
-                  <div class="ts-field ts-full">
-                    <label>Disable Reason (optional)</label>
-                    <input id="disableReason" class="ts-input" placeholder="Reason..." />
-                  </div>
-                `
-                : ""
-            }
 
           </div>
         </div>
@@ -484,10 +589,8 @@ const TransportStaff = () => {
           staff_status: document.getElementById("staff_status").value,
         };
 
-        if (isSuperadmin && payload.status === "disabled") {
-          const r = document.getElementById("disableReason")?.value;
-          if (safeStr(r)) payload.disableReason = safeStr(r);
-        }
+        const dr = safeStr(document.getElementById("disableReason")?.value);
+        if (payload.status === "disabled" && dr) payload.disableReason = dr;
 
         return payload;
       },
@@ -614,7 +717,7 @@ const TransportStaff = () => {
             <th>License</th>
             <th>Staff Status</th>
             <th>User Status</th>
-            <th style={{ minWidth: 160 }}>Actions</th>
+            <th style={{ minWidth: 230 }}>Actions</th>
           </tr>
         </thead>
 
@@ -646,6 +749,15 @@ const TransportStaff = () => {
                     disabled={!canManage}
                   >
                     Edit
+                  </button>
+
+                  <button
+                    className="btn btn-warning btn-sm me-2"
+                    onClick={() => handleResetPassword(r)}
+                    disabled={!canManage}
+                    title="Reset Password"
+                  >
+                    Reset PW
                   </button>
 
                   <button

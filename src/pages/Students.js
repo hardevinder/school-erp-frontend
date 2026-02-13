@@ -233,21 +233,12 @@ const Students = () => {
 
 const fetchTransportations = async () => {
   try {
-    // ✅ NEW: fetch only active-session transport routes
-    const resp = await api.get("/transportations/active");
-    const list = resp?.data?.data; // controller sends { session, count, data: [...] }
-
-    setTransportations(Array.isArray(list) ? list : []);
+    // ✅ fetch all routes (all sessions)
+    const { data } = await api.get("/transportations");
+    setTransportations(Array.isArray(data) ? data : []);
   } catch (err) {
     console.error("fetchTransportations:", err);
-
-    // fallback (optional): if active endpoint not available on some school
-    try {
-      const { data } = await api.get("/transportations");
-      setTransportations(Array.isArray(data) ? data : []);
-    } catch (e2) {
-      setTransportations([]);
-    }
+    setTransportations([]);
   }
 };
 
@@ -972,226 +963,294 @@ const fetchTransportations = async () => {
       </div>
     `;
 
-    const popup = await Swal.fire({
-      title: "",
-      icon: undefined,
-      width: "1040px",
-      html,
-      showCancelButton: true,
-      confirmButtonText: isEdit ? "Update" : "Add",
-      cancelButtonText: "Cancel",
-      focusConfirm: false,
-      showLoaderOnConfirm: true,
-      customClass: { popup: "student-swal" },
-      preConfirm: () => {
-        const rawRouteVal = document.getElementById("f_route_id")?.value;
-        const routeVal = rawRouteVal === "" ? null : Number(rawRouteVal);
+  const popup = await Swal.fire({
+  title: "",
+  icon: undefined,
+  width: "1040px",
+  html,
+  showCancelButton: true,
+  confirmButtonText: isEdit ? "Update" : "Add",
+  cancelButtonText: "Cancel",
+  focusConfirm: false,
+  showLoaderOnConfirm: true,
+  customClass: { popup: "student-swal" },
+  preConfirm: () => {
+    const rawRouteVal = document.getElementById("f_route_id")?.value;
+    const routeVal = rawRouteVal === "" ? null : Number(rawRouteVal);
 
-        const payload = {
-          // Mandatory
-          name: document.getElementById("f_name").value.trim(),
-          admission_number: document.getElementById("f_admission_number").value.trim() || null,
-          class_id: document.getElementById("f_class_id").value || null,
-          section_id: document.getElementById("f_section_id").value || null,
-          session_id: document.getElementById("f_session_id").value || null,
-          house_id: document.getElementById("f_house_id")?.value || null,
-          concession_id: document.getElementById("f_concession_id")?.value || null,
-          admission_type: document.getElementById("f_admission_type").value,
-          roll_number: document.getElementById("f_roll_number").value
-            ? parseInt(document.getElementById("f_roll_number").value, 10)
-            : null,
+    const payload = {
+      // Mandatory
+      name: document.getElementById("f_name").value.trim(),
+      admission_number: document.getElementById("f_admission_number").value.trim() || null,
+      class_id: document.getElementById("f_class_id").value || null,
+      section_id: document.getElementById("f_section_id").value || null,
+      session_id: document.getElementById("f_session_id").value || null,
+      house_id: document.getElementById("f_house_id")?.value || null,
+      concession_id: document.getElementById("f_concession_id")?.value || null,
+      admission_type: document.getElementById("f_admission_type").value,
+      roll_number: document.getElementById("f_roll_number").value
+        ? parseInt(document.getElementById("f_roll_number").value, 10)
+        : null,
 
-          // Personal
-          father_name: document.getElementById("f_father_name").value.trim(),
-          mother_name: document.getElementById("f_mother_name").value.trim(),
+      // Personal
+      father_name: document.getElementById("f_father_name").value.trim(),
+      mother_name: document.getElementById("f_mother_name").value.trim(),
 
-          // ✅ Gender
-          gender: document.getElementById("f_gender")?.value || null,
+      // ✅ Gender
+      gender: document.getElementById("f_gender")?.value || null,
 
-          Date_Of_Birth: document.getElementById("f_DOB").value || null,
-          date_of_admission: document.getElementById("f_date_of_admission").value || null,
-          date_of_withdraw: document.getElementById("f_date_of_withdraw").value || null,
-          pen_number: document.getElementById("f_pen_number").value || null,
-          b_group: document.getElementById("f_b_group").value || null,
-          state: document.getElementById("f_state").value || null,
-          category: document.getElementById("f_category").value || null,
-          religion: document.getElementById("f_religion").value || null,
-          address: document.getElementById("f_address").value || null,
+      Date_Of_Birth: document.getElementById("f_DOB").value || null,
+      date_of_admission: document.getElementById("f_date_of_admission").value || null,
+      date_of_withdraw: document.getElementById("f_date_of_withdraw").value || null,
+      pen_number: document.getElementById("f_pen_number").value || null,
+      b_group: document.getElementById("f_b_group").value || null,
+      state: document.getElementById("f_state").value || null,
+      category: document.getElementById("f_category").value || null,
+      religion: document.getElementById("f_religion").value || null,
+      address: document.getElementById("f_address").value || null,
 
-          // Contact
-          father_phone: document.getElementById("f_father_phone").value || null,
-          mother_phone: document.getElementById("f_mother_phone").value || null,
-          aadhaar_number: document.getElementById("f_aadhaar").value || null,
-          visible: document.getElementById("f_visible")?.value === "1",
+      // Contact
+      father_phone: document.getElementById("f_father_phone").value || null,
+      mother_phone: document.getElementById("f_mother_phone").value || null,
+      aadhaar_number: document.getElementById("f_aadhaar").value || null,
+      visible: document.getElementById("f_visible")?.value === "1",
 
-          // Transport
-          bus_service: document.getElementById("f_bus_service").value || "0",
-          route_id: routeVal,
+      // Transport
+      bus_service: document.getElementById("f_bus_service").value || "0",
+      route_id: routeVal,
 
-          // ✅ Bus gender
-          bus_gender: document.getElementById("f_bus_gender")?.value || null,
+      // ✅ Bus gender
+      bus_gender: document.getElementById("f_bus_gender")?.value || null,
 
-          // Previous School
-          prev_school_name: document.getElementById("f_prev_school_name")?.value || null,
-          prev_school_address: document.getElementById("f_prev_school_address")?.value || null,
-          prev_class: document.getElementById("f_prev_class")?.value || null,
-          prev_admission_no: document.getElementById("f_prev_admission_no")?.value || null,
-        };
+      // Previous School
+      prev_school_name: document.getElementById("f_prev_school_name")?.value || null,
+      prev_school_address: document.getElementById("f_prev_school_address")?.value || null,
+      prev_class: document.getElementById("f_prev_class")?.value || null,
+      prev_admission_no: document.getElementById("f_prev_admission_no")?.value || null,
+    };
 
-        if (!payload.bus_gender) payload.bus_gender = null;
+    if (!payload.bus_gender) payload.bus_gender = null;
 
-        // Siblings
-        [1, 2, 3, 4].forEach((slot) => {
-          const rawId = document.getElementById(`f_sibling_id_${slot}`)?.value ?? "";
-          const rawName = document.getElementById(`f_sibling_name_${slot}`)?.value ?? "";
+    // Siblings
+    [1, 2, 3, 4].forEach((slot) => {
+      const rawId = document.getElementById(`f_sibling_id_${slot}`)?.value ?? "";
+      const rawName = document.getElementById(`f_sibling_name_${slot}`)?.value ?? "";
 
-          const cleanedId = rawId ? String(rawId).replace(/^ID:\s*/i, "").trim() : null;
-          const cleanedName = rawName ? String(rawName).trim() : null;
+      const cleanedId = rawId ? String(rawId).replace(/^ID:\s*/i, "").trim() : null;
+      const cleanedName = rawName ? String(rawName).trim() : null;
 
-          payload[`sibling_id_${slot}`] = cleanedId || null;
-          payload[`sibling_name_${slot}`] = cleanedName || null;
-        });
-
-        if (!payload.name) Swal.showValidationMessage("Full name is required");
-        if (!payload.class_id) Swal.showValidationMessage("Class selection is required");
-        if (!payload.section_id) Swal.showValidationMessage("Section selection is required");
-
-        return payload;
-      },
-      didOpen: () => {
-        const closeBtn = document.getElementById("studentSwalCloseBtn");
-        if (closeBtn) closeBtn.addEventListener("click", () => Swal.close());
-
-        // Tabs wire-up
-        const btns = document.querySelectorAll(".tabbtn");
-        const panes = {
-          mandatory: document.getElementById("pane-mandatory"),
-          personal: document.getElementById("pane-personal"),
-          contact: document.getElementById("pane-contact"),
-          transport: document.getElementById("pane-transport"),
-          siblings: document.getElementById("pane-siblings"),
-          prevschool: document.getElementById("pane-prevschool"),
-        };
-        btns.forEach((b) =>
-          b.addEventListener("click", () => {
-            btns.forEach((x) => x.classList.remove("active"));
-            b.classList.add("active");
-            Object.values(panes).forEach((p) => p.classList.remove("active"));
-            const t = b.getAttribute("data-tab");
-            if (panes[t]) panes[t].classList.add("active");
-          })
-        );
-
-        // Sibling pickers
-        [1, 2, 3, 4].forEach((slot) => {
-          const clsSel = document.getElementById(`sib_class_${slot}`);
-          const secSel = document.getElementById(`sib_section_${slot}`);
-          const stuSel = document.getElementById(`sib_student_${slot}`);
-          const hiddenId = document.getElementById(`f_sibling_id_${slot}`);
-          const hiddenName = document.getElementById(`f_sibling_name_${slot}`);
-
-          if (!clsSel || !secSel || !stuSel) return;
-
-          const populateSectionsForClass = (classId) => {
-            const options = [`<option value="">All Sections</option>`];
-            sectionOptionsAll.forEach((sec) => {
-              if (!classId || String(sec.class_id) === String(classId)) {
-                options.push(`<option value="${sec.id}">${sec.name}</option>`);
-              }
-            });
-            secSel.innerHTML = options.join("");
-          };
-
-          const fetchAndPopulateStudents = async (classId, sectionId) => {
-            stuSel.innerHTML = `<option value="">Loading...</option>`;
-            if (!classId) {
-              stuSel.innerHTML = `<option value="">Select class first</option>`;
-              return;
-            }
-            try {
-              const url = `/students/sibling-list?class_id=${classId}${
-                sectionId ? `&section_id=${sectionId}` : ""
-              }`;
-              const { data } = await api.get(url);
-              if (!Array.isArray(data) || data.length === 0) {
-                stuSel.innerHTML = `<option value="">No students found</option>`;
-                hiddenId.value = "";
-                hiddenName.value = "";
-                return;
-              }
-              const opts = [`<option value="">Select Student</option>`].concat(
-                data.map((st) => {
-                  const token = st.admission_number || String(st.id);
-                  return `<option value="${token}"
-                          data-name="${(st.name || "").replace(/"/g, "&quot;")}"
-                          data-pk="${st.id}"
-                          data-an="${st.admission_number || ""}">
-                          ${st.name}${st.admission_number ? ` (AN:${st.admission_number})` : ""}
-                        </option>`;
-                })
-              );
-
-              stuSel.innerHTML = opts.join("");
-            } catch (err) {
-              console.error("fetchAndPopulateStudents:", err);
-              stuSel.innerHTML = `<option value="">Error loading</option>`;
-            }
-          };
-
-          clsSel.onchange = async () => {
-            const classId = clsSel.value;
-            populateSectionsForClass(classId);
-            hiddenId.value = "";
-            hiddenName.value = "";
-            await fetchAndPopulateStudents(classId, secSel.value || "");
-          };
-
-          secSel.onchange = async () => {
-            const classId = clsSel.value;
-            const sectionId = secSel.value;
-            hiddenId.value = "";
-            hiddenName.value = "";
-            await fetchAndPopulateStudents(classId, sectionId || "");
-          };
-
-          stuSel.onchange = () => {
-            const opt = stuSel.selectedOptions[0];
-            if (opt && opt.value) {
-              hiddenId.value = opt.value;
-              hiddenName.value = opt.dataset.name || opt.textContent || "";
-            } else {
-              hiddenId.value = "";
-              hiddenName.value = "";
-            }
-          };
-
-          const preClass = clsSel.value;
-          const preSection = secSel.value;
-          const preStudentId = hiddenId.value;
-
-          (async () => {
-            if (preClass) {
-              populateSectionsForClass(preClass);
-              await fetchAndPopulateStudents(preClass, preSection || "");
-            } else {
-              populateSectionsForClass("");
-              stuSel.innerHTML = `<option value="">Select class first</option>`;
-            }
-
-            if (preClass && preStudentId) {
-              const opt =
-                Array.from(stuSel.options).find((o) => String(o.value) === String(preStudentId)) ||
-                Array.from(stuSel.options).find((o) => String(o.dataset.pk) === String(preStudentId));
-              if (opt) {
-                opt.selected = true;
-                hiddenName.value = opt.dataset.name || opt.textContent || "";
-                hiddenId.value = opt.value;
-              }
-            }
-          })();
-        });
-      },
+      payload[`sibling_id_${slot}`] = cleanedId || null;
+      payload[`sibling_name_${slot}`] = cleanedName || null;
     });
+
+    if (!payload.name) Swal.showValidationMessage("Full name is required");
+    if (!payload.class_id) Swal.showValidationMessage("Class selection is required");
+    if (!payload.section_id) Swal.showValidationMessage("Section selection is required");
+
+    return payload;
+  },
+  didOpen: () => {
+    const closeBtn = document.getElementById("studentSwalCloseBtn");
+    if (closeBtn) closeBtn.addEventListener("click", () => Swal.close());
+
+    /* ============================================================
+     * ✅ NEW: Session-wise Transport Route reload
+     * ============================================================ */
+    const sessionSel = document.getElementById("f_session_id");
+    const routeSel = document.getElementById("f_route_id");
+
+    const buildRouteOptionsHtml = (list, selectedId) => {
+      const safe = Array.isArray(list) ? list : [];
+      const opts = [`<option value="">No Transport</option>`];
+
+      safe.forEach((t) => {
+        const label = String(t?.Villages || "").replace(/"/g, "&quot;");
+        const cost = t?.Cost ?? "";
+        const id = t?.id;
+
+        opts.push(
+          `<option value="${id}" ${String(id) === String(selectedId) ? "selected" : ""}>
+            ${label}${cost ? ` — ₹${cost}` : ""}
+          </option>`
+        );
+      });
+
+      return opts.join("");
+    };
+
+    const fetchTransportForSessionId = async (sessionId) => {
+      if (!routeSel) return;
+
+      // keep selected value if still exists
+      const prevSelected = routeSel.value || "";
+
+      try {
+        routeSel.innerHTML = `<option value="">Loading...</option>`;
+
+        // session dropdown stores session_id (numeric) -> convert to session name (e.g. "2025-26")
+        const ssObj = sessions.find((x) => String(x.id) === String(sessionId));
+        const sessionName = ssObj?.name ? String(ssObj.name) : "";
+
+        if (sessionName) {
+          const resp = await api.get(`/transportations?session=${encodeURIComponent(sessionName)}`);
+          const list = Array.isArray(resp.data) ? resp.data : [];
+          routeSel.innerHTML = buildRouteOptionsHtml(list, prevSelected);
+        } else {
+          const resp = await api.get(`/transportations/active`);
+          const list = Array.isArray(resp?.data?.data) ? resp.data.data : [];
+          routeSel.innerHTML = buildRouteOptionsHtml(list, prevSelected);
+        }
+      } catch (e) {
+        console.error("fetchTransportForSessionId:", e);
+        routeSel.innerHTML = `<option value="">No Transport</option>`;
+      }
+    };
+
+    // ✅ Session change -> reload routes
+    if (sessionSel) {
+      sessionSel.addEventListener("change", () => {
+        fetchTransportForSessionId(sessionSel.value || "");
+      });
+    }
+
+    // ✅ initial load
+    fetchTransportForSessionId(sessionSel?.value || "");
+
+    /* ============================================================
+     * Tabs wire-up
+     * ============================================================ */
+    const btns = document.querySelectorAll(".tabbtn");
+    const panes = {
+      mandatory: document.getElementById("pane-mandatory"),
+      personal: document.getElementById("pane-personal"),
+      contact: document.getElementById("pane-contact"),
+      transport: document.getElementById("pane-transport"),
+      siblings: document.getElementById("pane-siblings"),
+      prevschool: document.getElementById("pane-prevschool"),
+    };
+    btns.forEach((b) =>
+      b.addEventListener("click", () => {
+        btns.forEach((x) => x.classList.remove("active"));
+        b.classList.add("active");
+        Object.values(panes).forEach((p) => p.classList.remove("active"));
+        const t = b.getAttribute("data-tab");
+        if (panes[t]) panes[t].classList.add("active");
+      })
+    );
+
+    /* ============================================================
+     * Sibling pickers
+     * ============================================================ */
+    [1, 2, 3, 4].forEach((slot) => {
+      const clsSel = document.getElementById(`sib_class_${slot}`);
+      const secSel = document.getElementById(`sib_section_${slot}`);
+      const stuSel = document.getElementById(`sib_student_${slot}`);
+      const hiddenId = document.getElementById(`f_sibling_id_${slot}`);
+      const hiddenName = document.getElementById(`f_sibling_name_${slot}`);
+
+      if (!clsSel || !secSel || !stuSel) return;
+
+      const populateSectionsForClass = (classId) => {
+        const options = [`<option value="">All Sections</option>`];
+        sectionOptionsAll.forEach((sec) => {
+          if (!classId || String(sec.class_id) === String(classId)) {
+            options.push(`<option value="${sec.id}">${sec.name}</option>`);
+          }
+        });
+        secSel.innerHTML = options.join("");
+      };
+
+      const fetchAndPopulateStudents = async (classId, sectionId) => {
+        stuSel.innerHTML = `<option value="">Loading...</option>`;
+        if (!classId) {
+          stuSel.innerHTML = `<option value="">Select class first</option>`;
+          return;
+        }
+        try {
+          const url = `/students/sibling-list?class_id=${classId}${
+            sectionId ? `&section_id=${sectionId}` : ""
+          }`;
+          const { data } = await api.get(url);
+          if (!Array.isArray(data) || data.length === 0) {
+            stuSel.innerHTML = `<option value="">No students found</option>`;
+            hiddenId.value = "";
+            hiddenName.value = "";
+            return;
+          }
+          const opts = [`<option value="">Select Student</option>`].concat(
+            data.map((st) => {
+              const token = st.admission_number || String(st.id);
+              return `<option value="${token}"
+                        data-name="${(st.name || "").replace(/"/g, "&quot;")}"
+                        data-pk="${st.id}"
+                        data-an="${st.admission_number || ""}">
+                        ${st.name}${st.admission_number ? ` (AN:${st.admission_number})` : ""}
+                      </option>`;
+            })
+          );
+
+          stuSel.innerHTML = opts.join("");
+        } catch (err) {
+          console.error("fetchAndPopulateStudents:", err);
+          stuSel.innerHTML = `<option value="">Error loading</option>`;
+        }
+      };
+
+      clsSel.onchange = async () => {
+        const classId = clsSel.value;
+        populateSectionsForClass(classId);
+        hiddenId.value = "";
+        hiddenName.value = "";
+        await fetchAndPopulateStudents(classId, secSel.value || "");
+      };
+
+      secSel.onchange = async () => {
+        const classId = clsSel.value;
+        const sectionId = secSel.value;
+        hiddenId.value = "";
+        hiddenName.value = "";
+        await fetchAndPopulateStudents(classId, sectionId || "");
+      };
+
+      stuSel.onchange = () => {
+        const opt = stuSel.selectedOptions[0];
+        if (opt && opt.value) {
+          hiddenId.value = opt.value;
+          hiddenName.value = opt.dataset.name || opt.textContent || "";
+        } else {
+          hiddenId.value = "";
+          hiddenName.value = "";
+        }
+      };
+
+      const preClass = clsSel.value;
+      const preSection = secSel.value;
+      const preStudentId = hiddenId.value;
+
+      (async () => {
+        if (preClass) {
+          populateSectionsForClass(preClass);
+          await fetchAndPopulateStudents(preClass, preSection || "");
+        } else {
+          populateSectionsForClass("");
+          stuSel.innerHTML = `<option value="">Select class first</option>`;
+        }
+
+        if (preClass && preStudentId) {
+          const opt =
+            Array.from(stuSel.options).find((o) => String(o.value) === String(preStudentId)) ||
+            Array.from(stuSel.options).find((o) => String(o.dataset.pk) === String(preStudentId));
+          if (opt) {
+            opt.selected = true;
+            hiddenName.value = opt.dataset.name || opt.textContent || "";
+            hiddenId.value = opt.value;
+          }
+        }
+      })();
+    });
+  },
+});
+
 
     if (!popup.isConfirmed) return;
     const payload = popup.value;

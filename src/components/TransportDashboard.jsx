@@ -17,6 +17,8 @@ const getRoleFlags = () => {
     isSuperadmin: roles.includes("superadmin"),
     isAccounts: roles.includes("accounts"),
     isTransport: roles.includes("transport") || roles.includes("transport_admin"),
+    isDriver: roles.includes("driver"),
+    isConductor: roles.includes("conductor"),
   };
 };
 
@@ -24,7 +26,6 @@ const getRoleFlags = () => {
 const asArray = (d) => {
   if (Array.isArray(d)) return d;
   if (!d) return [];
-  // ✅ added common keys (staff is important for /transport-staff)
   return (
     d.staff ||
     d.routes ||
@@ -91,6 +92,14 @@ const uniqCount = (arr, keyGetter) => {
   return set.size;
 };
 
+const todayYYYYMMDD = () => {
+  const dt = new Date();
+  const y = dt.getFullYear();
+  const m = String(dt.getMonth() + 1).padStart(2, "0");
+  const d = String(dt.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+};
+
 /* ---------------- UI helpers ---------------- */
 const StatPill = ({ label, value, tone = "secondary", to }) => {
   const content = (
@@ -120,14 +129,16 @@ const StatPill = ({ label, value, tone = "secondary", to }) => {
   );
 };
 
-const Tile = ({ title, value, variant = "secondary", hint, to }) => {
+const Tile = ({ title, value, variant = "secondary", hint, to, onClick }) => {
   const body = (
     <div
       className={`card border-0 shadow-sm rounded-4 h-100 bg-${variant} bg-opacity-10`}
       style={{
-        cursor: to ? "pointer" : "default",
+        cursor: to || onClick ? "pointer" : "default",
         transition: "transform .12s ease, box-shadow .12s ease",
       }}
+      onClick={onClick}
+      role={onClick ? "button" : undefined}
     >
       <div className="card-body">
         <div className="d-flex justify-content-between gap-2">
@@ -145,7 +156,7 @@ const Tile = ({ title, value, variant = "secondary", hint, to }) => {
 
         <div className="small text-muted mt-1">{hint || "Live snapshot"}</div>
 
-        {to ? (
+        {(to || onClick) ? (
           <div className="mt-3">
             <span className={`btn btn-sm btn-outline-${variant === "dark" ? "dark" : "secondary"}`}>
               View details
@@ -156,20 +167,29 @@ const Tile = ({ title, value, variant = "secondary", hint, to }) => {
     </div>
   );
 
-  return to ? (
-    <Link to={to} style={{ textDecoration: "none", color: "inherit" }}>
-      {body}
-    </Link>
-  ) : (
-    body
-  );
+  if (to) {
+    return (
+      <Link to={to} style={{ textDecoration: "none", color: "inherit" }}>
+        {body}
+      </Link>
+    );
+  }
+  return body;
 };
 
 /* ---------------- Component ---------------- */
 export default function TransportDashboard() {
   const navigate = useNavigate();
-  const { isAdmin, isSuperadmin, isAccounts, isTransport } = useMemo(getRoleFlags, []);
-  const canUse = isTransport || isAdmin || isSuperadmin || isAccounts;
+  const { isAdmin, isSuperadmin, isAccounts, isTransport, isDriver, isConductor } = useMemo(getRoleFlags, []);
+
+  // who can use transport dashboard page
+  const canUse = isTransport || isAdmin || isSuperadmin || isAccounts || isDriver || isConductor;
+
+  // who can see report page
+  const canSeeReport = isTransport || isAdmin || isSuperadmin || isAccounts;
+
+  // who can see mobile marking page
+  const canMarkMobile = isDriver || isConductor || isTransport || isAdmin || isSuperadmin;
 
   // Session (shared with Transportation page)
   const [session, setSession] = useState(() => {
@@ -182,7 +202,7 @@ export default function TransportDashboard() {
   const [buses, setBuses] = useState([]);
   const [recentAssignments, setRecentAssignments] = useState([]);
 
-  // ✅ NEW: Staff counts
+  // Staff counts
   const [staffCounts, setStaffCounts] = useState({
     total: 0,
     drivers: 0,
@@ -237,11 +257,7 @@ export default function TransportDashboard() {
       setLastUpdated(new Date());
     } catch (e) {
       console.error("fetchRoutes error:", e);
-      setError(
-        e?.response?.data?.message ||
-          e?.response?.data?.error ||
-          "Failed to load transport routes."
-      );
+      setError(e?.response?.data?.message || e?.response?.data?.error || "Failed to load transport routes.");
     } finally {
       setLoading((s) => ({ ...s, routes: false }));
     }
@@ -290,7 +306,7 @@ export default function TransportDashboard() {
     }
   }, [canUse, sessionCfg]);
 
-  // For KPI: Students with transport (fallback)
+  // KPI: Students with transport (fallback)
   const [studentsWithTransportCount, setStudentsWithTransportCount] = useState(0);
 
   const fetchStudentsWithTransport = useCallback(async () => {
@@ -329,13 +345,12 @@ export default function TransportDashboard() {
     }
   }, [canUse, sessionCfg]);
 
-  // ✅ Staff counts
+  // Staff counts
   const fetchStaffCounts = useCallback(async () => {
     if (!canUse) return;
     setLoading((s) => ({ ...s, staff: true }));
     try {
       const res = await api.get(STAFF_BASE, sessionCfg);
-      // IMPORTANT: response shape is { staff: [...] }
       const list = res?.data?.staff || asArray(res.data);
       const arr = Array.isArray(list) ? list : [];
 
@@ -350,11 +365,11 @@ export default function TransportDashboard() {
         if (t === "driver") drivers++;
         if (t === "conductor") conductors++;
 
-        const staffStatus = lower(r?.status); // TransportStaff.status
+        const staffStatus = lower(r?.status);
         if (staffStatus === "inactive") inactiveStaff++;
         else activeStaff++;
 
-        const userStatus = lower(r?.user?.status); // User.status
+        const userStatus = lower(r?.user?.status);
         if (userStatus === "disabled") userDisabled++;
       }
 
@@ -411,43 +426,36 @@ export default function TransportDashboard() {
     timersRef.current.staff = setInterval(fetchStaffCounts, POLLING_INTERVAL);
 
     return () => Object.values(timersRef.current || {}).forEach(clearInterval);
-  }, [
-    autoRefresh,
-    canUse,
-    fetchRoutes,
-    fetchBuses,
-    fetchRecentAssignments,
-    fetchStudentsWithTransport,
-    fetchStaffCounts,
-  ]);
+  }, [autoRefresh, canUse, fetchRoutes, fetchBuses, fetchRecentAssignments, fetchStudentsWithTransport, fetchStaffCounts]);
 
   /* ---------------- Derived KPI ---------------- */
   const busKpis = useMemo(() => {
     const total = buses.length;
     const active = buses.filter((b) => b.active !== false).length;
-    return { total, active };
+    const withDriver = buses.filter((b) => !!b?.driver_user_id).length;
+    const withConductor = buses.filter((b) => !!b?.conductor_user_id).length;
+    return { total, active, withDriver, withConductor };
   }, [buses]);
 
   const routeKpis = useMemo(() => {
     const total = routes.length;
-    const withFine = routes.filter(
-      (r) => Number(r?.finePercentage || 0) > 0 || !!r?.fineStartDate
-    ).length;
+    const withFine = routes.filter((r) => Number(r?.finePercentage || 0) > 0 || !!r?.fineStartDate).length;
     const uniqVillages = uniqCount(routes, (r) => safeStr(r?.Villages).toLowerCase());
     return { total, withFine, uniqVillages };
   }, [routes]);
 
-  const busy =
-    loading.routes || loading.buses || loading.assignments || loading.students || loading.staff;
+  const busy = loading.routes || loading.buses || loading.assignments || loading.students || loading.staff;
 
-  const quickLinks = useMemo(
-    () => [
+  /* ---------------- Quick Links (UPDATED) ---------------- */
+  const quickLinks = useMemo(() => {
+    const links = [
       {
         label: "Transport Routes",
         icon: "bi-signpost-split",
         href: "/transportations",
         gradient: "linear-gradient(135deg, #0ea5e9, #0369a1)",
         desc: `Routes: ${routeKpis.total} · Fine: ${routeKpis.withFine}`,
+        show: isTransport || isAdmin || isSuperadmin || isAccounts,
       },
       {
         label: "Buses",
@@ -455,6 +463,7 @@ export default function TransportDashboard() {
         href: "/buses",
         gradient: "linear-gradient(135deg, #22c55e, #16a34a)",
         desc: `Total: ${busKpis.total} · Active: ${busKpis.active}`,
+        show: isTransport || isAdmin || isSuperadmin || isAccounts,
       },
       {
         label: "Assign Students",
@@ -462,6 +471,7 @@ export default function TransportDashboard() {
         href: "/student-transport-assignments",
         gradient: "linear-gradient(135deg, #6366f1, #4338ca)",
         desc: `Live: ${studentsWithTransportCount} students`,
+        show: isTransport || isAdmin || isSuperadmin || isAccounts,
       },
       {
         label: "Drivers / Conductors",
@@ -469,31 +479,100 @@ export default function TransportDashboard() {
         href: "/transport-staff",
         gradient: "linear-gradient(135deg, #ef4444, #b91c1c)",
         desc: `Drivers: ${staffCounts.drivers} · Conductors: ${staffCounts.conductors}`,
+        show: isTransport || isAdmin || isSuperadmin || isAccounts,
       },
-    ],
-    [routeKpis.total, routeKpis.withFine, busKpis.total, busKpis.active, studentsWithTransportCount, staffCounts]
-  );
 
-  const tiles = useMemo(
-    () => [
-      { title: "Routes (Session)", value: routeKpis.total, variant: "info", to: "/transportations" },
-      { title: "Routes with Fine", value: routeKpis.withFine, variant: "warning", to: "/transportations" },
-      { title: "Unique Villages", value: routeKpis.uniqVillages, variant: "secondary", to: "/transportations" },
+      // ✅ NEW: Attendance Mobile
+      {
+        label: "Mark Attendance (Mobile)",
+        icon: "bi-check2-square",
+        href: "/transport-attendance",
+        gradient: "linear-gradient(135deg, #f59e0b, #b45309)",
+        desc: "Pickup/Drop marking (Driver/Conductor)",
+        show: canMarkMobile,
+      },
 
-      { title: "Total Buses", value: busKpis.total, variant: "success", to: "/buses" },
-      { title: "Active Buses", value: busKpis.active, variant: "primary", to: "/buses" },
+      // ✅ NEW: Attendance Report
+      {
+        label: "Attendance Report",
+        icon: "bi-clipboard-data",
+        href: "/transport-attendance-report",
+        gradient: "linear-gradient(135deg, #14b8a6, #0f766e)",
+        desc: `Bus-wise present/absent · ${todayYYYYMMDD()}`,
+        show: canSeeReport,
+      },
+    ];
 
-      { title: "Students w/ Transport", value: studentsWithTransportCount, variant: "dark", to: "/student-transport-assignments" },
+    return links.filter((x) => x.show);
+  }, [
+    routeKpis.total,
+    routeKpis.withFine,
+    busKpis.total,
+    busKpis.active,
+    studentsWithTransportCount,
+    staffCounts,
+    isTransport,
+    isAdmin,
+    isSuperadmin,
+    isAccounts,
+    canMarkMobile,
+    canSeeReport,
+  ]);
 
-      { title: "Drivers", value: staffCounts.drivers, variant: "danger", to: "/transport-staff" },
-      { title: "Conductors", value: staffCounts.conductors, variant: "danger", to: "/transport-staff" },
-      { title: "Staff Total", value: staffCounts.total, variant: "secondary", to: "/transport-staff" },
-      { title: "Staff Inactive", value: staffCounts.inactiveStaff, variant: "warning", to: "/transport-staff" },
-      { title: "User Disabled", value: staffCounts.userDisabled, variant: "warning", to: "/transport-staff" },
-      { title: "Recent Assignments", value: recentAssignments.length, variant: "secondary", to: "/student-transport-assignments" },
-    ],
-    [routeKpis, busKpis, studentsWithTransportCount, staffCounts, recentAssignments.length]
-  );
+  /* ---------------- Tiles (UPDATED) ---------------- */
+  const tiles = useMemo(() => {
+    const t = [
+      { title: "Routes (Session)", value: routeKpis.total, variant: "info", to: "/transportations", show: canSeeReport || isTransport || isAdmin || isSuperadmin || isAccounts },
+      { title: "Routes with Fine", value: routeKpis.withFine, variant: "warning", to: "/transportations", show: canSeeReport || isTransport || isAdmin || isSuperadmin || isAccounts },
+      { title: "Unique Villages", value: routeKpis.uniqVillages, variant: "secondary", to: "/transportations", show: canSeeReport || isTransport || isAdmin || isSuperadmin || isAccounts },
+
+      { title: "Total Buses", value: busKpis.total, variant: "success", to: "/buses", show: isTransport || isAdmin || isSuperadmin || isAccounts },
+      { title: "Active Buses", value: busKpis.active, variant: "primary", to: "/buses", show: isTransport || isAdmin || isSuperadmin || isAccounts },
+
+      { title: "Buses w/ Driver", value: busKpis.withDriver, variant: "dark", to: "/buses", show: isTransport || isAdmin || isSuperadmin || isAccounts },
+      { title: "Buses w/ Conductor", value: busKpis.withConductor, variant: "dark", to: "/buses", show: isTransport || isAdmin || isSuperadmin || isAccounts },
+
+      { title: "Students w/ Transport", value: studentsWithTransportCount, variant: "dark", to: "/student-transport-assignments", show: isTransport || isAdmin || isSuperadmin || isAccounts },
+
+      { title: "Drivers", value: staffCounts.drivers, variant: "danger", to: "/transport-staff", show: isTransport || isAdmin || isSuperadmin || isAccounts },
+      { title: "Conductors", value: staffCounts.conductors, variant: "danger", to: "/transport-staff", show: isTransport || isAdmin || isSuperadmin || isAccounts },
+      { title: "Staff Total", value: staffCounts.total, variant: "secondary", to: "/transport-staff", show: isTransport || isAdmin || isSuperadmin || isAccounts },
+      { title: "Staff Inactive", value: staffCounts.inactiveStaff, variant: "warning", to: "/transport-staff", show: isTransport || isAdmin || isSuperadmin || isAccounts },
+      { title: "User Disabled", value: staffCounts.userDisabled, variant: "warning", to: "/transport-staff", show: isTransport || isAdmin || isSuperadmin || isAccounts },
+
+      // ✅ NEW: Attendance
+      {
+        title: "Mark Attendance",
+        value: "Open",
+        variant: "warning",
+        to: "/transport-attendance",
+        show: canMarkMobile,
+      },
+      {
+        title: "Attendance Report",
+        value: "Open",
+        variant: "info",
+        to: "/transport-attendance-report",
+        show: canSeeReport,
+      },
+
+      { title: "Recent Assignments", value: recentAssignments.length, variant: "secondary", to: "/student-transport-assignments", show: isTransport || isAdmin || isSuperadmin || isAccounts },
+    ];
+
+    return t.filter((x) => x.show);
+  }, [
+    routeKpis,
+    busKpis,
+    studentsWithTransportCount,
+    staffCounts,
+    recentAssignments.length,
+    isTransport,
+    isAdmin,
+    isSuperadmin,
+    isAccounts,
+    canMarkMobile,
+    canSeeReport,
+  ]);
 
   if (!canUse) {
     return (
@@ -539,7 +618,7 @@ export default function TransportDashboard() {
               </div>
 
               <div className="text-muted small mt-1">
-                Routes · Buses · Assignments · Staff{" · "}
+                Routes · Buses · Assignments · Staff · Attendance{" · "}
                 {lastUpdated ? `Last updated: ${lastUpdated.toLocaleString("en-IN")}` : "—"}
               </div>
 
@@ -549,6 +628,14 @@ export default function TransportDashboard() {
                 <StatPill label="Conductors" value={staffCounts.conductors} tone="danger" to="/transport-staff" />
                 <StatPill label="Buses Active" value={busKpis.active} tone="primary" to="/buses" />
                 <StatPill label="Routes" value={routeKpis.total} tone="info" to="/transportations" />
+
+                {canMarkMobile ? (
+                  <StatPill label="Mark Attendance" value="Open" tone="warning" to="/transport-attendance" />
+                ) : null}
+
+                {canSeeReport ? (
+                  <StatPill label="Attendance Report" value="Open" tone="info" to="/transport-attendance-report" />
+                ) : null}
               </div>
             </div>
 
@@ -638,7 +725,7 @@ export default function TransportDashboard() {
           ))}
         </div>
 
-        {/* KPI tiles (more “dashboard-y”, clickable) */}
+        {/* KPI tiles */}
         <div className="row g-3 mb-4">
           {tiles.map((t, i) => (
             <div key={i} className="col-12 col-sm-6 col-lg-3">
@@ -654,95 +741,102 @@ export default function TransportDashboard() {
         </div>
 
         {/* Recent Assignments */}
-        <div className="row g-4">
-          <div className="col-12">
-            <div className="card shadow-sm rounded-4 overflow-hidden">
-              <div className="card-header bg-white border-0 d-flex flex-wrap justify-content-between align-items-center gap-2">
-                <div className="fw-semibold d-flex align-items-center gap-2">
-                  Recent Student Transport Assignments
-                  <span className="badge text-bg-light border">Session: {session}</span>
+        {(isTransport || isAdmin || isSuperadmin || isAccounts) ? (
+          <div className="row g-4">
+            <div className="col-12">
+              <div className="card shadow-sm rounded-4 overflow-hidden">
+                <div className="card-header bg-white border-0 d-flex flex-wrap justify-content-between align-items-center gap-2">
+                  <div className="fw-semibold d-flex align-items-center gap-2">
+                    Recent Student Transport Assignments
+                    <span className="badge text-bg-light border">Session: {session}</span>
+                  </div>
+
+                  <div className="d-flex gap-2 flex-wrap">
+                    <button
+                      className="btn btn-sm btn-outline-secondary"
+                      onClick={() => navigate("/transportations")}
+                      title="Open Routes"
+                    >
+                      Routes
+                    </button>
+                    <Link className="btn btn-sm btn-outline-primary" to="/student-transport-assignments">
+                      Assignments
+                    </Link>
+                    <Link className="btn btn-sm btn-outline-success" to="/buses">
+                      Buses
+                    </Link>
+                    <Link className="btn btn-sm btn-outline-danger" to="/transport-staff">
+                      Staff
+                    </Link>
+                    {canSeeReport ? (
+                      <Link className="btn btn-sm btn-outline-info" to="/transport-attendance-report">
+                        Attendance Report
+                      </Link>
+                    ) : null}
+                  </div>
                 </div>
 
-                <div className="d-flex gap-2 flex-wrap">
-                  <button
-                    className="btn btn-sm btn-outline-secondary"
-                    onClick={() => navigate("/transportations")}
-                    title="Open Routes"
-                  >
-                    Routes
-                  </button>
-                  <Link className="btn btn-sm btn-outline-primary" to="/student-transport-assignments">
-                    Assignments
-                  </Link>
-                  <Link className="btn btn-sm btn-outline-success" to="/buses">
-                    Buses
-                  </Link>
-                  <Link className="btn btn-sm btn-outline-danger" to="/transport-staff">
-                    Staff
-                  </Link>
-                </div>
-              </div>
-
-              <div className="table-responsive">
-                <table className="table table-hover align-middle mb-0">
-                  <thead className="table-light">
-                    <tr>
-                      <th style={{ width: 60 }}>#</th>
-                      <th>Student ID</th>
-                      <th>Pickup Bus</th>
-                      <th>Drop Bus</th>
-                      <th>Pickup Route</th>
-                      <th>Drop Route</th>
-                      <th>Effective From</th>
-                      <th>Created</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {loading.assignments && (
+                <div className="table-responsive">
+                  <table className="table table-hover align-middle mb-0">
+                    <thead className="table-light">
                       <tr>
-                        <td colSpan={8} className="text-center py-4 text-muted">
-                          Loading…
-                        </td>
+                        <th style={{ width: 60 }}>#</th>
+                        <th>Student ID</th>
+                        <th>Pickup Bus</th>
+                        <th>Drop Bus</th>
+                        <th>Pickup Route</th>
+                        <th>Drop Route</th>
+                        <th>Effective From</th>
+                        <th>Created</th>
                       </tr>
-                    )}
-
-                    {!loading.assignments &&
-                      recentAssignments.map((a, idx) => (
-                        <tr key={a.id || idx}>
-                          <td className="text-muted">{idx + 1}</td>
-                          <td className="fw-semibold">{safe(a.student_id)}</td>
-                          <td>{safe(a.pickup_bus_id)}</td>
-                          <td>{safe(a.drop_bus_id)}</td>
-                          <td>{safe(a.pickup_route_id)}</td>
-                          <td>{safe(a.drop_route_id)}</td>
-                          <td className="text-muted">{fmtDate(a.effective_from)}</td>
-                          <td className="text-muted">{fmtDateTime(a.createdAt)}</td>
+                    </thead>
+                    <tbody>
+                      {loading.assignments && (
+                        <tr>
+                          <td colSpan={8} className="text-center py-4 text-muted">
+                            Loading…
+                          </td>
                         </tr>
-                      ))}
+                      )}
 
-                    {!loading.assignments && recentAssignments.length === 0 && (
-                      <tr>
-                        <td colSpan={8} className="text-center py-4 text-muted">
-                          No assignments found.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
+                      {!loading.assignments &&
+                        recentAssignments.map((a, idx) => (
+                          <tr key={a.id || idx}>
+                            <td className="text-muted">{idx + 1}</td>
+                            <td className="fw-semibold">{safe(a.student_id)}</td>
+                            <td>{safe(a.pickup_bus_id)}</td>
+                            <td>{safe(a.drop_bus_id)}</td>
+                            <td>{safe(a.pickup_route_id)}</td>
+                            <td>{safe(a.drop_route_id)}</td>
+                            <td className="text-muted">{fmtDate(a.effective_from)}</td>
+                            <td className="text-muted">{fmtDateTime(a.createdAt)}</td>
+                          </tr>
+                        ))}
 
-              <div className="card-footer bg-white border-0 small text-muted d-flex flex-wrap justify-content-between gap-2">
-                <div>
-                  Tip: Use <strong>Assignments</strong> to set Pickup/Drop buses with effective dates.
+                      {!loading.assignments && recentAssignments.length === 0 && (
+                        <tr>
+                          <td colSpan={8} className="text-center py-4 text-muted">
+                            No assignments found.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
                 </div>
-                <div>
-                  Auto-refresh: <strong>{autoRefresh ? "On" : "Off"}</strong> · Polling:{" "}
-                  <code>{POLLING_INTERVAL / 1000}s</code>
+
+                <div className="card-footer bg-white border-0 small text-muted d-flex flex-wrap justify-content-between gap-2">
+                  <div>
+                    Tip: Use <strong>Assignments</strong> to set Pickup/Drop buses with effective dates.
+                  </div>
+                  <div>
+                    Auto-refresh: <strong>{autoRefresh ? "On" : "Off"}</strong> · Polling:{" "}
+                    <code>{POLLING_INTERVAL / 1000}s</code>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
-        </div>
+        ) : null}
 
         {/* Styles */}
         <style>{`
@@ -756,7 +850,7 @@ export default function TransportDashboard() {
           a:hover .card { transform: translateY(-2px); box-shadow: 0 12px 28px rgba(0,0,0,.10); }
         `}</style>
 
-        {/* Bootstrap Icons (if not already globally included) */}
+        {/* Bootstrap Icons */}
         <link
           rel="stylesheet"
           href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css"

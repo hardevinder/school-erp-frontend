@@ -1,3 +1,4 @@
+// src/components/RoleAwareDashboard.jsx
 import React from "react";
 import { Navigate } from "react-router-dom";
 import { useRoles } from "../hooks/useRoles";
@@ -15,6 +16,9 @@ import LibraryDashboard from "./LibraryDashboard";
 // ✅ Transport Dashboard
 import TransportDashboard from "./TransportDashboard";
 
+// ✅ NEW: Transport Attendance (Mobile UI for Driver/Conductor)
+import TransportAttendanceMobile from "../pages/TransportAttendanceMobile";
+
 // ✅ NEW: Examination Dashboard
 import ExaminationDashboard from "./ExaminationDashboard";
 
@@ -29,10 +33,17 @@ export default function RoleAwareDashboard() {
     case "admission":
       return <AdmissionDashboard />;
 
+    // ✅ Transport office / admin
     case "transport":
+    case "transport_admin":
       return <TransportDashboard />;
 
-    // ✅ NEW: Examination role
+    // ✅ Driver/Conductor should land directly on attendance page
+    case "driver":
+    case "conductor":
+      return <TransportAttendanceMobile />;
+
+    // ✅ Examination role
     case "examination":
       return <ExaminationDashboard />;
 

@@ -20,22 +20,31 @@ const getRoleFlags = () => {
 
 const safeStr = (v) => String(v ?? "").trim();
 
+const fmtYYYYMMDD = (d = new Date()) => {
+  try {
+    return new Date(d).toISOString().slice(0, 10);
+  } catch {
+    return "";
+  }
+};
+
 const StudentTransportAssignments = () => {
-  useMemo(getRoleFlags, []); // keeps same pattern; not used directly right now
+  useMemo(getRoleFlags, []); // keep pattern
 
   const [students, setStudents] = useState([]);
   const [buses, setBuses] = useState([]);
   const [routes, setRoutes] = useState([]);
 
   const [search, setSearch] = useState("");
-
-  // ✅ Route filter to show only students of that route
   const [selectedRouteFilterId, setSelectedRouteFilterId] = useState("");
 
   const [loading, setLoading] = useState(false);
 
   // used for dialog current assignment preview
   const [activeAssignment, setActiveAssignment] = useState(null);
+
+  // compact paging
+  const [visibleCount, setVisibleCount] = useState(40);
 
   // -------------------- Load dropdown data --------------------
   const fetchStudents = async () => {
@@ -58,13 +67,29 @@ const StudentTransportAssignments = () => {
     setRoutes(Array.isArray(res.data) ? res.data : []);
   };
 
+  const refreshAll = async () => {
+    setLoading(true);
+    try {
+      await Promise.all([fetchStudents(), fetchBuses(), fetchRoutes()]);
+      Swal.fire("Refreshed", "Data refreshed.", "success");
+    } catch (e) {
+      console.error("Refresh error:", e);
+      Swal.fire("Error", "Failed to refresh data.", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     (async () => {
+      setLoading(true);
       try {
         await Promise.all([fetchStudents(), fetchBuses(), fetchRoutes()]);
       } catch (e) {
         console.error("Load dropdowns error:", e);
         Swal.fire("Error", "Failed to load Students/Buses/Routes.", "error");
+      } finally {
+        setLoading(false);
       }
     })();
   }, []);
@@ -92,7 +117,9 @@ const StudentTransportAssignments = () => {
   // -------------------- helpers: names/labels --------------------
   const findBusNo = (id) => {
     const b = buses.find((x) => String(x.id) === String(id));
-    return b ? safeStr(b.bus_no) : "—";
+    if (!b) return "—";
+    const label = `${safeStr(b.bus_no)}${b.reg_no ? ` (${safeStr(b.reg_no)})` : ""}`;
+    return label || "—";
   };
 
   const getStudentLabel = (studentId) => {
@@ -124,69 +151,51 @@ const StudentTransportAssignments = () => {
       }`;
     }
     // fallback to lookup by route_id
-    const routeObj = routes.find(
-      (r) => String(r.id) === String(s?.route_id || "")
-    );
+    const routeObj = routes.find((r) => String(r.id) === String(s?.route_id || ""));
     return routeObj ? formatRouteLabel(routeObj) : "—";
   };
 
-  // class/section display
   const getClassName = (s) =>
     safeStr(s?.class_name || s?.Class?.class_name || s?.ClassName || "") || "—";
 
   const getSectionName = (s) =>
-    safeStr(
-      s?.section_name || s?.Section?.section_name || s?.SectionName || ""
-    ) || "—";
+    safeStr(s?.section_name || s?.Section?.section_name || s?.SectionName || "") ||
+    "—";
 
-  // -------------------- PROFESSIONAL DIALOG (SweetAlert2) --------------------
+  // -------------------- Assignment modal (SweetAlert2) --------------------
   const openAssignDialog = async (studentId) => {
     if (!studentId) {
       return Swal.fire("Validation", "Please select a student.", "warning");
     }
 
-    const defaultEff = new Date().toISOString().slice(0, 10);
+    const defaultDate = fmtYYYYMMDD(new Date());
 
     // fetch current active assignment for preview + defaults
-    const current = await fetchActiveAssignment(studentId, defaultEff);
+    const current = await fetchActiveAssignment(studentId, defaultDate);
 
     const curPickupBus = current?.pickup_bus_id ? String(current.pickup_bus_id) : "";
     const curDropBus = current?.drop_bus_id ? String(current.drop_bus_id) : "";
-    const curPickupRoute = current?.pickup_route_id ? String(current.pickup_route_id) : "";
-    const curDropRoute = current?.drop_route_id ? String(current.drop_route_id) : "";
 
     const busOptionsHtml = buses
       .filter((b) => b.active !== false)
       .map((b) => {
-        const label = `${safeStr(b.bus_no)}${b.reg_no ? ` (${b.reg_no})` : ""}`;
+        const label = `${safeStr(b.bus_no)}${b.reg_no ? ` (${safeStr(b.reg_no)})` : ""}`;
         return `<option value="${b.id}">${label}</option>`;
       })
       .join("");
 
-    const routeOptionsHtml = routes
-      .map((r) => {
-        const label = safeStr(
-          r.RouteName || r.Villages || r.village || r.villages
-        );
-        return `<option value="${r.id}">${label}</option>`;
-      })
-      .join("");
-
     const result = await Swal.fire({
-      title: "Transport Assignment",
+      title: "Assign Pickup / Drop Bus",
       icon: "info",
-
       position: "center",
       focusConfirm: false,
       scrollbarPadding: false,
-
       showCancelButton: true,
-      confirmButtonText: "Save Assignment",
+      confirmButtonText: "Save",
       cancelButtonText: "Cancel",
-
       allowOutsideClick: false,
       allowEscapeKey: false,
-      width: 760,
+      width: 820,
 
       willOpen: () => {
         document.body.style.overflow = "hidden";
@@ -206,82 +215,37 @@ const StudentTransportAssignments = () => {
 
       html: `
         <style>
-          .swal-transport-card{
-            padding: 16px 16px 14px 16px !important;
-            border-radius: 14px !important;
-          }
-          .swal-title-compact{
-            font-size: 18px !important;
-            margin: 6px 0 10px 0 !important;
-          }
-          .swal-actions-row{
-            gap: 10px !important;
-          }
+          .swal-transport-card{ padding: 14px 14px 12px 14px !important; border-radius: 16px !important; }
+          .swal-title-compact{ font-size: 18px !important; margin: 6px 0 10px 0 !important; }
+          .swal-actions-row{ gap: 10px !important; }
           .ta-head{
-            display:flex;
-            justify-content:space-between;
-            align-items:flex-start;
-            gap:12px;
-            padding: 10px 12px;
-            border: 1px solid rgba(0,0,0,0.08);
-            border-radius: 12px;
-            background: rgba(0,0,0,0.03);
-            margin-bottom: 12px;
-            text-align:left;
+            display:flex; justify-content:space-between; align-items:flex-start; gap:12px;
+            padding: 10px 12px; border: 1px solid rgba(0,0,0,0.08);
+            border-radius: 14px; background: rgba(0,0,0,0.03); margin-bottom: 12px; text-align:left;
           }
-          .ta-student{
-            font-weight: 700;
-            font-size: 14px;
-          }
-          .ta-sub{
-            font-size: 12px;
-            opacity: 0.85;
-            margin-top: 4px;
-            line-height: 1.35;
-          }
-          .ta-grid{
-            display:grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 12px;
-            text-align:left;
-          }
-          .ta-field label{
-            display:block;
-            font-size: 12px;
-            font-weight: 700;
-            margin: 0 0 6px 0;
-          }
-          .ta-field select, .ta-field input{
-            width: 100%;
-            height: 40px;
-            border-radius: 10px;
-            border: 1px solid rgba(0,0,0,0.14);
-            padding: 8px 10px;
-            outline: none;
-          }
-          .ta-field select:focus, .ta-field input:focus{
-            border-color: rgba(0,0,0,0.35);
-          }
-          .ta-full{
-            grid-column: 1 / span 2;
-          }
-          .ta-note{
-            margin-top: 8px;
-            font-size: 12px;
-            opacity: 0.85;
-            padding: 10px 12px;
-            border-left: 4px solid rgba(25,135,84,0.55);
-            background: rgba(25,135,84,0.06);
-            border-radius: 10px;
-          }
+          .ta-student{ font-weight: 800; font-size: 14px; }
+          .ta-sub{ font-size: 12px; opacity: 0.85; margin-top: 4px; line-height: 1.35; }
           .ta-pill{
-            display:inline-block;
-            padding: 2px 8px;
-            border-radius: 999px;
-            font-size: 11px;
-            background: rgba(0,0,0,0.06);
-            border: 1px solid rgba(0,0,0,0.10);
-            margin-left: 6px;
+            display:inline-flex; align-items:center; gap:6px;
+            padding: 4px 10px; border-radius: 999px; font-size: 11px;
+            background: rgba(0,0,0,0.06); border: 1px solid rgba(0,0,0,0.10);
+            margin-right: 6px; margin-top: 6px;
+          }
+          .ta-grid{ display:grid; grid-template-columns: 1fr 1fr; gap: 12px; text-align:left; }
+          .ta-field label{ display:block; font-size: 12px; font-weight: 800; margin: 0 0 6px 0; }
+          .ta-field select, .ta-field input{
+            width: 100%; height: 40px; border-radius: 12px;
+            border: 1px solid rgba(0,0,0,0.14); padding: 8px 10px; outline: none;
+          }
+          .ta-field select:focus, .ta-field input:focus{ border-color: rgba(0,0,0,0.35); }
+          .ta-full{ grid-column: 1 / span 2; }
+          .ta-note{
+            margin-top: 8px; font-size: 12px; opacity: 0.9;
+            padding: 10px 12px; border-left: 4px solid rgba(25,135,84,0.55);
+            background: rgba(25,135,84,0.06); border-radius: 12px;
+          }
+          .ta-mini{
+            font-size: 12px; opacity: 0.85; margin-top: 4px;
           }
           @media (max-width: 620px){
             .ta-grid{ grid-template-columns: 1fr; }
@@ -293,17 +257,12 @@ const StudentTransportAssignments = () => {
           <div>
             <div class="ta-student">${safeStr(getStudentLabel(studentId))}</div>
             <div class="ta-sub">
-              Current assignment:
-              <span class="ta-pill">Pickup: <b>${findBusNo(
-                current?.pickup_bus_id
-              )}</b></span>
-              <span class="ta-pill">Drop: <b>${findBusNo(
-                current?.drop_bus_id
-              )}</b></span>
-              <span class="ta-pill">From: <b>${safeStr(
-                current?.effective_from || "—"
-              )}</b></span>
+              <span class="ta-pill">Pickup: <b>${findBusNo(current?.pickup_bus_id)}</b></span>
+              <span class="ta-pill">Drop: <b>${findBusNo(current?.drop_bus_id)}</b></span>
+              <span class="ta-pill">Start: <b>${safeStr(current?.start_date || "—")}</b></span>
+              <span class="ta-pill">Status: <b>${safeStr(current?.status || "—")}</b></span>
             </div>
+            <div class="ta-mini">Saving will close existing active assignment and create a new one.</div>
           </div>
         </div>
 
@@ -325,26 +284,20 @@ const StudentTransportAssignments = () => {
           </div>
 
           <div class="ta-field">
-            <label>Pickup Route (optional)</label>
-            <select id="sw_pickupRoute">
-              <option value="">-- Select --</option>
-              ${routeOptionsHtml}
-            </select>
+            <label>Pickup Stop (optional)</label>
+            <input id="sw_pickupStop" type="text" placeholder="e.g. Main Gate" />
           </div>
 
           <div class="ta-field">
-            <label>Drop Route (optional)</label>
-            <select id="sw_dropRoute">
-              <option value="">-- Select --</option>
-              ${routeOptionsHtml}
-            </select>
+            <label>Drop Stop (optional)</label>
+            <input id="sw_dropStop" type="text" placeholder="e.g. Bus Stand" />
           </div>
 
           <div class="ta-field ta-full">
-            <label>Effective From</label>
-            <input id="sw_eff" type="date" value="${defaultEff}" />
+            <label>Start Date</label>
+            <input id="sw_start" type="date" value="${defaultDate}" />
             <div class="ta-note">
-              Saving will close any existing active assignment for this student and create a new one.
+              Tip: If student changes bus from a date, choose that date. System will auto-close previous record.
             </div>
           </div>
         </div>
@@ -353,69 +306,63 @@ const StudentTransportAssignments = () => {
       didOpen: () => {
         const pb = document.getElementById("sw_pickupBus");
         const db = document.getElementById("sw_dropBus");
-        const pr = document.getElementById("sw_pickupRoute");
-        const dr = document.getElementById("sw_dropRoute");
-        const popup = Swal.getPopup();
+        const ps = document.getElementById("sw_pickupStop");
+        const ds = document.getElementById("sw_dropStop");
 
         // defaults from current assignment
         if (pb) pb.value = curPickupBus || "";
         if (db) db.value = curDropBus || "";
-        if (pr) pr.value = curPickupRoute || "";
-        if (dr) dr.value = curDropRoute || "";
 
+        // show current stops if present
+        if (ps && current?.pickup_stop) ps.value = safeStr(current.pickup_stop);
+        if (ds && current?.drop_stop) ds.value = safeStr(current.drop_stop);
+
+        const popup = Swal.getPopup();
         if (popup) popup.scrollTop = 0;
       },
 
       preConfirm: () => {
         const pb = document.getElementById("sw_pickupBus")?.value || "";
         const db = document.getElementById("sw_dropBus")?.value || "";
-        const pr = document.getElementById("sw_pickupRoute")?.value || "";
-        const dr = document.getElementById("sw_dropRoute")?.value || "";
-        const eff = document.getElementById("sw_eff")?.value || "";
+        const ps = document.getElementById("sw_pickupStop")?.value || "";
+        const ds = document.getElementById("sw_dropStop")?.value || "";
+        const start = document.getElementById("sw_start")?.value || "";
 
-        if (!eff) {
-          Swal.showValidationMessage("Please select Effective From date.");
+        if (!start) {
+          Swal.showValidationMessage("Please select Start Date.");
           return false;
         }
 
         if (!pb && !db) {
-          Swal.showValidationMessage(
-            "Please select at least Pickup Bus or Drop Bus."
-          );
+          Swal.showValidationMessage("Please select at least Pickup Bus or Drop Bus.");
           return false;
         }
 
-        return { pb, db, pr, dr, eff };
+        return { pb, db, ps, ds, start };
       },
     });
 
     if (!result.isConfirmed) return;
 
-    const { pb, db, pr, dr, eff } = result.value || {};
+    const { pb, db, ps, ds, start } = result.value || {};
 
+    // ✅ NEW controller expects start_date (or assign_date)
     const payload = {
       student_id: Number(studentId),
       pickup_bus_id: pb ? Number(pb) : null,
       drop_bus_id: db ? Number(db) : null,
-      pickup_route_id: pr ? Number(pr) : null,
-      drop_route_id: dr ? Number(dr) : null,
-      effective_from: eff,
+      pickup_stop: safeStr(ps) || null,
+      drop_stop: safeStr(ds) || null,
+      start_date: start,
     };
 
     setLoading(true);
     try {
-      const res = await api.post(
-        "/student-transport-assignments/assign",
-        payload
-      );
-      Swal.fire(
-        "Saved",
-        res?.data?.message || "Transport assignment saved successfully.",
-        "success"
-      );
+      const res = await api.post("/student-transport-assignments/assign", payload);
+      Swal.fire("Saved", res?.data?.message || "Bus assigned successfully.", "success");
 
       // refresh current assignment preview state
-      await fetchActiveAssignment(studentId, eff);
+      await fetchActiveAssignment(studentId, start);
     } catch (e) {
       console.error("Assign error:", e);
       const msg =
@@ -430,110 +377,225 @@ const StudentTransportAssignments = () => {
   };
 
   // -------------------- Search helpers --------------------
-  const filteredStudents = students.filter((s) => {
+  const filteredStudents = useMemo(() => {
     const q = safeStr(search).toLowerCase();
-    const name = safeStr(s?.name).toLowerCase();
-    const adm = safeStr(s?.admission_number).toLowerCase();
 
-    const textOk = !q || name.includes(q) || adm.includes(q);
+    return students.filter((s) => {
+      const name = safeStr(s?.name).toLowerCase();
+      const adm = safeStr(s?.admission_number).toLowerCase();
 
-    const routeOk =
-      !selectedRouteFilterId ||
-      String(s?.route_id || "") === String(selectedRouteFilterId);
+      const textOk = !q || name.includes(q) || adm.includes(q);
 
-    return textOk && routeOk;
-  });
+      const routeOk =
+        !selectedRouteFilterId ||
+        String(s?.route_id || "") === String(selectedRouteFilterId);
+
+      return textOk && routeOk;
+    });
+  }, [students, search, selectedRouteFilterId]);
+
+  const visibleStudents = filteredStudents.slice(0, visibleCount);
 
   // -------------------- UI --------------------
   return (
-    <div className="container mt-4">
-      <div className="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-        <h1 className="m-0">Assign Bus to Students</h1>
+    <div className="container-fluid mt-3">
+      <style>{`
+        /* Compact, modern table feel (Excel-like) */
+        .sta-toolbar{
+          position: sticky;
+          top: 0;
+          z-index: 5;
+          background: #fff;
+          border-bottom: 1px solid rgba(0,0,0,0.08);
+          padding: 10px 0;
+          margin-bottom: 12px;
+        }
+        .sta-title{
+          font-weight: 800;
+          letter-spacing: 0.2px;
+        }
+        .sta-subtitle{
+          font-size: 12px;
+          opacity: 0.75;
+          margin-top: 2px;
+        }
+        .sta-card{
+          border: 1px solid rgba(0,0,0,0.08);
+          border-radius: 14px;
+          box-shadow: 0 6px 18px rgba(0,0,0,0.04);
+        }
+        .sta-filter label{
+          font-size: 12px;
+          font-weight: 700;
+          margin-bottom: 6px;
+        }
+        .sta-filter .form-select,
+        .sta-filter .form-control{
+          height: 38px;
+          border-radius: 12px;
+        }
+        .sta-table thead th{
+          font-size: 12px;
+          font-weight: 800;
+          white-space: nowrap;
+        }
+        .sta-table tbody td{
+          font-size: 13px;
+          padding-top: 8px;
+          padding-bottom: 8px;
+          vertical-align: middle;
+        }
+        .sta-row:hover{
+          background: rgba(0,0,0,0.03);
+        }
+        .sta-pill{
+          display:inline-flex;
+          align-items:center;
+          gap:6px;
+          padding: 2px 10px;
+          border-radius: 999px;
+          border: 1px solid rgba(0,0,0,0.12);
+          background: rgba(0,0,0,0.04);
+          font-size: 12px;
+          white-space: nowrap;
+        }
+        .sta-btn{
+          border-radius: 10px;
+          padding: 6px 10px;
+          font-weight: 700;
+          font-size: 12px;
+        }
+        .sta-loading{
+          position: fixed;
+          inset: 0;
+          background: rgba(255,255,255,0.55);
+          backdrop-filter: blur(3px);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 2000;
+        }
+        .sta-loading .box{
+          border: 1px solid rgba(0,0,0,0.12);
+          background: #fff;
+          border-radius: 14px;
+          padding: 14px 16px;
+          box-shadow: 0 10px 30px rgba(0,0,0,0.10);
+          font-weight: 800;
+        }
+      `}</style>
 
-        <button
-          className="btn btn-outline-secondary"
-          onClick={async () => {
-            try {
-              await Promise.all([fetchStudents(), fetchBuses(), fetchRoutes()]);
-              Swal.fire("Refreshed", "Data refreshed.", "success");
-            } catch (e) {
-              Swal.fire("Error", "Failed to refresh data.", "error");
-            }
-          }}
-        >
-          Refresh
-        </button>
-      </div>
+      {loading && (
+        <div className="sta-loading">
+          <div className="box">Loading…</div>
+        </div>
+      )}
 
-      {/* ✅ Keep only Route Filter + Search */}
-      <div className="row g-3 mb-3">
-        <div className="col-md-6">
-          <label className="form-label">Filter by Route (Village — Cost)</label>
-          <select
-            className="form-select"
-            value={selectedRouteFilterId}
-            onChange={(e) => setSelectedRouteFilterId(e.target.value)}
-          >
-            <option value="">All Routes</option>
-            {routes.map((r) => (
-              <option key={r.id} value={r.id}>
-                {formatRouteLabel(r)}
-              </option>
-            ))}
-          </select>
-          <small className="text-muted">
-            Select route to show only students of that route.
-          </small>
+      {/* Sticky header / toolbar */}
+      <div className="sta-toolbar">
+        <div className="d-flex justify-content-between align-items-start flex-wrap gap-2">
+          <div>
+            <div className="sta-title h4 m-0">Assign Bus to Students</div>
+            <div className="sta-subtitle">
+              Quick assign pickup/drop bus. Previous active record auto-closes.
+            </div>
+          </div>
+
+          <div className="d-flex gap-2">
+            <button className="btn btn-outline-secondary sta-btn" onClick={refreshAll} disabled={loading}>
+              Refresh
+            </button>
+          </div>
         </div>
 
-        <div className="col-md-6">
-          <label className="form-label">
-            Search Student (Name / Admission No)
-          </label>
-          <input
-            className="form-control"
-            placeholder="Search..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
+        {/* Filters */}
+        <div className="row g-2 mt-2 sta-filter">
+          <div className="col-md-6">
+            <label className="form-label">Filter by Route (Village — Cost)</label>
+            <select
+              className="form-select"
+              value={selectedRouteFilterId}
+              onChange={(e) => {
+                setSelectedRouteFilterId(e.target.value);
+                setVisibleCount(40);
+              }}
+            >
+              <option value="">All Routes</option>
+              {routes.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {formatRouteLabel(r)}
+                </option>
+              ))}
+            </select>
+            <div className="text-muted" style={{ fontSize: 12 }}>
+              Select route to show only students of that route.
+            </div>
+          </div>
+
+          <div className="col-md-6">
+            <label className="form-label">Search Student (Name / Admission No)</label>
+            <input
+              className="form-control"
+              placeholder="Type name or admission no..."
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setVisibleCount(40);
+              }}
+            />
+          </div>
         </div>
       </div>
 
       {/* Students table */}
-      <div className="card p-3">
+      <div className="sta-card p-2 p-md-3">
         <div className="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
-          <h5 className="m-0">Students (Filtered)</h5>
-          <small className="text-muted">
-            Showing: <b>{filteredStudents.length}</b> / {students.length}
-          </small>
+          <div className="d-flex align-items-center gap-2">
+            <div className="h6 m-0" style={{ fontWeight: 800 }}>
+              Students
+            </div>
+            <span className="sta-pill">
+              Showing <b>{visibleStudents.length}</b> / {filteredStudents.length}
+              <span style={{ opacity: 0.7 }}>/ {students.length}</span>
+            </span>
+          </div>
+
+          {filteredStudents.length > visibleCount && (
+            <button
+              className="btn btn-outline-primary sta-btn"
+              onClick={() => setVisibleCount((v) => v + 40)}
+              disabled={loading}
+            >
+              Show more
+            </button>
+          )}
         </div>
 
         <div className="table-responsive">
-          <table className="table table-striped m-0">
+          <table className="table table-striped m-0 sta-table">
             <thead>
               <tr>
-                <th>#</th>
+                <th style={{ width: 60 }}>#</th>
                 <th>Name</th>
-                <th>Admission No</th>
-                <th>Class</th>
-                <th>Section</th>
+                <th style={{ width: 150 }}>Admission</th>
+                <th style={{ width: 120 }}>Class</th>
+                <th style={{ width: 90 }}>Sec</th>
                 <th>Route</th>
-                <th>Assign</th>
+                <th style={{ width: 120 }}>Action</th>
               </tr>
             </thead>
             <tbody>
-              {filteredStudents.slice(0, 30).map((s, idx) => (
-                <tr key={s.id}>
+              {visibleStudents.map((s, idx) => (
+                <tr key={s.id} className="sta-row">
                   <td>{idx + 1}</td>
-                  <td>{safeStr(s?.name)}</td>
+                  <td style={{ fontWeight: 700 }}>{safeStr(s?.name)}</td>
                   <td>{safeStr(s?.admission_number) || "—"}</td>
                   <td>{getClassName(s)}</td>
                   <td>{getSectionName(s)}</td>
-                  <td>{formatStudentRoute(s)}</td>
-
+                  <td style={{ minWidth: 220 }}>{formatStudentRoute(s)}</td>
                   <td>
                     <button
-                      className="btn btn-sm btn-primary"
+                      className="btn btn-primary sta-btn"
                       disabled={loading}
                       onClick={() => openAssignDialog(String(s.id))}
                     >
@@ -545,8 +607,8 @@ const StudentTransportAssignments = () => {
 
               {filteredStudents.length === 0 && (
                 <tr>
-                  <td colSpan="7" className="text-center">
-                    No students found
+                  <td colSpan="7" className="text-center text-muted" style={{ padding: 20 }}>
+                    No students found. Try clearing search / route filter.
                   </td>
                 </tr>
               )}
@@ -554,9 +616,9 @@ const StudentTransportAssignments = () => {
           </table>
         </div>
 
-        {filteredStudents.length > 30 && (
-          <div className="text-muted mt-2">
-            Showing first 30 results. Use search or route filter to narrow down.
+        {filteredStudents.length > visibleCount && (
+          <div className="text-muted mt-2" style={{ fontSize: 12 }}>
+            Showing {visibleCount} results. Click <b>Show more</b> to load next.
           </div>
         )}
       </div>

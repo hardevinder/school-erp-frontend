@@ -1,0 +1,411 @@
+/* src/pages/TransportAttendanceMobile.css */
+
+/* Page */
+.ta-page {
+  min-height: 100vh;
+  background: #f6f7fb;
+  padding-bottom: 76px; /* space for sticky footer */
+}
+
+/* Header (compact + sticky) */
+.ta-header {
+  background: #fff;
+  border-bottom: 1px solid #e9e9ef;
+  padding: 10px 10px 8px;
+}
+
+.ta-header.sticky {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
+.ta-headRow {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.ta-title {
+  font-size: 15px;
+  font-weight: 900;
+  letter-spacing: 0.2px;
+}
+
+.ta-iconBtn {
+  height: 34px;
+  width: 38px;
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+  background: #fff;
+  font-size: 18px;
+  line-height: 1;
+}
+
+/* Controls */
+.ta-controls {
+  margin-top: 8px;
+  display: grid;
+  gap: 8px;
+}
+
+.ta-controls.compact {
+  gap: 7px;
+}
+
+/* Trip pills */
+.ta-trip {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.ta-pill {
+  height: 36px;
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+  background: #f9fafb;
+  font-weight: 800;
+  font-size: 13px;
+}
+
+.ta-pill.active {
+  border-color: #111827;
+  background: #111827;
+  color: #fff;
+}
+
+/* Inputs */
+.ta-grid2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.ta-row {
+  display: grid;
+  gap: 8px;
+}
+
+.ta-row.tight {
+  gap: 6px;
+}
+
+.ta-label {
+  display: grid;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 800;
+  color: #4b5563;
+}
+
+.ta-input {
+  height: 36px;
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+  padding: 0 10px;
+  background: #fff;
+  font-size: 13px;
+  outline: none;
+}
+
+.ta-search {
+  height: 36px;
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+  padding: 0 12px;
+  background: #fff;
+  width: 100%;
+  font-size: 13px;
+  outline: none;
+}
+
+/* Stats cards row */
+.ta-statsRow {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.ta-stat {
+  background: #fff;
+  border: 1px solid #ececf3;
+  border-radius: 14px;
+  padding: 8px 8px 7px;
+  box-shadow: 0 1px 0 rgba(0,0,0,0.02);
+  text-align: center;
+}
+
+.ta-statVal {
+  font-size: 14px;
+  font-weight: 900;
+  color: #111827;
+  line-height: 1.1;
+}
+
+.ta-statLbl {
+  margin-top: 2px;
+  font-size: 10px;
+  font-weight: 800;
+  color: #6b7280;
+}
+
+/* Tone borders for stat cards */
+.ta-stat.present {
+  border-color: #a7f3d0;
+}
+.ta-stat.absent {
+  border-color: #fecaca;
+}
+.ta-stat.leave {
+  border-color: #fde68a;
+}
+
+/* Bulk buttons row */
+.ta-bulkRow {
+  display: grid;
+  grid-template-columns: auto auto auto auto 1fr;
+  gap: 8px;
+  align-items: center;
+}
+
+.ta-miniBtn {
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+  background: #fff;
+  font-weight: 900;
+  font-size: 12px;
+}
+
+.ta-miniBtn.ghost {
+  background: #f9fafb;
+}
+
+.ta-changesPill {
+  justify-self: end;
+  background: #111827;
+  color: #fff;
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 11px;
+  font-weight: 900;
+  border: 1px solid #111827;
+}
+
+/* Body */
+.ta-body {
+  padding: 10px;
+}
+
+.ta-body.compact {
+  padding: 8px 10px;
+}
+
+.ta-empty {
+  background: #fff;
+  border: 1px solid #eee;
+  border-radius: 14px;
+  padding: 14px;
+  color: #374151;
+}
+
+.ta-hint {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #6b7280;
+}
+
+/* Compact list (more students visible) */
+.ta-list {
+  display: grid;
+  gap: 8px;
+}
+
+.ta-list.compact {
+  gap: 6px;
+}
+
+/* Row item */
+.ta-rowItem {
+  background: #fff;
+  border: 1px solid #ececf3;
+  border-radius: 14px;
+  padding: 8px 8px;
+  box-shadow: 0 1px 0 rgba(0,0,0,0.02);
+}
+
+.ta-rowItem.present {
+  border-left: 5px solid #34d399;
+}
+.ta-rowItem.absent {
+  border-left: 5px solid #f87171;
+}
+.ta-rowItem.leave {
+  border-left: 5px solid #fbbf24;
+}
+
+.ta-rowMain {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.ta-left {
+  min-width: 0;
+}
+
+.ta-rowName {
+  font-size: 13px;
+  font-weight: 900;
+  color: #111827;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ta-rowMeta {
+  margin-top: 2px;
+  font-size: 11px;
+  color: #6b7280;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  min-width: 0;
+}
+
+.ta-muted {
+  opacity: 0.95;
+}
+
+.ta-dot {
+  opacity: 0.6;
+}
+
+.ta-stop {
+  color: #374151;
+  font-weight: 800;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 42vw;
+}
+
+/* Right actions: segmented status + note */
+.ta-right {
+  display: grid;
+  grid-auto-flow: column;
+  gap: 8px;
+  align-items: center;
+}
+
+/* Segmented buttons (P/A/L) */
+.ta-segWrap {
+  display: grid;
+  grid-auto-flow: column;
+  gap: 0;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #f9fafb;
+}
+
+.ta-seg {
+  height: 30px;
+  width: 34px;
+  border: 0;
+  background: transparent;
+  font-weight: 900;
+  font-size: 12px;
+  color: #111827;
+}
+
+.ta-seg + .ta-seg {
+  border-left: 1px solid #e5e7eb;
+}
+
+.ta-seg.active {
+  background: #111827;
+  color: #fff;
+}
+
+/* Notes button */
+.ta-noteBtn {
+  height: 30px;
+  width: 34px;
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+  background: #fff;
+  font-weight: 900;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.ta-noteBtn.has {
+  border-color: #111827;
+}
+
+/* Footer (sticky) */
+.ta-footer {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 30;
+  background: #fff;
+  border-top: 1px solid #e9e9ef;
+  padding: 10px 12px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.ta-footer.sticky {
+  position: fixed;
+}
+
+.ta-footerInfo {
+  display: grid;
+  gap: 2px;
+  font-size: 12px;
+  color: #374151;
+}
+
+.ta-footerLine b {
+  font-weight: 900;
+}
+
+.ta-save {
+  height: 42px;
+  padding: 0 16px;
+  border-radius: 14px;
+  border: 1px solid #111827;
+  background: #111827;
+  color: #fff;
+  font-weight: 900;
+}
+
+.ta-save:disabled {
+  opacity: 0.6;
+}
+
+/* Small screens tweaks */
+@media (max-width: 380px) {
+  .ta-statsRow {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .ta-bulkRow {
+    grid-template-columns: auto auto auto auto;
+  }
+  .ta-changesPill {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+  .ta-stop {
+    max-width: 50vw;
+  }
+}

@@ -149,6 +149,13 @@ import StudentStrengthProjection from "./pages/StudentStrengthProjection";
 // ✅ NEW: Transport Staff (Drivers/Conductors)
 import TransportStaff from "./pages/TransportStaff";
 
+// ✅ NEW: Transport Attendance (Mobile)
+import TransportAttendanceMobile from "./pages/TransportAttendanceMobile";
+
+// ✅ NEW: Transport Attendance Report (Bus-wise summary + details)
+import TransportAttendanceReport from "./pages/TransportAttendanceReport";
+
+
 
 
 // ---------- auth guard ----------
@@ -636,6 +643,27 @@ function App() {
               </RequireRole>
             }
           />
+
+          {/* ✅ Transport Attendance (Mobile UI for Driver/Conductor) */}
+            <Route
+              path="/transport-attendance"
+              element={
+                <RequireRole roles={["driver", "conductor", "transport", "transport_admin", "admin", "superadmin"]}>
+                  <TransportAttendanceMobile />
+                </RequireRole>
+              }
+            />
+
+            {/* ✅ Transport Attendance Report (Bus-wise reports) */}
+            <Route
+              path="/transport-attendance-report"
+              element={
+                <RequireRole roles={["transport", "transport_admin", "admin", "superadmin", "accounts"]}>
+                  <TransportAttendanceReport />
+                </RequireRole>
+              }
+            />
+
           <Route path="/discipline" element={<Navigate to="/disciplinary-actions" replace />} />
 
           {/* Catch-all (inside app) */}
