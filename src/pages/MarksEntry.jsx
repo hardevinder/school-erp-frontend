@@ -1,4 +1,5 @@
-import React, { useEffect, useState, useRef } from "react";
+// src/pages/MarksEntry.jsx
+import React, { useEffect, useState, useRef, useMemo } from "react";
 import api from "../api";
 import Swal from "sweetalert2";
 import "bootstrap/dist/css/bootstrap.min.css";
@@ -10,6 +11,7 @@ const MarksEntry = () => {
     exam_id: "",
     subject_id: "",
   });
+
   const [classExamSubjects, setClassExamSubjects] = useState([]);
   const [exams, setExams] = useState([]);
   const [subjects, setSubjects] = useState([]);
@@ -22,21 +24,23 @@ const MarksEntry = () => {
   const [activeStudentId, setActiveStudentId] = useState(null);
   const inputRefs = useRef({});
 
+  // ✅ simple stats modal (no charts)
+  const [showStats, setShowStats] = useState(false);
+
   const resetMarksData = () => {
     setStudents([]);
     setComponents([]);
     setMarks({});
     setAttendance({});
     setExamScheduleId(null);
+    setActiveStudentId(null);
   };
 
-  // initial loads
   useEffect(() => {
     loadClassExamSubjects();
     loadSections();
   }, []);
 
-  // whenever all filters selected, load marks entry data
   useEffect(() => {
     const { class_id, section_id, exam_id, subject_id } = filters;
     if (class_id && section_id && exam_id && subject_id) {
@@ -104,28 +108,20 @@ const MarksEntry = () => {
         params: { class_id, section_id, exam_id, subject_id },
       });
 
-      console.log("MARKS ENTRY RESPONSE:", res.data);
-
       setStudents(res.data.students || []);
       setComponents(res.data.components || []);
       setExamScheduleId(res.data.exam_schedule_id || null);
 
-      // ✅ Prefill from backend resultMap (key = "studentId_componentId")
       const prefill = {};
       const preAttendance = {};
-
       const resultMap = res.data.resultMap || {};
 
       Object.entries(resultMap).forEach(([key, val]) => {
-        // val: { marks, attendance }
-        const m =
-          val.marks ?? val.marks_obtained ?? val.marksObtained ?? null;
-
+        const m = val.marks ?? val.marks_obtained ?? val.marksObtained ?? null;
         prefill[key] = m === null || m === undefined ? "" : m;
         preAttendance[key] = val.attendance || "P";
       });
 
-      console.log("PREFILL FROM RESULTMAP:", prefill);
       setMarks(prefill);
       setAttendance(preAttendance);
     } catch (err) {
@@ -146,8 +142,7 @@ const MarksEntry = () => {
     const key = `${student_id}_${component_id}`;
     const num = parseFloat(value);
     const max =
-      components.find((c) => c.component_id === component_id)?.max_marks ||
-      100;
+      components.find((c) => c.component_id === component_id)?.max_marks || 100;
 
     if (!isNaN(num) && num > max) {
       Swal.fire(
@@ -172,7 +167,6 @@ const MarksEntry = () => {
     students.forEach((student) => {
       components.forEach((comp) => {
         const key = `${student.id}_${comp.component_id}`;
-
         const hasKey = Object.prototype.hasOwnProperty.call(marks, key);
         const rawVal = hasKey ? marks[key] : "";
         const att = attendance[key] || "P";
@@ -223,6 +217,31 @@ const MarksEntry = () => {
     }
   };
 
+  const handleExportPDF = async () => {
+    const { class_id, section_id, exam_id, subject_id } = filters;
+    try {
+      const response = await api.get("/marks-entry/export-pdf", {
+        params: { class_id, section_id, exam_id, subject_id },
+        responseType: "blob",
+      });
+
+      const blob = new Blob([response.data], { type: "application/pdf" });
+      const url = window.URL.createObjectURL(blob);
+
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `marks-entry-${Date.now()}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+
+      setTimeout(() => window.URL.revokeObjectURL(url), 1500);
+    } catch (err) {
+      console.error("Export PDF error:", err);
+      Swal.fire("Error", "Failed to export PDF", "error");
+    }
+  };
+
   const handleImportExcel = async (e) => {
     const file = e.target.files[0];
     if (!file || !examScheduleId)
@@ -241,7 +260,6 @@ const MarksEntry = () => {
         headers: { "Content-Type": "multipart/form-data" },
       });
 
-      console.log("IMPORT RESPONSE:", res.data);
       Swal.fire(
         "Success",
         `Marks imported successfully${
@@ -297,11 +315,84 @@ const MarksEntry = () => {
     (s) => s.id === parseInt(filters.subject_id)
   );
 
+  // ✅ UPDATED: percentage based on max marks (per student, only PRESENT components counted)
+  const stats = useMemo(() => {
+    const buckets = { "90+": 0, "80-89": 0, "70-79": 0, "60-69": 0, "<60": 0 };
+    let absentAny = 0;
+
+    if (!students.length || !components.length) {
+      return {
+        buckets,
+        absentAny,
+        total: 0,
+        classAvgPct: 0,
+        details: [],
+      };
+    }
+
+    let totalPctSum = 0;
+    let totalPctCount = 0;
+
+    const details = students.map((st) => {
+      let obtained = 0;
+      let maxEligible = 0;
+      let anyAbsent = false;
+
+      components.forEach((comp) => {
+        const key = `${st.id}_${comp.component_id}`;
+        const att = attendance[key] || "P";
+        const compMax = Number(comp.max_marks || 0);
+
+        if (att !== "P") {
+          anyAbsent = true;
+          return; // ✅ do not count this component in denominator
+        }
+
+        maxEligible += compMax;
+
+        const n = Number(marks[key]);
+        obtained += Number.isFinite(n) ? n : 0;
+      });
+
+      if (anyAbsent) absentAny += 1;
+
+      const pct = maxEligible > 0 ? (obtained / maxEligible) * 100 : 0;
+
+      if (pct >= 90) buckets["90+"] += 1;
+      else if (pct >= 80) buckets["80-89"] += 1;
+      else if (pct >= 70) buckets["70-79"] += 1;
+      else if (pct >= 60) buckets["60-69"] += 1;
+      else buckets["<60"] += 1;
+
+      totalPctSum += pct;
+      totalPctCount += 1;
+
+      return {
+        student_id: st.id,
+        name: st.name,
+        roll_number: st.roll_number,
+        obtained,
+        maxEligible,
+        pct,
+        anyAbsent,
+      };
+    });
+
+    const classAvgPct = totalPctCount > 0 ? totalPctSum / totalPctCount : 0;
+
+    return {
+      buckets,
+      absentAny,
+      total: students.length,
+      classAvgPct,
+      details,
+    };
+  }, [students, components, marks, attendance]);
+
   return (
     <div className="container mt-4">
       <h2>📝 Marks Entry</h2>
 
-      {/* Filter Card */}
       <div className="card mt-4 mb-4">
         <div className="card-body">
           <h5 className="card-title">Filter</h5>
@@ -321,6 +412,7 @@ const MarksEntry = () => {
                 ))}
               </select>
             </div>
+
             <div className="col-md-3 mb-3">
               <label>Section</label>
               <select
@@ -337,6 +429,7 @@ const MarksEntry = () => {
                 ))}
               </select>
             </div>
+
             <div className="col-md-3 mb-3">
               <label>Exam</label>
               <select
@@ -352,6 +445,7 @@ const MarksEntry = () => {
                 ))}
               </select>
             </div>
+
             <div className="col-md-3 mb-3">
               <label>Subject</label>
               <select
@@ -385,25 +479,21 @@ const MarksEntry = () => {
 
       {isExamLocked && (
         <div className="alert alert-danger">
-          <strong>This exam is locked.</strong> You cannot enter or modify
-          marks.
+          <strong>This exam is locked.</strong> You cannot enter or modify marks.
         </div>
       )}
 
-      {/* Table */}
       {components.length > 0 && (
         <div className="card mb-4">
           <div className="card-body">
             <h5 className="card-title">Marks Entry Table</h5>
 
-            <div className="d-flex gap-3 mb-3">
+            <div className="d-flex gap-3 mb-3 flex-wrap">
               <button
                 className="btn btn-success"
                 onClick={handleSaveMarks}
                 disabled={
-                  isExamLocked ||
-                  students.length === 0 ||
-                  components.length === 0
+                  isExamLocked || students.length === 0 || components.length === 0
                 }
               >
                 💾 Save Marks
@@ -417,6 +507,14 @@ const MarksEntry = () => {
                 ⬇️ Export Excel
               </button>
 
+              <button
+                className="btn btn-outline-dark"
+                onClick={handleExportPDF}
+                disabled={isExamLocked}
+              >
+                🖨️ Export PDF
+              </button>
+
               <label className="btn btn-outline-secondary mb-0">
                 ⬆️ Import Excel
                 <input
@@ -427,6 +525,14 @@ const MarksEntry = () => {
                   disabled={isExamLocked}
                 />
               </label>
+
+              <button
+                className="btn btn-outline-info"
+                onClick={() => setShowStats(true)}
+                disabled={students.length === 0 || components.length === 0}
+              >
+                📊 Statistics
+              </button>
             </div>
 
             <div
@@ -474,6 +580,7 @@ const MarksEntry = () => {
                     ))}
                   </tr>
                 </thead>
+
                 <tbody>
                   {students.length === 0 ? (
                     <tr>
@@ -494,6 +601,7 @@ const MarksEntry = () => {
                       >
                         <td>{student.roll_number}</td>
                         <td>{student.name}</td>
+
                         {components.map((comp) => {
                           const key = `${student.id}_${comp.component_id}`;
 
@@ -542,6 +650,7 @@ const MarksEntry = () => {
                                   )}
                                 </select>
                               </td>
+
                               <td
                                 className={
                                   comp.is_locked ? "bg-light text-muted" : ""
@@ -572,71 +681,51 @@ const MarksEntry = () => {
                                     e.target.select();
                                   }}
                                   onKeyDown={(e) => {
-                                    const currentStudentIndex =
-                                      students.findIndex(
-                                        (s) => s.id === student.id
-                                      );
-                                    const currentCompIndex =
-                                      components.findIndex(
-                                        (c) =>
-                                          c.component_id ===
-                                          comp.component_id
-                                      );
+                                    const currentStudentIndex = students.findIndex(
+                                      (s) => s.id === student.id
+                                    );
+                                    const currentCompIndex = components.findIndex(
+                                      (c) => c.component_id === comp.component_id
+                                    );
+
                                     let nextKey = null;
 
-                                    if (
-                                      e.key === "Enter" ||
-                                      e.key === "ArrowDown"
-                                    ) {
+                                    if (e.key === "Enter" || e.key === "ArrowDown") {
                                       e.preventDefault();
-                                      const nextStudent =
-                                        students[currentStudentIndex + 1];
-                                      if (nextStudent) {
+                                      const nextStudent = students[currentStudentIndex + 1];
+                                      if (nextStudent)
                                         nextKey = `${nextStudent.id}_${comp.component_id}`;
-                                      } else {
-                                        Swal.fire(
-                                          "Info",
-                                          "Reached last student",
-                                          "info"
-                                        );
-                                      }
+                                      else
+                                        Swal.fire("Info", "Reached last student", "info");
                                     }
 
                                     if (e.key === "ArrowUp") {
                                       e.preventDefault();
-                                      const prevStudent =
-                                        students[currentStudentIndex - 1];
-                                      if (prevStudent) {
+                                      const prevStudent = students[currentStudentIndex - 1];
+                                      if (prevStudent)
                                         nextKey = `${prevStudent.id}_${comp.component_id}`;
-                                      }
                                     }
 
                                     if (e.key === "ArrowRight") {
                                       e.preventDefault();
-                                      const nextComp =
-                                        components[currentCompIndex + 1];
-                                      if (nextComp) {
+                                      const nextComp = components[currentCompIndex + 1];
+                                      if (nextComp)
                                         nextKey = `${student.id}_${nextComp.component_id}`;
-                                      }
                                     }
 
                                     if (e.key === "ArrowLeft") {
                                       e.preventDefault();
-                                      const prevComp =
-                                        components[currentCompIndex - 1];
-                                      if (prevComp) {
+                                      const prevComp = components[currentCompIndex - 1];
+                                      if (prevComp)
                                         nextKey = `${student.id}_${prevComp.component_id}`;
-                                      }
                                     }
 
-                                    if (
-                                      nextKey &&
-                                      inputRefs.current[nextKey]
-                                    ) {
+                                    if (nextKey && inputRefs.current[nextKey]) {
                                       inputRefs.current[nextKey].focus();
                                     }
                                   }}
                                 />
+
                                 {isInvalid && (
                                   <div className="invalid-feedback">
                                     Max: {comp.max_marks}
@@ -652,6 +741,135 @@ const MarksEntry = () => {
                 </tbody>
               </table>
             </div>
+
+            {/* ✅ Stats Modal */}
+            {showStats && (
+              <div
+                className="position-fixed top-0 start-0 w-100 h-100"
+                style={{ background: "rgba(0,0,0,0.5)", zIndex: 9999 }}
+                onClick={() => setShowStats(false)}
+              >
+                <div
+                  className="bg-white rounded shadow p-3 p-md-4"
+                  style={{
+                    width: "min(800px, 95vw)",
+                    maxHeight: "90vh",
+                    overflowY: "auto",
+                    margin: "5vh auto",
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="d-flex align-items-center justify-content-between mb-3">
+                    <div>
+                      <h4 className="mb-0">📊 Marks Statistics</h4>
+                      <div className="text-muted small">
+                        Percentage is calculated per-student using only <b>Present (P)</b>{" "}
+                        components’ max marks.
+                      </div>
+                    </div>
+                    <button
+                      className="btn btn-sm btn-outline-secondary"
+                      onClick={() => setShowStats(false)}
+                    >
+                      ✖ Close
+                    </button>
+                  </div>
+
+                  <div className="row g-3 mb-3">
+                    <div className="col-6 col-md-3">
+                      <div className="card">
+                        <div className="card-body">
+                          <div className="text-muted small">Total Students</div>
+                          <div className="h4 mb-0">{stats.total}</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="col-6 col-md-3">
+                      <div className="card">
+                        <div className="card-body">
+                          <div className="text-muted small">Class Avg %</div>
+                          <div className="h4 mb-0">{stats.classAvgPct.toFixed(1)}%</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="col-6 col-md-3">
+                      <div className="card">
+                        <div className="card-body">
+                          <div className="text-muted small">90+</div>
+                          <div className="h4 mb-0">{stats.buckets["90+"]}</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="col-6 col-md-3">
+                      <div className="card">
+                        <div className="card-body">
+                          <div className="text-muted small">Absent (any)</div>
+                          <div className="h4 mb-0">{stats.absentAny}</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <table className="table table-sm table-bordered mb-3">
+                    <thead className="table-light">
+                      <tr>
+                        <th>Range</th>
+                        <th>Students</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {["90+", "80-89", "70-79", "60-69", "<60"].map((k) => (
+                        <tr key={k}>
+                          <td>{k}</td>
+                          <td>{stats.buckets[k]}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+
+                  <div className="text-muted small mb-2">
+                    * If student is absent in any component, that component is <b>excluded</b> from denominator.
+                  </div>
+
+                  {/* Optional: Top/Bottom quick view */}
+                  {stats.details?.length ? (
+                    <div className="mt-3">
+                      <h6 className="mb-2">Quick % List (Top 10)</h6>
+                      <div className="table-responsive">
+                        <table className="table table-sm table-striped table-bordered">
+                          <thead className="table-light">
+                            <tr>
+                              <th>Roll</th>
+                              <th>Name</th>
+                              <th>Obtained</th>
+                              <th>Max Eligible</th>
+                              <th>%</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {[...stats.details]
+                              .sort((a, b) => (b.pct || 0) - (a.pct || 0))
+                              .slice(0, 10)
+                              .map((d) => (
+                                <tr key={d.student_id}>
+                                  <td>{d.roll_number}</td>
+                                  <td>{d.name}</td>
+                                  <td>{d.obtained}</td>
+                                  <td>{d.maxEligible}</td>
+                                  <td>{Number(d.pct || 0).toFixed(2)}%</td>
+                                </tr>
+                              ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

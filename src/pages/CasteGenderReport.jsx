@@ -1,17 +1,41 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Container, Row, Col, Table, Button, Form, Alert, Spinner, InputGroup } from "react-bootstrap";
+import {
+  Container,
+  Row,
+  Col,
+  Table,
+  Button,
+  Form,
+  Alert,
+  Spinner,
+  InputGroup,
+} from "react-bootstrap";
 import api from "../api";
 import { pdf, Page, Text, View, Document, StyleSheet } from "@react-pdf/renderer";
 
+// ✅ Charts (Recharts)
+import {
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  Legend,
+  CartesianGrid,
+  LabelList,
+} from "recharts";
+
 const toINR = (n) => (Number(n || 0)).toLocaleString("en-IN");
 
+/* ------------------ CSV DOWNLOAD ------------------ */
 const downloadCSV = (filename, rows) => {
   const esc = (v) => {
     if (v == null) return "";
     const s = String(v).replace(/"/g, '""');
     return /[",\n]/.test(s) ? `"${s}"` : s;
   };
-  const csv = rows.map(r => r.map(esc).join(",")).join("\n");
+  const csv = rows.map((r) => r.map(esc).join(",")).join("\n");
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -42,7 +66,9 @@ const PdfCasteGenderReport = ({ categories, matrix, grandTotal }) => (
         <View style={styles.row}>
           <Text style={{ ...styles.headerCell, flex: 2 }}>Classes</Text>
           {categories.map((cat) => (
-            <Text key={cat} style={{ ...styles.headerCell, flex: 3 }}>{cat} Students</Text>
+            <Text key={cat} style={{ ...styles.headerCell, flex: 3 }}>
+              {cat} Students
+            </Text>
           ))}
           <Text style={{ ...styles.headerCell, flex: 3 }}>Total</Text>
         </View>
@@ -65,7 +91,7 @@ const PdfCasteGenderReport = ({ categories, matrix, grandTotal }) => (
         {matrix.map((r, idx) => (
           <View style={styles.row} key={idx}>
             <Text style={{ ...styles.cell, flex: 2 }}>{r.class_name}</Text>
-            {categories.map(cat => {
+            {categories.map((cat) => {
               const c = r[cat] || { Boys: 0, Girls: 0, Total: 0 };
               return (
                 <React.Fragment key={`${r.class_name}-${cat}`}>
@@ -84,7 +110,9 @@ const PdfCasteGenderReport = ({ categories, matrix, grandTotal }) => (
         {/* Grand Total */}
         {grandTotal && (
           <View style={styles.row}>
-            <Text style={{ ...styles.cell, flex: 2, fontWeight: "bold" }}>Total (All Classes)</Text>
+            <Text style={{ ...styles.cell, flex: 2, fontWeight: "bold" }}>
+              Total (All Classes)
+            </Text>
             {categories.map((cat) => {
               const c = grandTotal[cat] || { Boys: 0, Girls: 0, Total: 0 };
               return (
@@ -105,6 +133,32 @@ const PdfCasteGenderReport = ({ categories, matrix, grandTotal }) => (
   </Document>
 );
 
+/* ------------------ CHART HELPERS ------------------ */
+const makeColor = (i) => {
+  const hue = (i * 53) % 360;
+  return `hsl(${hue} 70% 45%)`;
+};
+
+// label on each bar (only if >0)
+const ValueLabel = (props) => {
+  const { x, y, width, value } = props;
+  if (!value) return null;
+  return (
+    <text
+      x={x + width / 2}
+      y={y - 6}
+      textAnchor="middle"
+      fontSize={11}
+      fill="#111"
+    >
+      {value}
+    </text>
+  );
+};
+
+// tooltip formatting
+const tooltipFormatter = (value) => [toINR(value), "Count"];
+
 const CasteGenderReport = () => {
   const [loading, setLoading] = useState(false);
   const [matrix, setMatrix] = useState([]);
@@ -112,6 +166,9 @@ const CasteGenderReport = () => {
   const [categories, setCategories] = useState(["SC", "ST", "OBC", "General"]);
   const [search, setSearch] = useState("");
   const [error, setError] = useState("");
+
+  // ✅ toggle view
+  const [viewMode, setViewMode] = useState("table"); // "table" | "chart"
 
   const fetchReport = async () => {
     setLoading(true);
@@ -121,7 +178,11 @@ const CasteGenderReport = () => {
       const data = res.data || {};
       setMatrix(Array.isArray(data.matrix) ? data.matrix : []);
       setGrandTotal(data.grandTotal || null);
-      setCategories(Array.isArray(data.categories) && data.categories.length ? data.categories : ["SC", "ST", "OBC", "General"]);
+      setCategories(
+        Array.isArray(data.categories) && data.categories.length
+          ? data.categories
+          : ["SC", "ST", "OBC", "General"]
+      );
     } catch (e) {
       console.error(e);
       setError(e?.response?.data?.message || "Failed to fetch report");
@@ -130,25 +191,47 @@ const CasteGenderReport = () => {
     }
   };
 
-  useEffect(() => { fetchReport(); }, []);
+  useEffect(() => {
+    fetchReport();
+  }, []);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return matrix;
-    return matrix.filter(r => (r.class_name || "").toLowerCase().includes(q));
+    return matrix.filter((r) => (r.class_name || "").toLowerCase().includes(q));
   }, [matrix, search]);
+
+  // ✅ class-wise totals for chart (grouped Boys vs Girls)
+  const chartDataTotal = useMemo(() => {
+    return filtered.map((r) => ({
+      class_name: r.class_name || "",
+      Boys: Number(r.Total?.Boys || 0),
+      Girls: Number(r.Total?.Girls || 0),
+      Total: Number(r.Total?.Total || 0),
+    }));
+  }, [filtered]);
+
+  // ✅ category-wise totals across filtered classes (grouped Boys vs Girls)
+  const chartDataByCategory = useMemo(() => {
+    return categories.map((cat) => ({
+      category: cat,
+      Boys: filtered.reduce((sum, r) => sum + Number(r?.[cat]?.Boys || 0), 0),
+      Girls: filtered.reduce((sum, r) => sum + Number(r?.[cat]?.Girls || 0), 0),
+      Total: filtered.reduce((sum, r) => sum + Number(r?.[cat]?.Total || 0), 0),
+    }));
+  }, [filtered, categories]);
 
   const handlePrint = () => window.print();
 
   const handleExportCSV = () => {
     const header = ["Class"];
-    categories.forEach(cat => header.push(`${cat} Boys`, `${cat} Girls`, `${cat} Total`));
+    categories.forEach((cat) => header.push(`${cat} Boys`, `${cat} Girls`, `${cat} Total`));
     header.push("Total Boys", "Total Girls", "Overall Total");
 
     const rows = [header];
-    filtered.forEach(r => {
+    filtered.forEach((r) => {
       const row = [r.class_name];
-      categories.forEach(cat => {
+      categories.forEach((cat) => {
         const cell = r[cat] || { Boys: 0, Girls: 0, Total: 0 };
         row.push(cell.Boys || 0, cell.Girls || 0, cell.Total || 0);
       });
@@ -158,7 +241,7 @@ const CasteGenderReport = () => {
 
     if (grandTotal) {
       const gt = ["Total (All Classes)"];
-      categories.forEach(cat => {
+      categories.forEach((cat) => {
         const cell = grandTotal[cat] || { Boys: 0, Girls: 0, Total: 0 };
         gt.push(cell.Boys || 0, cell.Girls || 0, cell.Total || 0);
       });
@@ -187,8 +270,14 @@ const CasteGenderReport = () => {
   return (
     <Container className="mt-4">
       <Row className="align-items-center">
-        <Col><h2>Class-wise Caste & Gender Report</h2></Col>
-        <Col md="6">
+        <Col>
+          <h2 className="mb-0">Class-wise Caste & Gender Report</h2>
+          <div className="text-muted" style={{ fontSize: 12 }}>
+            {filtered.length} classes shown
+          </div>
+        </Col>
+
+        <Col md="5" className="mt-2 mt-md-0">
           <InputGroup>
             <Form.Control
               placeholder="Search class (e.g., 1st, Nursery)..."
@@ -196,14 +285,32 @@ const CasteGenderReport = () => {
               onChange={(e) => setSearch(e.target.value)}
             />
             {search && (
-              <Button variant="outline-secondary" onClick={() => setSearch("")}>Clear</Button>
+              <Button variant="outline-secondary" onClick={() => setSearch("")}>
+                Clear
+              </Button>
             )}
           </InputGroup>
         </Col>
-        <Col className="text-end">
-          <Button variant="secondary" className="me-2" onClick={handlePrint}>Print</Button>
-          <Button variant="success" className="me-2" onClick={handleExportCSV}>Export CSV</Button>
-          <Button variant="danger" onClick={handleExportPDF}>Export PDF</Button>
+
+        <Col className="text-end mt-2 mt-md-0">
+          {/* ✅ Graphic view toggle */}
+          <Button
+            variant={viewMode === "chart" ? "primary" : "outline-primary"}
+            className="me-2"
+            onClick={() => setViewMode((v) => (v === "table" ? "chart" : "table"))}
+          >
+            {viewMode === "table" ? "Graphic View" : "Table View"}
+          </Button>
+
+          <Button variant="secondary" className="me-2" onClick={handlePrint}>
+            Print
+          </Button>
+          <Button variant="success" className="me-2" onClick={handleExportCSV}>
+            Export CSV
+          </Button>
+          <Button variant="danger" onClick={handleExportPDF}>
+            Export PDF
+          </Button>
         </Col>
       </Row>
 
@@ -217,25 +324,40 @@ const CasteGenderReport = () => {
       )}
 
       {error && !loading && (
-        <Row className="mt-3"><Col><Alert variant="danger">{error}</Alert></Col></Row>
+        <Row className="mt-3">
+          <Col>
+            <Alert variant="danger">{error}</Alert>
+          </Col>
+        </Row>
       )}
 
       {!loading && !error && (
         <>
-          <Row className="mt-3">
-            <Col>
-              {filtered.length === 0 ? (
+          {filtered.length === 0 ? (
+            <Row className="mt-3">
+              <Col>
                 <Alert variant="info">No classes match your search.</Alert>
-              ) : (
+              </Col>
+            </Row>
+          ) : viewMode === "table" ? (
+            // ===================== TABLE VIEW =====================
+            <Row className="mt-3">
+              <Col>
                 <div style={{ overflowX: "auto" }}>
                   <Table striped bordered hover responsive>
                     <thead>
                       <tr>
-                        <th rowSpan={2} className="align-middle text-center">Class</th>
+                        <th rowSpan={2} className="align-middle text-center">
+                          Class
+                        </th>
                         {categories.map((cat) => (
-                          <th key={cat} colSpan={3} className="text-center">{cat}</th>
+                          <th key={cat} colSpan={3} className="text-center">
+                            {cat}
+                          </th>
                         ))}
-                        <th colSpan={3} className="text-center">Total</th>
+                        <th colSpan={3} className="text-center">
+                          Total
+                        </th>
                       </tr>
                       <tr>
                         {categories.map((cat) => (
@@ -253,7 +375,9 @@ const CasteGenderReport = () => {
                     <tbody>
                       {filtered.map((r, idx) => (
                         <tr key={`${r.class_name}-${idx}`}>
-                          <td><strong>{r.class_name}</strong></td>
+                          <td>
+                            <strong>{r.class_name}</strong>
+                          </td>
                           {categories.map((cat) => {
                             const cell = r[cat] || { Boys: 0, Girls: 0, Total: 0 };
                             return (
@@ -270,10 +394,13 @@ const CasteGenderReport = () => {
                         </tr>
                       ))}
                     </tbody>
+
                     {grandTotal && (
                       <tfoot>
                         <tr>
-                          <td><strong>Total (All Classes)</strong></td>
+                          <td>
+                            <strong>Total (All Classes)</strong>
+                          </td>
                           {categories.map((cat) => {
                             const cell = grandTotal[cat] || { Boys: 0, Girls: 0, Total: 0 };
                             return (
@@ -292,9 +419,94 @@ const CasteGenderReport = () => {
                     )}
                   </Table>
                 </div>
-              )}
-            </Col>
-          </Row>
+              </Col>
+            </Row>
+          ) : (
+            // ===================== CHART VIEW =====================
+            <Row className="mt-3 g-3">
+              {/* Class-wise Boys vs Girls */}
+              <Col md={12}>
+                <div className="p-3 border rounded bg-white">
+                  <div className="fw-bold">Class-wise Boys vs Girls</div>
+                  <div className="text-muted" style={{ fontSize: 12 }}>
+                    Side-by-side bars for comparison (counts on bars)
+                  </div>
+
+                  <div style={{ width: "100%", height: 380 }}>
+                    <ResponsiveContainer>
+                      <BarChart
+                        data={chartDataTotal}
+                        margin={{ top: 24, right: 20, left: 10, bottom: 60 }}
+                        barCategoryGap={18}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis
+                          dataKey="class_name"
+                          angle={-30}
+                          textAnchor="end"
+                          interval={0}
+                          height={70}
+                        />
+                        <YAxis />
+                        <Tooltip formatter={tooltipFormatter} />
+                        <Legend />
+
+                        <Bar dataKey="Boys" name="Boys" fill={makeColor(1)}>
+                          <LabelList content={<ValueLabel />} />
+                        </Bar>
+
+                        <Bar dataKey="Girls" name="Girls" fill={makeColor(7)}>
+                          <LabelList content={<ValueLabel />} />
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              </Col>
+
+              {/* Category-wise Boys vs Girls (Totals across filtered classes) */}
+              <Col md={12}>
+                <div className="p-3 border rounded bg-white">
+                  <div className="fw-bold">Category-wise Boys vs Girls</div>
+                  <div className="text-muted" style={{ fontSize: 12 }}>
+                    Totals across filtered classes (counts on bars)
+                  </div>
+
+                  <div style={{ width: "100%", height: 340 }}>
+                    <ResponsiveContainer>
+                      <BarChart
+                        data={chartDataByCategory}
+                        margin={{ top: 24, right: 20, left: 10, bottom: 20 }}
+                        barCategoryGap={26}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="category" />
+                        <YAxis />
+                        <Tooltip formatter={tooltipFormatter} />
+                        <Legend />
+
+                        <Bar dataKey="Boys" name="Boys" fill={makeColor(2)}>
+                          <LabelList content={<ValueLabel />} />
+                        </Bar>
+
+                        <Bar dataKey="Girls" name="Girls" fill={makeColor(8)}>
+                          <LabelList content={<ValueLabel />} />
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  {grandTotal && (
+                    <div className="mt-2 text-muted" style={{ fontSize: 12 }}>
+                      Grand Total (All Classes): Boys <b>{toINR(grandTotal.Total?.Boys || 0)}</b>, Girls{" "}
+                      <b>{toINR(grandTotal.Total?.Girls || 0)}</b>, Overall{" "}
+                      <b>{toINR(grandTotal.Total?.Total || 0)}</b>
+                    </div>
+                  )}
+                </div>
+              </Col>
+            </Row>
+          )}
         </>
       )}
     </Container>

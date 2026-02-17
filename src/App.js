@@ -155,6 +155,11 @@ import TransportAttendanceMobile from "./pages/TransportAttendanceMobile";
 // ✅ NEW: Transport Attendance Report (Bus-wise summary + details)
 import TransportAttendanceReport from "./pages/TransportAttendanceReport";
 
+import StudentStatsSummary from "./pages/StudentStatsSummary";
+
+import AttendanceEntry from "./pages/AttendanceEntry";
+
+
 
 
 
@@ -515,6 +520,16 @@ function App() {
           <Route path="/exam-schedules" element={<ExamScheduleManagement />} />
           <Route path="/roll-numbers" element={<RollNumberManagement />} />
           <Route path="/marks-entry" element={<MarksEntry />} />
+
+            {/* ✅ NEW: Attendance Entry (Term-1 / Term-2 modal + export/import) */}
+            <Route
+              path="/attendance-entry"
+              element={
+                <RequireRole roles={["teacher", "academic_coordinator", "admin", "superadmin", "principal"]}>
+                  <AttendanceEntry />
+                </RequireRole>
+              }
+            />
           <Route path="/report-builder" element={<ReportBuilder />} />
           <Route path="/student-remarks-entry" element={<StudentRemarksEntry />} />
           <Route path="/reports/classwise-result-summary" element={<ClasswiseResultSummary />} />
@@ -654,6 +669,24 @@ function App() {
               }
             />
 
+            <Route
+                path="/reports/student-summary"
+                element={
+                  <RequireRole
+                    roles={[
+                      "superadmin",
+                      "admin",
+                      "accounts",
+                      "academic_coordinator",
+                      "teacher",
+                    ]}
+                  >
+                    <StudentStatsSummary />
+                  </RequireRole>
+                }
+              />
+
+
             {/* ✅ Transport Attendance Report (Bus-wise reports) */}
             <Route
               path="/transport-attendance-report"
@@ -663,6 +696,8 @@ function App() {
                 </RequireRole>
               }
             />
+
+           
 
           <Route path="/discipline" element={<Navigate to="/disciplinary-actions" replace />} />
 

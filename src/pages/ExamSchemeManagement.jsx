@@ -1,5 +1,5 @@
 // src/pages/ExamSchemeManagement.jsx
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import api from "../api";
 import Swal from "sweetalert2";
 import "bootstrap/dist/css/bootstrap.min.css";
@@ -100,6 +100,7 @@ const ExamSchemeManagement = () => {
   const [components, setComponents] = useState([]);
 
   const [filters, setFilters] = useState({ class_id: "", subject_id: "" });
+
   const [formData, setFormData] = useState({
     id: null,
     class_id: "",
@@ -108,8 +109,25 @@ const ExamSchemeManagement = () => {
     component_id: "",
     weightage_percent: "",
   });
+
   const [isEditing, setIsEditing] = useState(false);
   const [showModal, setShowModal] = useState(false);
+
+  // ✅ Bulk Copy Modal
+  const [showCopyModal, setShowCopyModal] = useState(false);
+  const [copyData, setCopyData] = useState({
+    class_id: "",
+    from_subject_id: "",
+    to_subject_ids: [],
+    overwrite: false,
+  });
+
+  // helpers
+  const subjectById = useMemo(() => {
+    const map = new Map();
+    (subjects || []).forEach((s) => map.set(String(s.id), s));
+    return map;
+  }, [subjects]);
 
   useEffect(() => {
     fetchDropdowns();
@@ -145,13 +163,96 @@ const ExamSchemeManagement = () => {
 
   const handleFilterChange = (e) =>
     setFilters({ ...filters, [e.target.name]: e.target.value });
+
   const applyFilters = () => fetchSchemes();
+
+  // ==============================
+  // ✅ NEW: Bulk Delete (All / Filtered)
+  // ==============================
+  const handleDeleteAllSchemes = async () => {
+    const classId = filters.class_id ? String(filters.class_id) : "";
+    const subjectId = filters.subject_id ? String(filters.subject_id) : "";
+
+    const isFiltered = !!(classId || subjectId);
+
+    const scopeHtml = isFiltered
+      ? `
+        <div style="text-align:left">
+          <div><b>This will delete schemes matching current filters:</b></div>
+          <div><b>Class:</b> ${classId || "All Classes"}</div>
+          <div><b>Subject:</b> ${subjectId || "All Subjects"}</div>
+        </div>
+      `
+      : `
+        <div style="text-align:left">
+          <div><b style="color:#d33">This will delete ALL exam schemes from the system.</b></div>
+          <div>Filters are not selected.</div>
+        </div>
+      `;
+
+    // 1st confirm
+    const c1 = await Swal.fire({
+      title: isFiltered ? "⚠️ Confirm Delete Filtered Schemes" : "🧨 Confirm Delete ALL Schemes",
+      html: scopeHtml,
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "Continue",
+      confirmButtonColor: "#d33",
+    });
+    if (!c1.isConfirmed) return;
+
+    // 2nd confirm: type DELETE
+    const c2 = await Swal.fire({
+      title: "Type DELETE to confirm",
+      input: "text",
+      inputPlaceholder: "DELETE",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "Delete Now",
+      confirmButtonColor: "#d33",
+      preConfirm: (val) => {
+        if ((val || "").trim().toUpperCase() !== "DELETE") {
+          Swal.showValidationMessage("Please type DELETE exactly.");
+        }
+        return val;
+      },
+    });
+    if (!c2.isConfirmed) return;
+
+    try {
+      Swal.fire({
+        title: "Deleting...",
+        text: "Please wait",
+        allowOutsideClick: false,
+        didOpen: () => Swal.showLoading(),
+      });
+
+      const res = await api.delete("/exam-schemes", {
+        params: {
+          class_id: classId || undefined,
+          subject_id: subjectId || undefined,
+        },
+      });
+
+      const deleted = res?.data?.deleted ?? 0;
+
+      await Swal.fire(
+        "Deleted ✅",
+        `${deleted} scheme(s) removed successfully.`,
+        "success"
+      );
+
+      fetchSchemes();
+    } catch (e) {
+      const msg = e?.response?.data?.message || "Failed to delete schemes.";
+      Swal.fire("Error", msg, "error");
+    }
+  };
 
   const openModal = (scheme) => {
     if (scheme) {
       setFormData({
         id: scheme.id,
-        // ✅ normalize to string for select values
         class_id: String(scheme.class_id ?? ""),
         subject_id: String(scheme.subject_id ?? ""),
         term_id: String(scheme.term_id ?? ""),
@@ -173,10 +274,10 @@ const ExamSchemeManagement = () => {
     setShowModal(true);
   };
 
-  // ✅ Duplicate modal: keep all fields filled, user can change only subject
+  // ✅ Single-row Duplicate modal
   const openDuplicateModal = (scheme) => {
     setFormData({
-      id: null, // new copy record
+      id: null,
       class_id: String(scheme.class_id ?? ""),
       subject_id: String(scheme.subject_id ?? ""),
       term_id: String(scheme.term_id ?? ""),
@@ -193,7 +294,6 @@ const ExamSchemeManagement = () => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
 
   const handleSubmit = async () => {
-    // ✅ normalize payload (prevents empty/number mismatch issues)
     const payload = {
       ...formData,
       class_id: String(formData.class_id || ""),
@@ -206,7 +306,13 @@ const ExamSchemeManagement = () => {
     const { class_id, subject_id, term_id, component_id, weightage_percent } =
       payload;
 
-    if (!class_id || !subject_id || !term_id || !component_id || !weightage_percent) {
+    if (
+      !class_id ||
+      !subject_id ||
+      !term_id ||
+      !component_id ||
+      !weightage_percent
+    ) {
       return Swal.fire("Warning", "Please fill all fields.", "warning");
     }
 
@@ -291,11 +397,144 @@ const ExamSchemeManagement = () => {
     }
   };
 
+  // ==============================
+  // ✅ Bulk Copy handlers
+  // ==============================
+  const openCopyModal = () => {
+    setCopyData({
+      class_id: filters.class_id ? String(filters.class_id) : "",
+      from_subject_id: filters.subject_id ? String(filters.subject_id) : "",
+      to_subject_ids: [],
+      overwrite: false,
+    });
+    setShowCopyModal(true);
+  };
+
+  const closeCopyModal = () => setShowCopyModal(false);
+
+  const handleCopySubmit = async () => {
+    const { class_id, from_subject_id, to_subject_ids, overwrite } = copyData;
+
+    if (!from_subject_id) {
+      return Swal.fire("Warning", "Please select From Subject.", "warning");
+    }
+    if (!to_subject_ids || !to_subject_ids.length) {
+      return Swal.fire(
+        "Warning",
+        "Please select at least one To Subject.",
+        "warning"
+      );
+    }
+
+    const cleanedTargets = to_subject_ids
+      .map(String)
+      .filter((id) => id !== String(from_subject_id));
+
+    if (!cleanedTargets.length) {
+      return Swal.fire(
+        "Warning",
+        "To Subject(s) cannot include From Subject.",
+        "warning"
+      );
+    }
+
+    const fromName =
+      subjectById.get(String(from_subject_id))?.name || "Selected";
+    const toNames = cleanedTargets
+      .map((id) => subjectById.get(String(id))?.name || id)
+      .join(", ");
+
+    // ✅ CLOSE MODAL FIRST (fix overlap)
+    setShowCopyModal(false);
+    await new Promise((r) => setTimeout(r, 150));
+
+    const confirm = await Swal.fire({
+      title: "Confirm Bulk Copy",
+      html: `
+        <div style="text-align:left">
+          <div><b>From:</b> ${fromName}</div>
+          <div><b>To:</b> ${toNames}</div>
+          <div><b>Class:</b> ${class_id ? class_id : "All Classes"}</div>
+          <div><b>Overwrite:</b> ${overwrite ? "Yes" : "No (skip duplicates)"}</div>
+        </div>
+      `,
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "Yes, Copy",
+    });
+
+    // If cancelled, reopen modal (nice UX)
+    if (!confirm.isConfirmed) {
+      setShowCopyModal(true);
+      return;
+    }
+
+    try {
+      Swal.fire({
+        title: "Copying...",
+        text: "Please wait",
+        allowOutsideClick: false,
+        didOpen: () => Swal.showLoading(),
+      });
+
+      const res = await api.post("/exam-schemes/bulk-duplicate", {
+        from_subject_id: Number(from_subject_id),
+        to_subject_ids: cleanedTargets.map(Number),
+        class_id: class_id ? Number(class_id) : null,
+        overwrite: !!overwrite,
+      });
+
+      const created = res?.data?.created ?? 0;
+      const per = res?.data?.per_target_created || {};
+
+      const perLines = Object.entries(per)
+        .map(([sid, cnt]) => {
+          const nm = subjectById.get(String(sid))?.name || sid;
+          return `${nm}: ${cnt}`;
+        })
+        .join("<br/>");
+
+      await Swal.fire(
+        "Success",
+        `
+          Bulk copy completed ✅<br/>
+          <b>Total created:</b> ${created}<br/>
+          ${perLines ? `<hr/><div style="text-align:left">${perLines}</div>` : ""}
+        `,
+        "success"
+      );
+
+      fetchSchemes();
+    } catch (e) {
+      const msg = e?.response?.data?.message || "Bulk copy failed.";
+      Swal.fire("Error", msg, "error");
+    }
+  };
+
+  const isFiltered = !!(filters.class_id || filters.subject_id);
+
   return (
     <div className="container mt-4">
-      <h2>📘 Exam Scheme Management</h2>
+      <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+        <h2 className="m-0">📘 Exam Scheme Management</h2>
 
-      {/* Filters & Add */}
+        <div className="d-flex gap-2 flex-wrap">
+          <Button variant="outline-info" onClick={openCopyModal}>
+            📚 Copy Subject Scheme
+          </Button>
+
+          {/* ✅ NEW: Delete All / Filtered */}
+          <Button variant="outline-danger" onClick={handleDeleteAllSchemes}>
+            🧨 Delete {isFiltered ? "Filtered" : "All"} Schemes
+          </Button>
+
+          <Button variant="success" onClick={() => openModal()}>
+            ➕ Add Scheme
+          </Button>
+        </div>
+      </div>
+
+      {/* Filters */}
       <div className="d-flex justify-content-between align-items-end mb-3">
         <div className="d-flex gap-2 flex-wrap">
           <select
@@ -330,16 +569,15 @@ const ExamSchemeManagement = () => {
             Apply Filters
           </Button>
         </div>
-
-        <Button variant="success" onClick={() => openModal()}>
-          ➕ Add Scheme
-        </Button>
       </div>
 
       {/* Table */}
       <div className="card mb-3">
         <div className="card-body">
-          <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <DndContext
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
+          >
             <SortableContext
               items={schemes.map((s) => s.id.toString())}
               strategy={verticalListSortingStrategy}
@@ -354,7 +592,7 @@ const ExamSchemeManagement = () => {
                     <th>Component</th>
                     <th>Weightage (%)</th>
                     <th>Status</th>
-                    <th>Actions</th>
+                    <th style={{ width: 260 }}>Actions</th>
                   </tr>
                 </thead>
 
@@ -376,7 +614,7 @@ const ExamSchemeManagement = () => {
         </div>
       </div>
 
-      {/* Modal */}
+      {/* Add/Edit/Duplicate (single row) Modal */}
       <Modal show={showModal} onHide={closeModal} centered size="lg">
         <Modal.Header closeButton>
           <Modal.Title>
@@ -474,6 +712,113 @@ const ExamSchemeManagement = () => {
           </Button>
           <Button variant="primary" onClick={handleSubmit}>
             {isEditing ? "Update" : "Save"}
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* Bulk Copy Modal */}
+      <Modal show={showCopyModal} onHide={closeCopyModal} centered size="lg">
+        <Modal.Header closeButton>
+          <Modal.Title>📚 Copy Subject Scheme (Bulk)</Modal.Title>
+        </Modal.Header>
+
+        <Modal.Body>
+          <div className="row g-2">
+            <div className="col-12 col-md-6">
+              <label>Class (optional)</label>
+              <select
+                className="form-control"
+                value={copyData.class_id}
+                onChange={(e) =>
+                  setCopyData({ ...copyData, class_id: e.target.value })
+                }
+              >
+                <option value="">All Classes</option>
+                {classes.map((c) => (
+                  <option key={c.id} value={String(c.id)}>
+                    {c.class_name}
+                  </option>
+                ))}
+              </select>
+              <small className="text-muted">
+                If you select class, only that class schemes will be copied.
+              </small>
+            </div>
+
+            <div className="col-12 col-md-6">
+              <label>From Subject</label>
+              <select
+                className="form-control"
+                value={copyData.from_subject_id}
+                onChange={(e) =>
+                  setCopyData({ ...copyData, from_subject_id: e.target.value })
+                }
+              >
+                <option value="">Select</option>
+                {subjects.map((s) => (
+                  <option key={s.id} value={String(s.id)}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+              <small className="text-muted">
+                Example: English (PT scheme already made)
+              </small>
+            </div>
+
+            <div className="col-12">
+              <label>To Subject(s)</label>
+              <select
+                multiple
+                className="form-control"
+                value={copyData.to_subject_ids}
+                onChange={(e) => {
+                  const vals = Array.from(e.target.selectedOptions).map(
+                    (o) => o.value
+                  );
+                  setCopyData({ ...copyData, to_subject_ids: vals });
+                }}
+                style={{ minHeight: 160 }}
+              >
+                {subjects.map((s) => (
+                  <option key={s.id} value={String(s.id)}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+              <small className="text-muted">
+                Ctrl/Command hold karke multiple select karo. (OA, Punjabi, etc.)
+              </small>
+            </div>
+
+            <div className="col-12">
+              <div className="form-check mt-2">
+                <input
+                  className="form-check-input"
+                  type="checkbox"
+                  checked={copyData.overwrite}
+                  onChange={(e) =>
+                    setCopyData({ ...copyData, overwrite: e.target.checked })
+                  }
+                  id="overwriteChk"
+                />
+                <label className="form-check-label" htmlFor="overwriteChk">
+                  Overwrite target schemes (delete first)
+                </label>
+              </div>
+              <small className="text-muted">
+                If unchecked, it will safely skip duplicates.
+              </small>
+            </div>
+          </div>
+        </Modal.Body>
+
+        <Modal.Footer>
+          <Button variant="secondary" onClick={closeCopyModal}>
+            Cancel
+          </Button>
+          <Button variant="primary" onClick={handleCopySubmit}>
+            Copy Now
           </Button>
         </Modal.Footer>
       </Modal>

@@ -1,5 +1,5 @@
 // src/pages/ClassCoScholasticMapping.jsx
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import api from "../api";
 import Swal from "sweetalert2";
 import { Modal, Button } from "react-bootstrap";
@@ -8,6 +8,7 @@ import * as XLSX from "xlsx";
 /** 👇 Backend ke hisaab se list endpoint (NO /list) */
 const LIST_ENDPOINT = "/class-co-scholastic-areas";
 const IMPORT_ENDPOINT = "/class-co-scholastic-areas/import";
+const BULK_COPY_ENDPOINT = "/class-co-scholastic-areas/bulk-copy";
 
 /* =========================
  * Helpers
@@ -26,11 +27,21 @@ const pickId = (
   return "";
 };
 
+// ✅ existing helper used for IMPORT (keeps >0 only) — leave as-is
 const toIntOrNull = (v) => {
   const s = String(v ?? "").trim();
   if (!s) return null;
   const n = Number(s);
   return Number.isFinite(n) && n > 0 ? n : null;
+};
+
+// ✅ NEW: allow 0 (Pre-Nursery) as VALID id
+const toIntAllowZeroOrNull = (v) => {
+  if (v === null || v === undefined) return null;
+  const s = String(v).trim();
+  if (s === "") return null; // empty is invalid
+  const n = Number(s);
+  return Number.isFinite(n) ? n : null; // 0 allowed
 };
 
 // normalize dropdown arrays to always have .id (stringable) + label fields
@@ -77,6 +88,28 @@ const ClassCoScholasticMapping = () => {
   // Import
   const fileRef = useRef(null);
   const [importing, setImporting] = useState(false);
+
+  // ✅ Bulk Copy (Class -> Class)
+  const [showCopyModal, setShowCopyModal] = useState(false);
+  const [copyData, setCopyData] = useState({
+    from_class_id: "",
+    to_class_ids: [],
+    term_id: "", // optional filter; "" => all terms
+    overwrite: false,
+  });
+
+  // helper maps for names
+  const classById = useMemo(() => {
+    const map = new Map();
+    (classes || []).forEach((c) => map.set(String(c.id), c));
+    return map;
+  }, [classes]);
+
+  const termById = useMemo(() => {
+    const map = new Map();
+    (terms || []).forEach((t) => map.set(String(t.id), t));
+    return map;
+  }, [terms]);
 
   useEffect(() => {
     loadDropdowns();
@@ -221,6 +254,121 @@ const ClassCoScholasticMapping = () => {
       Swal.fire("Error", e?.response?.data?.message || "Failed to delete.", "error");
     }
   }
+
+  /* ============================================================
+   * ✅ Bulk Copy: Class -> Class(es)
+   * (ID=0 safe)
+   * ============================================================ */
+  const openCopyModal = () => {
+    setCopyData({
+      from_class_id: "",
+      to_class_ids: [],
+      term_id: "",
+      overwrite: false,
+    });
+    setShowCopyModal(true);
+  };
+
+  const closeCopyModal = () => setShowCopyModal(false);
+
+  const handleCopySubmit = async () => {
+    const { from_class_id, to_class_ids, term_id, overwrite } = copyData;
+
+    const fromId = toIntAllowZeroOrNull(from_class_id); // ✅ 0 ok
+    const targetIds = (to_class_ids || [])
+      .map(toIntAllowZeroOrNull)
+      .filter((v) => v !== null && v !== undefined); // ✅ keep 0
+
+    if (fromId === null || fromId === undefined) {
+      return Swal.fire("Warning", "Please select From Class.", "warning");
+    }
+    if (!targetIds.length) {
+      return Swal.fire("Warning", "Please select at least one To Class.", "warning");
+    }
+
+    // remove same id from targets
+    const cleanedTargets = targetIds.filter((id) => id !== fromId);
+
+    if (!cleanedTargets.length) {
+      return Swal.fire("Warning", "To Class(es) cannot include From Class.", "warning");
+    }
+
+    const fromName = classById.get(String(fromId))?.class_name ?? String(fromId);
+    const toNames = cleanedTargets
+      .map((id) => classById.get(String(id))?.class_name ?? String(id))
+      .join(", ");
+
+    const termId = toIntAllowZeroOrNull(term_id); // optional
+    const termName = termId !== null && termId !== undefined
+      ? (termById.get(String(termId))?.name ?? String(termId))
+      : "All Terms";
+
+    // ✅ close modal first to avoid overlap
+    setShowCopyModal(false);
+    await new Promise((r) => setTimeout(r, 150));
+
+    const confirm = await Swal.fire({
+      title: "Confirm Copy",
+      html: `
+        <div style="text-align:left">
+          <div><b>From Class:</b> ${fromName}</div>
+          <div><b>To Class(es):</b> ${toNames}</div>
+          <div><b>Term:</b> ${termName}</div>
+          <div><b>Overwrite:</b> ${overwrite ? "Yes (delete target first)" : "No (skip duplicates)"}</div>
+        </div>
+      `,
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "Yes, Copy",
+    });
+
+    if (!confirm.isConfirmed) {
+      setShowCopyModal(true);
+      return;
+    }
+
+    try {
+      Swal.fire({
+        title: "Copying...",
+        text: "Please wait",
+        allowOutsideClick: false,
+        didOpen: () => Swal.showLoading(),
+      });
+
+      const res = await api.post(BULK_COPY_ENDPOINT, {
+        from_class_id: fromId,            // ✅ 0 allowed
+        to_class_ids: cleanedTargets,     // ✅ 0 allowed
+        term_id: termId ?? null,
+        overwrite: !!overwrite,
+      });
+
+      const created = res?.data?.created ?? 0;
+      const per = res?.data?.per_target_created || {};
+
+      const perLines = Object.entries(per)
+        .map(([cid, cnt]) => {
+          const nm = classById.get(String(cid))?.class_name || cid;
+          return `${nm}: ${cnt}`;
+        })
+        .join("<br/>");
+
+      await Swal.fire(
+        "Success ✅",
+        `
+          Copy completed ✅<br/>
+          <b>Total created:</b> ${created}<br/>
+          ${perLines ? `<hr/><div style="text-align:left">${perLines}</div>` : ""}
+        `,
+        "success"
+      );
+
+      fetchMappings();
+    } catch (e) {
+      const msg = e?.response?.data?.message || "Bulk copy failed.";
+      Swal.fire("Error", msg, "error");
+      setShowCopyModal(true);
+    }
+  };
 
   /* ============================================================
    * ✅ Import handler (2nd sheet priority)
@@ -382,9 +530,14 @@ const ClassCoScholasticMapping = () => {
       <div className="d-flex align-items-center justify-content-between flex-wrap gap-2">
         <h2 className="m-0">🎯 Class Co-Scholastic Area Mapping</h2>
 
-        <div className="d-flex gap-2">
+        <div className="d-flex gap-2 flex-wrap">
           <Button variant="outline-secondary" onClick={fetchMappings}>
             Refresh
+          </Button>
+
+          {/* ✅ Copy Class Mappings */}
+          <Button variant="outline-info" onClick={openCopyModal}>
+            📚 Copy Class Mapping
           </Button>
 
           {/* ✅ Import button */}
@@ -470,7 +623,7 @@ const ClassCoScholasticMapping = () => {
         </div>
       </div>
 
-      {/* Modal */}
+      {/* Add/Edit/Duplicate Modal */}
       <Modal show={showModal} onHide={closeModal} centered>
         <Modal.Header closeButton>
           <Modal.Title>{isEditing ? "✏️ Edit Mapping" : "➕ Add / Duplicate Mapping"}</Modal.Title>
@@ -537,6 +690,97 @@ const ClassCoScholasticMapping = () => {
           </Button>
           <Button variant="primary" onClick={handleSubmit}>
             {isEditing ? "Update" : "Save"}
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* ✅ Bulk Copy Modal */}
+      <Modal show={showCopyModal} onHide={closeCopyModal} centered size="lg">
+        <Modal.Header closeButton>
+          <Modal.Title>📚 Copy Class Mapping (Bulk)</Modal.Title>
+        </Modal.Header>
+
+        <Modal.Body>
+          <div className="row g-2">
+            <div className="col-12 col-md-6">
+              <label>From Class</label>
+              <select
+                className="form-control"
+                value={copyData.from_class_id}
+                onChange={(e) => setCopyData({ ...copyData, from_class_id: e.target.value })}
+              >
+                <option value="">Select</option>
+                {classes.map((c) => (
+                  <option key={strId(c.id)} value={strId(c.id)}>
+                    {c.class_name}
+                  </option>
+                ))}
+              </select>
+              <small className="text-muted">Is class ki co-scholastic mappings copy hongi.</small>
+            </div>
+
+            <div className="col-12 col-md-6">
+              <label>Term (optional)</label>
+              <select
+                className="form-control"
+                value={copyData.term_id}
+                onChange={(e) => setCopyData({ ...copyData, term_id: e.target.value })}
+              >
+                <option value="">All Terms</option>
+                {terms.map((t) => (
+                  <option key={strId(t.id)} value={strId(t.id)}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+              <small className="text-muted">Blank = all terms. Select = only that term.</small>
+            </div>
+
+            <div className="col-12">
+              <label>To Class(es)</label>
+              <select
+                multiple
+                className="form-control"
+                value={copyData.to_class_ids}
+                onChange={(e) => {
+                  const vals = Array.from(e.target.selectedOptions).map((o) => o.value);
+                  setCopyData({ ...copyData, to_class_ids: vals });
+                }}
+                style={{ minHeight: 160 }}
+              >
+                {classes.map((c) => (
+                  <option key={strId(c.id)} value={strId(c.id)}>
+                    {c.class_name}
+                  </option>
+                ))}
+              </select>
+              <small className="text-muted">Ctrl/Command hold karke multiple select karo.</small>
+            </div>
+
+            <div className="col-12">
+              <div className="form-check mt-2">
+                <input
+                  className="form-check-input"
+                  type="checkbox"
+                  checked={copyData.overwrite}
+                  onChange={(e) => setCopyData({ ...copyData, overwrite: e.target.checked })}
+                  id="overwriteClassMapChk"
+                />
+                <label className="form-check-label" htmlFor="overwriteClassMapChk">
+                  Overwrite target mappings (delete first)
+                </label>
+              </div>
+              <small className="text-muted">Unchecked = duplicates safely skip ho jayenge.</small>
+            </div>
+          </div>
+        </Modal.Body>
+
+        <Modal.Footer>
+          <Button variant="secondary" onClick={closeCopyModal}>
+            Cancel
+          </Button>
+          <Button variant="primary" onClick={handleCopySubmit}>
+            Copy Now
           </Button>
         </Modal.Footer>
       </Modal>
