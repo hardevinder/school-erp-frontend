@@ -196,14 +196,21 @@ const Students = () => {
     }
   };
 
-  const fetchSections = async () => {
-    try {
-      const { data } = await api.get("/sections");
-      setSections(Array.isArray(data) ? data : []);
-    } catch (err) {
-      console.error("fetchSections:", err);
-    }
-  };
+ const fetchSections = async () => {
+  try {
+    const resp = await api.get("/sections");
+
+    // support both shapes:
+    // 1) [ ... ]
+    // 2) { ok: true, data: [ ... ] }
+    const list = Array.isArray(resp.data) ? resp.data : resp.data?.data;
+
+    setSections(Array.isArray(list) ? list : []);
+  } catch (err) {
+    console.error("fetchSections:", err);
+    setSections([]);
+  }
+};
 
   const fetchConcessions = async () => {
     try {

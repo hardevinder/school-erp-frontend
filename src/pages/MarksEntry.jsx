@@ -4,6 +4,85 @@ import api from "../api";
 import Swal from "sweetalert2";
 import "bootstrap/dist/css/bootstrap.min.css";
 
+/* =========================
+ * Helpers
+ * ========================= */
+const asArray = (d) => {
+  if (Array.isArray(d)) return d;
+  if (!d) return [];
+  const keys = [
+    "data",
+    "rows",
+    "results",
+    "items",
+    "list",
+    "records",
+    "students",
+    "components",
+    "grades",
+    "grade_options",
+    "gradeOptions",
+    "allowedGrades",
+  ];
+  for (const k of keys) {
+    if (Array.isArray(d?.[k])) return d[k];
+  }
+  return [];
+};
+
+const upper = (v) => String(v || "").trim().toUpperCase();
+const safeMode = (m) => (upper(m) === "GRADE" ? "GRADE" : "MARKS");
+
+const attendanceOptions = ["P", "A", "L", "ACT", "LA", "ML", "X"];
+
+// ✅ Better error message extractor (shows unauthorized clearly)
+const getApiErrorMessage = (err, fallback = "Something went wrong") => {
+  const status = err?.response?.status;
+  const data = err?.response?.data;
+
+  const serverMsg =
+    data?.message ||
+    data?.error ||
+    data?.details ||
+    (typeof data === "string" ? data : "") ||
+    err?.message;
+
+  if (status === 401) {
+    return (
+      serverMsg ||
+      "Unauthorized (401). Please login again and try."
+    );
+  }
+  if (status === 403) {
+    return (
+      serverMsg ||
+      "Forbidden (403). You do not have permission for this class/section."
+    );
+  }
+
+  return serverMsg || fallback;
+};
+
+const showApiError = (title, err, fallback) => {
+  const status = err?.response?.status;
+  const msg = getApiErrorMessage(err, fallback);
+
+  Swal.fire({
+    icon: "error",
+    title: title || "Error",
+    html: `
+      <div style="text-align:left">
+        <div style="font-weight:600;margin-bottom:6px;">${msg}</div>
+        ${
+          status
+            ? `<div style="opacity:0.8;font-size:12px;">Status: <b>${status}</b></div>`
+            : ""
+        }
+      </div>
+    `,
+  });
+};
+
 const MarksEntry = () => {
   const [filters, setFilters] = useState({
     class_id: "",
@@ -16,10 +95,20 @@ const MarksEntry = () => {
   const [exams, setExams] = useState([]);
   const [subjects, setSubjects] = useState([]);
   const [sections, setSections] = useState([]);
+
   const [students, setStudents] = useState([]);
   const [components, setComponents] = useState([]);
+
+  // MARKS mode
   const [marks, setMarks] = useState({});
   const [attendance, setAttendance] = useState({});
+
+  // ✅ evaluation mode + grade mode
+  const [evaluationMode, setEvaluationMode] = useState("MARKS"); // MARKS | GRADE
+  const [gradeOptions, setGradeOptions] = useState([]); // can be string[] OR object[]
+  const [gradeValues, setGradeValues] = useState({}); // { [student_id]: grade_string }
+  const [gradeAttendance, setGradeAttendance] = useState({}); // { [student_id]: "P"|"A"|... }
+
   const [examScheduleId, setExamScheduleId] = useState(null);
   const [activeStudentId, setActiveStudentId] = useState(null);
   const inputRefs = useRef({});
@@ -34,11 +123,18 @@ const MarksEntry = () => {
     setAttendance({});
     setExamScheduleId(null);
     setActiveStudentId(null);
+
+    // grade mode
+    setEvaluationMode("MARKS");
+    setGradeOptions([]);
+    setGradeValues({});
+    setGradeAttendance({});
   };
 
   useEffect(() => {
     loadClassExamSubjects();
     loadSections();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -54,18 +150,18 @@ const MarksEntry = () => {
   const loadClassExamSubjects = async () => {
     try {
       const res = await api.get("/exams/class-exam-subjects");
-      setClassExamSubjects(res.data || []);
+      setClassExamSubjects(asArray(res.data));
     } catch (err) {
-      Swal.fire("Error", "Failed to load class-exam-subject data", "error");
+      showApiError("Error", err, "Failed to load class-exam-subject data");
     }
   };
 
   const loadSections = async () => {
     try {
       const res = await api.get("/sections");
-      setSections(res.data || []);
+      setSections(asArray(res.data));
     } catch (err) {
-      Swal.fire("Error", "Failed to load sections", "error");
+      showApiError("Error", err, "Failed to load sections");
     }
   };
 
@@ -73,10 +169,10 @@ const MarksEntry = () => {
     const class_id = e.target.value;
     setFilters({ class_id, section_id: "", exam_id: "", subject_id: "" });
 
-    const selectedClass = classExamSubjects.find(
-      (c) => c.class_id === parseInt(class_id)
+    const selectedClass = asArray(classExamSubjects).find(
+      (c) => Number(c.class_id) === Number(class_id)
     );
-    setExams(selectedClass ? selectedClass.exams : []);
+    setExams(asArray(selectedClass?.exams));
     setSubjects([]);
     resetMarksData();
   };
@@ -85,13 +181,13 @@ const MarksEntry = () => {
     const exam_id = e.target.value;
     setFilters((prev) => ({ ...prev, exam_id, subject_id: "" }));
 
-    const selectedClass = classExamSubjects.find(
-      (c) => c.class_id === parseInt(filters.class_id)
+    const selectedClass = asArray(classExamSubjects).find(
+      (c) => Number(c.class_id) === Number(filters.class_id)
     );
-    const selectedExam = selectedClass?.exams.find(
-      (ex) => ex.exam_id === parseInt(exam_id)
+    const selectedExam = asArray(selectedClass?.exams).find(
+      (ex) => Number(ex.exam_id) === Number(exam_id)
     );
-    setSubjects(selectedExam ? selectedExam.subjects : []);
+    setSubjects(asArray(selectedExam?.subjects));
     resetMarksData();
   };
 
@@ -103,33 +199,112 @@ const MarksEntry = () => {
 
   const fetchMarksEntryData = async () => {
     const { class_id, section_id, exam_id, subject_id } = filters;
+
     try {
       const res = await api.get("/marks-entry", {
         params: { class_id, section_id, exam_id, subject_id },
       });
 
-      setStudents(res.data.students || []);
-      setComponents(res.data.components || []);
-      setExamScheduleId(res.data.exam_schedule_id || null);
+      const modeRaw =
+        res?.data?.evaluation_mode ?? res?.data?.mode ?? res?.data?.subject_mode;
+      const mode = safeMode(modeRaw);
+      setEvaluationMode(mode);
 
-      const prefill = {};
+      const fetchedStudents = asArray(res?.data?.students);
+      const fetchedComponents = asArray(res?.data?.components);
+
+      setStudents(fetchedStudents);
+      setComponents(fetchedComponents);
+      setExamScheduleId(
+        res?.data?.exam_schedule_id || res?.data?.examScheduleId || null
+      );
+
+      // grade options: backend can return string[] (allowedGrades) or object[]
+      const opts =
+        asArray(res?.data?.grade_options) ||
+        asArray(res?.data?.gradeOptions) ||
+        asArray(res?.data?.grades) ||
+        asArray(res?.data?.allowedGrades);
+
+      setGradeOptions(asArray(opts));
+
+      const resultMap = res?.data?.resultMap || {};
+
+      // Prefill marks/attendance
+      const prefillMarks = {};
       const preAttendance = {};
-      const resultMap = res.data.resultMap || {};
+
+      // Prefill grades + grade attendance (per student)
+      // ✅ After backend change, grade results come as student_component keys.
+      // We'll take the first grade/attendance seen per student.
+      const preGrades = {};
+      const preGradeAtt = {};
 
       Object.entries(resultMap).forEach(([key, val]) => {
-        const m = val.marks ?? val.marks_obtained ?? val.marksObtained ?? null;
-        prefill[key] = m === null || m === undefined ? "" : m;
-        preAttendance[key] = val.attendance || "P";
+        const parts = String(key).split("_");
+        if (parts.length >= 2) {
+          const sid = String(parts[0] || "");
+          const cid = String(parts[1] || "");
+
+          // MARKS map (sid_component)
+          if (sid && cid && cid !== "G") {
+            const m = val?.marks ?? val?.marks_obtained ?? val?.marksObtained ?? null;
+            prefillMarks[key] = m === null || m === undefined ? "" : m;
+            preAttendance[key] = val?.attendance || "P";
+          }
+
+          // GRADE: pick first found per student (grade saved per component in backend)
+          if (sid) {
+            if (preGrades[sid] == null) {
+              const g =
+                val?.grade ??
+                val?.grade_name ??
+                val?.gradeName ??
+                val?.grade_label ??
+                "";
+              if (g !== "" && g != null) preGrades[sid] = String(g).trim().toUpperCase();
+              else if (val?.grade_id || val?.gradeId) {
+                preGrades[sid] = String(val.grade_id ?? val.gradeId);
+              }
+            }
+            if (preGradeAtt[sid] == null && val?.attendance) {
+              preGradeAtt[sid] = upper(val.attendance) || "P";
+            }
+          }
+          return;
+        }
+
+        // If backend ever sends { [studentId]: { grade, attendance } } (older)
+        const sidOnly = String(key || "");
+        if (sidOnly) {
+          const g =
+            val?.grade ??
+            val?.grade_name ??
+            val?.gradeName ??
+            val?.grade_label ??
+            "";
+          if (g !== "" && g != null) preGrades[sidOnly] = String(g).trim().toUpperCase();
+          else if (val?.grade_id || val?.gradeId) {
+            preGrades[sidOnly] = String(val.grade_id ?? val.gradeId);
+          }
+          if (val?.attendance) preGradeAtt[sidOnly] = upper(val.attendance) || "P";
+        }
       });
 
-      setMarks(prefill);
+      setMarks(prefillMarks);
       setAttendance(preAttendance);
+
+      setGradeValues(preGrades);
+      setGradeAttendance(preGradeAtt);
     } catch (err) {
       console.error("Error loading marks entry:", err);
-      Swal.fire("Error", "Failed to load marks entry data", "error");
+      showApiError("Error", err, "Failed to load marks/grade entry data");
     }
   };
 
+  /* =========================
+   * MARKS mode handlers
+   * ========================= */
   const handleAttendanceChange = (student_id, component_id, value) => {
     const key = `${student_id}_${component_id}`;
     setAttendance((prev) => ({ ...prev, [key]: value }));
@@ -142,14 +317,11 @@ const MarksEntry = () => {
     const key = `${student_id}_${component_id}`;
     const num = parseFloat(value);
     const max =
-      components.find((c) => c.component_id === component_id)?.max_marks || 100;
+      components.find((c) => Number(c.component_id) === Number(component_id))
+        ?.max_marks || 100;
 
-    if (!isNaN(num) && num > max) {
-      Swal.fire(
-        "Invalid Marks",
-        `Marks cannot exceed maximum of ${max}`,
-        "warning"
-      );
+    if (!isNaN(num) && num > Number(max)) {
+      Swal.fire("Invalid Marks", `Marks cannot exceed maximum of ${max}`, "warning");
       return;
     }
 
@@ -159,61 +331,119 @@ const MarksEntry = () => {
     }));
   };
 
-  const handleSaveMarks = async () => {
-    if (!examScheduleId)
+  /* =========================
+   * GRADE mode handlers
+   * ========================= */
+  const handleGradeChange = (student_id, value) => {
+    setGradeValues((prev) => ({ ...prev, [String(student_id)]: value }));
+  };
+
+  const handleGradeAttendanceChange = (student_id, value) => {
+    setGradeAttendance((prev) => ({ ...prev, [String(student_id)]: value }));
+  };
+
+  /* =========================
+   * Save (MARKS or GRADE)
+   * ========================= */
+  const handleSave = async () => {
+    if (!examScheduleId) {
       return Swal.fire("Error", "Exam Schedule ID not found", "error");
-
-    const marksData = [];
-    students.forEach((student) => {
-      components.forEach((comp) => {
-        const key = `${student.id}_${comp.component_id}`;
-        const hasKey = Object.prototype.hasOwnProperty.call(marks, key);
-        const rawVal = hasKey ? marks[key] : "";
-        const att = attendance[key] || "P";
-
-        marksData.push({
-          student_id: student.id,
-          component_id: comp.component_id,
-          marks_obtained:
-            rawVal === "" || rawVal === null || rawVal === undefined
-              ? null
-              : parseFloat(rawVal),
-          attendance: att,
-        });
-      });
-    });
+    }
 
     try {
+      if (evaluationMode === "GRADE") {
+        // ✅ IMPORTANT: Backend stores grade PER COMPONENT (StudentExamResult)
+        // So we repeat same grade/attendance for each component in scheme.
+        const marksData = [];
+
+        students.forEach((st) => {
+          const sid = String(st.id);
+          const g = gradeValues[sid] ?? "";
+          const att = gradeAttendance[sid] ?? "P";
+
+          components.forEach((comp) => {
+            marksData.push({
+              student_id: st.id,
+              component_id: comp.component_id, // ✅ REQUIRED
+              grade: g ? String(g).trim().toUpperCase() : null,
+              attendance: upper(att) || "P",
+              marks_obtained: null, // optional
+            });
+          });
+        });
+
+        await api.post("/marks-entry/save", {
+          exam_schedule_id: examScheduleId,
+          marksData,
+        });
+
+        Swal.fire("Success", "Grades saved successfully", "success");
+        fetchMarksEntryData();
+        return;
+      }
+
+      // MARKS mode
+      const marksData = [];
+      students.forEach((student) => {
+        components.forEach((comp) => {
+          const key = `${student.id}_${comp.component_id}`;
+          const hasKey = Object.prototype.hasOwnProperty.call(marks, key);
+          const rawVal = hasKey ? marks[key] : "";
+          const att = attendance[key] || "P";
+
+          marksData.push({
+            student_id: student.id,
+            component_id: comp.component_id,
+            marks_obtained:
+              rawVal === "" || rawVal === null || rawVal === undefined
+                ? null
+                : parseFloat(rawVal),
+            attendance: att,
+          });
+        });
+      });
+
       await api.post("/marks-entry/save", {
         exam_schedule_id: examScheduleId,
         marksData,
       });
+
       Swal.fire("Success", "Marks saved successfully", "success");
       fetchMarksEntryData();
     } catch (err) {
-      console.error("Save marks error:", err);
-      Swal.fire("Error", "Failed to save marks", "error");
+      console.error("Save error:", err);
+      showApiError(
+        "Error",
+        err,
+        `Failed to save ${evaluationMode === "GRADE" ? "grades" : "marks"}`
+      );
     }
   };
 
+  /* =========================
+   * Export / Import
+   * ========================= */
   const handleExportExcel = async () => {
     const { class_id, section_id, exam_id, subject_id } = filters;
     try {
       const response = await api.get("/marks-entry/export", {
-        params: { class_id, section_id, exam_id, subject_id },
+        params: { class_id, section_id, exam_id, subject_id, mode: evaluationMode },
         responseType: "blob",
       });
 
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement("a");
       link.href = url;
-      link.setAttribute("download", `marks-entry-${Date.now()}.xlsx`);
+      link.setAttribute(
+        "download",
+        `marks-entry-${evaluationMode.toLowerCase()}-${Date.now()}.xlsx`
+      );
       document.body.appendChild(link);
       link.click();
       link.remove();
     } catch (err) {
       console.error("Export Excel error:", err);
-      Swal.fire("Error", "Failed to export Excel", "error");
+      showApiError("Error", err, "Failed to export Excel");
     }
   };
 
@@ -221,7 +451,7 @@ const MarksEntry = () => {
     const { class_id, section_id, exam_id, subject_id } = filters;
     try {
       const response = await api.get("/marks-entry/export-pdf", {
-        params: { class_id, section_id, exam_id, subject_id },
+        params: { class_id, section_id, exam_id, subject_id, mode: evaluationMode },
         responseType: "blob",
       });
 
@@ -230,7 +460,7 @@ const MarksEntry = () => {
 
       const link = document.createElement("a");
       link.href = url;
-      link.download = `marks-entry-${Date.now()}.pdf`;
+      link.download = `marks-entry-${evaluationMode.toLowerCase()}-${Date.now()}.pdf`;
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -238,22 +468,20 @@ const MarksEntry = () => {
       setTimeout(() => window.URL.revokeObjectURL(url), 1500);
     } catch (err) {
       console.error("Export PDF error:", err);
-      Swal.fire("Error", "Failed to export PDF", "error");
+      showApiError("Error", err, "Failed to export PDF");
     }
   };
 
   const handleImportExcel = async (e) => {
     const file = e.target.files[0];
-    if (!file || !examScheduleId)
-      return Swal.fire(
-        "Error",
-        "Please select a file and valid schedule",
-        "error"
-      );
+    if (!file || !examScheduleId) {
+      return Swal.fire("Error", "Please select a file and valid schedule", "error");
+    }
 
     const formData = new FormData();
     formData.append("file", file);
     formData.append("exam_schedule_id", examScheduleId);
+    formData.append("mode", evaluationMode); // backend can ignore; safe
 
     try {
       const res = await api.post("/marks-entry/import", formData, {
@@ -262,10 +490,8 @@ const MarksEntry = () => {
 
       Swal.fire(
         "Success",
-        `Marks imported successfully${
-          res.data?.rowsProcessed
-            ? ` (rows processed: ${res.data.rowsProcessed})`
-            : ""
+        `Imported successfully${
+          res.data?.rowsProcessed ? ` (rows processed: ${res.data.rowsProcessed})` : ""
         }`,
         "success"
       );
@@ -273,7 +499,7 @@ const MarksEntry = () => {
       e.target.value = null;
     } catch (err) {
       console.error("Import Excel error:", err);
-      Swal.fire("Error", "Failed to import marks", "error");
+      showApiError("Error", err, "Failed to import Excel");
     }
   };
 
@@ -297,37 +523,65 @@ const MarksEntry = () => {
       fetchMarksEntryData();
     } catch (err) {
       console.error("Lock component error:", err);
-      Swal.fire("Error", "Failed to lock component", "error");
+      showApiError("Error", err, "Failed to lock component");
     }
   };
 
-  const selectedClass = classExamSubjects.find(
-    (c) => c.class_id === parseInt(filters.class_id)
+  /* =========================
+   * Selected helpers
+   * ========================= */
+  const selectedClass = asArray(classExamSubjects).find(
+    (c) => Number(c.class_id) === Number(filters.class_id)
   );
-  const selectedSection = sections.find(
-    (s) => s.id === parseInt(filters.section_id)
+  const selectedSection = asArray(sections).find(
+    (s) => Number(s.id) === Number(filters.section_id)
   );
-  const selectedExam = exams.find(
-    (e) => e.exam_id === parseInt(filters.exam_id)
+  const selectedExam = asArray(exams).find(
+    (e) => Number(e.exam_id) === Number(filters.exam_id)
   );
   const isExamLocked = selectedExam?.is_locked;
-  const selectedSubject = subjects.find(
-    (s) => s.id === parseInt(filters.subject_id)
+  const selectedSubject = asArray(subjects).find(
+    (s) => Number(s.id) === Number(filters.subject_id)
   );
 
-  // ✅ UPDATED: percentage based on max marks (per student, only PRESENT components counted)
+  const showSelectedBanner =
+    selectedClass && selectedSection && selectedExam && selectedSubject;
+
+  /* =========================
+   * Grade options normalized
+   * ========================= */
+  const gradeOptionsNormalized = useMemo(() => {
+    const arr = asArray(gradeOptions);
+
+    // If backend returns string[] like ["A1","A2",...]
+    if (arr.length && typeof arr[0] === "string") {
+      return arr
+        .map((g) => String(g).trim().toUpperCase())
+        .filter(Boolean)
+        .map((g) => ({ value: g, label: g }));
+    }
+
+    // If backend returns objects
+    return arr
+      .map((g) => {
+        const grade = (g.grade || g.abbreviation || g.name || "").toString().trim();
+        const label =
+          g.abbreviation && g.name ? `${g.abbreviation} - ${g.name}` : grade || g.name || "";
+        const value = grade ? grade.toUpperCase() : "";
+        return value ? { value, label: label || value } : null;
+      })
+      .filter(Boolean);
+  }, [gradeOptions]);
+
+  /* =========================
+   * Stats (MARKS only)
+   * ========================= */
   const stats = useMemo(() => {
     const buckets = { "90+": 0, "80-89": 0, "70-79": 0, "60-69": 0, "<60": 0 };
     let absentAny = 0;
 
-    if (!students.length || !components.length) {
-      return {
-        buckets,
-        absentAny,
-        total: 0,
-        classAvgPct: 0,
-        details: [],
-      };
+    if (evaluationMode === "GRADE" || !students.length || !components.length) {
+      return { buckets, absentAny, total: students.length || 0, classAvgPct: 0, details: [] };
     }
 
     let totalPctSum = 0;
@@ -345,7 +599,7 @@ const MarksEntry = () => {
 
         if (att !== "P") {
           anyAbsent = true;
-          return; // ✅ do not count this component in denominator
+          return;
         }
 
         maxEligible += compMax;
@@ -387,11 +641,11 @@ const MarksEntry = () => {
       classAvgPct,
       details,
     };
-  }, [students, components, marks, attendance]);
+  }, [evaluationMode, students, components, marks, attendance]);
 
   return (
     <div className="container mt-4">
-      <h2>📝 Marks Entry</h2>
+      <h2>📝 Marks / Grade Entry</h2>
 
       <div className="card mt-4 mb-4">
         <div className="card-body">
@@ -405,7 +659,7 @@ const MarksEntry = () => {
                 onChange={handleClassChange}
               >
                 <option value="">Select Class</option>
-                {classExamSubjects.map((c) => (
+                {asArray(classExamSubjects).map((c) => (
                   <option key={c.class_id} value={c.class_id}>
                     {c.class_name}
                   </option>
@@ -422,7 +676,7 @@ const MarksEntry = () => {
                 onChange={handleFilterChange}
               >
                 <option value="">Select Section</option>
-                {sections.map((sec) => (
+                {asArray(sections).map((sec) => (
                   <option key={sec.id} value={sec.id}>
                     {sec.section_name}
                   </option>
@@ -432,13 +686,9 @@ const MarksEntry = () => {
 
             <div className="col-md-3 mb-3">
               <label>Exam</label>
-              <select
-                className="form-control"
-                value={filters.exam_id}
-                onChange={handleExamChange}
-              >
+              <select className="form-control" value={filters.exam_id} onChange={handleExamChange}>
                 <option value="">Select Exam</option>
-                {exams.map((e) => (
+                {asArray(exams).map((e) => (
                   <option key={e.exam_id} value={e.exam_id}>
                     {e.exam_name}
                   </option>
@@ -455,7 +705,7 @@ const MarksEntry = () => {
                 onChange={handleFilterChange}
               >
                 <option value="">Select Subject</option>
-                {subjects.map((s) => (
+                {asArray(subjects).map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.name}
                   </option>
@@ -466,43 +716,45 @@ const MarksEntry = () => {
         </div>
       </div>
 
-      {selectedClass && selectedSection && selectedExam && selectedSubject && (
-        <div className="alert alert-info">
+      {showSelectedBanner && (
+        <div className={`alert ${evaluationMode === "GRADE" ? "alert-warning" : "alert-info"}`}>
           <strong>Selected Details:</strong>
           <br />
           Class: <strong>{selectedClass.class_name}</strong> &nbsp;|&nbsp;
           Section: <strong>{selectedSection.section_name}</strong> &nbsp;|&nbsp;
           Exam: <strong>{selectedExam.exam_name}</strong> &nbsp;|&nbsp;
           Subject: <strong>{selectedSubject.name}</strong>
+          <br />
+          Mode: <strong>{evaluationMode === "GRADE" ? "GRADE ONLY" : "MARKS"}</strong>
         </div>
       )}
 
       {isExamLocked && (
         <div className="alert alert-danger">
-          <strong>This exam is locked.</strong> You cannot enter or modify marks.
+          <strong>This exam is locked.</strong> You cannot enter or modify data.
         </div>
       )}
 
-      {components.length > 0 && (
-        <div className="card mb-4">
+      {/* =========================
+          Action Bar
+         ========================= */}
+      {showSelectedBanner && (
+        <div className="card mb-3">
           <div className="card-body">
-            <h5 className="card-title">Marks Entry Table</h5>
-
-            <div className="d-flex gap-3 mb-3 flex-wrap">
+            <div className="d-flex gap-3 flex-wrap align-items-center">
               <button
                 className="btn btn-success"
-                onClick={handleSaveMarks}
-                disabled={
-                  isExamLocked || students.length === 0 || components.length === 0
-                }
+                onClick={handleSave}
+                disabled={isExamLocked || students.length === 0}
               >
-                💾 Save Marks
+                💾 Save {evaluationMode === "GRADE" ? "Grades" : "Marks"}
               </button>
 
               <button
                 className="btn btn-outline-primary"
                 onClick={handleExportExcel}
-                disabled={isExamLocked}
+                disabled={isExamLocked || students.length === 0}
+                title="Exports will include the current mode"
               >
                 ⬇️ Export Excel
               </button>
@@ -510,12 +762,13 @@ const MarksEntry = () => {
               <button
                 className="btn btn-outline-dark"
                 onClick={handleExportPDF}
-                disabled={isExamLocked}
+                disabled={isExamLocked || students.length === 0}
+                title="Exports will include the current mode"
               >
                 🖨️ Export PDF
               </button>
 
-              <label className="btn btn-outline-secondary mb-0">
+              <label className={`btn btn-outline-secondary mb-0 ${isExamLocked ? "disabled" : ""}`}>
                 ⬆️ Import Excel
                 <input
                   type="file"
@@ -526,43 +779,135 @@ const MarksEntry = () => {
                 />
               </label>
 
-              <button
-                className="btn btn-outline-info"
-                onClick={() => setShowStats(true)}
-                disabled={students.length === 0 || components.length === 0}
-              >
-                📊 Statistics
-              </button>
+              {evaluationMode !== "GRADE" && (
+                <button
+                  className="btn btn-outline-info"
+                  onClick={() => setShowStats(true)}
+                  disabled={students.length === 0 || components.length === 0}
+                >
+                  📊 Statistics
+                </button>
+              )}
             </div>
 
-            <div
-              className="table-responsive"
-              style={{ maxHeight: "500px", overflowY: "auto" }}
-            >
+            {evaluationMode === "GRADE" && (
+              <div className="text-muted small mt-2">
+                * This subject is configured as <b>GRADE-only</b>. Marks components are not applicable.
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* =========================
+          GRADE MODE UI
+         ========================= */}
+      {evaluationMode === "GRADE" && students.length > 0 && showSelectedBanner && (
+        <div className="card mb-4">
+          <div className="card-body">
+            <h5 className="card-title">Grade Entry</h5>
+
+            {(!gradeOptionsNormalized || gradeOptionsNormalized.length === 0) && (
+              <div className="alert alert-danger">
+                <b>Grade options not found.</b> Backend should return{" "}
+                <code>allowedGrades</code> (string array) OR <code>grade_options</code>.
+              </div>
+            )}
+
+            <div className="table-responsive" style={{ maxHeight: "520px", overflowY: "auto" }}>
               <table className="table table-bordered table-striped">
-                <thead
-                  className="table-light"
-                  style={{ position: "sticky", top: 0, zIndex: 1 }}
-                >
+                <thead className="table-light" style={{ position: "sticky", top: 0, zIndex: 1 }}>
+                  <tr>
+                    <th style={{ width: 110 }}>Roll No</th>
+                    <th>Name</th>
+                    <th style={{ width: 120 }}>Attd.</th>
+                    <th style={{ width: 220 }}>Grade</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {students.map((st) => {
+                    const sid = String(st.id);
+                    const currentGrade = gradeValues[sid] ?? "";
+                    const currentAtt = gradeAttendance[sid] ?? "P";
+
+                    return (
+                      <tr key={st.id}>
+                        <td>{st.roll_number}</td>
+                        <td>{st.name}</td>
+
+                        <td>
+                          <select
+                            className="form-select"
+                            value={currentAtt}
+                            onChange={(e) => handleGradeAttendanceChange(st.id, e.target.value)}
+                            disabled={isExamLocked}
+                          >
+                            {attendanceOptions.map((opt) => (
+                              <option key={opt} value={opt}>
+                                {opt}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+
+                        <td>
+                          <select
+                            className="form-select"
+                            value={String(currentGrade)}
+                            onChange={(e) => handleGradeChange(st.id, e.target.value)}
+                            disabled={isExamLocked}
+                          >
+                            <option value="">Select Grade</option>
+                            {gradeOptionsNormalized.map((g) => (
+                              <option key={g.value} value={g.value}>
+                                {g.label}
+                              </option>
+                            ))}
+                          </select>
+                          <div className="text-muted small mt-1">
+                            Saved as <b>grade string</b> (A1/A2/B1…)
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="text-muted small mt-2">
+              Note: Grade is saved per component in backend (same grade repeated across all scheme components).
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =========================
+          MARKS MODE UI
+         ========================= */}
+      {evaluationMode !== "GRADE" && components.length > 0 && (
+        <div className="card mb-4">
+          <div className="card-body">
+            <h5 className="card-title">Marks Entry Table</h5>
+
+            <div className="table-responsive" style={{ maxHeight: "520px", overflowY: "auto" }}>
+              <table className="table table-bordered table-striped">
+                <thead className="table-light" style={{ position: "sticky", top: 0, zIndex: 1 }}>
                   <tr>
                     <th rowSpan="2">Roll No</th>
                     <th rowSpan="2">Name</th>
                     {components.map((comp) => (
-                      <th
-                        key={comp.component_id}
-                        colSpan="2"
-                        className="text-center"
-                      >
+                      <th key={comp.component_id} colSpan="2" className="text-center">
                         <div>{comp.abbreviation || comp.name}</div>
+                        <div className="small text-muted">Max: {comp.max_marks}</div>
                         <div>
                           {comp.is_locked ? (
                             <span className="text-danger small">🔒 Locked</span>
                           ) : (
                             <button
                               className="btn btn-sm btn-outline-warning mt-1"
-                              onClick={() =>
-                                handleLockComponent(comp.exam_scheme_id)
-                              }
+                              onClick={() => handleLockComponent(comp.exam_scheme_id)}
+                              disabled={isExamLocked}
                             >
                               🔐 Lock
                             </button>
@@ -584,10 +929,7 @@ const MarksEntry = () => {
                 <tbody>
                   {students.length === 0 ? (
                     <tr>
-                      <td
-                        colSpan={2 + components.length * 2}
-                        className="text-center text-muted"
-                      >
+                      <td colSpan={2 + components.length * 2} className="text-center text-muted">
                         No students found for this selection.
                       </td>
                     </tr>
@@ -595,9 +937,7 @@ const MarksEntry = () => {
                     students.map((student) => (
                       <tr
                         key={student.id}
-                        className={
-                          activeStudentId === student.id ? "table-primary" : ""
-                        }
+                        className={activeStudentId === student.id ? "table-primary" : ""}
                       >
                         <td>{student.roll_number}</td>
                         <td>{student.name}</td>
@@ -605,14 +945,9 @@ const MarksEntry = () => {
                         {components.map((comp) => {
                           const key = `${student.id}_${comp.component_id}`;
 
-                          const hasKey = Object.prototype.hasOwnProperty.call(
-                            marks,
-                            key
-                          );
+                          const hasKey = Object.prototype.hasOwnProperty.call(marks, key);
                           const value =
-                            hasKey &&
-                            marks[key] !== null &&
-                            marks[key] !== undefined
+                            hasKey && marks[key] !== null && marks[key] !== undefined
                               ? marks[key]
                               : "";
 
@@ -620,19 +955,15 @@ const MarksEntry = () => {
                           const isInvalid =
                             value !== "" &&
                             !isNaN(parseFloat(value)) &&
-                            parseFloat(value) > comp.max_marks;
+                            parseFloat(value) > Number(comp.max_marks);
 
                           return (
                             <React.Fragment key={key}>
-                              <td
-                                className={
-                                  comp.is_locked ? "bg-light text-muted" : ""
-                                }
-                              >
+                              <td className={comp.is_locked ? "bg-light text-muted" : ""}>
                                 <select
                                   className="form-select"
                                   value={att}
-                                  disabled={comp.is_locked}
+                                  disabled={comp.is_locked || isExamLocked}
                                   onChange={(e) =>
                                     handleAttendanceChange(
                                       student.id,
@@ -641,36 +972,24 @@ const MarksEntry = () => {
                                     )
                                   }
                                 >
-                                  {["P", "A", "L", "ACT", "LA", "ML", "X"].map(
-                                    (opt) => (
-                                      <option key={opt} value={opt}>
-                                        {opt}
-                                      </option>
-                                    )
-                                  )}
+                                  {attendanceOptions.map((opt) => (
+                                    <option key={opt} value={opt}>
+                                      {opt}
+                                    </option>
+                                  ))}
                                 </select>
                               </td>
 
-                              <td
-                                className={
-                                  comp.is_locked ? "bg-light text-muted" : ""
-                                }
-                              >
+                              <td className={comp.is_locked ? "bg-light text-muted" : ""}>
                                 <input
                                   type="number"
                                   autoComplete="off"
-                                  className={`form-control ${
-                                    isInvalid ? "is-invalid" : ""
-                                  }`}
+                                  className={`form-control ${isInvalid ? "is-invalid" : ""}`}
                                   value={value}
                                   onChange={(e) =>
-                                    handleMarksChange(
-                                      student.id,
-                                      comp.component_id,
-                                      e.target.value
-                                    )
+                                    handleMarksChange(student.id, comp.component_id, e.target.value)
                                   }
-                                  disabled={att !== "P" || comp.is_locked}
+                                  disabled={att !== "P" || comp.is_locked || isExamLocked}
                                   min="0"
                                   max={comp.max_marks}
                                   ref={(el) => {
@@ -693,31 +1012,26 @@ const MarksEntry = () => {
                                     if (e.key === "Enter" || e.key === "ArrowDown") {
                                       e.preventDefault();
                                       const nextStudent = students[currentStudentIndex + 1];
-                                      if (nextStudent)
-                                        nextKey = `${nextStudent.id}_${comp.component_id}`;
-                                      else
-                                        Swal.fire("Info", "Reached last student", "info");
+                                      if (nextStudent) nextKey = `${nextStudent.id}_${comp.component_id}`;
+                                      else Swal.fire("Info", "Reached last student", "info");
                                     }
 
                                     if (e.key === "ArrowUp") {
                                       e.preventDefault();
                                       const prevStudent = students[currentStudentIndex - 1];
-                                      if (prevStudent)
-                                        nextKey = `${prevStudent.id}_${comp.component_id}`;
+                                      if (prevStudent) nextKey = `${prevStudent.id}_${comp.component_id}`;
                                     }
 
                                     if (e.key === "ArrowRight") {
                                       e.preventDefault();
                                       const nextComp = components[currentCompIndex + 1];
-                                      if (nextComp)
-                                        nextKey = `${student.id}_${nextComp.component_id}`;
+                                      if (nextComp) nextKey = `${student.id}_${nextComp.component_id}`;
                                     }
 
                                     if (e.key === "ArrowLeft") {
                                       e.preventDefault();
                                       const prevComp = components[currentCompIndex - 1];
-                                      if (prevComp)
-                                        nextKey = `${student.id}_${prevComp.component_id}`;
+                                      if (prevComp) nextKey = `${student.id}_${prevComp.component_id}`;
                                     }
 
                                     if (nextKey && inputRefs.current[nextKey]) {
@@ -727,9 +1041,7 @@ const MarksEntry = () => {
                                 />
 
                                 {isInvalid && (
-                                  <div className="invalid-feedback">
-                                    Max: {comp.max_marks}
-                                  </div>
+                                  <div className="invalid-feedback">Max: {comp.max_marks}</div>
                                 )}
                               </td>
                             </React.Fragment>
@@ -742,8 +1054,8 @@ const MarksEntry = () => {
               </table>
             </div>
 
-            {/* ✅ Stats Modal */}
-            {showStats && (
+            {/* ✅ Stats Modal (MARKS only) */}
+            {showStats && evaluationMode !== "GRADE" && (
               <div
                 className="position-fixed top-0 start-0 w-100 h-100"
                 style={{ background: "rgba(0,0,0,0.5)", zIndex: 9999 }}
@@ -834,7 +1146,6 @@ const MarksEntry = () => {
                     * If student is absent in any component, that component is <b>excluded</b> from denominator.
                   </div>
 
-                  {/* Optional: Top/Bottom quick view */}
                   {stats.details?.length ? (
                     <div className="mt-3">
                       <h6 className="mb-2">Quick % List (Top 10)</h6>
@@ -871,6 +1182,13 @@ const MarksEntry = () => {
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {/* If subject selected but no components and not grade -> show hint */}
+      {showSelectedBanner && evaluationMode !== "GRADE" && components.length === 0 && (
+        <div className="alert alert-warning">
+          <b>No components found</b> for this selection. Please check Exam Scheme for this subject/term.
         </div>
       )}
     </div>

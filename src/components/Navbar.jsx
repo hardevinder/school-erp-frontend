@@ -465,7 +465,7 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
   };
 
   const quickLinks = QUICK_LINKS_BY_ROLE[roleLower] || [];
-  const brandLogo = `${process.env.PUBLIC_URL}/images/pts_logo.png`;
+  const brandLogo = `${process.env.PUBLIC_URL}/images/DemoLogo.png`;
 
   return (
     <>
@@ -482,7 +482,7 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
           >
             <img
               src={brandLogo}
-              alt="Pathseekers International School"
+              alt="Demo Public School"
               width={34}
               height={34}
               className="rounded"
@@ -492,7 +492,7 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
               }}
             />
             <span className="fw-semibold">
-              Pathseekers International School
+              Demo Public School
             </span>
           </Link>
 

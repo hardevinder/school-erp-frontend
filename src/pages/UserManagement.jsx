@@ -4,13 +4,7 @@ import Swal from "sweetalert2";
 import withReactContent from "sweetalert2-react-content";
 import "./Users.css";
 
-import {
-  collection,
-  addDoc,
-  setDoc,
-  doc,
-  serverTimestamp,
-} from "firebase/firestore";
+import { collection, addDoc, setDoc, doc, serverTimestamp } from "firebase/firestore";
 import { firestore } from "../firebase/firebaseConfig.js";
 
 const MySwal = withReactContent(Swal);
@@ -30,6 +24,29 @@ const UserManagement = () => {
     debounceTimer.current = setTimeout(() => setDebouncedSearch(search), 300);
     return () => clearTimeout(debounceTimer.current);
   }, [search]);
+
+  /* ========================= Error popup helper ========================= */
+  const showApiError = (error, fallbackTitle = "Error") => {
+    const data = error?.response?.data;
+
+    // Backend validation array support:
+    const errorsArr = Array.isArray(data?.errors) ? data.errors : [];
+
+    const html = errorsArr.length
+      ? errorsArr
+          .map(
+            (e) =>
+              `• <b>${String(e.field || "field")}</b>: ${String(e.message || "")}`
+          )
+          .join("<br/>")
+      : data?.message || error?.message || "Something went wrong.";
+
+    Swal.fire({
+      icon: "error",
+      title: fallbackTitle,
+      html,
+    });
+  };
 
   /* ========================= Fetchers ========================= */
   const fetchUsers = async () => {
@@ -121,7 +138,7 @@ const UserManagement = () => {
       fetchUsers();
     } catch (error) {
       console.error(error);
-      Swal.fire("Error", "Failed to delete the user.", "error");
+      showApiError(error, "Failed to delete user");
     }
   };
 
@@ -147,12 +164,14 @@ const UserManagement = () => {
       focusConfirm: false,
       showCancelButton: true,
       confirmButtonText: "Add User",
+      confirmButtonColor: "#198754",
       preConfirm: () => {
         const name = document.getElementById("name").value.trim();
         const username = document.getElementById("username").value.trim();
         const email = document.getElementById("email").value.trim();
         const password = document.getElementById("password").value.trim();
         const roles = getSelectedRolesFromDOM();
+
         if (!name || !username || !password) {
           Swal.showValidationMessage("Name, Username & Password are required");
           return false;
@@ -161,6 +180,15 @@ const UserManagement = () => {
           Swal.showValidationMessage("Please select at least one role");
           return false;
         }
+
+        // basic client check (backend will still validate)
+        if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+          Swal.showValidationMessage(
+            "Please enter a valid email address (or leave empty)."
+          );
+          return false;
+        }
+
         return { name, username, email, password, roles };
       },
       didOpen: () => document.getElementById("name")?.focus(),
@@ -170,10 +198,19 @@ const UserManagement = () => {
     if (!formValues) return;
 
     try {
+      // show loader while saving
+      Swal.fire({
+        title: "Saving...",
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        didOpen: () => Swal.showLoading(),
+      });
+
+      // ✅ Only await backend (this is reliable)
       const resp = await api.post("/users/register", formValues);
       const backendId = resp.data?.user?.id || resp.data?.id || null;
 
-      // Prefer stable ids in Firestore when we have them
+      // Prepare Firestore payload
       const payload = {
         name: formValues.name,
         username: formValues.username,
@@ -183,23 +220,38 @@ const UserManagement = () => {
         createdAt: serverTimestamp(),
       };
 
-      if (backendId) {
-        await setDoc(doc(firestore, "users", String(backendId)), payload, {
-          merge: true,
-        });
-      } else {
-        await addDoc(collection(firestore, "users"), payload);
-      }
+      // ✅ Firestore mirror (NON-BLOCKING, do not await)
+      (async () => {
+        try {
+          if (backendId) {
+            await setDoc(doc(firestore, "users", String(backendId)), payload, {
+              merge: true,
+            });
+          } else {
+            await addDoc(collection(firestore, "users"), payload);
+          }
+        } catch (e) {
+          console.warn("Firestore mirror skipped (token issue):", e?.message || e);
+        }
+      })();
 
-      Swal.fire("Success!", "User has been added.", "success");
-      fetchUsers();
+      // close loader
+      Swal.close();
+
+      // ✅ success popup then refresh
+      await Swal.fire({
+        icon: "success",
+        title: "Success!",
+        text: "User added. Refreshing page...",
+        timer: 900,
+        showConfirmButton: false,
+      });
+
+      window.location.reload();
     } catch (error) {
       console.error(error);
-      Swal.fire(
-        "Error",
-        error.response?.data?.message || "Failed to add the user.",
-        "error"
-      );
+      Swal.close(); // close loading if any
+      showApiError(error, "Failed to add user");
     }
   };
 
@@ -231,6 +283,7 @@ const UserManagement = () => {
         const email = document.getElementById("email").value.trim();
         const password = document.getElementById("password").value.trim();
         const roles = getSelectedRolesFromDOM();
+
         if (!name || !username) {
           Swal.showValidationMessage("Name & Username are required");
           return false;
@@ -239,6 +292,13 @@ const UserManagement = () => {
           Swal.showValidationMessage("Please select at least one role");
           return false;
         }
+        if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+          Swal.showValidationMessage(
+            "Please enter a valid email address (or leave empty)."
+          );
+          return false;
+        }
+
         return {
           userId: user.id,
           name,
@@ -254,7 +314,6 @@ const UserManagement = () => {
     if (!formValues) return;
 
     try {
-      // ✅ Use RESTful update route
       await api.put(`/users/${formValues.userId}`, {
         name: formValues.name,
         username: formValues.username,
@@ -263,28 +322,29 @@ const UserManagement = () => {
         ...(formValues.password && { password: formValues.password }),
       });
 
-      // Mirror to Firestore keyed by backend id
-      await setDoc(
-        doc(firestore, "users", String(formValues.userId)),
-        {
-          name: formValues.name,
-          username: formValues.username,
-          email: formValues.email,
-          roles: formValues.roles,
-          updatedAt: serverTimestamp(),
-        },
-        { merge: true }
-      );
+      // ⚠️ keeping this await for edit is okay, but it can hang too if Firebase token is stuck.
+      // If you want, make this also non-blocking like create.
+      try {
+        await setDoc(
+          doc(firestore, "users", String(formValues.userId)),
+          {
+            name: formValues.name,
+            username: formValues.username,
+            email: formValues.email,
+            roles: formValues.roles,
+            updatedAt: serverTimestamp(),
+          },
+          { merge: true }
+        );
+      } catch (e) {
+        console.warn("Firestore mirror skipped (edit):", e?.message || e);
+      }
 
       Swal.fire("Updated!", "User details have been updated.", "success");
       fetchUsers();
     } catch (error) {
       console.error(error);
-      Swal.fire(
-        "Error",
-        error.response?.data?.message || "Failed to update the user.",
-        "error"
-      );
+      showApiError(error, "Failed to update user");
     }
   };
 
@@ -296,9 +356,8 @@ const UserManagement = () => {
         .join(" ")
         .toLowerCase()
         .includes(q);
-      const roleMatch = selectedRole
-        ? (u.roles || []).includes(selectedRole)
-        : true;
+
+      const roleMatch = selectedRole ? (u.roles || []).includes(selectedRole) : true;
       return textMatch && roleMatch;
     });
   }, [users, debouncedSearch, selectedRole]);
@@ -311,9 +370,7 @@ const UserManagement = () => {
           <div className="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
             <div className="d-flex align-items-center gap-2">
               <h1 className="h4 mb-0 text-primary">User Management</h1>
-              <span className="badge bg-light text-secondary border">
-                {users.length} total
-              </span>
+              <span className="badge bg-light text-secondary border">{users.length} total</span>
             </div>
             <button className="btn btn-success" onClick={handleAdd}>
               <i className="bi bi-plus-lg me-1"></i> Add User
@@ -367,7 +424,6 @@ const UserManagement = () => {
               </thead>
               <tbody>
                 {loading ? (
-                  // Loading skeleton rows (simple)
                   Array.from({ length: 6 }).map((_, i) => (
                     <tr key={`s-${i}`}>
                       <td colSpan={6}>
@@ -377,7 +433,7 @@ const UserManagement = () => {
                   ))
                 ) : filteredUsers.length ? (
                   filteredUsers.map((user, idx) => (
-                    <tr key={user.id}>
+                    <tr key={user.id || user.username || `u-${idx}`}>
                       <td>{idx + 1}</td>
                       <td className="fw-semibold">{user.name}</td>
                       <td>
@@ -415,8 +471,7 @@ const UserManagement = () => {
                   <tr>
                     <td colSpan="6" className="text-center py-5">
                       <div className="text-muted">
-                        <i className="bi bi-people me-2"></i>No matching users
-                        found
+                        <i className="bi bi-people me-2"></i>No matching users found
                       </div>
                     </td>
                   </tr>
@@ -425,11 +480,9 @@ const UserManagement = () => {
             </table>
           </div>
 
-          {/* Footer hint */}
           <div className="mt-2 small text-muted">
-            Tip: Use the search box to filter by <em>name</em>,{" "}
-            <em>username</em>, or <em>email</em>. Use the dropdown to narrow by
-            role.
+            Tip: Use the search box to filter by <em>name</em>, <em>username</em>, or <em>email</em>. Use the dropdown
+            to narrow by role.
           </div>
         </div>
       </div>

@@ -179,7 +179,10 @@ const FeeStructure = () => {
       .map((s) => `<option value="${s.id}">${s.name}${s.is_active ? " (Active)" : ""}</option>`)
       .join("");
 
-    const isEdit = Boolean(existing);
+    // ✅ Copy mode support
+    const isCopy = Boolean(existing?.__isCopy);
+    const isEdit = Boolean(existing) && !isCopy;
+
     const dueDateFormatted =
       existing && existing.fineStartDate
         ? new Date(existing.fineStartDate).toISOString().split("T")[0]
@@ -298,14 +301,14 @@ const FeeStructure = () => {
     `;
 
     // ✅ short title (small height)
-    const modalTitle = isEdit ? "Edit Fee" : "Add Fee";
+    const modalTitle = isEdit ? "Edit Fee" : isCopy ? "Copy Fee" : "Add Fee";
 
     return Swal.fire({
       ...swalBaseOpts,
       title: modalTitle,
       html,
       didOpen: () => {
-        // set current values if edit
+        // set current values if edit/copy
         if (existing) {
           document.getElementById("sessionId").value =
             existing.Session?.id ?? selectedSessionId ?? "";
@@ -346,6 +349,11 @@ const FeeStructure = () => {
 
         fineTypeSelect.addEventListener("change", applyFineMode);
         applyFineMode();
+
+        // ✅ UX: when copying, auto-focus class for quick change
+        if (isCopy) {
+          setTimeout(() => document.getElementById("classId")?.focus(), 50);
+        }
       },
       preConfirm: () => {
         const sessionId = document.getElementById("sessionId").value;
@@ -397,8 +405,9 @@ const FeeStructure = () => {
           await api.put(`/fee-structures/${existing.id}`, res.value);
           Swal.fire("Updated!", "Fee structure updated.", "success");
         } else {
+          // ✅ Add OR Copy => POST
           await api.post(`/fee-structures`, res.value);
-          Swal.fire("Added!", "Fee structure added.", "success");
+          Swal.fire(isCopy ? "Copied!" : "Added!", isCopy ? "Fee structure copied." : "Fee structure added.", "success");
         }
 
         setSelectedSessionId(Number(res.value.session_id));
@@ -412,6 +421,12 @@ const FeeStructure = () => {
 
   const handleAdd = () => openAddOrEditModal(null);
   const handleEdit = (fee) => openAddOrEditModal(fee);
+
+  // ✅ COPY ROW
+  const handleCopy = (fee) => {
+    // pass a marker so modal knows this is "copy" (POST) but prefilled
+    openAddOrEditModal({ ...fee, __isCopy: true, id: null });
+  };
 
   // ---------------------- Options & Filters ----------------------
   const classOptions = useMemo(
@@ -843,7 +858,7 @@ const FeeStructure = () => {
                 </>
               )}
 
-              {canEdit && <th style={{ width: 130 }}>Actions</th>}
+              {canEdit && <th style={{ width: 190 }}>Actions</th>}
             </tr>
           </thead>
 
@@ -887,6 +902,11 @@ const FeeStructure = () => {
                         <button className="btn btn-primary btn-sm me-1" onClick={() => handleEdit(fee)}>
                           Edit
                         </button>
+
+                        <button className="btn btn-outline-secondary btn-sm me-1" onClick={() => handleCopy(fee)}>
+                          Copy
+                        </button>
+
                         {isSuperadmin && (
                           <button className="btn btn-danger btn-sm" onClick={() => handleDelete(fee)}>
                             Delete

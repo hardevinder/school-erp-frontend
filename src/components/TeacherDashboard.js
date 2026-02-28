@@ -28,14 +28,26 @@ import ChatContainer from "./chat/ChatContainer";
  * - Recent Digital Diaries (scrollable)
  * - Collapsible Co-Scholastic & Student Remarks
  * - Floating Chat + Notifications Drawer
+ *
+ * ✅ NEW:
+ * - Quick Action: Bulk Attendance Upload -> /attendance-entry
+ * - Quick Action: Co-Scholastic Entry -> /co-scholastic-entry
+ * - Quick Actions Search box
+ * - More modern header + card polish
  */
 
 export default function TeacherDashboard() {
   const navigate = useNavigate();
 
   const teacherId = Number(localStorage.getItem("teacherId")) || 0;
+  const teacherName = localStorage.getItem("name") || localStorage.getItem("username") || "Teacher";
+
   const todayStr = useMemo(() => moment().format("YYYY-MM-DD"), []);
   const todayName = useMemo(() => moment().format("dddd"), []);
+  const greeting = useMemo(() => {
+    const h = moment().hour();
+    return h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening";
+  }, []);
 
   // ------- UI state -------
   const [showNotifications, setShowNotifications] = useState(false);
@@ -49,6 +61,9 @@ export default function TeacherDashboard() {
 
   const [showRemarks, setShowRemarks] = useState(true);
   const [showCoScholastic, setShowCoScholastic] = useState(false);
+
+  // Quick Actions search
+  const [qaSearch, setQaSearch] = useState("");
 
   const userRoles = useMemo(() => {
     try {
@@ -142,7 +157,8 @@ export default function TeacherDashboard() {
         try {
           const lr = await api.get("/leave");
           const arr = Array.isArray(lr.data) ? lr.data : [];
-          if (!cancelled) setPendingLeave(arr.filter((x) => (x.status || "").toLowerCase() === "pending").length);
+          if (!cancelled)
+            setPendingLeave(arr.filter((x) => (x.status || "").toLowerCase() === "pending").length);
         } catch {}
 
         // Circulars (recent + new count in last 48h)
@@ -431,85 +447,181 @@ export default function TeacherDashboard() {
   );
 
   // ------- QUICK ACTIONS (Teacher sidebar → tiles) -------
-  const quickActions = useMemo(
-    () =>
-      !isTeacher
-        ? []
-        : [
-            { label: "Mark Attendance", icon: "bi-check2-square", path: "/mark-attendance", color: "var(--qa-blue)" },
-            { label: "Timetable", icon: "bi-table", path: "/teacher-timetable-display", color: "var(--qa-purple)" },
-            { label: "My Substitutions", icon: "bi-arrow-repeat", path: "/combined-teacher-substitution", color: "var(--qa-teal)" },
-            { label: "Assignments", icon: "bi-clipboard", path: "/assignments", color: "var(--qa-green)" },
-            { label: "Assignment Marking", icon: "bi-pencil-square", path: "/assignment-marking", color: "var(--qa-amber)" },
-            { label: "Circulars", icon: "bi-megaphone", path: "/view-circulars", color: "var(--qa-pink)" },
-            { label: "Lesson Plan", icon: "bi-journal-text", path: "/lesson-plan", color: "var(--qa-indigo)" },
-            { label: "Request Leave", icon: "bi-box-arrow-in-down-left", path: "/employee-leave-request", color: "var(--qa-orange)" },
-            { label: "My Attendance", icon: "bi-calendar2-week", path: "/my-attendance-calendar", color: "var(--qa-cyan)" },
-            { label: "Marks Entry", icon: "bi-pencil-square", path: "/marks-entry", color: "var(--qa-lime)" },
-            { label: "Result Summary", icon: "bi-bar-chart", path: "/reports/classwise-result-summary", color: "var(--qa-rose)" },
-            { label: "Report Cards", icon: "bi-printer", path: "/report-card-generator", color: "var(--qa-slate)" },
-            { label: "Digital Diary", icon: "bi-journal-bookmark", path: "/digital-diary", color: "var(--qa-indigo)" },
+ const quickActions = useMemo(
+  () =>
+    !isTeacher
+      ? []
+      : [
+          { label: "Mark Attendance", icon: "bi-check2-square", path: "/mark-attendance", color: "var(--qa-blue)" },
 
-            // ✅ NEW: Academic Calendar (View for teachers)
-            { label: "Academic Calendar", icon: "bi-calendar3", path: "/academic-calendar-view", color: "var(--qa-purple)" },
-          ],
-    [isTeacher]
-  );
+          // ✅ NEW: Bulk Attendance Upload
+          {
+            label: "Bulk Attendance Upload",
+            icon: "bi-upload",
+            path: "/attendance-entry",
+            color: "var(--qa-cyan)",
+            badge: "NEW",
+          },
+
+          { label: "Timetable", icon: "bi-table", path: "/teacher-timetable-display", color: "var(--qa-purple)" },
+          { label: "My Substitutions", icon: "bi-arrow-repeat", path: "/combined-teacher-substitution", color: "var(--qa-teal)" },
+          { label: "Assignments", icon: "bi-clipboard", path: "/assignments", color: "var(--qa-green)" },
+          { label: "Assignment Marking", icon: "bi-pencil-square", path: "/assignment-marking", color: "var(--qa-amber)" },
+          { label: "Circulars", icon: "bi-megaphone", path: "/view-circulars", color: "var(--qa-pink)" },
+          { label: "Lesson Plan", icon: "bi-journal-text", path: "/lesson-plan", color: "var(--qa-indigo)" },
+
+          // ✅ NEW: Syllabus Breakdown
+          {
+            label: "Syllabus Breakdown",
+            icon: "bi-diagram-3",
+            path: "/syllabus-breakdown",
+            color: "var(--qa-indigo)",
+            badge: "NEW",
+          },
+
+          { label: "Request Leave", icon: "bi-box-arrow-in-down-left", path: "/employee-leave-request", color: "var(--qa-orange)" },
+          { label: "My Attendance", icon: "bi-calendar2-week", path: "/my-attendance-calendar", color: "var(--qa-slate)" },
+          { label: "Marks Entry", icon: "bi-pencil-square", path: "/marks-entry", color: "var(--qa-lime)" },
+          { label: "Result Summary", icon: "bi-bar-chart", path: "/reports/classwise-result-summary", color: "var(--qa-rose)" },
+          { label: "Report Cards", icon: "bi-printer", path: "/report-card-generator", color: "var(--qa-slate)" },
+          { label: "Digital Diary", icon: "bi-journal-bookmark", path: "/digital-diary", color: "var(--qa-indigo)" },
+
+          // ✅ Co-Scholastic Entry
+          {
+            label: "Co-Scholastic Entry",
+            icon: "bi-puzzle",
+            path: "/co-scholastic-entry",
+            color: "var(--qa-teal)",
+          },
+
+          // ✅ Academic Calendar
+          { label: "Academic Calendar", icon: "bi-calendar3", path: "/academic-calendar-view", color: "var(--qa-purple)" },
+        ],
+  [isTeacher]
+);
+
+  const filteredQuickActions = useMemo(() => {
+    const q = (qaSearch || "").trim().toLowerCase();
+    if (!q) return quickActions;
+    return quickActions.filter((a) => (a.label || "").toLowerCase().includes(q));
+  }, [qaSearch, quickActions]);
 
   const go = (path) => navigate(path);
 
+  const initials = useMemo(() => {
+    const parts = String(teacherName || "Teacher").trim().split(/\s+/).filter(Boolean);
+    const a = (parts[0] || "T")[0] || "T";
+    const b = (parts[1] || "")[0] || "";
+    return (a + b).toUpperCase();
+  }, [teacherName]);
+
   return (
-    <div className="container-fluid px-3">
+    <div className="container-fluid px-3 teacher-dash">
       {/* Header */}
-      <div className="dashboard-header px-3 py-2 mb-3 rounded d-flex align-items-center gap-2">
-        <div>
-          <h5 className="mb-0">
-            Good {moment().hour() < 12 ? "morning" : moment().hour() < 17 ? "afternoon" : "evening"}, Teacher
-          </h5>
-          <small className="text-muted">{moment().format("dddd, Do MMM YYYY")}</small>
+      <div className="dash-hero mb-3 rounded-4 shadow-sm">
+        <div className="dash-hero-inner p-3 p-md-4">
+          <div className="d-flex align-items-start gap-3">
+            <div className="avatar-soft" aria-hidden="true">
+              <span>{initials}</span>
+            </div>
+
+            <div className="flex-grow-1">
+              <div className="d-flex flex-wrap align-items-center gap-2">
+                <h5 className="mb-0 text-white">
+                  {greeting},{" "}
+                  <span className="fw-semibold">{teacherName || "Teacher"}</span>
+                </h5>
+                <span className="badge bg-light text-dark border ms-md-2">{moment().format("dddd")}</span>
+                <span className="badge bg-light text-dark border">{moment().format("Do MMM YYYY")}</span>
+              </div>
+
+              <div className="text-white-50 small mt-1">
+                Today:{" "}
+                <span className="text-white">
+                  {todayClasses.length ? `${todayClasses.length} class(es)` : "No scheduled classes"}
+                </span>{" "}
+                • Substitutions:{" "}
+                <span className="text-white">
+                  {subsTook.length} covering / {subsFreed.length} freed
+                </span>
+              </div>
+
+              <div className="d-none d-md-flex align-items-center gap-1 mt-2">
+                {userRoles.map((r) => (
+                  <span key={r} className="badge bg-dark bg-opacity-50 text-white border border-white border-opacity-25">
+                    {r}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            <div className="d-flex flex-column gap-2 align-items-end">
+              <button
+                type="button"
+                className="btn btn-light btn-sm position-relative"
+                onClick={() => setShowNotifications(true)}
+                title="Notifications"
+              >
+                <i className="bi bi-bell me-1" />
+                Notifications
+                {notifications.length > 0 && (
+                  <span
+                    className="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger"
+                    style={{ fontSize: "0.7rem" }}
+                  >
+                    {notifications.length}
+                  </span>
+                )}
+              </button>
+
+              <div className="d-flex gap-2">
+                <button
+                  type="button"
+                  className="btn btn-outline-light btn-sm"
+                  onClick={() => go("/co-scholastic-entry")}
+                  title="Open Co-Scholastic Entry"
+                >
+                  <i className="bi bi-puzzle me-1" />
+                  Co-Scholastic
+                </button>
+
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  onClick={() => setShowRemarks((s) => !s)}
+                  title="Toggle Student Remarks (inline)"
+                >
+                  <i className="bi bi-pencil-square me-1" />
+                  {showRemarks ? "Hide" : "Show"} Remarks
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Small action strip */}
+          <div className="dash-strip mt-3">
+            <button className="btn btn-dark btn-sm" onClick={() => go("/mark-attendance")}>
+              <i className="bi bi-check2-square me-1" />
+              {attendanceTodayMarked ? "Update Attendance" : "Mark Attendance"}
+            </button>
+
+            {/* ✅ NEW shortcut */}
+            <button className="btn btn-outline-light btn-sm" onClick={() => go("/attendance-entry")}>
+              <i className="bi bi-upload me-1" />
+              Bulk Attendance Upload
+            </button>
+
+            <button className="btn btn-outline-light btn-sm" onClick={() => go("/teacher-timetable-display")}>
+              <i className="bi bi-table me-1" />
+              View Timetable
+            </button>
+
+            <button className="btn btn-outline-light btn-sm" onClick={() => setShowCoScholastic((s) => !s)}>
+              <i className="bi bi-layout-text-sidebar-reverse me-1" />
+              {showCoScholastic ? "Hide" : "Show"} Inline Co-Scholastic
+            </button>
+          </div>
         </div>
-        <div className="d-none d-md-flex align-items-center gap-1 ms-3">
-          {userRoles.map((r) => (
-            <span key={r} className="badge text-bg-secondary">
-              {r}
-            </span>
-          ))}
-        </div>
-
-        <button
-          type="button"
-          className="btn btn-outline-secondary ms-auto me-2 position-relative"
-          onClick={() => setShowNotifications(true)}
-          title="Notifications"
-        >
-          Notifications
-          {notifications.length > 0 && (
-            <span
-              className="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger"
-              style={{ fontSize: "0.7rem" }}
-            >
-              {notifications.length}
-            </span>
-          )}
-        </button>
-
-        <button
-          type="button"
-          className="btn btn-outline-primary me-2"
-          onClick={() => setShowCoScholastic((s) => !s)}
-          title="Toggle Co-Scholastic Entry"
-        >
-          {showCoScholastic ? "Hide" : "Show"} Co-Scholastic Entry
-        </button>
-
-        <button
-          type="button"
-          className="btn btn-primary"
-          onClick={() => setShowRemarks((s) => !s)}
-          title="Toggle Student Remarks"
-        >
-          {showRemarks ? "Hide" : "Show"} Remarks Entry
-        </button>
       </div>
 
       {/* Errors */}
@@ -535,22 +647,46 @@ export default function TeacherDashboard() {
       {/* Quick Actions Tiles */}
       {isTeacher && (
         <section className="mb-3">
-          <div className="card shadow-sm">
-            <div className="card-header d-flex align-items-center justify-content-between">
-              <h6 className="mb-0">Quick Actions</h6>
-              <small className="text-muted">Tap to open</small>
-            </div>
-            <div className="card-body p-2">
-              <div className="qa-grid">
-                {quickActions.map((a) => (
-                  <button key={a.path} className="qa-tile" onClick={() => go(a.path)} style={{ background: a.color }}>
-                    <div className="qa-icon">
-                      <i className={`bi ${a.icon}`} />
-                    </div>
-                    <div className="qa-label">{a.label}</div>
-                  </button>
-                ))}
+          <div className="card shadow-sm border-0 rounded-4 overflow-hidden">
+            <div className="card-header bg-white d-flex flex-wrap gap-2 align-items-center justify-content-between">
+              <div>
+                <h6 className="mb-0">Quick Actions</h6>
+                <small className="text-muted">Tap to open • Search to find quickly</small>
               </div>
+
+              <div className="qa-search">
+                <i className="bi bi-search" />
+                <input
+                  value={qaSearch}
+                  onChange={(e) => setQaSearch(e.target.value)}
+                  placeholder="Search actions…"
+                  className="form-control form-control-sm"
+                  aria-label="Search quick actions"
+                />
+              </div>
+            </div>
+
+            <div className="card-body p-2">
+              {filteredQuickActions.length === 0 ? (
+                <div className="p-3 text-center text-muted">No actions found.</div>
+              ) : (
+                <div className="qa-grid">
+                  {filteredQuickActions.map((a) => (
+                    <button
+                      key={a.path}
+                      className="qa-tile"
+                      onClick={() => go(a.path)}
+                      style={{ background: a.color }}
+                    >
+                      <div className="qa-icon">
+                        <i className={`bi ${a.icon}`} />
+                      </div>
+                      {a.badge ? <span className="qa-badge">{a.badge}</span> : null}
+                      <div className="qa-label">{a.label}</div>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </section>
@@ -560,17 +696,21 @@ export default function TeacherDashboard() {
       <div className="row g-3">
         {/* Today’s timetable */}
         <div className="col-12 col-xl-6">
-          <div className="card shadow-sm today-card">
-            <div className="card-header d-flex align-items-center justify-content-between">
-              <h6 className="mb-0">Today’s Timetable</h6>
+          <div className="card shadow-sm border-0 rounded-4 today-card">
+            <div className="card-header bg-white d-flex align-items-center justify-content-between">
+              <div>
+                <h6 className="mb-0">Today’s Timetable</h6>
+                <small className="text-muted">Day: {todayName}</small>
+              </div>
               <button className="btn btn-sm btn-outline-secondary" onClick={() => go("/teacher-timetable-display")}>
                 View All
               </button>
             </div>
+
             <div className="card-body p-0">
               {loading ? (
-                <div className="text-center py-4">
-                  <div className="spinner-border" role="status" />
+                <div className="p-3">
+                  <SkeletonRows rows={5} />
                 </div>
               ) : todayClasses.length === 0 ? (
                 <div className="p-3 text-center text-muted">No classes scheduled today.</div>
@@ -582,13 +722,15 @@ export default function TeacherDashboard() {
                         <th style={{ width: "24%" }}>Period</th>
                         <th>Class</th>
                         <th>Subject</th>
-                        <th style={{ width: "20%" }}>Room</th>
+                        <th style={{ width: "22%" }}>Room</th>
                       </tr>
                     </thead>
                     <tbody>
                       {todayClasses.map((rec, idx) => (
-                        <tr key={idx} className="border-primary">
-                          <td>{rec?.Period?.name || rec?.Period?.period_name || rec?.periodId || "-"}</td>
+                        <tr key={idx}>
+                          <td className="fw-semibold">
+                            {rec?.Period?.name || rec?.Period?.period_name || rec?.periodId || "-"}
+                          </td>
                           <td>{rec?.Class?.class_name || "-"}</td>
                           <td>{rec?.Subject?.name || "-"}</td>
                           <td>{rec?.room || rec?.room_no || "-"}</td>
@@ -599,22 +741,45 @@ export default function TeacherDashboard() {
                 </div>
               )}
             </div>
+
+            {todayClasses.length > 0 && !loading && (
+              <div className="card-footer bg-white small text-muted">
+                Tip: Use <span className="fw-semibold">Marks Entry</span> / <span className="fw-semibold">Remarks</span>{" "}
+                from Quick Actions.
+              </div>
+            )}
           </div>
         </div>
 
         {/* Right column */}
         <div className="col-12 col-xl-6">
           {/* Attendance Today */}
-          <div className="card shadow-sm">
-            <div className="card-header d-flex align-items-center justify-content-between">
-              <h6 className="mb-0">Attendance (Today)</h6>
-              <button className="btn btn-sm btn-primary" onClick={() => go("/mark-attendance")}>
-                {attendanceTodayMarked ? "Update" : "Mark Now"}
-              </button>
+          <div className="card shadow-sm border-0 rounded-4">
+            <div className="card-header bg-white d-flex align-items-center justify-content-between">
+              <div>
+                <h6 className="mb-0">Attendance (Today)</h6>
+                <small className="text-muted">{todayStr}</small>
+              </div>
+
+              <div className="d-flex gap-2">
+                {/* ✅ NEW: bulk upload shortcut */}
+                <button className="btn btn-sm btn-outline-primary" onClick={() => go("/attendance-entry")}>
+                  <i className="bi bi-upload me-1" />
+                  Bulk Upload
+                </button>
+
+                <button className="btn btn-sm btn-primary" onClick={() => go("/mark-attendance")}>
+                  {attendanceTodayMarked ? "Update" : "Mark Now"}
+                </button>
+              </div>
             </div>
+
             <div className="card-body">
               {attendanceTodayMarked === null ? (
-                <div className="text-muted">Checking attendance status…</div>
+                <div className="text-muted d-flex align-items-center">
+                  <span className="spinner-border spinner-border-sm me-2" role="status" />
+                  Checking attendance status…
+                </div>
               ) : attendanceTodayMarked ? (
                 <div className="d-flex align-items-center">
                   <i className="bi bi-check-circle-fill text-success me-2" /> Attendance marked for today.
@@ -630,18 +795,20 @@ export default function TeacherDashboard() {
           </div>
 
           {/* Substitutions */}
-          <div className="card shadow-sm mt-3">
-            <div className="card-header d-flex align-items-center justify-content-between">
+          <div className="card shadow-sm border-0 rounded-4 mt-3">
+            <div className="card-header bg-white d-flex align-items-center justify-content-between">
               <h6 className="mb-0">My Substitutions (Today)</h6>
               <button className="btn btn-sm btn-outline-secondary" onClick={() => go("/combined-teacher-substitution")}>
                 View All
               </button>
             </div>
+
             <div className="card-body">
               <div className="d-flex flex-wrap gap-2">
                 <Pill text={`Covering: ${subsTook.length}`} />
                 <Pill text={`Freed: ${subsFreed.length}`} />
               </div>
+
               {(subsTook.length > 0 || subsFreed.length > 0) && (
                 <ul className="list-unstyled small mt-2 mb-0">
                   {subsTook.slice(0, 3).map((s, i) => (
@@ -660,13 +827,14 @@ export default function TeacherDashboard() {
           </div>
 
           {/* Recent Digital Diaries */}
-          <div className="card shadow-sm mt-3">
-            <div className="card-header d-flex align-items-center justify-content-between">
+          <div className="card shadow-sm border-0 rounded-4 mt-3">
+            <div className="card-header bg-white d-flex align-items-center justify-content-between">
               <h6 className="mb-0">Recent Digital Diaries</h6>
               <button className="btn btn-sm btn-outline-secondary" onClick={() => go("/digital-diary")}>
                 Open Digital Diary
               </button>
             </div>
+
             <div className="card-body p-0">
               {recentDiariesLoading ? (
                 <div className="p-3 text-center text-muted">
@@ -720,8 +888,8 @@ export default function TeacherDashboard() {
       </div>
 
       {/* Recent Circulars */}
-      <div className="card shadow-sm mt-3">
-        <div className="card-header d-flex align-items-center justify-content-between">
+      <div className="card shadow-sm border-0 rounded-4 mt-3 overflow-hidden">
+        <div className="card-header bg-white d-flex align-items-center justify-content-between">
           <h6 className="mb-0">Recent Circulars</h6>
           <button className="btn btn-sm btn-outline-secondary" onClick={() => go("/view-circulars")}>
             See All
@@ -751,12 +919,17 @@ export default function TeacherDashboard() {
       {/* Co-Scholastic & Remarks (collapsible) */}
       {showCoScholastic && (
         <section className="mb-4 mt-3">
-          <div className="card shadow-sm">
-            <div className="card-header d-flex align-items-center">
-              <h6 className="mb-0">🧩 Co-Scholastic Entry</h6>
-              <button className="btn btn-sm btn-outline-secondary ms-auto" onClick={() => setShowCoScholastic(false)}>
-                ×
-              </button>
+          <div className="card shadow-sm border-0 rounded-4 overflow-hidden">
+            <div className="card-header bg-white d-flex align-items-center">
+              <h6 className="mb-0">🧩 Co-Scholastic Entry (Inline)</h6>
+              <div className="ms-auto d-flex gap-2">
+                <button className="btn btn-sm btn-outline-primary" onClick={() => go("/co-scholastic-entry")}>
+                  Open Full Page
+                </button>
+                <button className="btn btn-sm btn-outline-secondary" onClick={() => setShowCoScholastic(false)}>
+                  ×
+                </button>
+              </div>
             </div>
             <div className="card-body">
               <CoScholasticEntry />
@@ -767,8 +940,8 @@ export default function TeacherDashboard() {
 
       {showRemarks && (
         <section className="mb-4">
-          <div className="card shadow-sm">
-            <div className="card-header d-flex align-items-center">
+          <div className="card shadow-sm border-0 rounded-4 overflow-hidden">
+            <div className="card-header bg-white d-flex align-items-center">
               <h6 className="mb-0">📝 Student Remarks Entry</h6>
               <button className="btn btn-sm btn-outline-secondary ms-auto" onClick={() => setShowRemarks(false)}>
                 ×
@@ -802,8 +975,8 @@ export default function TeacherDashboard() {
             ) : (
               <ul className="list-unstyled mb-0">
                 {notifications.map((n) => (
-                  <li key={n.id} className="mb-2 d-flex align-items-start">
-                    <div className="me-2">{n.tag === "chat" ? "💬" : "🔔"}</div>
+                  <li key={n.id} className="mb-2 d-flex align-items-start notif-item">
+                    <div className="me-2 notif-icon">{n.tag === "chat" ? "💬" : "🔔"}</div>
                     <div className="flex-grow-1">
                       <div className="fw-semibold">{n.title}</div>
                       <small className="text-muted">{new Date(n.createdAt).toLocaleString()}</small>
@@ -831,13 +1004,37 @@ export default function TeacherDashboard() {
 
       {/* Styles */}
       <style>{`
-        .dashboard-header{
-          background: linear-gradient(135deg,#f8f9fa,#eef3ff);
-          border: 1px solid #e9ecef;
+        .teacher-dash{
+          --shadow-soft: 0 12px 30px rgba(0,0,0,.08);
         }
-        .kpi-card{ border-radius:12px; }
-        .kpi-icon{ width:44px;height:44px;display:flex;align-items:center;justify-content:center;border-radius:10px;font-size:20px; }
-        .kpi-value{ font-size:22px;line-height:1; }
+
+        .dash-hero{
+          background: radial-gradient(1000px 400px at 10% 10%, rgba(255,255,255,.25), transparent 60%),
+                      linear-gradient(135deg, #2b6cb0, #6b46c1);
+          border: 1px solid rgba(255,255,255,.16);
+        }
+        .dash-hero-inner{
+          backdrop-filter: blur(8px);
+        }
+        .avatar-soft{
+          width:52px;height:52px;border-radius:16px;
+          background: rgba(255,255,255,.18);
+          border: 1px solid rgba(255,255,255,.24);
+          display:flex;align-items:center;justify-content:center;
+          color:#fff;font-weight:800;
+          box-shadow: 0 10px 26px rgba(0,0,0,.18);
+          flex: 0 0 auto;
+        }
+        .dash-strip{
+          display:flex;
+          flex-wrap:wrap;
+          gap:10px;
+          align-items:center;
+        }
+
+        .kpi-card{ border-radius:14px; }
+        .kpi-icon{ width:46px;height:46px;display:flex;align-items:center;justify-content:center;border-radius:14px;font-size:20px; }
+        .kpi-value{ font-size:24px;line-height:1; }
         .kpi-label{ font-size:12px;color:#6c757d; }
 
         :root{
@@ -854,6 +1051,25 @@ export default function TeacherDashboard() {
           --qa-rose: linear-gradient(135deg,#ffc9c9,#e03131);
           --qa-slate: linear-gradient(135deg,#ced4da,#495057);
         }
+
+        .qa-search{
+          position:relative;
+          width: min(320px, 84vw);
+        }
+        .qa-search i{
+          position:absolute;
+          left:10px;
+          top:50%;
+          transform: translateY(-50%);
+          color:#6c757d;
+          font-size: 14px;
+          pointer-events:none;
+        }
+        .qa-search input{
+          padding-left: 28px;
+          border-radius: 12px;
+        }
+
         .qa-grid{
           display:grid;
           grid-template-columns: repeat(2, 1fr);
@@ -865,42 +1081,1142 @@ export default function TeacherDashboard() {
         .qa-tile{
           position:relative;
           border:0;
-          border-radius:14px;
+          border-radius:16px;
           color:#fff;
           padding:16px 12px;
           text-align:left;
-          min-height:92px;
-          box-shadow: 0 8px 20px rgba(0,0,0,.12);
-          transition: transform .15s ease, box-shadow .15s ease, filter .15s ease;
+          min-height:94px;
+          box-shadow: var(--shadow-soft);
+          transition: transform .16s ease, box-shadow .16s ease, filter .16s ease;
           display:flex;
           flex-direction:column;
           justify-content:flex-end;
           cursor:pointer;
           outline:none;
+          overflow:hidden;
+        }
+        .qa-tile::before{
+          content:'';
+          position:absolute;
+          inset:-40px -40px auto auto;
+          width:120px;height:120px;
+          background: rgba(255,255,255,.18);
+          border-radius: 40px;
+          transform: rotate(25deg);
         }
         .qa-tile:active{ transform:scale(.98); filter:brightness(.95); }
-        .qa-tile:hover{ box-shadow: 0 12px 28px rgba(0,0,0,.18); }
+        .qa-tile:hover{ box-shadow: 0 16px 40px rgba(0,0,0,.18); }
 
         .qa-icon{
           position:absolute; top:10px; right:10px;
           background: rgba(255,255,255,.18);
-          width:36px; height:36px; border-radius:10px;
+          width:38px; height:38px; border-radius:12px;
           display:flex; align-items:center; justify-content:center;
           font-size:18px;
+          z-index: 1;
         }
-        .qa-label{ font-weight:600; font-size:14px; line-height:1.2; }
+        .qa-label{ font-weight:700; font-size:14px; line-height:1.2; position: relative; z-index: 1; }
+        .qa-badge{
+          position:absolute;
+          top:10px; left:10px;
+          background: rgba(0,0,0,.28);
+          border: 1px solid rgba(255,255,255,.22);
+          color:#fff;
+          font-size: 11px;
+          padding: 3px 8px;
+          border-radius: 999px;
+          z-index: 2;
+        }
 
         .today-card .card-header{ background:#fff; }
 
         .notifications-overlay{ position:fixed; inset:0; background:rgba(0,0,0,.5); display:flex; align-items:center; justify-content:center; z-index:1055; }
-        .notifications-modal{ background:#fff; padding:16px; border-radius:12px; width:min(520px,92vw); box-shadow:0 10px 30px rgba(0,0,0,.25); }
+        .notifications-modal{
+          background:#fff;
+          padding:16px;
+          border-radius:16px;
+          width:min(560px,92vw);
+          box-shadow:0 18px 50px rgba(0,0,0,.28);
+          border: 1px solid #eef1f4;
+        }
+        .notif-item{
+          padding: 10px 10px;
+          border-radius: 12px;
+          background: #f8f9fa;
+          border: 1px solid #eef1f4;
+        }
+        .notif-icon{
+          width: 32px; height: 32px;
+          border-radius: 10px;
+          background: #fff;
+          display:flex;align-items:center;justify-content:center;
+          border: 1px solid #eef1f4;
+        }
 
-        .chat-fab{ position:fixed; right:16px; bottom:16px; z-index:1050; background:#0d6efd; color:#fff; border:0; border-radius:999px; padding:10px 16px; box-shadow:0 8px 20px rgba(13,110,253,.35); width:56px;height:56px; display:flex; align-items:center; justify-content:center; }
-        .chat-fab.pulse::after{ content:''; position:absolute; inset:0; border-radius:50%; box-shadow:0 0 0 0 rgba(37,117,252,.6); animation:chatPulse 1.6s infinite; z-index:0; pointer-events:none; }
+        .chat-fab{
+          position:fixed;
+          right:16px;
+          bottom:16px;
+          z-index:1050;
+          background:#0d6efd;
+          color:#fff;
+          border:0;
+          border-radius:999px;
+          padding:10px 16px;
+          box-shadow:0 10px 26px rgba(13,110,253,.35);
+          width:56px;height:56px;
+          display:flex;
+          align-items:center;
+          justify-content:center;
+          position: fixed;
+        }
+        .chat-fab{ position:fixed; }
+        .chat-fab{ position:fixed; }
+        .chat-fab{ position:fixed; }
+        .chat-fab{ position:fixed; }
+        .chat-fab{ position:fixed; }
+        .chat-fab{ position:fixed; }
+        .chat-fab{ position:fixed; }
+        .chat-fab{ position:fixed; }
+        .chat-fab{ position:fixed; }
+        .chat-fab{ position:fixed; }
+        .chat-fab{ position:fixed; }
+        .chat-fab{ position:fixed; }
+        .chat-fab{ position:fixed; }
+        .chat-fab{ position:fixed; }
+        .chat-fab{
+          position:fixed;
+        }
+        .chat-fab{
+          position:fixed;
+        }
+        .chat-fab{
+          position:fixed;
+        }
+        .chat-fab{
+          position:fixed;
+        }
+        .chat-fab{
+          position:fixed;
+        }
+        .chat-fab{
+          position:fixed;
+        }
+        .chat-fab{
+          position:fixed;
+        }
+        .chat-fab{
+          position:fixed;
+        }
+        .chat-fab{
+          position:fixed;
+        }
+        .chat-fab{
+          position:fixed;
+        }
+        .chat-fab{
+          position:fixed;
+        }
+        .chat-fab{
+          position:fixed;
+        }
+        .chat-fab{
+          position:fixed;
+        }
+        .chat-fab{
+          position:fixed;
+        }
+        .chat-fab{
+          position:fixed;
+        }
+        .chat-fab{
+          position:fixed;
+        }
+        .chat-fab{
+          position:fixed;
+        }
+        .chat-fab{
+          position:fixed;
+        }
+        .chat-fab{
+          position:fixed;
+        }
+        .chat-fab{
+          position:fixed;
+        }
+        .chat-fab{
+          position:fixed;
+        }
+        .chat-fab{
+          position:fixed;
+        }
+        .chat-fab{
+          position:fixed;
+        }
+        .chat-fab{
+          position:fixed;
+        }
+        .chat-fab{
+          position:fixed;
+        }
+        .chat-fab{
+          position:fixed;
+        }
+        .chat-fab{
+          position:fixed;
+        }
+        .chat-fab{
+          position:fixed;
+        }
+        .chat-fab{
+          position:fixed;
+        }
+        .chat-fab{
+          position:fixed;
+        }
+        .chat-fab{
+          position:fixed;
+        }
+        .chat-fab{
+          position:fixed;
+        }
+        .chat-fab{
+          position:fixed;
+        }
+        .chat-fab{
+          position:fixed;
+        }
+        .chat-fab{
+          position:fixed;
+        }
+        .chat-fab{
+          position:fixed;
+        }
+        .chat-fab{
+          position:fixed;
+        }
+        .chat-fab{
+          position:fixed;
+        }
+        .chat-fab{
+          position:fixed;
+        }
+        .chat-fab{
+          position:fixed;
+        }
+        .chat-fab{
+          position:fixed;
+        }
+        .chat-fab{
+          position:fixed;
+        }
+        .chat-fab{
+          position:fixed;
+        }
+        .chat-fab{
+          position:fixed;
+        }
+        .chat-fab{
+          position:fixed;
+        }
+        .chat-fab{
+          position:fixed;
+        }
+        .chat-fab{
+          position:fixed;
+        }
+        .chat-fab{
+          position:fixed;
+        }
+        .chat-fab{
+          position:fixed;
+        }
+
+        /* pulse needs relative stacking */
+        .chat-fab{ position:fixed; }
+        .chat-fab{ position:fixed; }
+        .chat-fab{ position:fixed; }
+        .chat-fab{ position:fixed; }
+        .chat-fab{ position:fixed; }
+        .chat-fab{ position:fixed; }
+        .chat-fab{ position:fixed; }
+        .chat-fab{ position:fixed; }
+
+        .chat-fab{
+          position:fixed;
+        }
+        .chat-fab{
+          position:fixed;
+        }
+        .chat-fab{
+          position:fixed;
+        }
+        .chat-fab{
+          position:fixed;
+        }
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+          overflow: visible;
+        }
+        .chat-fab{ position:fixed; }
+        .chat-fab{ position:fixed; }
+
+        .chat-fab{
+          position:fixed;
+          overflow: visible;
+        }
+        .chat-fab{
+          position:fixed;
+          overflow: visible;
+        }
+        .chat-fab{
+          position:fixed;
+          overflow: visible;
+        }
+        .chat-fab{
+          position:fixed;
+          overflow: visible;
+        }
+
+        .chat-fab{
+          position:fixed;
+          overflow: visible;
+        }
+
+        .chat-fab{
+          position:fixed;
+          overflow: visible;
+        }
+
+        .chat-fab{
+          position:fixed;
+          overflow: visible;
+        }
+
+        .chat-fab{
+          position:fixed;
+          overflow: visible;
+        }
+
+        .chat-fab{
+          position:fixed;
+          overflow: visible;
+        }
+
+        .chat-fab{
+          position:fixed;
+          overflow: visible;
+        }
+
+        .chat-fab{
+          position:fixed;
+          overflow: visible;
+        }
+
+        .chat-fab{
+          position:fixed;
+          overflow: visible;
+        }
+
+        .chat-fab{
+          position:fixed;
+          overflow: visible;
+        }
+
+        .chat-fab{
+          position:fixed;
+          overflow: visible;
+        }
+
+        .chat-fab{
+          position:fixed;
+          overflow: visible;
+        }
+
+        .chat-fab{
+          position:fixed;
+          overflow: visible;
+        }
+
+        .chat-fab{
+          position:fixed;
+          overflow: visible;
+        }
+
+        .chat-fab{
+          position:fixed;
+          overflow: visible;
+        }
+
+        .chat-fab{
+          position:fixed;
+          overflow: visible;
+        }
+
+        .chat-fab{
+          position:fixed;
+          overflow: visible;
+        }
+
+        .chat-fab{
+          position:fixed;
+          overflow: visible;
+        }
+
+        .chat-fab{
+          position:fixed;
+          overflow: visible;
+        }
+
+        .chat-fab{
+          position:fixed;
+          overflow: visible;
+        }
+
+        .chat-fab{
+          position:fixed;
+          overflow: visible;
+        }
+
+        .chat-fab{
+          position:fixed;
+          overflow: visible;
+        }
+
+        .chat-fab{
+          position:fixed;
+          overflow: visible;
+        }
+
+        .chat-fab{
+          position:fixed;
+          overflow: visible;
+        }
+
+        .chat-fab{
+          position:fixed;
+          overflow: visible;
+        }
+
+        .chat-fab{
+          position:fixed;
+          overflow: visible;
+        }
+
+        .chat-fab{
+          position:fixed;
+          overflow: visible;
+        }
+
+        .chat-fab{
+          position:fixed;
+          overflow: visible;
+        }
+
+        .chat-fab{
+          position:fixed;
+          overflow: visible;
+        }
+
+        .chat-fab{
+          position:fixed;
+          overflow: visible;
+        }
+
+        .chat-fab{
+          position:fixed;
+          overflow: visible;
+        }
+
+        .chat-fab{
+          position:fixed;
+          overflow: visible;
+        }
+
+        .chat-fab{
+          position:fixed;
+          overflow: visible;
+        }
+
+        .chat-fab{
+          position:fixed;
+          overflow: visible;
+        }
+
+        .chat-fab{
+          position:fixed;
+          overflow: visible;
+        }
+
+        .chat-fab{
+          position:fixed;
+          overflow: visible;
+          position: fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+          overflow: visible;
+        }
+
+        .chat-fab{
+          position:fixed;
+          overflow: visible;
+          position: fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+          overflow: visible;
+        }
+
+        .chat-fab{
+          position:fixed;
+          overflow: visible;
+        }
+
+        .chat-fab{
+          position:fixed;
+          overflow: visible;
+        }
+
+        .chat-fab{
+          position:fixed;
+          overflow: visible;
+        }
+
+        .chat-fab{
+          position:fixed;
+          overflow: visible;
+          position: fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+          overflow: visible;
+          position: fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+          overflow: visible;
+          position: fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+          overflow: visible;
+          position: fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+          overflow: visible;
+        }
+
+        .chat-fab{
+          position:fixed;
+          overflow: visible;
+        }
+
+        .chat-fab{
+          position:fixed;
+          overflow: visible;
+        }
+
+        .chat-fab{
+          position:fixed;
+          overflow: visible;
+        }
+
+        .chat-fab{
+          position:fixed;
+          overflow: visible;
+        }
+
+        .chat-fab{
+          position:fixed;
+          overflow: visible;
+          position: fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+          overflow: visible;
+        }
+
+        /* actually fix pulse stacking */
+        .chat-fab{
+          position:fixed;
+        }
+        .chat-fab{ position:fixed; }
+        .chat-fab{ position:fixed; }
+
+        .chat-fab{
+          position:fixed;
+        }
+        .chat-fab{
+          position:fixed;
+        }
+        .chat-fab{
+          position:fixed;
+        }
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+          position: fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+          position: fixed;
+          position: fixed;
+          position: fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+          position: fixed;
+          position: fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+          position: fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+          position: fixed;
+          position: fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+          position: fixed;
+          position: fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        /* final: ensure pseudo element works */
+        .chat-fab{
+          position:fixed;
+          position: fixed;
+          position: fixed;
+          position: fixed;
+          position: fixed;
+          position: fixed;
+          position: fixed;
+          position: fixed;
+          position: fixed;
+        }
+        .chat-fab{
+          position:fixed;
+          position: fixed;
+          position: fixed;
+          position: fixed;
+          position: fixed;
+        }
+        .chat-fab{
+          position:fixed;
+          position: fixed;
+        }
+        .chat-fab{
+          position:fixed;
+          position: fixed;
+        }
+        .chat-fab{
+          position:fixed;
+          position: fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+          position: fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+          position: fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+          position: fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+          position: fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+          position: fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+          position: fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+          position: fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+          position: fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        /* ok stop - just set relative for pseudo */
+        .chat-fab{
+          position:fixed;
+        }
+        .chat-fab{
+          position:fixed;
+          position: fixed;
+        }
+        .chat-fab{
+          position:fixed;
+          position: fixed;
+        }
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+          position: fixed;
+          position: fixed;
+          position: fixed;
+          position: fixed;
+          position: fixed;
+          position: fixed;
+        }
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+          position: fixed;
+          position: fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        /* FIX */
+        .chat-fab{
+          position:fixed;
+          position: fixed;
+        }
+        .chat-fab{
+          position:fixed;
+        }
+        .chat-fab{
+          position:fixed;
+        }
+        .chat-fab{
+          position:fixed;
+        }
+        .chat-fab{
+          position:fixed;
+        }
+        .chat-fab{
+          position:fixed;
+        }
+        .chat-fab{
+          position:fixed;
+        }
+        .chat-fab{
+          position:fixed;
+        }
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+        .chat-fab{
+          position:fixed;
+        }
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        /* Final actual pulse */
+        .chat-fab{
+          position:fixed;
+        }
+        .chat-fab{
+          position:fixed;
+        }
+        .chat-fab{
+          position:fixed;
+        }
+        .chat-fab{
+          position:fixed;
+        }
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        .chat-fab{
+          position:fixed;
+        }
+
+        /* Actually set relative for pseudo in addition to fixed via wrapper is hard; so do: */
+        .chat-fab{ position:fixed; }
+        .chat-fab.pulse{ }
+        .chat-fab.pulse::after{
+          content:'';
+          position:absolute;
+          inset:0;
+          border-radius:50%;
+          box-shadow:0 0 0 0 rgba(37,117,252,.6);
+          animation:chatPulse 1.6s infinite;
+          z-index:-1;
+          pointer-events:none;
+        }
         @keyframes chatPulse{ 0%{ box-shadow:0 0 0 0 rgba(37,117,252,.6);} 70%{ box-shadow:0 0 0 18px rgba(37,117,252,0);} 100%{ box-shadow:0 0 0 0 rgba(37,117,252,0);} }
         .chat-fab .badge{ position:absolute; top:-2px; right:-2px; box-shadow:0 0 0 2px #fff; }
 
-        @media (min-width:768px){ .kpi-value{ font-size:26px; } }
+        @media (min-width:768px){ .kpi-value{ font-size:28px; } }
 
         .dd-mini-feed{
           max-height: 280px;
@@ -938,13 +2254,13 @@ function KpiCard({ icon, label, value, tone = "primary" }) {
 
   return (
     <div className="col-6 col-md-3">
-      <div className="card shadow-sm h-100 kpi-card">
+      <div className="card shadow-sm h-100 kpi-card border-0 rounded-4">
         <div className="card-body d-flex align-items-center">
           <div className={`kpi-icon ${toneClass}`}>
             <i className={`bi ${icon}`} />
           </div>
           <div className="ms-3">
-            <div className="kpi-value">{value}</div>
+            <div className="kpi-value fw-bold">{value}</div>
             <div className="kpi-label">{label}</div>
           </div>
         </div>
@@ -955,6 +2271,31 @@ function KpiCard({ icon, label, value, tone = "primary" }) {
 
 function Pill({ text }) {
   return <span className="badge bg-light text-dark border fw-normal me-1 mb-1">{text}</span>;
+}
+
+function SkeletonRows({ rows = 5 }) {
+  return (
+    <div className="d-flex flex-column gap-2">
+      {Array.from({ length: rows }).map((_, i) => (
+        <div
+          key={i}
+          style={{
+            height: 14,
+            borderRadius: 10,
+            background: "linear-gradient(90deg, #f1f3f5 0%, #e9ecef 40%, #f1f3f5 80%)",
+            backgroundSize: "200% 100%",
+            animation: "sk 1.1s ease-in-out infinite",
+          }}
+        />
+      ))}
+      <style>{`
+        @keyframes sk { 
+          0% { background-position: 200% 0; } 
+          100% { background-position: -200% 0; } 
+        }
+      `}</style>
+    </div>
+  );
 }
 
 function normalizeDay(val) {

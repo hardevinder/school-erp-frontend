@@ -1,13 +1,30 @@
 // src/pages/Registrations.jsx
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import api from "../api";
 import Swal from "sweetalert2";
+
+/* =========================
+ * Helpers
+ * ========================= */
+const asArray = (d) => {
+  if (Array.isArray(d)) return d;
+  if (!d) return [];
+  const keys = ["data", "rows", "results", "items", "list", "records", "registrations", "classes", "sections", "sessions"];
+  for (const k of keys) if (Array.isArray(d?.[k])) return d[k];
+  return [];
+};
+
+// ✅ helper: robust time getter for "recent first"
+const getRegTime = (r) => {
+  const val = r?.registration_date || r?.createdAt || r?.created_at || r?.updatedAt || r?.updated_at;
+  const d = new Date(val);
+  return Number.isNaN(d.getTime()) ? 0 : d.getTime();
+};
 
 // ---- role helpers ---------------------------------------------------------
 const getRoleFlags = () => {
   const singleRole = localStorage.getItem("userRole");
 
-  // ✅ safer parse for roles
   const raw = localStorage.getItem("roles");
   let multiRoles = [];
   try {
@@ -23,12 +40,10 @@ const getRoleFlags = () => {
 
   const isAdmin = roles.includes("admin");
   const isSuperadmin = roles.includes("superadmin");
-
   const isAdmission = roles.includes("admission") || roles.includes("frontoffice");
   const isAccounts = roles.includes("accounts");
   const isCoordinator = roles.includes("academic_coordinator");
 
-  // View allowed
   const canView =
     isAdmin ||
     isSuperadmin ||
@@ -38,7 +53,6 @@ const getRoleFlags = () => {
     roles.includes("hr") ||
     roles.includes("teacher");
 
-  // Full CRUD details
   const canEditDetails =
     isAdmin ||
     isSuperadmin ||
@@ -47,14 +61,12 @@ const getRoleFlags = () => {
     roles.includes("hr") ||
     roles.includes("teacher");
 
-  // Fee update only
   const canUpdateFee = isAccounts || isAdmin || isSuperadmin;
-
-  // Status update
   const canUpdateStatus = isAdmission || isCoordinator || isAdmin || isSuperadmin;
-
-  // Delete only
   const canDelete = isAdmin || isSuperadmin;
+
+  // ✅ Convert registration -> student (as per backend roles)
+  const canConvert = isAdmin || isSuperadmin || isAdmission || isCoordinator;
 
   return {
     roles,
@@ -62,17 +74,19 @@ const getRoleFlags = () => {
     isSuperadmin,
     isAdmission,
     isAccounts,
+    isCoordinator,
     canView,
     canEditDetails,
     canUpdateFee,
     canUpdateStatus,
     canDelete,
+    canConvert,
   };
 };
 
 // ---- defaults -------------------------------------------------------------
 const emptyForm = {
-  registration_no: "", // optional (backend auto-generates if empty)
+  registration_no: "",
   student_name: "",
   father_name: "",
   mother_name: "",
@@ -83,7 +97,7 @@ const emptyForm = {
   address: "",
   class_applied: "",
   academic_session: "",
-  registration_date: "", // optional
+  registration_date: "",
   registration_fee: "",
   fee_status: "unpaid",
   payment_ref: "",
@@ -91,33 +105,26 @@ const emptyForm = {
   remarks: "",
 };
 
-// ✅ helper: robust time getter for "recent first"
-const getRegTime = (r) => {
-  const val =
-    r?.registration_date ||
-    r?.createdAt ||
-    r?.created_at ||
-    r?.updatedAt ||
-    r?.updated_at;
-  const d = new Date(val);
-  return Number.isNaN(d.getTime()) ? 0 : d.getTime();
-};
-
 const Registrations = () => {
   const flags = useMemo(getRoleFlags, []);
-  const { canView, canEditDetails, canUpdateFee, canUpdateStatus, canDelete, isSuperadmin } =
-    flags;
+  const { canView, canEditDetails, canUpdateFee, canUpdateStatus, canDelete, isSuperadmin, canConvert } = flags;
+
+  // ---- API base path ------------------------------------------------------
+  const BASE = "/registrations";
 
   const [rows, setRows] = useState([]);
+  const [search, setSearch] = useState("");
+
+  // main modal
+  const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({ ...emptyForm });
   const [editingRow, setEditingRow] = useState(null);
 
-  const [search, setSearch] = useState("");
-  const [showModal, setShowModal] = useState(false);
+  // ✅ field-level errors (don’t wipe the form on invalid)
+  const [formErrors, setFormErrors] = useState({}); // { fieldName: "message" }
 
+  // Fee modal
   const [feeModalOpen, setFeeModalOpen] = useState(false);
-  const [statusModalOpen, setStatusModalOpen] = useState(false);
-
   const [feeForm, setFeeForm] = useState({
     registration_fee: "",
     fee_status: "unpaid",
@@ -125,31 +132,35 @@ const Registrations = () => {
     remarks: "",
   });
 
+  // Status modal
+  const [statusModalOpen, setStatusModalOpen] = useState(false);
   const [statusForm, setStatusForm] = useState({
     status: "registered",
     remarks: "",
   });
 
-  // ✅ export/import/next-no states
+  // export/import/next-no states
   const fileRef = useRef(null);
   const [importing, setImporting] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [suggesting, setSuggesting] = useState(false);
   const [printingId, setPrintingId] = useState(null);
-
   const [regNoSuggestion, setRegNoSuggestion] = useState("");
 
-  // ---- API base path ------------------------------------------------------
-  const BASE = "/registrations";
+  // ✅ Convert selection
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const [classes, setClasses] = useState([]); // [{id,name}...]
+  const [sections, setSections] = useState([]); // [{id,name,class_id?}...]
+  const [sessions, setSessions] = useState([]); // [{id,name,session,...}...]
 
+  /* =========================
+   * Fetchers
+   * ========================= */
   const fetchRegistrations = async () => {
     try {
       const { data } = await api.get(BASE);
-      const arr = Array.isArray(data) ? data : [];
-
-      // ✅ force recent first (top to bottom)
+      const arr = asArray(data);
       arr.sort((a, b) => getRegTime(b) - getRegTime(a));
-
       setRows(arr);
     } catch (error) {
       console.error("Error fetching registrations:", error);
@@ -171,8 +182,7 @@ const Registrations = () => {
         params: { academic_session: session },
       });
 
-      const suggestion = data?.suggestion || "";
-      setRegNoSuggestion(suggestion);
+      setRegNoSuggestion(data?.suggestion || "");
     } catch (err) {
       console.error("next-no failed:", err);
       setRegNoSuggestion("");
@@ -181,46 +191,73 @@ const Registrations = () => {
     }
   };
 
+  // ✅ Load meta for convert UI (best-effort)
+  const fetchMeta = async () => {
+    // These endpoints can differ per project. We try safely.
+    const tryGet = async (url, params = undefined) => {
+      try {
+        const resp = await api.get(url, params ? { params } : undefined);
+        return asArray(resp?.data);
+      } catch {
+        return [];
+      }
+    };
+
+    const [cls, secs, sess] = await Promise.all([
+      tryGet("/classes"),
+      tryGet("/sections"),
+      tryGet("/sessions"), // or you may have /sessions/all
+    ]);
+
+    setClasses(cls);
+    setSections(secs);
+    setSessions(sess);
+  };
+
+  /* =========================
+   * Modal open/close
+   * ========================= */
   const openCreate = () => {
     setEditingRow(null);
     setForm({ ...emptyForm });
+    setFormErrors({});
     setRegNoSuggestion("");
     setShowModal(true);
   };
 
   const openEdit = (row) => {
     setEditingRow(row);
+    setFormErrors({});
     setRegNoSuggestion("");
 
     setForm({
       ...emptyForm,
       ...row,
       dob: row?.dob ? String(row.dob).slice(0, 10) : "",
-      registration_date: row?.registration_date
-        ? new Date(row.registration_date).toISOString().slice(0, 16)
-        : "",
+      registration_date: row?.registration_date ? new Date(row.registration_date).toISOString().slice(0, 16) : "",
       registration_fee:
-        row?.registration_fee !== null && row?.registration_fee !== undefined
-          ? String(row.registration_fee)
-          : "",
+        row?.registration_fee !== null && row?.registration_fee !== undefined ? String(row.registration_fee) : "",
     });
 
     setShowModal(true);
   };
 
+  /* =========================
+   * CRUD
+   * ========================= */
   const saveRegistration = async () => {
     try {
-      if (
-        !form.student_name.trim() ||
-        !form.phone.trim() ||
-        !form.class_applied.trim() ||
-        !form.academic_session.trim()
-      ) {
-        Swal.fire(
-          "Error",
-          "Student name, phone, class applied, and academic session are required.",
-          "error"
-        );
+      setFormErrors({});
+
+      if (!form.student_name.trim() || !form.phone.trim() || !form.class_applied.trim() || !form.academic_session.trim()) {
+        const errs = {};
+        if (!form.student_name.trim()) errs.student_name = "Student name is required";
+        if (!form.phone.trim()) errs.phone = "Phone is required";
+        if (!form.class_applied.trim()) errs.class_applied = "Class applied is required";
+        if (!form.academic_session.trim()) errs.academic_session = "Academic session is required";
+        setFormErrors(errs);
+
+        Swal.fire("Error", "Please fix the highlighted fields.", "error");
         return;
       }
 
@@ -232,14 +269,10 @@ const Registrations = () => {
         academic_session: form.academic_session.trim(),
         email: form.email?.trim() ? form.email.trim() : null,
 
-        registration_no: form.registration_no?.trim()
-          ? form.registration_no.trim()
-          : undefined, // backend auto if undefined/empty
-
+        registration_no: form.registration_no?.trim() ? form.registration_no.trim() : undefined,
         registration_fee: form.registration_fee === "" ? null : Number(form.registration_fee),
       };
 
-      // avoid sending empty strings as dates
       if (!payload.dob) delete payload.dob;
       if (!payload.registration_date) delete payload.registration_date;
 
@@ -253,21 +286,35 @@ const Registrations = () => {
 
       setEditingRow(null);
       setForm({ ...emptyForm });
+      setFormErrors({});
       setRegNoSuggestion("");
       setShowModal(false);
       fetchRegistrations();
     } catch (error) {
       console.error("Error saving registration:", error);
-      const msg =
-        error?.response?.data?.message || "Failed to save registration. Please check inputs.";
+
+      // ✅ field-wise backend errors (SequelizeValidationError style)
+      const backendErrors = error?.response?.data?.errors;
+      if (Array.isArray(backendErrors) && backendErrors.length) {
+        const errs = {};
+        for (const e of backendErrors) {
+          const field = e?.field || e?.path;
+          const msg = e?.message || "Invalid";
+          if (field) errs[field] = msg;
+        }
+        setFormErrors(errs);
+        Swal.fire("Invalid", "Please fix the highlighted fields.", "error");
+        return;
+      }
+
+      const msg = error?.response?.data?.message || "Failed to save registration. Please check inputs.";
       Swal.fire("Error", msg, "error");
+      // ✅ DO NOT clear form on error
     }
   };
 
   const deleteRegistration = async (id) => {
-    if (!canDelete) {
-      return Swal.fire("Forbidden", "Only Admin/Superadmin can delete.", "warning");
-    }
+    if (!canDelete) return Swal.fire("Forbidden", "Only Admin/Superadmin can delete.", "warning");
 
     const confirm = await Swal.fire({
       title: "Are you sure?",
@@ -279,7 +326,6 @@ const Registrations = () => {
       allowOutsideClick: false,
       allowEscapeKey: false,
     });
-
     if (!confirm.isConfirmed) return;
 
     try {
@@ -292,13 +338,14 @@ const Registrations = () => {
     }
   };
 
+  /* =========================
+   * Fee / Status
+   * ========================= */
   const openFeeModal = (row) => {
     setEditingRow(row);
     setFeeForm({
       registration_fee:
-        row?.registration_fee !== null && row?.registration_fee !== undefined
-          ? String(row.registration_fee)
-          : "",
+        row?.registration_fee !== null && row?.registration_fee !== undefined ? String(row.registration_fee) : "",
       fee_status: row?.fee_status || "unpaid",
       payment_ref: row?.payment_ref || "",
       remarks: row?.remarks || "",
@@ -359,7 +406,9 @@ const Registrations = () => {
     }
   };
 
-  // ✅ Export Excel (download)
+  /* =========================
+   * Export / Import / Print
+   * ========================= */
   const exportExcel = async () => {
     try {
       setDownloading(true);
@@ -391,13 +440,10 @@ const Registrations = () => {
     }
   };
 
-  // ✅ Import Excel
   const importExcel = async (file) => {
     if (!file) return;
 
-    const ok =
-      file.name.toLowerCase().endsWith(".xlsx") || file.name.toLowerCase().endsWith(".xls");
-
+    const ok = file.name.toLowerCase().endsWith(".xlsx") || file.name.toLowerCase().endsWith(".xls");
     if (!ok) {
       Swal.fire("Invalid", "Please upload .xlsx or .xls file.", "warning");
       if (fileRef.current) fileRef.current.value = "";
@@ -430,7 +476,6 @@ const Registrations = () => {
       });
 
       const imported = data?.message || "Import completed.";
-
       const dupCount = Array.isArray(data?.duplicates) ? data.duplicates.length : 0;
       const invalidCount = Array.isArray(data?.invalid) ? data.invalid.length : 0;
 
@@ -440,7 +485,6 @@ const Registrations = () => {
         <div>Invalid rows skipped: <b>${invalidCount}</b></div>
       </div>`;
 
-      // show small preview of issues (first 5 each)
       if (dupCount > 0 || invalidCount > 0) {
         const dPrev = (data.duplicates || []).slice(0, 5);
         const iPrev = (data.invalid || []).slice(0, 5);
@@ -450,9 +494,7 @@ const Registrations = () => {
           const items = arr
             .map(
               (x) =>
-                `<li>${x?.error || "Issue"}${
-                  x?.registration_no ? ` (RegNo: ${x.registration_no})` : ""
-                }</li>`
+                `<li>${x?.error || "Issue"}${x?.registration_no ? ` (RegNo: ${x.registration_no})` : ""}</li>`
             )
             .join("");
           return `<div style="margin-top:10px"><b>${title} (showing up to 5)</b><ul>${items}</ul></div>`;
@@ -481,7 +523,6 @@ const Registrations = () => {
     }
   };
 
-  // ✅ NEW: Print Registration Form PDF
   const printForm = async (row) => {
     try {
       if (!row?.id) return;
@@ -491,7 +532,6 @@ const Registrations = () => {
 
       const blob = new Blob([resp.data], { type: "application/pdf" });
       const url = window.URL.createObjectURL(blob);
-
       window.open(url, "_blank", "noopener,noreferrer");
 
       setTimeout(() => {
@@ -507,7 +547,176 @@ const Registrations = () => {
     }
   };
 
-  // Search filter (✅ keeps newest-first too)
+  /* =========================
+   * Convert to Student
+   * ========================= */
+  const toggleSelect = (id) => {
+    setSelectedIds((prev) => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  };
+
+  const toggleSelectAll = (checked, list) => {
+    setSelectedIds(() => {
+      if (!checked) return new Set();
+      const s = new Set();
+      (list || []).forEach((r) => r?.id && s.add(r.id));
+      return s;
+    });
+  };
+
+  const convertSingle = async (row) => {
+    try {
+      if (!row?.id) return;
+
+      // ensure meta loaded once
+      if (!classes.length && !sections.length && !sessions.length) {
+        await fetchMeta();
+      }
+
+      const clsOptions = classes
+        .map((c) => `<option value="${c.id}">${c.name || c.class_name || c.title || `Class #${c.id}`}</option>`)
+        .join("");
+
+      const secOptions = sections
+        .map((s) => `<option value="${s.id}">${s.name || s.section_name || s.title || `Section #${s.id}`}</option>`)
+        .join("");
+
+      const sessOptions = sessions
+        .map((s) => `<option value="${s.id}">${s.name || s.session || s.title || `Session #${s.id}`}</option>`)
+        .join("");
+
+      const result = await Swal.fire({
+        title: "Convert to Student",
+        html: `
+          <div style="text-align:left">
+            <div style="margin-bottom:10px">
+              <div><b>${row.student_name || "Student"}</b> (${row.registration_no || "no reg no"})</div>
+              <div style="font-size:12px;opacity:.8">${row.phone || ""} • ${row.class_applied || ""} • ${row.academic_session || ""}</div>
+            </div>
+
+            <label style="font-size:13px">Admission No (optional)</label>
+            <input id="admission_number" class="swal2-input" placeholder="Leave empty to auto" style="margin-top:6px"/>
+
+            <label style="font-size:13px;margin-top:8px">Class (optional)</label>
+            <select id="class_id" class="swal2-select" style="width:100%;padding:10px">
+              <option value="">Auto / Map from class_applied</option>
+              ${clsOptions}
+            </select>
+
+            <label style="font-size:13px;margin-top:8px">Section (optional)</label>
+            <select id="section_id" class="swal2-select" style="width:100%;padding:10px">
+              <option value="">Auto / Default</option>
+              ${secOptions}
+            </select>
+
+            <label style="font-size:13px;margin-top:8px">Session (optional)</label>
+            <select id="session_id" class="swal2-select" style="width:100%;padding:10px">
+              <option value="">Auto / Current</option>
+              ${sessOptions}
+            </select>
+
+            <div style="margin-top:10px">
+              <label style="display:flex;gap:8px;align-items:center">
+                <input id="force" type="checkbox"/>
+                <span style="font-size:13px">Force (skip/override conflicts if backend supports)</span>
+              </label>
+            </div>
+          </div>
+        `,
+        showCancelButton: true,
+        confirmButtonText: "Convert",
+        cancelButtonText: "Cancel",
+        focusConfirm: false,
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        preConfirm: () => {
+          const admission_number = document.getElementById("admission_number")?.value || "";
+          const class_id = document.getElementById("class_id")?.value || "";
+          const section_id = document.getElementById("section_id")?.value || "";
+          const session_id = document.getElementById("session_id")?.value || "";
+          const force = !!document.getElementById("force")?.checked;
+
+          return {
+            admission_number: admission_number.trim() || undefined,
+            class_id: class_id ? Number(class_id) : undefined,
+            section_id: section_id ? Number(section_id) : undefined,
+            session_id: session_id ? Number(session_id) : undefined,
+            force,
+          };
+        },
+      });
+
+      if (!result.isConfirmed) return;
+
+      const payload = { ...result.value };
+      Object.keys(payload).forEach((k) => payload[k] === undefined && delete payload[k]);
+
+      const { data } = await api.post(`${BASE}/${row.id}/convert-to-student`, payload);
+
+      await Swal.fire("Converted!", data?.message || "Registration converted to Student.", "success");
+      fetchRegistrations();
+    } catch (err) {
+      console.error("convertSingle failed:", err);
+      const msg = err?.response?.data?.message || "Failed to convert registration.";
+      Swal.fire("Error", msg, "error");
+    }
+  };
+
+  const bulkConvert = async () => {
+    try {
+      const ids = Array.from(selectedIds);
+      if (!ids.length) {
+        Swal.fire("Select", "Please select at least one registration.", "info");
+        return;
+      }
+
+      const confirm = await Swal.fire({
+        title: "Bulk Convert to Students?",
+        html: `<div style="text-align:left">Selected: <b>${ids.length}</b> registrations</div>`,
+        icon: "question",
+        showCancelButton: true,
+        confirmButtonText: "Convert All",
+        cancelButtonText: "Cancel",
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        input: "checkbox",
+        inputPlaceholder: "Force (skip/override conflicts if backend supports)",
+      });
+
+      if (!confirm.isConfirmed) return;
+
+      const payload = {
+        ids,
+        force: !!confirm.value,
+      };
+
+      const { data } = await api.post(`${BASE}/convert-to-students`, payload);
+
+      const okCount = data?.okCount ?? data?.converted ?? data?.successCount ?? null;
+      const failCount = data?.failCount ?? data?.failed ?? data?.errorCount ?? null;
+
+      const msgParts = [];
+      if (okCount != null) msgParts.push(`Converted: ${okCount}`);
+      if (failCount != null) msgParts.push(`Failed: ${failCount}`);
+
+      await Swal.fire("Done", msgParts.length ? msgParts.join(" • ") : "Bulk conversion completed.", "success");
+
+      setSelectedIds(new Set());
+      fetchRegistrations();
+    } catch (err) {
+      console.error("bulkConvert failed:", err);
+      const msg = err?.response?.data?.message || "Failed to bulk convert registrations.";
+      Swal.fire("Error", msg, "error");
+    }
+  };
+
+  /* =========================
+   * Derived: filtered list
+   * ========================= */
   const filtered = useMemo(() => {
     const base = !search
       ? [...rows]
@@ -528,17 +737,29 @@ const Registrations = () => {
           return hay.includes(q);
         });
 
-    // ✅ always recent top to bottom
     base.sort((a, b) => getRegTime(b) - getRegTime(a));
     return base;
   }, [rows, search]);
 
+  /* =========================
+   * Effects
+   * ========================= */
   useEffect(() => {
     if (!canView) return;
     fetchRegistrations();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    if (!canConvert) return;
+    // Load meta in background (best-effort)
+    fetchMeta();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canConvert]);
+
+  /* =========================
+   * Render
+   * ========================= */
   if (!canView) {
     return (
       <div className="container mt-4">
@@ -547,6 +768,19 @@ const Registrations = () => {
       </div>
     );
   }
+
+  const setField = (key, value) => {
+    setForm((p) => ({ ...p, [key]: value }));
+    setFormErrors((p) => {
+      if (!p?.[key]) return p;
+      const n = { ...p };
+      delete n[key];
+      return n;
+    });
+  };
+
+  const fieldClass = (k) => (formErrors?.[k] ? "form-control is-invalid" : "form-control");
+  const fieldErr = (k) => (formErrors?.[k] ? <div className="invalid-feedback">{formErrors[k]}</div> : null);
 
   return (
     <div className="container mt-4">
@@ -557,6 +791,13 @@ const Registrations = () => {
         {canEditDetails && (
           <button className="btn btn-success" onClick={openCreate}>
             Add Registration
+          </button>
+        )}
+
+        {/* Convert bulk */}
+        {canConvert && (
+          <button className="btn btn-outline-dark" onClick={bulkConvert} disabled={!selectedIds.size}>
+            Convert Selected ({selectedIds.size})
           </button>
         )}
 
@@ -614,6 +855,16 @@ const Registrations = () => {
       <table className="table table-striped">
         <thead>
           <tr>
+            {canConvert && (
+              <th style={{ width: 40 }}>
+                <input
+                  type="checkbox"
+                  checked={filtered.length > 0 && selectedIds.size === filtered.length}
+                  onChange={(e) => toggleSelectAll(e.target.checked, filtered)}
+                  title="Select all (filtered)"
+                />
+              </th>
+            )}
             <th>#</th>
             <th>Reg No</th>
             <th>Student</th>
@@ -624,12 +875,18 @@ const Registrations = () => {
             <th>Fee</th>
             <th>Fee Status</th>
             <th>Date</th>
-            {(canEditDetails || canUpdateFee || canUpdateStatus || canDelete) && <th>Actions</th>}
+            {(canEditDetails || canUpdateFee || canUpdateStatus || canDelete || canConvert) && <th>Actions</th>}
           </tr>
         </thead>
+
         <tbody>
           {filtered.map((r, index) => (
             <tr key={r.id}>
+              {canConvert && (
+                <td>
+                  <input type="checkbox" checked={selectedIds.has(r.id)} onChange={() => toggleSelect(r.id)} />
+                </td>
+              )}
               <td>{index + 1}</td>
               <td>{r.registration_no || "-"}</td>
               <td>{r.student_name || "-"}</td>
@@ -637,13 +894,11 @@ const Registrations = () => {
               <td>{r.class_applied || "-"}</td>
               <td>{r.academic_session || "-"}</td>
               <td>{r.status || "-"}</td>
-              <td>
-                {r.registration_fee !== null && r.registration_fee !== undefined ? r.registration_fee : "-"}
-              </td>
+              <td>{r.registration_fee !== null && r.registration_fee !== undefined ? r.registration_fee : "-"}</td>
               <td>{r.fee_status || "-"}</td>
               <td>{r.registration_date ? new Date(r.registration_date).toLocaleDateString() : "-"}</td>
 
-              {(canEditDetails || canUpdateFee || canUpdateStatus || canDelete) && (
+              {(canEditDetails || canUpdateFee || canUpdateStatus || canDelete || canConvert) && (
                 <td className="d-flex flex-wrap gap-2">
                   <button
                     className="btn btn-secondary btn-sm"
@@ -653,6 +908,12 @@ const Registrations = () => {
                   >
                     {printingId === r.id ? "Opening..." : "Print"}
                   </button>
+
+                  {canConvert && (
+                    <button className="btn btn-dark btn-sm" onClick={() => convertSingle(r)} title="Convert to Student">
+                      Convert
+                    </button>
+                  )}
 
                   {canEditDetails && (
                     <button className="btn btn-primary btn-sm" onClick={() => openEdit(r)}>
@@ -684,10 +945,7 @@ const Registrations = () => {
 
           {filtered.length === 0 && (
             <tr>
-              <td
-                colSpan={canEditDetails || canUpdateFee || canUpdateStatus || canDelete ? 11 : 10}
-                className="text-center"
-              >
+              <td colSpan={(canConvert ? 1 : 0) + (canEditDetails || canUpdateFee || canUpdateStatus || canDelete || canConvert ? 11 : 10)} className="text-center">
                 No registrations found
               </td>
             </tr>
@@ -702,7 +960,14 @@ const Registrations = () => {
             <div className="modal-content">
               <div className="modal-header">
                 <h5 className="modal-title">{editingRow ? "Edit Registration" : "Add Registration"}</h5>
-                <button type="button" className="btn-close" onClick={() => setShowModal(false)}></button>
+                <button
+                  type="button"
+                  className="btn-close"
+                  onClick={() => {
+                    setShowModal(false);
+                    setFormErrors({});
+                  }}
+                ></button>
               </div>
 
               <div className="modal-body">
@@ -712,12 +977,14 @@ const Registrations = () => {
                     <label className="form-label">Registration No (optional)</label>
                     <input
                       type="text"
-                      className="form-control"
+                      className={fieldClass("registration_no")}
                       placeholder="Auto if empty"
                       value={form.registration_no || ""}
-                      onChange={(e) => setForm({ ...form, registration_no: e.target.value })}
+                      onChange={(e) => setField("registration_no", e.target.value)}
                     />
-                    {!editingRow && !form.registration_no?.trim() && (
+                    {fieldErr("registration_no")}
+
+                    {!editingRow && !String(form.registration_no || "").trim() && (
                       <div className="form-text">
                         {suggesting ? (
                           <span>Checking next reg no...</span>
@@ -727,7 +994,7 @@ const Registrations = () => {
                             <button
                               type="button"
                               className="btn btn-link btn-sm ms-2 p-0"
-                              onClick={() => setForm((p) => ({ ...p, registration_no: regNoSuggestion }))}
+                              onClick={() => setField("registration_no", regNoSuggestion)}
                             >
                               Use
                             </button>
@@ -743,12 +1010,12 @@ const Registrations = () => {
                     <label className="form-label">Academic Session *</label>
                     <input
                       type="text"
-                      className="form-control"
+                      className={fieldClass("academic_session")}
                       placeholder="e.g. 2025-26"
                       value={form.academic_session || ""}
                       onChange={(e) => {
                         const v = e.target.value;
-                        setForm({ ...form, academic_session: v });
+                        setField("academic_session", v);
 
                         if (!editingRow) {
                           if (String(v).trim().length >= 4) fetchNextRegNo(v);
@@ -759,17 +1026,19 @@ const Registrations = () => {
                         if (!editingRow) fetchNextRegNo(form.academic_session);
                       }}
                     />
+                    {fieldErr("academic_session")}
                   </div>
 
                   <div className="col-md-4">
                     <label className="form-label">Class Applied *</label>
                     <input
                       type="text"
-                      className="form-control"
+                      className={fieldClass("class_applied")}
                       placeholder="e.g. Nursery"
                       value={form.class_applied || ""}
-                      onChange={(e) => setForm({ ...form, class_applied: e.target.value })}
+                      onChange={(e) => setField("class_applied", e.target.value)}
                     />
+                    {fieldErr("class_applied")}
                   </div>
                 </div>
 
@@ -781,32 +1050,37 @@ const Registrations = () => {
                     <label className="form-label">Student Name *</label>
                     <input
                       type="text"
-                      className="form-control mb-3"
+                      className={fieldClass("student_name") + " mb-0"}
                       value={form.student_name || ""}
-                      onChange={(e) => setForm({ ...form, student_name: e.target.value })}
+                      onChange={(e) => setField("student_name", e.target.value)}
                     />
+                    {fieldErr("student_name")}
                   </div>
 
                   <div className="col-md-4">
                     <label className="form-label">Phone *</label>
                     <input
                       type="text"
-                      className="form-control mb-3"
+                      className={fieldClass("phone") + " mb-0"}
                       value={form.phone || ""}
-                      onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                      onChange={(e) => setField("phone", e.target.value)}
                     />
+                    {fieldErr("phone")}
                   </div>
 
                   <div className="col-md-4">
                     <label className="form-label">Email</label>
                     <input
                       type="email"
-                      className="form-control mb-3"
+                      className={fieldClass("email") + " mb-0"}
                       value={form.email || ""}
-                      onChange={(e) => setForm({ ...form, email: e.target.value })}
+                      onChange={(e) => setField("email", e.target.value)}
                     />
+                    {fieldErr("email")}
                   </div>
                 </div>
+
+                <div className="mt-3" />
 
                 {/* Row 3 */}
                 <div className="row">
@@ -814,89 +1088,95 @@ const Registrations = () => {
                     <label className="form-label">Father Name</label>
                     <input
                       type="text"
-                      className="form-control mb-3"
+                      className={fieldClass("father_name")}
                       value={form.father_name || ""}
-                      onChange={(e) => setForm({ ...form, father_name: e.target.value })}
+                      onChange={(e) => setField("father_name", e.target.value)}
                     />
+                    {fieldErr("father_name")}
                   </div>
 
                   <div className="col-md-4">
                     <label className="form-label">Mother Name</label>
                     <input
                       type="text"
-                      className="form-control mb-3"
+                      className={fieldClass("mother_name")}
                       value={form.mother_name || ""}
-                      onChange={(e) => setForm({ ...form, mother_name: e.target.value })}
+                      onChange={(e) => setField("mother_name", e.target.value)}
                     />
+                    {fieldErr("mother_name")}
                   </div>
 
                   <div className="col-md-4">
                     <label className="form-label">DOB</label>
                     <input
                       type="date"
-                      className="form-control mb-3"
+                      className={fieldClass("dob")}
                       value={form.dob || ""}
-                      onChange={(e) => setForm({ ...form, dob: e.target.value })}
+                      onChange={(e) => setField("dob", e.target.value)}
                     />
+                    {fieldErr("dob")}
                   </div>
                 </div>
+
+                <div className="mt-3" />
 
                 {/* Row 4 */}
                 <div className="row">
                   <div className="col-md-4">
                     <label className="form-label">Gender</label>
-                    <select
-                      className="form-control mb-3"
-                      value={form.gender || ""}
-                      onChange={(e) => setForm({ ...form, gender: e.target.value })}
-                    >
+                    <select className={fieldClass("gender")} value={form.gender || ""} onChange={(e) => setField("gender", e.target.value)}>
                       <option value="">Select</option>
                       <option value="Male">Male</option>
                       <option value="Female">Female</option>
                       <option value="Other">Other</option>
                     </select>
+                    {fieldErr("gender")}
                   </div>
 
                   <div className="col-md-4">
                     <label className="form-label">Registration Date (optional)</label>
                     <input
                       type="datetime-local"
-                      className="form-control mb-3"
+                      className={fieldClass("registration_date")}
                       value={form.registration_date || ""}
-                      onChange={(e) => setForm({ ...form, registration_date: e.target.value })}
+                      onChange={(e) => setField("registration_date", e.target.value)}
                     />
+                    {fieldErr("registration_date")}
                   </div>
 
                   <div className="col-md-4">
                     <label className="form-label">Status</label>
-                    <select
-                      className="form-control mb-3"
-                      value={form.status || "registered"}
-                      onChange={(e) => setForm({ ...form, status: e.target.value })}
-                    >
+                    <select className={fieldClass("status")} value={form.status || "registered"} onChange={(e) => setField("status", e.target.value)}>
                       <option value="registered">Registered</option>
                       <option value="selected">Selected</option>
                       <option value="rejected">Rejected</option>
                       <option value="admitted">Admitted</option>
                     </select>
+                    {fieldErr("status")}
                   </div>
                 </div>
 
+                <div className="mt-3" />
+
                 <label className="form-label">Address</label>
                 <textarea
-                  className="form-control mb-3"
+                  className={(formErrors?.address ? "form-control is-invalid" : "form-control") + " mb-0"}
                   rows={2}
                   value={form.address || ""}
-                  onChange={(e) => setForm({ ...form, address: e.target.value })}
+                  onChange={(e) => setField("address", e.target.value)}
                 />
+                {fieldErr("address")}
+
+                <div className="mt-3" />
 
                 <label className="form-label">Remarks</label>
                 <textarea
-                  className="form-control"
+                  className={fieldClass("remarks")}
                   rows={2}
                   value={form.remarks || ""}
-                  onChange={(e) => setForm({ ...form, remarks: e.target.value })}
+                  onChange={(e) => setField("remarks", e.target.value)}
                 />
+                {fieldErr("remarks")}
               </div>
 
               <div className="modal-footer">

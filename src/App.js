@@ -15,7 +15,6 @@ import Chat from "./components/Chat";
 import ChatContainer from "./components/chat/ChatContainer";
 import ExaminationDashboard from "./components/ExaminationDashboard";
 
-
 // ✅ NEW: Transport dashboard (optional direct route)
 import TransportDashboard from "./components/TransportDashboard";
 
@@ -159,9 +158,15 @@ import StudentStatsSummary from "./pages/StudentStatsSummary";
 
 import AttendanceEntry from "./pages/AttendanceEntry";
 
+import AIChatBox from "./components/AIChatBox";
 
+import SyllabusTeacherAssignment from "./pages/SyllabusTeacherAssignment";
+import SyllabusBreakdownCRUD from "./pages/SyllabusBreakdownCRUD";
 
+// ✅ NEW: Coordinator Approval Page
+import SyllabusApprovalCoordinator from "./pages/SyllabusApprovalCoordinator";
 
+import LessonPlanEvaluations from "./pages/LessonPlanEvaluations";
 
 // ---------- auth guard ----------
 const RequireRole = ({ roles = [], children }) => {
@@ -306,7 +311,10 @@ function App() {
 
           {/* Optional aliases for view */}
           <Route path="/calendar" element={<Navigate to="/academic-calendar-view" replace />} />
-          <Route path="/academic-calendar/public" element={<Navigate to="/academic-calendar-view" replace />} />
+          <Route
+            path="/academic-calendar/public"
+            element={<Navigate to="/academic-calendar-view" replace />}
+          />
 
           {/* ✅ Academic Calendar (Coordinator CRUD) */}
           <Route
@@ -343,8 +351,10 @@ function App() {
           {/* Chat */}
           <Route path="/chat" element={<Chat chatId="chat_room_1" currentUserId={currentUserId} />} />
           <Route path="/chat-page" element={<ChatContainer fullPage currentUserId={currentUserId} />} />
-          <Route path="/chat-page/:contactId" element={<ChatContainer fullPage currentUserId={currentUserId} />} />
-          <Route path="/chat-page/:contactId" element={<ChatContainer fullPage currentUserId={currentUserId} />} />
+          <Route
+            path="/chat-page/:contactId"
+            element={<ChatContainer fullPage currentUserId={currentUserId} />}
+          />
 
           {/* Core / Admissions */}
           <Route path="/classes" element={<Classes />} />
@@ -354,6 +364,7 @@ function App() {
           <Route path="/students" element={<Student />} />
           <Route path="/sections" element={<Sections />} />
           <Route path="/schools" element={<Schools />} />
+
           {/* ✅ Transport: Drivers / Conductors (guarded) */}
           <Route
             path="/transport-staff"
@@ -364,9 +375,8 @@ function App() {
             }
           />
 
-
           {/* Enquiries (admin) */}
-         <Route
+          <Route
             path="/enquiries"
             element={
               <RequireRole roles={["admin", "superadmin", "admissions", "admission", "frontoffice"]}>
@@ -374,7 +384,6 @@ function App() {
               </RequireRole>
             }
           />
-
 
           {/* ✅ Registrations (staff-only) */}
           <Route
@@ -499,6 +508,14 @@ function App() {
           <Route path="/teacher-substituted-listing" element={<TeacherSubstitutedListing />} />
           <Route path="/combined-teacher-substitution" element={<TeacherCombinedSubstitutionPage />} />
           <Route path="/lesson-plan" element={<LessonPlan />} />
+          <Route
+          path="/lesson-plans/:lessonPlanId/evaluations"
+          element={
+            <RequireRole roles={["teacher", "academic_coordinator", "admin", "superadmin", "principal", "coordinator"]}>
+              <LessonPlanEvaluations />
+            </RequireRole>
+          }
+        />
           <Route path="/mark-attendance" element={<MarkAttendance />} />
           <Route path="/attendance-calendar" element={<AttendanceCalendar />} />
           <Route path="/leave-requests" element={<TeacherLeaveRequests />} />
@@ -521,15 +538,16 @@ function App() {
           <Route path="/roll-numbers" element={<RollNumberManagement />} />
           <Route path="/marks-entry" element={<MarksEntry />} />
 
-            {/* ✅ NEW: Attendance Entry (Term-1 / Term-2 modal + export/import) */}
-            <Route
-              path="/attendance-entry"
-              element={
-                <RequireRole roles={["teacher", "academic_coordinator", "admin", "superadmin", "principal"]}>
-                  <AttendanceEntry />
-                </RequireRole>
-              }
-            />
+          {/* ✅ NEW: Attendance Entry */}
+          <Route
+            path="/attendance-entry"
+            element={
+              <RequireRole roles={["teacher", "academic_coordinator", "admin", "superadmin", "principal"]}>
+                <AttendanceEntry />
+              </RequireRole>
+            }
+          />
+
           <Route path="/report-builder" element={<ReportBuilder />} />
           <Route path="/student-remarks-entry" element={<StudentRemarksEntry />} />
           <Route path="/reports/classwise-result-summary" element={<ClasswiseResultSummary />} />
@@ -574,7 +592,6 @@ function App() {
               </RequireRole>
             }
           />
-
 
           {/* Accounts Dashboard */}
           <Route
@@ -628,7 +645,7 @@ function App() {
             }
           />
 
-          {/* ✅ Projection Report (Next Session Strength) */}
+          {/* ✅ Projection Report */}
           <Route
             path="/reports/student-strength-projection"
             element={
@@ -648,7 +665,6 @@ function App() {
             }
           />
 
-
           {/* ✅ Disciplinary Actions */}
           <Route
             path="/disciplinary-actions"
@@ -660,44 +676,68 @@ function App() {
           />
 
           {/* ✅ Transport Attendance (Mobile UI for Driver/Conductor) */}
-            <Route
-              path="/transport-attendance"
-              element={
-                <RequireRole roles={["driver", "conductor", "transport", "transport_admin", "admin", "superadmin"]}>
-                  <TransportAttendanceMobile />
-                </RequireRole>
-              }
-            />
+          <Route
+            path="/transport-attendance"
+            element={
+              <RequireRole roles={["driver", "conductor", "transport", "transport_admin", "admin", "superadmin"]}>
+                <TransportAttendanceMobile />
+              </RequireRole>
+            }
+          />
 
-            <Route
-                path="/reports/student-summary"
-                element={
-                  <RequireRole
-                    roles={[
-                      "superadmin",
-                      "admin",
-                      "accounts",
-                      "academic_coordinator",
-                      "teacher",
-                    ]}
-                  >
-                    <StudentStatsSummary />
-                  </RequireRole>
-                }
-              />
+          <Route
+            path="/reports/student-summary"
+            element={
+              <RequireRole roles={["superadmin", "admin", "accounts", "academic_coordinator", "teacher"]}>
+                <StudentStatsSummary />
+              </RequireRole>
+            }
+          />
 
+          {/* ✅ Transport Attendance Report */}
+          <Route
+            path="/transport-attendance-report"
+            element={
+              <RequireRole roles={["transport", "transport_admin", "admin", "superadmin", "accounts"]}>
+                <TransportAttendanceReport />
+              </RequireRole>
+            }
+          />
 
-            {/* ✅ Transport Attendance Report (Bus-wise reports) */}
-            <Route
-              path="/transport-attendance-report"
-              element={
-                <RequireRole roles={["transport", "transport_admin", "admin", "superadmin", "accounts"]}>
-                  <TransportAttendanceReport />
-                </RequireRole>
-              }
-            />
+          {/* ✅ Syllabus Teacher Assignment */}
+          <Route
+            path="/syllabus-teacher-assignment"
+            element={
+              <RequireRole roles={["admin", "superadmin", "academic_coordinator", "coordinator"]}>
+                <SyllabusTeacherAssignment />
+              </RequireRole>
+            }
+          />
 
-           
+          {/* ✅ Syllabus Breakdown CRUD */}
+          <Route
+            path="/syllabus-breakdown"
+            element={
+              <RequireRole
+                roles={["teacher", "academic_coordinator", "admin", "superadmin", "principal", "coordinator"]}
+              >
+                <SyllabusBreakdownCRUD />
+              </RequireRole>
+            }
+          />
+
+          {/* ✅ NEW: Syllabus Approval (Coordinator/Admin) */}
+          <Route
+            path="/syllabus-approval"
+            element={
+              <RequireRole roles={["academic_coordinator", "coordinator", "admin", "superadmin", "principal"]}>
+                <SyllabusApprovalCoordinator />
+              </RequireRole>
+            }
+          />
+          <Route path="/syllabus-approvals" element={<Navigate to="/syllabus-approval" replace />} />
+
+          <Route path="/ai-chat" element={<AIChatBox />} />
 
           <Route path="/discipline" element={<Navigate to="/disciplinary-actions" replace />} />
 

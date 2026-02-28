@@ -5,6 +5,11 @@ import Swal from "sweetalert2";
 import { Modal, Button, ProgressBar } from "react-bootstrap";
 
 /* ============================================================
+ * ✅ CONFIG
+ * ============================================================ */
+const PDF_ENDPOINT = "/report-card/generate-pdf/report-card";
+
+/* ============================================================
  * ✅ Student photo helpers (same style as Students.js)
  * ============================================================ */
 const apiBase = (() => {
@@ -13,7 +18,9 @@ const apiBase = (() => {
 })();
 
 const buildStudentPhotoURL = (fileName) =>
-  fileName ? `${apiBase}/uploads/photoes/students/${encodeURIComponent(fileName)}` : "";
+  fileName
+    ? `${apiBase}/uploads/photoes/students/${encodeURIComponent(fileName)}`
+    : "";
 
 // Neutral "no photo" SVG placeholder (works in browser + PDF HTML)
 const NO_PHOTO_SVG =
@@ -37,9 +44,32 @@ const safeInt = (v) => {
 const buildPresentTotalText = (att) => {
   const p = safeInt(att?.present_days);
   const t = safeInt(att?.total_days);
-
   if (p == null && t == null) return "-";
   return `${p ?? 0} / ${t ?? 0}`;
+};
+
+/* ============================================================
+ * ✅ MARKS / GRADE helpers (NEW)
+ * ============================================================ */
+const isNumeric = (v) => v != null && v !== "" && Number.isFinite(Number(v));
+
+const renderCellValue = (cc) => {
+  if (!cc) return "-";
+  if (cc.marks != null && cc.marks !== "") return cc.marks;
+  if (cc.grade != null && String(cc.grade).trim() !== "") return cc.grade;
+  return "-";
+};
+
+const sumMarksOnly = (arr = []) =>
+  (arr || []).reduce((a, x) => a + (isNumeric(x?.marks) ? Number(x.marks) : 0), 0);
+
+const hasAnyMarks = (arr = []) => (arr || []).some((x) => isNumeric(x?.marks));
+
+const pickGrade = (arr = []) => {
+  const hit = (arr || []).find(
+    (x) => x?.grade != null && String(x.grade).trim() !== ""
+  );
+  return hit?.grade || "-";
 };
 
 const FinalResultSummary = () => {
@@ -48,20 +78,26 @@ const FinalResultSummary = () => {
   const [subjects, setSubjects] = useState([]);
   const [exams, setExams] = useState([]);
   const [showTotals, setShowTotals] = useState(true);
+
   const [studentInfoMap, setStudentInfoMap] = useState({});
   const [coScholasticData, setCoScholasticData] = useState([]);
   const [remarksData, setRemarksData] = useState({});
   const [attendanceData, setAttendanceData] = useState({});
   const [gradeSchema, setGradeSchema] = useState([]);
+
   const [filters, setFilters] = useState({
     class_id: "",
     section_id: "",
     exam_ids: [],
-    subjectComponents: [{ subject_id: "", selected_components: {}, availableComponents: [] }],
+    subjectComponents: [
+      { subject_id: "", selected_components: {}, availableComponents: [] },
+    ],
   });
+
   const [reportData, setReportData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [reportFormat, setReportFormat] = useState(null);
+
   const [numberFormat, setNumberFormat] = useState({
     decimalPoints: 2,
     rounding: "none",
@@ -193,7 +229,9 @@ const FinalResultSummary = () => {
       class_id,
       section_id: "",
       exam_ids: [],
-      subjectComponents: [{ subject_id: "", selected_components: {}, availableComponents: [] }],
+      subjectComponents: [
+        { subject_id: "", selected_components: {}, availableComponents: [] },
+      ],
     });
 
     setSubjects([]);
@@ -210,7 +248,10 @@ const FinalResultSummary = () => {
 
     try {
       const subjectList = await loadSubjects(class_id);
-      const subjectComponents = await preselectAllSubjectsAndComponents(class_id, subjectList);
+      const subjectComponents = await preselectAllSubjectsAndComponents(
+        class_id,
+        subjectList
+      );
 
       setFilters((prev) => ({
         ...prev,
@@ -243,10 +284,8 @@ const FinalResultSummary = () => {
     }
 
     try {
-      const { availableComponents, selected_components } = await loadSubjectComponentsAuto(
-        filters.class_id,
-        subject_id
-      );
+      const { availableComponents, selected_components } =
+        await loadSubjectComponentsAuto(filters.class_id, subject_id);
 
       setFilters((prev) => {
         const updated = [...prev.subjectComponents];
@@ -269,8 +308,11 @@ const FinalResultSummary = () => {
       const t = String(term_id);
 
       if (!selected[t]) selected[t] = [];
-      if (checked) selected[t] = [...selected[t], compId];
-      else selected[t] = selected[t].filter((id) => id !== compId);
+      if (checked) {
+        if (!selected[t].includes(compId)) selected[t] = [...selected[t], compId];
+      } else {
+        selected[t] = selected[t].filter((id) => id !== compId);
+      }
 
       updated[index].selected_components = selected;
       return { ...prev, subjectComponents: updated };
@@ -304,8 +346,6 @@ const FinalResultSummary = () => {
 
   /* ============================================================
    * ✅ Term resolver for attendance/co-scholastic/remarks
-   * - Uses first selected exam's term_id
-   * - Fallback: "1"
    * ============================================================ */
   const resolveTermId = () => {
     const firstExamId = (filters.exam_ids || [])[0];
@@ -314,18 +354,12 @@ const FinalResultSummary = () => {
   };
 
   /* ============================================================
-   * ✅ Attendance fetcher
-   * - Reads from StudentTermAttendance summary endpoint
-   * - Supports both response shapes:
-   *   (A) { attendance: [...] }
-   *   (B) { attendanceMap: { [student_id]: {...} } }
-   * - Tries multiple endpoint paths to avoid 404 mismatch
+   * ✅ Attendance fetcher (supports multiple endpoints)
    * ============================================================ */
   const fetchAttendanceSummary = async ({ class_id, section_id, term_id }) => {
     const endpoints = [
-      "/attendance-entry/summary", // ✅ if mounted at /api/attendance-entry
-      "/student-term-attendances/summary", // ✅ if mounted at /api/student-term-attendances
-      "/student-term-attendance/summary",
+      "/attendance-entry/summary",
+      "/student-term-attendances/summary",
       "/student-term-attendance/summary",
     ];
 
@@ -333,7 +367,10 @@ const FinalResultSummary = () => {
 
     for (const url of endpoints) {
       try {
-        const res = await api.get(url, { params: { class_id, section_id, term_id } });
+        const res = await api.get(url, {
+          params: { class_id, section_id, term_id },
+        });
+
         const attendanceMap = {};
 
         if (res?.data?.attendanceMap && typeof res.data.attendanceMap === "object") {
@@ -343,18 +380,15 @@ const FinalResultSummary = () => {
         } else if (Array.isArray(res?.data?.attendance)) {
           for (const a of res.data.attendance) attendanceMap[a.student_id] = a;
         } else if (Array.isArray(res?.data)) {
-          // in case API returns array directly
           for (const a of res.data) attendanceMap[a.student_id] = a;
         } else {
-          // unknown shape
-          console.warn("Attendance summary: unknown response shape from", url, res?.data);
+          console.warn("Attendance summary: unknown shape from", url, res?.data);
         }
 
         return attendanceMap;
       } catch (e) {
         lastErr = e;
         const status = e?.response?.status;
-        // only ignore if route missing
         if (status !== 404) break;
       }
     }
@@ -423,11 +457,11 @@ const FinalResultSummary = () => {
       const remarksRes = await api.get("/report-card/remarks-summary", {
         params: { class_id, section_id, term_id },
       });
+
       const remarksMap = {};
       for (const r of remarksRes.data.remarks || []) remarksMap[r.student_id] = r.remark;
       setRemarksData(remarksMap);
 
-      // ✅ Attendance summary (Present/Total only) — from StudentTermAttendance
       const attendanceMap = await fetchAttendanceSummary({ class_id, section_id, term_id });
       setAttendanceData(attendanceMap);
     } catch (err) {
@@ -451,10 +485,10 @@ const FinalResultSummary = () => {
     const termId = exams.find((e) => e.id === examId)?.term_id;
     const compMap = new Map();
 
-    filters.subjectComponents.forEach((sc) => {
+    (filters.subjectComponents || []).forEach((sc) => {
       const comps = (sc.availableComponents || []).filter(
         (c) =>
-          filters.exam_ids.includes(examId) &&
+          (filters.exam_ids || []).includes(examId) &&
           (sc.selected_components?.[String(termId)] || []).includes(c.component_id)
       );
 
@@ -508,18 +542,24 @@ const FinalResultSummary = () => {
     return (
       <div className="mt-4">
         <h5 className="mb-2">Grade Schema</h5>
-        <div className="border rounded p-2 small" style={{ background: "#fff", lineHeight: 1.4 }}>
+        <div
+          className="border rounded p-2 small"
+          style={{ background: "#fff", lineHeight: 1.4 }}
+        >
           {line}
         </div>
       </div>
     );
   };
 
-  /** -------- Build PDF HTML that mirrors the on-screen report-card layout -------- */
+  /* ============================================================
+   * ✅ Build PDF HTML: Scholastic header/body
+   * ============================================================ */
   const buildScholasticHeaderHtml = () => {
     let theadTop = `<tr><th rowspan="2" style="background:#dff0ff;color:#003366;text-align:left">Subject</th>`;
     let theadBottom = `<tr>`;
-    filters.exam_ids.forEach((exId) => {
+
+    (filters.exam_ids || []).forEach((exId) => {
       const comps = getUniqueComponentsByExam(exId);
       theadTop += `<th colspan="${comps.length + (showTotals ? 2 : 0)}" style="background:#dff0ff;color:#003366">${
         exams.find((e) => e.id === exId)?.name || ""
@@ -531,42 +571,106 @@ const FinalResultSummary = () => {
         theadBottom += `<th style="background:#e6f4ff;font-weight:bold">Marks</th><th style="background:#e6f4ff;font-weight:bold">Grade</th>`;
       }
     });
+
     if (showTotals) {
       theadTop += `<th colspan="2" style="background:#dff0ff;color:#003366">Total</th>`;
       theadBottom += `<th style="background:#e6f4ff;font-weight:bold">Marks</th><th style="background:#e6f4ff;font-weight:bold">Grade</th>`;
     }
+
     theadTop += `</tr>`;
     theadBottom += `</tr>`;
     return theadTop + theadBottom;
   };
 
   const buildScholasticBodyRowHtml = (student, subjectName) => {
-    const subjComps = student.components.filter((c) => c.subject_name === subjectName);
+    const subjComps = (student.components || []).filter(
+      (c) => c.subject_name === subjectName
+    );
+
     let row = `<tr><td style="background:#dff0ff;font-weight:bold;text-align:left">${subjectName}</td>`;
-    filters.exam_ids.forEach((exId) => {
+
+    (filters.exam_ids || []).forEach((exId) => {
       const ecs = subjComps.filter((c) => c.exam_id === exId);
       const comps = getUniqueComponentsByExam(exId);
+
       comps.forEach((comp) => {
         const cc = subjComps.find(
           (c) => c.exam_id === exId && c.component_id === comp.component_id
         );
-        row += `<td>${cc?.marks ?? "-"}</td>`;
+        const val = cc?.marks ?? (cc?.grade ?? "-"); // ✅ marks OR grade
+        row += `<td>${val}</td>`;
       });
+
       if (showTotals) {
-        const totalMarks = ecs.reduce((a, x) => a + (x.marks || 0), 0);
-        const grade = ecs[0]?.grade || "-";
+        const totalMarks =
+          ecs.some((x) => x?.marks != null && x?.marks !== "")
+            ? ecs.reduce(
+                (a, x) => a + (Number.isFinite(Number(x.marks)) ? Number(x.marks) : 0),
+                0
+              )
+            : "-";
+
+        const grade =
+          ecs.find((x) => x?.grade != null && String(x.grade).trim() !== "")?.grade ||
+          "-";
+
         row += `<td style="font-weight:bold">${totalMarks}</td><td style="font-weight:bold">${grade}</td>`;
       }
     });
+
     if (showTotals) {
-      const total = subjComps.reduce((a, x) => a + (x.marks || 0), 0);
-      const grade = student.subject_grades?.[subjComps[0]?.subject_id] || "-";
+      const total =
+        subjComps.some((x) => x?.marks != null && x?.marks !== "")
+          ? subjComps.reduce(
+              (a, x) => a + (Number.isFinite(Number(x.marks)) ? Number(x.marks) : 0),
+              0
+            )
+          : "-";
+
+      const sid = subjComps[0]?.subject_id;
+      const grade =
+        student.subject_grades?.[sid] ||
+        subjComps.find((x) => x?.grade != null && String(x.grade).trim() !== "")?.grade ||
+        "-";
+
       row += `<td style="font-weight:bold">${total}</td><td style="font-weight:bold">${grade}</td>`;
     }
+
     row += `</tr>`;
     return row;
   };
 
+  /* ============================================================
+   * ✅ Overall block (Screen + PDF)
+   * ============================================================ */
+  const buildOverallPdfHtml = (student) => {
+    if (!showTotals) return "";
+    const total = student?.total_weighted;
+    const pct = student?.grand_percent_weighted;
+    const grade = student?.total_grade_weighted;
+
+    return `
+      <h5 class="mt-4">Overall (Weighted)</h5>
+      <table>
+        <thead>
+          <tr>
+            <th style="background:#dff0ff;color:#003366">Total</th>
+            <th style="background:#dff0ff;color:#003366">%</th>
+            <th style="background:#dff0ff;color:#003366">Grade</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td style="font-weight:bold">${formatNumber(total)}</td>
+            <td style="font-weight:bold">${pct != null ? `${formatNumber(pct)}%` : "-"}</td>
+            <td style="font-weight:bold">${grade || "-"}</td>
+          </tr>
+        </tbody>
+      </table>
+    `;
+  };
+
+  /** -------- Build PDF HTML that mirrors the on-screen report-card layout -------- */
   const buildCardsHtml = () => {
     const styles = `
       <style>
@@ -578,7 +682,6 @@ const FinalResultSummary = () => {
         h4, h5 { margin: 10px 0; }
         .header-flex { display:flex; align-items:center; justify-content:space-between; }
         .mb-3 { margin-bottom: 12px; }
-        .mb-2 { margin-bottom: 8px; }
         .p-8 { padding: 8px; }
         .text-center { text-align:center; }
 
@@ -599,24 +702,27 @@ const FinalResultSummary = () => {
           line-height: 1.4;
         }
 
+        /* PDF: keep tables from wrapping too much */
+        th, td { white-space: nowrap; font-size: 11px; }
+        td:first-child, th:first-child { white-space: normal; text-align:left; }
+
         @page { margin: 40px 20px; }
         section { page-break-after: always; }
         section:last-child { page-break-after: auto; }
       </style>
     `;
 
-    const blocks = reportData.map((student) => {
+    const blocks = (reportData || []).map((student) => {
       const info = studentInfoMap[student.id] || {};
       const co =
         (coScholasticData.find((s) => s.id === student.id) || { grades: [] }).grades;
 
       const att = attendanceData[student.id] || null;
       const presentTotal = buildPresentTotalText(att);
-
       const remark = remarksData[student.id] || "-";
 
       const subjectsForStudent = Array.from(
-        new Set(student.components.map((c) => c.subject_name))
+        new Set((student.components || []).map((c) => c.subject_name))
       );
 
       const scholasticTable = `
@@ -624,10 +730,14 @@ const FinalResultSummary = () => {
         <table>
           <thead>${buildScholasticHeaderHtml()}</thead>
           <tbody>
-            ${subjectsForStudent.map((sub) => buildScholasticBodyRowHtml(student, sub)).join("")}
+            ${subjectsForStudent
+              .map((sub) => buildScholasticBodyRowHtml(student, sub))
+              .join("")}
           </tbody>
         </table>
       `;
+
+      const overallBlock = buildOverallPdfHtml(student);
 
       const coScholasticTable = `
         <h5 class="mt-4">Co-Scholastic Areas</h5>
@@ -658,7 +768,6 @@ const FinalResultSummary = () => {
         </table>
       `;
 
-      // ✅ Attendance (Present/Total only)
       const attendanceTable = `
         <h5 class="mt-4">Attendance</h5>
         <table>
@@ -725,6 +834,7 @@ const FinalResultSummary = () => {
           ${studentInfoBlock}
           <h4 style="font-weight:bold">${info?.name || "-"} (Roll: ${info?.roll_number || "-"})</h4>
           ${scholasticTable}
+          ${overallBlock}
           ${coScholasticTable}
           ${attendanceTable}
           ${remarksBlock}
@@ -739,75 +849,36 @@ const FinalResultSummary = () => {
     )}</body></html>`;
   };
 
+  // ✅ helper: open pdf in new tab + download with proper .pdf name
+  const openAndDownloadPdfBlob = (blob, fileNameWithPdf) => {
+    const url = window.URL.createObjectURL(blob);
+
+    // open
+    const newTab = window.open(url, "_blank");
+    if (!newTab) {
+      console.warn("Popup blocked, downloading instead.");
+    }
+
+    // download
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = fileNameWithPdf;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+
+    setTimeout(() => window.URL.revokeObjectURL(url), 60000);
+  };
+
   const downloadPDF = async () => {
     if (!reportData.length) {
       return Swal.fire("No Data", "Please generate the report first", "info");
     }
 
-    let subject_components = (filters.subjectComponents || [])
-      .filter((sc) => sc.subject_id)
-      .map((sc) => {
-        const term_component_map = {};
-        Object.entries(sc.selected_components || {}).forEach(([termId, compIds]) => {
-          const arr = (compIds || []).map(Number).filter(Boolean);
-          if (arr.length) term_component_map[Number(termId)] = Array.from(new Set(arr));
-        });
-        return { subject_id: Number(sc.subject_id), term_component_map };
-      })
-      .filter((item) => Object.keys(item.term_component_map).length > 0);
-
-    if (!subject_components.length) {
-      const examIdToTermId = new Map(exams.map((e) => [e.id, e.term_id]));
-      const mapBySubject = new Map();
-      for (const student of reportData) {
-        for (const c of student.components || []) {
-          const subject_id = Number(c.subject_id);
-          const term_id = Number(examIdToTermId.get(c.exam_id));
-          const component_id = Number(c.component_id);
-          if (!subject_id || !term_id || !component_id) continue;
-
-          if (!mapBySubject.has(subject_id)) {
-            mapBySubject.set(subject_id, { subject_id, term_component_map: {} });
-          }
-          const entry = mapBySubject.get(subject_id);
-          if (!entry.term_component_map[term_id]) entry.term_component_map[term_id] = [];
-          if (!entry.term_component_map[term_id].includes(component_id)) {
-            entry.term_component_map[term_id].push(component_id);
-          }
-        }
-      }
-      subject_components = Array.from(mapBySubject.values()).filter(
-        (item) => Object.keys(item.term_component_map).length > 0
-      );
-    }
-
-    if (!subject_components.length) {
-      return Swal.fire(
-        "Missing Components",
-        "No assessment components found. Select components or generate the report again.",
-        "warning"
-      );
-    }
-
-    const filtersPayload = {
-      class_id: Number(filters.class_id),
-      section_id: Number(filters.section_id),
-      subject_components,
-      includeGrades: true,
-    };
-
     const html = buildCardsHtml();
-
-    const newTab = window.open("", "_blank");
-    if (!newTab) {
-      Swal.fire("Popup blocked", "Please allow popups for this site.", "warning");
-      return;
-    }
-    try {
-      newTab.document.write(
-        '<!doctype html><title>Preparing PDF…</title><p style="font-family:sans-serif;padding:16px">Preparing PDF…</p>'
-      );
-    } catch {}
+    const fileName = `FinalWeightedReport_${filters.class_id || "X"}_${
+      filters.section_id || "X"
+    }.pdf`;
 
     setPdfPercent(2);
     setPdfMessage("Queuing render…");
@@ -818,12 +889,13 @@ const FinalResultSummary = () => {
 
     try {
       const res = await api.post(
-        "/report-card/generate-pdf/report-card",
+        PDF_ENDPOINT,
         {
           html,
-          filters: filtersPayload,
-          fileName: "FinalWeightedReport",
+          fileName,
           orientation: "portrait",
+          class_id: Number(filters.class_id),
+          school_logo_url: reportFormat?.school_logo_url || null,
         },
         {
           responseType: "blob",
@@ -845,17 +917,12 @@ const FinalResultSummary = () => {
       setPdfMessage("Opening…");
 
       const blob = new Blob([res.data], { type: "application/pdf" });
-      const url = window.URL.createObjectURL(blob);
-      newTab.location.href = url;
-
-      setTimeout(() => window.URL.revokeObjectURL(url), 60000);
+      openAndDownloadPdfBlob(blob, fileName);
     } catch (error) {
       if (controller.signal.aborted) {
-        newTab.close();
         Swal.fire("Cancelled", "PDF generation was cancelled.", "info");
       } else {
         console.error(error);
-        newTab.close();
         Swal.fire("Error", "Failed to generate PDF", "error");
       }
     } finally {
@@ -866,12 +933,65 @@ const FinalResultSummary = () => {
 
   return (
     <div className="container mt-4">
+      {/* ✅ Screen-only CSS fixes for small screens */}
+      <style>{`
+        .report-card-wrap { overflow-x: hidden; }
+        .report-card {
+          background: #fff;
+          border-radius: 10px;
+        }
+
+        /* ✅ Make ALL tables scroll on small screens (prevents "going next page") */
+        .report-card .table-responsive {
+          overflow-x: auto;
+          -webkit-overflow-scrolling: touch;
+        }
+
+        /* ✅ Prevent cells from wrapping weirdly; keep layout stable */
+        .report-card table { table-layout: auto; }
+        .report-card th, .report-card td {
+          white-space: nowrap;
+          font-size: 12px;
+          vertical-align: middle;
+        }
+
+        /* First column (Subject/Area) can wrap a bit */
+        .report-card td:first-child,
+        .report-card th:first-child {
+          white-space: normal;
+          min-width: 160px;
+        }
+
+        /* Nice sticky first column (optional, helps when scrolling horizontally) */
+        .sticky-first-col {
+          position: sticky;
+          left: 0;
+          z-index: 2;
+          background: #dff0ff;
+        }
+        .sticky-first-col-td {
+          position: sticky;
+          left: 0;
+          z-index: 1;
+          background: #dff0ff;
+        }
+
+        /* Reduce paddings on very small screens */
+        @media (max-width: 768px) {
+          .report-card th, .report-card td { font-size: 11px; padding: 4px; }
+        }
+      `}</style>
+
       <h2>📘 Final Result Summary</h2>
 
       <div className="row g-3 mt-3">
         <div className="col-md-4">
           <label>Class</label>
-          <select className="form-select" value={filters.class_id} onChange={handleClassChange}>
+          <select
+            className="form-select"
+            value={filters.class_id}
+            onChange={handleClassChange}
+          >
             <option value="">Select Class</option>
             {classList.map((c) => (
               <option key={c.id} value={c.id}>
@@ -912,7 +1032,9 @@ const FinalResultSummary = () => {
               </option>
             ))}
           </select>
-          <div className="text-muted small mt-1">Hold Ctrl / Cmd to select multiple exams</div>
+          <div className="text-muted small mt-1">
+            Hold Ctrl / Cmd to select multiple exams
+          </div>
         </div>
       </div>
 
@@ -935,7 +1057,10 @@ const FinalResultSummary = () => {
                   ))}
                 </select>
 
-                <button className="btn btn-sm btn-danger mb-2" onClick={() => removeSubject(i)}>
+                <button
+                  className="btn btn-sm btn-danger mb-2"
+                  onClick={() => removeSubject(i)}
+                >
                   Remove
                 </button>
               </div>
@@ -959,7 +1084,12 @@ const FinalResultSummary = () => {
                             c.component_id
                           )}
                           onChange={(e) =>
-                            handleComponentToggle(+term, c.component_id, i, e.target.checked)
+                            handleComponentToggle(
+                              +term,
+                              c.component_id,
+                              i,
+                              e.target.checked
+                            )
                           }
                         />
                         <label
@@ -975,7 +1105,9 @@ const FinalResultSummary = () => {
               ))}
 
               {!sc.availableComponents?.length && sc.subject_id ? (
-                <div className="text-muted small">No components found for this subject.</div>
+                <div className="text-muted small">
+                  No components found for this subject.
+                </div>
               ) : null}
             </div>
           ))}
@@ -1019,7 +1151,7 @@ const FinalResultSummary = () => {
       )}
 
       {!loading && reportData.length > 0 && (
-        <div className="mt-5">
+        <div className="mt-5 report-card-wrap">
           <div className="d-flex justify-content-end">
             <button
               className="btn btn-outline-dark mb-3"
@@ -1032,7 +1164,9 @@ const FinalResultSummary = () => {
 
           {reportData.map((student) => {
             const info = studentInfoMap[student.id] || {};
-            const studentPhotoSrc = info?.photo ? buildStudentPhotoURL(info.photo) : NO_PHOTO_SVG;
+            const studentPhotoSrc = info?.photo
+              ? buildStudentPhotoURL(info.photo)
+              : NO_PHOTO_SVG;
 
             const coScholastic =
               coScholasticData.find((s) => s.id === student.id) || { grades: [] };
@@ -1042,7 +1176,7 @@ const FinalResultSummary = () => {
             const presentTotal = buildPresentTotalText(att);
 
             return (
-              <div key={student.id} className="mb-5">
+              <div key={student.id} className="mb-5 p-3 border report-card">
                 {reportFormat?.header_html && (
                   <div className="report-header mb-3">
                     <div className="d-flex align-items-center justify-content-between">
@@ -1110,178 +1244,255 @@ const FinalResultSummary = () => {
                 </h4>
 
                 <h5>Scholastic Areas</h5>
-                <table className="table table-bordered text-center small">
-                  <thead>
-                    <tr>
-                      <th
-                        rowSpan={2}
-                        style={{
-                          backgroundColor: "#dff0ff",
-                          color: "#003366",
-                          textAlign: "left",
-                        }}
-                      >
-                        Subject
-                      </th>
-                      {filters.exam_ids.map((exId) => {
-                        const uniqueComps = getUniqueComponentsByExam(exId);
-                        return (
+
+                <div className="table-responsive">
+                  <table className="table table-bordered text-center small">
+                    <thead>
+                      <tr>
+                        <th
+                          rowSpan={2}
+                          className="sticky-first-col"
+                          style={{
+                            backgroundColor: "#dff0ff",
+                            color: "#003366",
+                            textAlign: "left",
+                          }}
+                        >
+                          Subject
+                        </th>
+
+                        {(filters.exam_ids || []).map((exId) => {
+                          const uniqueComps = getUniqueComponentsByExam(exId);
+                          return (
+                            <th
+                              key={exId}
+                              colSpan={uniqueComps.length + (showTotals ? 2 : 0)}
+                              style={{ backgroundColor: "#dff0ff", color: "#003366" }}
+                            >
+                              {exams.find((e) => e.id === exId)?.name}
+                            </th>
+                          );
+                        })}
+
+                        {showTotals && (
                           <th
-                            key={exId}
-                            colSpan={uniqueComps.length + (showTotals ? 2 : 0)}
+                            colSpan={2}
                             style={{ backgroundColor: "#dff0ff", color: "#003366" }}
                           >
-                            {exams.find((e) => e.id === exId)?.name}
+                            Total
                           </th>
-                        );
-                      })}
-                      {showTotals && (
-                        <th colSpan={2} style={{ backgroundColor: "#dff0ff", color: "#003366" }}>
-                          Total
-                        </th>
-                      )}
-                    </tr>
+                        )}
+                      </tr>
 
-                    <tr>
-                      {filters.exam_ids.map((exId) => (
-                        <React.Fragment key={exId}>
-                          {getUniqueComponentsByExam(exId).map((comp) => (
-                            <th
-                              key={`c-${exId}-${comp.component_id}`}
-                              style={{ backgroundColor: "#e6f4ff" }}
-                            >
-                              {comp.label}
+                      <tr>
+                        {(filters.exam_ids || []).map((exId) => (
+                          <React.Fragment key={exId}>
+                            {getUniqueComponentsByExam(exId).map((comp) => (
+                              <th
+                                key={`c-${exId}-${comp.component_id}`}
+                                style={{ backgroundColor: "#e6f4ff" }}
+                              >
+                                {comp.label}
+                              </th>
+                            ))}
+
+                            {showTotals && (
+                              <>
+                                <th style={{ backgroundColor: "#e6f4ff", fontWeight: "bold" }}>
+                                  Marks
+                                </th>
+                                <th style={{ backgroundColor: "#e6f4ff", fontWeight: "bold" }}>
+                                  Grade
+                                </th>
+                              </>
+                            )}
+                          </React.Fragment>
+                        ))}
+
+                        {showTotals && (
+                          <>
+                            <th style={{ backgroundColor: "#e6f4ff", fontWeight: "bold" }}>
+                              Marks
                             </th>
-                          ))}
-                          {showTotals && (
-                            <>
-                              <th style={{ backgroundColor: "#e6f4ff", fontWeight: "bold" }}>
-                                Marks
-                              </th>
-                              <th style={{ backgroundColor: "#e6f4ff", fontWeight: "bold" }}>
-                                Grade
-                              </th>
-                            </>
-                          )}
-                        </React.Fragment>
-                      ))}
-                      {showTotals && (
-                        <>
-                          <th style={{ backgroundColor: "#e6f4ff", fontWeight: "bold" }}>Marks</th>
-                          <th style={{ backgroundColor: "#e6f4ff", fontWeight: "bold" }}>Grade</th>
-                        </>
+                            <th style={{ backgroundColor: "#e6f4ff", fontWeight: "bold" }}>
+                              Grade
+                            </th>
+                          </>
+                        )}
+                      </tr>
+                    </thead>
+
+                    <tbody>
+                      {[...new Set((student.components || []).map((c) => c.subject_name))].map(
+                        (sub, si) => {
+                          const subjComps = (student.components || []).filter(
+                            (c) => c.subject_name === sub
+                          );
+
+                          return (
+                            <tr key={si}>
+                              <td
+                                className="sticky-first-col-td"
+                                style={{
+                                  backgroundColor: "#dff0ff",
+                                  fontWeight: "bold",
+                                  textAlign: "left",
+                                }}
+                              >
+                                {sub}
+                              </td>
+
+                              {(filters.exam_ids || []).map((exId) => {
+                                const ecs = subjComps.filter((c) => c.exam_id === exId);
+                                return (
+                                  <React.Fragment key={exId}>
+                                    {getUniqueComponentsByExam(exId).map((comp) => {
+                                      const cc = subjComps.find(
+                                        (c) =>
+                                          c.exam_id === exId &&
+                                          c.component_id === comp.component_id
+                                      );
+                                      return (
+                                        <td key={`m-${exId}-${comp.component_id}`}>
+                                          {renderCellValue(cc)}
+                                        </td>
+                                      );
+                                    })}
+
+                                    {showTotals && (
+                                      <>
+                                        <td style={{ fontWeight: "bold" }}>
+                                          {hasAnyMarks(ecs) ? sumMarksOnly(ecs) : "-"}
+                                        </td>
+                                        <td style={{ fontWeight: "bold" }}>
+                                          {pickGrade(ecs)}
+                                        </td>
+                                      </>
+                                    )}
+                                  </React.Fragment>
+                                );
+                              })}
+
+                              {showTotals && (
+                                <>
+                                  <td style={{ fontWeight: "bold" }}>
+                                    {hasAnyMarks(subjComps) ? sumMarksOnly(subjComps) : "-"}
+                                  </td>
+                                  <td style={{ fontWeight: "bold" }}>
+                                    {student.subject_grades?.[subjComps[0]?.subject_id] ||
+                                      pickGrade(subjComps)}
+                                  </td>
+                                </>
+                              )}
+                            </tr>
+                          );
+                        }
                       )}
-                    </tr>
-                  </thead>
+                    </tbody>
+                  </table>
+                </div>
 
-                  <tbody>
-                    {[...new Set(student.components.map((c) => c.subject_name))].map((sub, si) => {
-                      const subjComps = student.components.filter((c) => c.subject_name === sub);
-                      return (
-                        <tr key={si}>
-                          <td
-                            style={{
-                              backgroundColor: "#dff0ff",
-                              fontWeight: "bold",
-                              textAlign: "left",
-                            }}
-                          >
-                            {sub}
-                          </td>
-
-                          {filters.exam_ids.map((exId) => {
-                            const ecs = subjComps.filter((c) => c.exam_id === exId);
-                            return (
-                              <React.Fragment key={exId}>
-                                {getUniqueComponentsByExam(exId).map((comp) => {
-                                  const cc = subjComps.find(
-                                    (c) =>
-                                      c.exam_id === exId && c.component_id === comp.component_id
-                                  );
-                                  return (
-                                    <td key={`m-${exId}-${comp.component_id}`}>
-                                      {cc?.marks ?? "-"}
-                                    </td>
-                                  );
-                                })}
-
-                                {showTotals && (
-                                  <>
-                                    <td style={{ fontWeight: "bold" }}>
-                                      {ecs.reduce((a, x) => a + (x.marks || 0), 0)}
-                                    </td>
-                                    <td style={{ fontWeight: "bold" }}>{ecs[0]?.grade || "-"}</td>
-                                  </>
-                                )}
-                              </React.Fragment>
-                            );
-                          })}
-
-                          {showTotals && (
-                            <>
-                              <td style={{ fontWeight: "bold" }}>
-                                {subjComps.reduce((a, x) => a + (x.marks || 0), 0)}
-                              </td>
-                              <td style={{ fontWeight: "bold" }}>
-                                {student.subject_grades?.[subjComps[0]?.subject_id] || "-"}
-                              </td>
-                            </>
-                          )}
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                {/* ✅ Overall (Weighted) Total + % + Grade */}
+                {showTotals && (
+                  <div className="mt-2">
+                    <div className="table-responsive">
+                      <table className="table table-bordered text-center small">
+                        <thead>
+                          <tr>
+                            <th style={{ backgroundColor: "#dff0ff", color: "#003366" }}>
+                              Overall (Weighted) Total
+                            </th>
+                            <th style={{ backgroundColor: "#dff0ff", color: "#003366" }}>%</th>
+                            <th style={{ backgroundColor: "#dff0ff", color: "#003366" }}>
+                              Grade
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr>
+                            <td style={{ fontWeight: "bold" }}>
+                              {formatNumber(student.total_weighted)}
+                            </td>
+                            <td style={{ fontWeight: "bold" }}>
+                              {student.grand_percent_weighted != null
+                                ? `${formatNumber(student.grand_percent_weighted)}%`
+                                : "-"}
+                            </td>
+                            <td style={{ fontWeight: "bold" }}>
+                              {student.total_grade_weighted || "-"}
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
 
                 <h5 className="mt-4">Co-Scholastic Areas</h5>
-                <table className="table table-bordered text-center small">
-                  <thead>
-                    <tr>
-                      <th style={{ backgroundColor: "#dff0ff", color: "#003366", textAlign: "left" }}>
-                        Area
-                      </th>
-                      <th style={{ backgroundColor: "#dff0ff", color: "#003366" }}>Grade</th>
-                      <th style={{ backgroundColor: "#dff0ff", color: "#003366" }}>Remarks</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {coScholastic.grades.map((grade, index) => (
-                      <tr key={index}>
-                        <td style={{ textAlign: "left", fontWeight: "bold" }}>{grade.area_name}</td>
-                        <td>{grade.grade || "-"}</td>
-                        <td>{grade.remarks || "-"}</td>
-                      </tr>
-                    ))}
-                    {coScholastic.grades.length === 0 && (
+                <div className="table-responsive">
+                  <table className="table table-bordered text-center small">
+                    <thead>
                       <tr>
-                        <td colSpan={3} className="text-center">
-                          No co-scholastic data available
-                        </td>
+                        <th
+                          style={{
+                            backgroundColor: "#dff0ff",
+                            color: "#003366",
+                            textAlign: "left",
+                          }}
+                        >
+                          Area
+                        </th>
+                        <th style={{ backgroundColor: "#dff0ff", color: "#003366" }}>
+                          Grade
+                        </th>
+                        <th style={{ backgroundColor: "#dff0ff", color: "#003366" }}>
+                          Remarks
+                        </th>
                       </tr>
-                    )}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {coScholastic.grades.map((grade, index) => (
+                        <tr key={index}>
+                          <td style={{ textAlign: "left", fontWeight: "bold" }}>
+                            {grade.area_name}
+                          </td>
+                          <td>{grade.grade || "-"}</td>
+                          <td>{grade.remarks || "-"}</td>
+                        </tr>
+                      ))}
+                      {coScholastic.grades.length === 0 && (
+                        <tr>
+                          <td colSpan={3} className="text-center">
+                            No co-scholastic data available
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
 
                 {/* ✅ Attendance (Present/Total only) */}
                 <h5 className="mt-4">Attendance</h5>
-                <table className="table table-bordered text-center small">
-                  <thead>
-                    <tr>
-                      <th style={{ backgroundColor: "#dff0ff", color: "#003366" }}>
-                        Present / Total Days
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr>
-                      <td style={{ fontWeight: "bold" }}>{presentTotal}</td>
-                    </tr>
-                  </tbody>
-                </table>
+                <div className="table-responsive">
+                  <table className="table table-bordered text-center small">
+                    <thead>
+                      <tr>
+                        <th style={{ backgroundColor: "#dff0ff", color: "#003366" }}>
+                          Present / Total Days
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td style={{ fontWeight: "bold" }}>{presentTotal}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
 
                 <h5 className="mt-4">Remarks</h5>
                 <div className="border p-3 small">
-                  <p>{remark || "No remarks provided"}</p>
+                  <p style={{ marginBottom: 0 }}>{remark || "No remarks provided"}</p>
                 </div>
 
                 {reportFormat?.footer_html && (

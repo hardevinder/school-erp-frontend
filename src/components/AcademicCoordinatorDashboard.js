@@ -1,7 +1,8 @@
-// src/components/Dashboard.jsx — polished & professional (updated)
-// ✅ Adds "Academic Calendar" quick card for coordinators
-// ✅ Adds safe refresh button + fixes Retry button (was not re-fetching)
-// ✅ Keeps your existing attendance dashboard exactly
+// src/components/Dashboard.jsx — polished & more attractive (FULL FILE)
+// ✅ Adds "Assign Syllabus Teacher" quick card for coordinators
+// ✅ Adds "Syllabus Approval" quick card (NEW)
+// ✅ Adds Academic Calendar quick card (already there) + extra Academic tools card
+// ✅ Keeps attendance dashboard logic intact
 
 import React, { useEffect, useMemo, useState, useCallback } from "react";
 import api from "../api";
@@ -12,7 +13,7 @@ import { Chart as ChartJS, ArcElement, Tooltip, Legend } from "chart.js";
 
 ChartJS.register(ArcElement, Tooltip, Legend);
 
-// ---- role helpers (same style as your GatePass) ----------------------------
+// ---- role helpers ----------------------------------------------------------
 const getRoleFlags = () => {
   const singleRole = localStorage.getItem("userRole");
   const multiRoles = JSON.parse(localStorage.getItem("roles") || "[]");
@@ -31,7 +32,7 @@ const getRoleFlags = () => {
 
 export default function Dashboard() {
   const { isAdmin, isSuperadmin, isAcademicCoordinator, isPrincipal } = useMemo(getRoleFlags, []);
-  const canSeeCalendarCard = isAdmin || isSuperadmin || isAcademicCoordinator || isPrincipal;
+  const canSeeAcademicCards = isAdmin || isSuperadmin || isAcademicCoordinator || isPrincipal;
 
   const [attendanceSummary, setAttendanceSummary] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -41,12 +42,17 @@ export default function Dashboard() {
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split("T")[0]);
   const [lastRefreshed, setLastRefreshed] = useState(Date.now());
 
-  // ✅ for reliable retry/refresh
+  // ✅ reliable retry/refresh
   const [refreshKey, setRefreshKey] = useState(0);
 
   // ✅ Academic calendar mini summary card (optional)
-  const [calMini, setCalMini] = useState(null); // {title, academic_session, status, counts...}
+  const [calMini, setCalMini] = useState(null);
   const [calErr, setCalErr] = useState(null);
+
+  // ✅ NEW: Syllabus approvals mini count (optional)
+  const [syllPendingCount, setSyllPendingCount] = useState(null);
+  const [syllPendingErr, setSyllPendingErr] = useState(null);
+  const [loadingSyllPending, setLoadingSyllPending] = useState(false);
 
   const formatTime = (ts) =>
     new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" }).format(ts);
@@ -141,17 +147,13 @@ export default function Dashboard() {
 
   // ✅ Mini Academic Calendar info (best effort; won’t break dashboard if API differs)
   const fetchCalendarMini = useCallback(async () => {
-    if (!canSeeCalendarCard) return;
+    if (!canSeeAcademicCards) return;
 
     setLoadingCalendar(true);
     setCalErr(null);
     try {
-      // Try summary-by-month without requiring you to pass calendar_id
-      // Your controller supports picking latest/published by school_id & academic_session,
-      // but those may not be available on dashboard. So we call it with no filters (best effort).
       const res = await api.get("/academic-calendars/summary-by-month").catch(() => ({ data: null }));
 
-      // Expected: { calendar: {...}, summary: [...] }
       const cal = res?.data?.calendar;
       const summary = Array.isArray(res?.data?.summary) ? res.data.summary : [];
 
@@ -160,7 +162,6 @@ export default function Dashboard() {
         return;
       }
 
-      // counts from summary
       const totals = summary.reduce(
         (acc, m) => {
           acc.working_days += Number(m.working_days || 0);
@@ -197,80 +198,135 @@ export default function Dashboard() {
     } finally {
       setLoadingCalendar(false);
     }
-  }, [canSeeCalendarCard]);
+  }, [canSeeAcademicCards]);
+
+  // ✅ NEW: Syllabus pending count (best effort)
+  const fetchSyllabusPendingMini = useCallback(async () => {
+    if (!canSeeAcademicCards) return;
+
+    setLoadingSyllPending(true);
+    setSyllPendingErr(null);
+    try {
+      // expects GET /syllabus-breakdowns/pending
+      const res = await api.get("/syllabus-breakdowns/pending").catch(() => ({ data: null }));
+      const data = res?.data?.data || res?.data || [];
+      const arr = Array.isArray(data) ? data : [];
+      setSyllPendingCount(arr.length);
+    } catch (e) {
+      console.error("Syllabus pending mini error:", e);
+      setSyllPendingErr(e?.response?.data?.message || e?.message || "Failed to load pending");
+      setSyllPendingCount(null);
+    } finally {
+      setLoadingSyllPending(false);
+    }
+  }, [canSeeAcademicCards]);
 
   useEffect(() => {
     fetchCalendarMini();
-  }, [fetchCalendarMini, refreshKey]);
+    fetchSyllabusPendingMini();
+  }, [fetchCalendarMini, fetchSyllabusPendingMini, refreshKey]);
 
+  // ---- quick navigation helpers --------------------------------------------
   const openAcademicCalendar = () => {
-    // your App.js route:
     window.location.href = "/academic-calendar";
   };
 
+  const openSyllabusTeacherAssignment = () => {
+    window.location.href = "/syllabus-teacher-assignment";
+  };
+
+  const openTeacherAssignment = () => {
+    window.location.href = "/teacher-assignment";
+  };
+
+  // ✅ NEW route opener
+  const openSyllabusApproval = () => {
+    window.location.href = "/syllabus-approval";
+  };
+
+  const CardShell = ({ style, children }) => (
+    <div
+      className="card border-0 shadow-sm rounded-4 h-100"
+      style={{
+        transition: "transform .18s ease, box-shadow .18s ease",
+        ...style,
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.transform = "translateY(-2px)";
+        e.currentTarget.style.boxShadow = "0 12px 28px rgba(0,0,0,0.10)";
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.transform = "none";
+        e.currentTarget.style.boxShadow = "";
+      }}
+    >
+      {children}
+    </div>
+  );
+
   return (
     <div className="container-fluid px-3 py-2">
-      {/* Header */}
+      {/* HERO HEADER */}
       <div
-        className="d-flex flex-wrap align-items-center justify-content-between mb-3 rounded-4 p-3 shadow-sm"
+        className="mb-3 rounded-4 p-3 shadow-sm"
         style={{
-          background: "linear-gradient(135deg, #f8fafc, #eef2ff)",
+          background: "linear-gradient(135deg, #eef2ff, #f8fafc, #ecfeff)",
           border: "1px solid #e5e7eb",
         }}
       >
-        <div>
-          <h4 className="mb-1 fw-semibold">Attendance Dashboard</h4>
-          <div className="text-muted small">Last updated at {formatTime(lastRefreshed)}</div>
-        </div>
-
-        <div className="d-flex gap-2 align-items-end flex-wrap">
+        <div className="d-flex flex-wrap align-items-center justify-content-between gap-3">
           <div>
-            <label htmlFor="summaryDate" className="form-label mb-1 small text-muted">
-              Date
-            </label>
-            <input
-              id="summaryDate"
-              type="date"
-              className="form-control"
-              value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
-            />
+            <div className="d-flex align-items-center gap-2 flex-wrap">
+              <h4 className="mb-0 fw-semibold">Attendance Dashboard</h4>
+              <span className="badge bg-light text-dark border">Date: {selectedDate}</span>
+              <span className="badge bg-light text-dark border">Updated: {formatTime(lastRefreshed)}</span>
+            </div>
+            <div className="text-muted small mt-1">Quick view of daily attendance + section-wise breakdown.</div>
           </div>
 
-          <div className="d-flex gap-2 pb-1">
-            <button
-              className="btn btn-outline-secondary"
-              type="button"
-              onClick={() => shiftDay(-1)}
-              title="Previous day"
-            >
-              ◀
-            </button>
-            <button className="btn btn-outline-primary" type="button" onClick={goToday}>
-              Today
-            </button>
-            <button
-              className="btn btn-outline-secondary"
-              type="button"
-              onClick={() => shiftDay(1)}
-              title="Next day"
-            >
-              ▶
-            </button>
+          <div className="d-flex gap-2 align-items-end flex-wrap">
+            <div>
+              <label htmlFor="summaryDate" className="form-label mb-1 small text-muted">
+                Date
+              </label>
+              <input
+                id="summaryDate"
+                type="date"
+                className="form-control"
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+              />
+            </div>
 
-            {/* ✅ Manual refresh */}
-            <button className="btn btn-outline-dark" type="button" onClick={hardRefresh} title="Refresh">
-              ⟳ Refresh
-            </button>
+            <div className="d-flex gap-2 pb-1">
+              <button className="btn btn-outline-secondary" type="button" onClick={() => shiftDay(-1)} title="Previous day">
+                ◀
+              </button>
+              <button className="btn btn-outline-primary" type="button" onClick={goToday}>
+                Today
+              </button>
+              <button className="btn btn-outline-secondary" type="button" onClick={() => shiftDay(1)} title="Next day">
+                ▶
+              </button>
+              <button className="btn btn-outline-dark" type="button" onClick={hardRefresh} title="Refresh">
+                ⟳ Refresh
+              </button>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* ✅ Quick Actions Row */}
-      {canSeeCalendarCard && (
+      {/* ✅ QUICK ACTIONS */}
+      {canSeeAcademicCards && (
         <div className="row g-3 mb-3">
-          <div className="col-lg-6">
-            <div className="card border-0 shadow-sm rounded-4 h-100">
+          {/* Academic Calendar */}
+          <div className="col-lg-4">
+            <CardShell
+              style={{
+                background: "linear-gradient(135deg, #ffffff, #f1f5ff)",
+                border: "1px solid #e5e7ff",
+              }}
+            >
               <div className="card-body">
                 <div className="d-flex align-items-start justify-content-between">
                   <div>
@@ -284,7 +340,7 @@ export default function Dashboard() {
                         "Fetching latest published calendar…"
                       ) : calMini ? (
                         <>
-                          Session: <strong>{calMini.academic_session || "-"}</strong> • Status:{" "}
+                          Session: <strong>{calMini.academic_session || "-"}</strong> •{" "}
                           <span
                             className={
                               "badge " +
@@ -307,13 +363,9 @@ export default function Dashboard() {
 
                     {calMini && (
                       <div className="d-flex gap-2 flex-wrap mt-2">
-                        <span className="badge bg-light text-dark border">
-                          Working: {calMini.working_days}
-                        </span>
+                        <span className="badge bg-light text-dark border">Working: {calMini.working_days}</span>
                         <span className="badge bg-light text-dark border">Holidays: {calMini.holidays}</span>
                         <span className="badge bg-light text-dark border">Vacations: {calMini.vacations}</span>
-                        <span className="badge bg-light text-dark border">Exams: {calMini.exams}</span>
-                        <span className="badge bg-light text-dark border">PTM: {calMini.ptm}</span>
                       </div>
                     )}
                   </div>
@@ -333,16 +385,109 @@ export default function Dashboard() {
                   </div>
                 </div>
 
+                <div className="small text-muted mt-3">Tip: Coordinators can create events and export PDF.</div>
+              </div>
+            </CardShell>
+          </div>
+
+          {/* ✅ Syllabus Teacher Assignment */}
+          <div className="col-lg-4">
+            <CardShell
+              style={{
+                background: "linear-gradient(135deg, #fff7ed, #fffbeb)",
+                border: "1px solid #fde68a",
+              }}
+            >
+              <div className="card-body">
+                <div className="d-flex align-items-start justify-content-between">
+                  <div>
+                    <div className="text-uppercase small text-muted mb-1">Syllabus Module</div>
+                    <div className="fw-semibold" style={{ fontSize: 18 }}>
+                      Assign Syllabus Teacher
+                    </div>
+                    <div className="text-muted small mt-1">
+                      Assign <strong>Class + Subject</strong> to a teacher for syllabus creation.
+                    </div>
+
+                    <div className="d-flex gap-2 flex-wrap mt-2">
+                      <span className="badge bg-light text-dark border">One teacher per Class+Subject</span>
+                      <span className="badge bg-light text-dark border">Replace allowed</span>
+                    </div>
+                  </div>
+
+                  <div className="d-flex flex-column gap-2">
+                    <button className="btn btn-warning" type="button" onClick={openSyllabusTeacherAssignment}>
+                      Open
+                    </button>
+                    <button className="btn btn-outline-secondary" type="button" onClick={openTeacherAssignment}>
+                      Teacher Map
+                    </button>
+                  </div>
+                </div>
+
+                <div className="small text-muted mt-3">Next: syllabus breakdown → lesson plans → progress tracking.</div>
+              </div>
+            </CardShell>
+          </div>
+
+          {/* ✅ NEW: Syllabus Approval */}
+          <div className="col-lg-4">
+            <CardShell
+              style={{
+                background: "linear-gradient(135deg, #ecfeff, #f0fdfa)",
+                border: "1px solid #a7f3d0",
+              }}
+            >
+              <div className="card-body">
+                <div className="d-flex align-items-start justify-content-between">
+                  <div>
+                    <div className="text-uppercase small text-muted mb-1">Syllabus Workflow</div>
+                    <div className="fw-semibold" style={{ fontSize: 18 }}>
+                      Syllabus Approvals
+                    </div>
+                    <div className="text-muted small mt-1">
+                      Review teacher submissions and <strong>Approve / Return</strong> with reason.
+                    </div>
+
+                    <div className="d-flex gap-2 flex-wrap mt-2">
+                      <span className="badge bg-light text-dark border">
+                        Pending:{" "}
+                        {loadingSyllPending ? "…" : syllPendingCount != null ? syllPendingCount : "—"}
+                      </span>
+                      <span className="badge bg-light text-dark border">PDF Preview</span>
+                      <span className="badge bg-light text-dark border">Publish option</span>
+                    </div>
+
+                    {syllPendingErr && (
+                      <div className="text-danger small mt-2">{syllPendingErr}</div>
+                    )}
+                  </div>
+
+                  <div className="d-flex flex-column gap-2">
+                    <button className="btn btn-success" type="button" onClick={openSyllabusApproval}>
+                      Open
+                    </button>
+                    <button
+                      className="btn btn-outline-secondary"
+                      type="button"
+                      onClick={fetchSyllabusPendingMini}
+                      disabled={loadingSyllPending}
+                    >
+                      {loadingSyllPending ? "…" : "Reload"}
+                    </button>
+                  </div>
+                </div>
+
                 <div className="small text-muted mt-3">
-                  Tip: Coordinators can create calendar + events and download PDF from this module.
+                  Tip: Return with clear reason so teacher can re-submit quickly.
                 </div>
               </div>
-            </div>
+            </CardShell>
           </div>
         </div>
       )}
 
-      {/* States */}
+      {/* STATES */}
       {loading && (
         <div className="mb-4">
           <div className="placeholder-glow">
@@ -368,8 +513,6 @@ export default function Dashboard() {
           <div>
             Failed to load attendance for <strong>{selectedDate}</strong>. {error}
           </div>
-
-          {/* ✅ fixed retry */}
           <button className="btn btn-sm btn-light ms-auto" onClick={hardRefresh}>
             Retry
           </button>
@@ -415,12 +558,8 @@ export default function Dashboard() {
                       onMouseLeave={(e) => (e.currentTarget.style.transform = "none")}
                     >
                       <div className="card-body">
-                        <div className="d-flex justify-content-between align-items-start">
-                          <div>
-                            <div className="text-uppercase small text-muted mb-1">{m.title}</div>
-                            <div className="display-6 fw-semibold">{m.value}</div>
-                          </div>
-                        </div>
+                        <div className="text-uppercase small text-muted mb-1">{m.title}</div>
+                        <div className="display-6 fw-semibold">{m.value}</div>
                         <div className="mt-2 small text-muted">{m.sub}</div>
                       </div>
                     </div>
@@ -439,7 +578,7 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* Class & Section Breakdown */}
+          {/* Breakdown */}
           <div className="d-flex align-items-center justify-content-between mb-2">
             <h6 className="mb-0">Class & Section Breakdown</h6>
             <span className="text-muted small">{attendanceSummary.summary?.length || 0} sections</span>
