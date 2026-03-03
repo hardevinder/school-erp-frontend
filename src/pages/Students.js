@@ -23,9 +23,7 @@ const apiBase = (() => {
 })();
 
 const buildPhotoURL = (fileName) =>
-  fileName
-    ? `${apiBase}/uploads/photoes/students/${encodeURIComponent(fileName)}`
-    : "";
+  fileName ? `${apiBase}/uploads/photoes/students/${encodeURIComponent(fileName)}` : "";
 
 // Small neutral "no photo" SVG placeholder
 const NO_PHOTO_SVG =
@@ -89,7 +87,6 @@ const STATES = [
 ];
 
 const CATEGORIES = ["General", "OBC", "SC", "ST", "EWS", "Other"];
-
 const RELIGIONS = ["Hindu", "Muslim", "Sikh", "Christian", "Buddhist", "Jain", "Other"];
 
 // ✅ gender options
@@ -165,6 +162,7 @@ const Students = () => {
       return false;
     }
   });
+
   const toggleColumnsMode = () => {
     setShowAllColumns((prev) => {
       const next = !prev;
@@ -174,6 +172,7 @@ const Students = () => {
       return next;
     });
   };
+
   const isCompact = !showAllColumns;
 
   // fetch lists
@@ -196,21 +195,21 @@ const Students = () => {
     }
   };
 
- const fetchSections = async () => {
-  try {
-    const resp = await api.get("/sections");
+  const fetchSections = async () => {
+    try {
+      const resp = await api.get("/sections");
 
-    // support both shapes:
-    // 1) [ ... ]
-    // 2) { ok: true, data: [ ... ] }
-    const list = Array.isArray(resp.data) ? resp.data : resp.data?.data;
+      // support both shapes:
+      // 1) [ ... ]
+      // 2) { ok: true, data: [ ... ] }
+      const list = Array.isArray(resp.data) ? resp.data : resp.data?.data;
 
-    setSections(Array.isArray(list) ? list : []);
-  } catch (err) {
-    console.error("fetchSections:", err);
-    setSections([]);
-  }
-};
+      setSections(Array.isArray(list) ? list : []);
+    } catch (err) {
+      console.error("fetchSections:", err);
+      setSections([]);
+    }
+  };
 
   const fetchConcessions = async () => {
     try {
@@ -253,7 +252,7 @@ const Students = () => {
   }, [isAdminOrSuperAdmin]);
 
   /* ============================================================
-   * ✅ NEW: House auto-suggest (lowest strength) helpers
+   * ✅ House auto-suggest (lowest strength) helpers
    * ============================================================ */
 
   const getHouseStrengthMap = (sessionIdOrEmpty) => {
@@ -261,13 +260,8 @@ const Students = () => {
     houses.forEach((h) => map.set(String(h.id), 0));
 
     const eligible = students.filter((st) => {
-      // only enabled (optional, can remove if you want count all)
       if (st.status && String(st.status).toLowerCase() === "disabled") return false;
-
-      // session-wise if session selected
-      if (sessionIdOrEmpty) {
-        return String(st.session_id || "") === String(sessionIdOrEmpty);
-      }
+      if (sessionIdOrEmpty) return String(st.session_id || "") === String(sessionIdOrEmpty);
       return true;
     });
 
@@ -740,11 +734,7 @@ const Students = () => {
                   })
                   .join("")}
               </select>
-              ${
-                !isEdit
-                  ? `<div class="hint small">Auto-selected lowest strength house (you can change).</div>`
-                  : ""
-              }
+              ${!isEdit ? `<div class="hint small">Auto-selected lowest strength house (you can change).</div>` : ""}
             </div>
 
             ${
@@ -834,8 +824,7 @@ const Students = () => {
               <select id="f_category" class="form-field">
                 <option value="">Select Category</option>
                 ${CATEGORIES.map(
-                  (c) =>
-                    `<option value="${c}" ${c === (s.category || "") ? "selected" : ""}>${c}</option>`
+                  (c) => `<option value="${c}" ${c === (s.category || "") ? "selected" : ""}>${c}</option>`
                 ).join("")}
               </select>
             </div>
@@ -845,8 +834,7 @@ const Students = () => {
               <select id="f_religion" class="form-field">
                 <option value="">Select Religion</option>
                 ${RELIGIONS.map(
-                  (r) =>
-                    `<option value="${r}" ${r === (s.religion || "") ? "selected" : ""}>${r}</option>`
+                  (r) => `<option value="${r}" ${r === (s.religion || "") ? "selected" : ""}>${r}</option>`
                 ).join("")}
               </select>
             </div>
@@ -932,9 +920,7 @@ const Students = () => {
                       .map(
                         (c) =>
                           `<option value="${c.id}" ${
-                            c.id === (s["sibling_class_" + slot] || "")
-                              ? "selected"
-                              : ""
+                            c.id === (s["sibling_class_" + slot] || "") ? "selected" : ""
                           }>${c.class_name}</option>`
                       )
                       .join("")}
@@ -945,12 +931,8 @@ const Students = () => {
                     ${sections
                       .map(
                         (sec) =>
-                          `<option value="${sec.id}" data-class="${
-                            sec.class_id
-                          }" ${
-                            sec.id === (s["sibling_section_" + slot] || "")
-                              ? "selected"
-                              : ""
+                          `<option value="${sec.id}" data-class="${sec.class_id}" ${
+                            sec.id === (s["sibling_section_" + slot] || "") ? "selected" : ""
                           }>${sec.section_name}</option>`
                       )
                       .join("")}
@@ -960,24 +942,13 @@ const Students = () => {
                     <option value="">Select Student</option>
                     ${
                       s["sibling_id_" + slot]
-                        ? `<option value="${
-                            s["sibling_id_" + slot]
-                          }" selected>${
-                            (s["sibling_name_" + slot] || "Selected").replace(
-                              /"/g,
-                              "&quot;"
-                            )
-                          }${
-                            s["sibling_id_" + slot]
-                              ? ` (ID:${s["sibling_id_" + slot]})`
-                              : ""
-                          }</option>`
+                        ? `<option value="${s["sibling_id_" + slot]}" selected>${
+                            (s["sibling_name_" + slot] || "Selected").replace(/"/g, "&quot;")
+                          }${s["sibling_id_" + slot] ? ` (ID:${s["sibling_id_" + slot]})` : ""}</option>`
                         : ""
                     }
                   </select>
-                  <input id="f_sibling_id_${slot}" type="hidden" value="${
-                  s["sibling_id_" + slot] || ""
-                }" />
+                  <input id="f_sibling_id_${slot}" type="hidden" value="${s["sibling_id_" + slot] || ""}" />
                   <input id="f_sibling_name_${slot}" type="hidden" value="${(
                     s["sibling_name_" + slot] || ""
                   ).replace(/"/g, "&quot;")}" />
@@ -1113,7 +1084,7 @@ const Students = () => {
         if (closeBtn) closeBtn.addEventListener("click", () => Swal.close());
 
         /* ============================================================
-         * ✅ NEW: Auto House on session change (add-mode only)
+         * ✅ Auto House on session change (add-mode only)
          * ============================================================ */
         const sessionSel = document.getElementById("f_session_id");
         const houseSel = document.getElementById("f_house_id");
@@ -1138,16 +1109,14 @@ const Students = () => {
 
         if (sessionSel) {
           sessionSel.addEventListener("change", () => {
-            // If user hasn't changed house manually, update suggestion
             autoPickHouse();
           });
         }
 
-        // Initial autopick (if empty)
         autoPickHouse();
 
         /* ============================================================
-         * ✅ NEW: Session-wise Transport Route reload
+         * ✅ Session-wise Transport Route reload
          * ============================================================ */
         const routeSel = document.getElementById("f_route_id");
 
@@ -1255,7 +1224,9 @@ const Students = () => {
               return;
             }
             try {
-              const url = `/students/sibling-list?class_id=${classId}${sectionId ? `&section_id=${sectionId}` : ""}`;
+              const url = `/students/sibling-list?class_id=${classId}${
+                sectionId ? `&section_id=${sectionId}` : ""
+              }`;
               const { data } = await api.get(url);
               if (!Array.isArray(data) || data.length === 0) {
                 stuSel.innerHTML = `<option value="">No students found</option>`;
@@ -1357,6 +1328,12 @@ const Students = () => {
 
   const handleAdd = () => showStudentForm("add", null);
   const handleEdit = (student) => showStudentForm("edit", student);
+
+  // ✅ NEW: click student row to open EDIT popup
+  const handleRowClickOpenEdit = (stu) => {
+    if (!isAdminOrSuperAdmin) return; // optional: only allow admin/superadmin to edit on click
+    showStudentForm("edit", stu);
+  };
 
   const handleExport = async () => {
     try {
@@ -1488,6 +1465,8 @@ const Students = () => {
       Swal.fire("Not Found", "Sibling record not available.", "warning");
       return;
     }
+
+    // ✅ sibling click still opens VIEW (keep your view screen for sibling navigation)
     handleView(respData);
   };
 
@@ -1529,7 +1508,7 @@ const Students = () => {
     );
   };
 
-  // VIEW POPUP
+  // VIEW POPUP (kept as-is for sibling flow / optional future use)
   function handleView(student) {
     const siblingRows = [];
     for (let i = 1; i <= 4; i++) {
@@ -1558,14 +1537,9 @@ const Students = () => {
       "-";
 
     const viewState = student.state || student.State || student.STATE || "-";
-
     const viewGender = student.gender || student.Gender || student.GENDER || "-";
     const viewBusGender =
-      student.bus_gender ||
-      student.busGender ||
-      student.BusGender ||
-      student.BUS_GENDER ||
-      "-";
+      student.bus_gender || student.busGender || student.BusGender || student.BUS_GENDER || "-";
 
     const fields = [
       { label: "Admission Number", value: student.admission_number || "-" },
@@ -1607,34 +1581,15 @@ const Students = () => {
       });
     }
 
-    fields.push({
-      label: "Transport Route",
-      value: formatTransportById(student.route_id),
-    });
+    fields.push({ label: "Transport Route", value: formatTransportById(student.route_id) });
     fields.push({ label: "Status", value: statusBadge });
-    fields.push({
-      label: "Residential Address",
-      value: student.address || "-",
-      full: true,
-    });
-    fields.push({
-      label: "Previous School",
-      value: student.prev_school_name || "-",
-    });
-    fields.push({
-      label: "Previous Class",
-      value: student.prev_class || "-",
-    });
-    fields.push({
-      label: "Previous Adm. #",
-      value: student.prev_admission_no || "-",
-    });
+    fields.push({ label: "Residential Address", value: student.address || "-", full: true });
+    fields.push({ label: "Previous School", value: student.prev_school_name || "-" });
+    fields.push({ label: "Previous Class", value: student.prev_class || "-" });
+    fields.push({ label: "Previous Adm. #", value: student.prev_admission_no || "-" });
+
     if (student.prev_school_address) {
-      fields.push({
-        label: "Previous School Address",
-        value: student.prev_school_address,
-        full: true,
-      });
+      fields.push({ label: "Previous School Address", value: student.prev_school_address, full: true });
     }
 
     const photoUrl = buildPhotoURL(student.photo);
@@ -1775,7 +1730,7 @@ const Students = () => {
     });
   }
 
-  // ✅ PART-1 ends here (PART-2 will contain the return(...) UI + export default)
+  // ✅ PART-2: UI
   return (
     <div
       className="container-fluid mt-2 students-page"
@@ -1944,7 +1899,6 @@ const Students = () => {
                   <th className="border-0 py-2">Photo</th>
                   <th className="border-0 py-2">Adm. #</th>
 
-                  {/* ✅ Compact: single Info column */}
                   {isCompact ? (
                     <th className="border-0 py-2">Info</th>
                   ) : (
@@ -2004,7 +1958,9 @@ const Students = () => {
                           {stu.admission_type && (
                             <span
                               className={`badge students-badge ${
-                                stu.admission_type === "New" ? "bg-success" : "bg-warning text-dark"
+                                stu.admission_type === "New"
+                                  ? "bg-success"
+                                  : "bg-warning text-dark"
                               }`}
                             >
                               {stu.admission_type}
@@ -2031,34 +1987,26 @@ const Students = () => {
                       );
 
                       return (
-                        <tr key={stu.id} className="table-hover-row">
+                        <tr
+                          key={stu.id}
+                          className="table-hover-row"
+                          onClick={() => handleRowClickOpenEdit(stu)} // ✅ CLICK STUDENT -> EDIT POPUP
+                          style={{ cursor: isAdminOrSuperAdmin ? "pointer" : "default" }}
+                          title={isAdminOrSuperAdmin ? "Click to edit" : ""}
+                        >
                           <td className="py-2 d-none d-md-table-cell">{idx + 1}</td>
 
-                          <td
-                            className="py-1"
-                            onClick={() => handleView(stu)}
-                            style={{ cursor: "pointer" }}
-                          >
+                          <td className="py-1">
                             <PhotoCell student={stu} />
                           </td>
 
-                          <td
-                            className="py-2 fw-medium"
-                            onClick={() => handleView(stu)}
-                            style={{ cursor: "pointer", whiteSpace: "nowrap" }}
-                          >
+                          <td className="py-2 fw-medium" style={{ whiteSpace: "nowrap" }}>
                             {stu.admission_number || "-"}
                           </td>
 
                           {isCompact ? (
-                            <td
-                              className="py-2"
-                              onClick={() => handleView(stu)}
-                              style={{ cursor: "pointer", minWidth: 260 }}
-                            >
-                              <div className="fw-semibold students-name-compact">
-                                {stu.name || "-"}
-                              </div>
+                            <td className="py-2" style={{ minWidth: 260 }}>
+                              <div className="fw-semibold students-name-compact">{stu.name || "-"}</div>
 
                               {combinedSiblings.length > 0 && (
                                 <div className="mt-1">
@@ -2085,28 +2033,23 @@ const Students = () => {
                                     </span>
                                   ))}
                                   {combinedSiblings.length > 3 && (
-                                    <span className="badge bg-secondary rounded-pill mb-1" style={{ fontSize: "0.7rem" }}>
+                                    <span
+                                      className="badge bg-secondary rounded-pill mb-1"
+                                      style={{ fontSize: "0.7rem" }}
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
                                       +{combinedSiblings.length - 3}
                                     </span>
                                   )}
                                 </div>
                               )}
 
-                              {compactLine2 && (
-                                <div className="text-muted students-compact-sub">
-                                  {compactLine2}
-                                </div>
-                              )}
-
+                              {compactLine2 && <div className="text-muted students-compact-sub">{compactLine2}</div>}
                               {compactBadges}
                             </td>
                           ) : (
                             <>
-                              <td
-                                className="py-2"
-                                onClick={() => handleView(stu)}
-                                style={{ cursor: "pointer" }}
-                              >
+                              <td className="py-2">
                                 <div className="fw-semibold">{stu.name}</div>
 
                                 {combinedSiblings.length > 0 && (
@@ -2137,46 +2080,23 @@ const Students = () => {
                                 )}
                               </td>
 
-                              <td
-                                className="py-2 text-muted d-none d-lg-table-cell"
-                                onClick={() => handleView(stu)}
-                                style={{ cursor: "pointer" }}
-                              >
-                                {stu.father_name || "-"}
-                              </td>
+                              <td className="py-2 text-muted d-none d-lg-table-cell">{stu.father_name || "-"}</td>
 
-                              <td
-                                className="py-2"
-                                onClick={() => handleView(stu)}
-                                style={{ cursor: "pointer" }}
-                              >
+                              <td className="py-2">
                                 <span className="badge bg-light text-dark border students-badge">
                                   {stu.class_name || "-"}
                                 </span>
                               </td>
 
-                              <td
-                                className="py-2 d-none d-md-table-cell"
-                                onClick={() => handleView(stu)}
-                                style={{ cursor: "pointer" }}
-                              >
-                                <span className="badge bg-secondary students-badge">
-                                  {stu.section_name || "-"}
-                                </span>
+                              <td className="py-2 d-none d-md-table-cell">
+                                <span className="badge bg-secondary students-badge">{stu.section_name || "-"}</span>
                               </td>
 
-                              <td
-                                className="py-2 d-none d-xl-table-cell"
-                                onClick={() => handleView(stu)}
-                                style={{ cursor: "pointer" }}
-                              >
+                              <td className="py-2 d-none d-xl-table-cell">
                                 {stu.house_name ? (
                                   <span
                                     className="badge students-badge"
-                                    style={{
-                                      backgroundColor: stu.house_color || "#6c757d",
-                                      color: "#fff",
-                                    }}
+                                    style={{ backgroundColor: stu.house_color || "#6c757d", color: "#fff" }}
                                   >
                                     {stu.house_name}
                                   </span>
@@ -2185,32 +2105,22 @@ const Students = () => {
                                 )}
                               </td>
 
-                              <td
-                                className="py-2 d-none d-lg-table-cell"
-                                onClick={() => handleView(stu)}
-                                style={{ cursor: "pointer" }}
-                              >
+                              <td className="py-2 d-none d-lg-table-cell">
                                 {stu.session_name || (stu.session_id ? "Assigned" : "-")}
                               </td>
 
-                              <td
-                                className="py-2 small d-none d-xl-table-cell"
-                                onClick={() => handleView(stu)}
-                                style={{ cursor: "pointer" }}
-                              >
+                              <td className="py-2 small d-none d-xl-table-cell">
                                 {stu.aadhaar_number
                                   ? stu.aadhaar_number.replace(/(\d{4})(\d{4})(\d{4})/, "$1-$2-$3")
                                   : "-"}
                               </td>
 
-                              <td
-                                className="py-2 d-none d-lg-table-cell"
-                                onClick={() => handleView(stu)}
-                                style={{ cursor: "pointer" }}
-                              >
+                              <td className="py-2 d-none d-lg-table-cell">
                                 <span
                                   className={`badge students-badge ${
-                                    stu.admission_type === "New" ? "bg-success" : "bg-warning text-dark"
+                                    stu.admission_type === "New"
+                                      ? "bg-success"
+                                      : "bg-warning text-dark"
                                   }`}
                                 >
                                   {stu.admission_type}
@@ -2218,22 +2128,14 @@ const Students = () => {
                               </td>
 
                               {isAdminOrSuperAdmin && (
-                                <td
-                                  className="py-2 d-none d-xl-table-cell"
-                                  onClick={() => handleView(stu)}
-                                  style={{ cursor: "pointer" }}
-                                >
+                                <td className="py-2 d-none d-xl-table-cell">
                                   <span className="badge bg-info text-dark students-badge">
                                     {stu.concession_name || "-"}
                                   </span>
                                 </td>
                               )}
 
-                              <td
-                                className="py-2 small d-none d-xl-table-cell"
-                                onClick={() => handleView(stu)}
-                                style={{ cursor: "pointer" }}
-                              >
+                              <td className="py-2 small d-none d-xl-table-cell">
                                 {formatTransportById(stu.route_id)}
                               </td>
                             </>
@@ -2249,13 +2151,20 @@ const Students = () => {
                                       type="checkbox"
                                       id={`status-${stu.id}`}
                                       checked={stu.status === "enabled"}
-                                      onChange={() => toggleStudentStatus(stu)}
+                                      onClick={(e) => e.stopPropagation()}
+                                      onChange={(e) => {
+                                        e.stopPropagation();
+                                        toggleStudentStatus(stu);
+                                      }}
                                     />
                                   </div>
 
                                   <button
                                     className="btn btn-outline-primary btn-sm"
-                                    onClick={() => handleEdit(stu)}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleEdit(stu);
+                                    }}
                                     title="Edit"
                                   >
                                     <i className="bi bi-pencil"></i>
@@ -2263,7 +2172,10 @@ const Students = () => {
 
                                   <button
                                     className="btn btn-outline-secondary btn-sm"
-                                    onClick={() => promptAndUploadPhoto(stu)}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      promptAndUploadPhoto(stu);
+                                    }}
                                     title={stu.photo ? "Replace Photo" : "Upload Photo"}
                                   >
                                     <i className="bi bi-camera"></i>
@@ -2273,7 +2185,10 @@ const Students = () => {
 
                               <button
                                 className="btn btn-outline-success btn-sm"
-                                onClick={() => handlePrintAdmissionForm(stu)}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handlePrintAdmissionForm(stu);
+                                }}
                                 title="Print Admission Form"
                               >
                                 <i className="bi bi-printer"></i>
@@ -2282,7 +2197,10 @@ const Students = () => {
                               {isSuperadmin && (
                                 <button
                                   className="btn btn-outline-danger btn-sm"
-                                  onClick={() => handleDelete(stu.id, stu.name)}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDelete(stu.id, stu.name);
+                                  }}
                                   title="Delete"
                                 >
                                   <i className="bi bi-trash"></i>
@@ -2295,10 +2213,7 @@ const Students = () => {
                     })
                 ) : (
                   <tr>
-                    <td
-                      colSpan={isCompact ? 5 : isAdminOrSuperAdmin ? 13 : 12}
-                      className="text-center py-4"
-                    >
+                    <td colSpan={isCompact ? 5 : isAdminOrSuperAdmin ? 13 : 12} className="text-center py-4">
                       <div className="text-muted">
                         <i className="bi bi-inbox display-6 mb-2"></i>
                         <p className="mb-0">No students match the current filters.</p>
