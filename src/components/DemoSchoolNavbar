@@ -365,7 +365,7 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
   };
 
   const quickLinks = QUICK_LINKS_BY_ROLE[roleLower] || [];
-  const brandLogo = `${process.env.PUBLIC_URL}/images/SmartoLogo.png`;
+  const brandLogo = `${process.env.PUBLIC_URL}/images/DemoLogo.png`;
 
   return (
     <>

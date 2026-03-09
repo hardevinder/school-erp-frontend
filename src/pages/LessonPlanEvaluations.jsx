@@ -271,6 +271,8 @@
     const [activeEvalId, setActiveEvalId] = useState(null);
     const [activeEval, setActiveEval] = useState(null);
     const [activeLoading, setActiveLoading] = useState(false);
+    // ADD HERE
+    const [leftCollapsed, setLeftCollapsed] = useState(false);
 
     // ✅ LessonPlan meta
     const [planLoading, setPlanLoading] = useState(false);
@@ -334,7 +336,7 @@
       setPhotoBroken(false);
     }, [showStudentModal, selectedStudentRow?.photoUrl]);
 
-    const REMARK_PREVIEW = 80;
+    const REMARK_PREVIEW = 45;
     const truncateText = (txt, max = REMARK_PREVIEW) => {
       const s = safeStr(txt).trim();
       if (!s) return "";
@@ -1627,14 +1629,24 @@
           </Col>
         </Row>
 
-        <Row className="g-3">
-          {/* LEFT: list */}
-          <Col xs={12} lg={5}>
+       <Row className="g-3">
+        {/* LEFT: list */}
+        {!leftCollapsed && (
+          <Col xs={12} lg={4}>
             <Card className="shadow-sm border-0">
               <Card.Header className="bg-white d-flex justify-content-between align-items-center">
                 <div className="fw-semibold">Evaluations</div>
-                <div className="text-muted small">
-                  {evals.length} item{evals.length === 1 ? "" : "s"}
+                <div className="d-flex align-items-center gap-2">
+                  <div className="text-muted small">
+                    {evals.length} item{evals.length === 1 ? "" : "s"}
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline-secondary"
+                    onClick={() => setLeftCollapsed(true)}
+                  >
+                    Hide
+                  </Button>
                 </div>
               </Card.Header>
 
@@ -1672,517 +1684,802 @@
               </Card.Body>
             </Card>
           </Col>
+        )}
 
-          {/* RIGHT: detail */}
-          <Col xs={12} lg={7}>
-            <Card className="shadow-sm border-0">
-              <Card.Header className="bg-white d-flex justify-content-between align-items-center flex-wrap gap-2">
-                <div className="fw-semibold">Details</div>
+  {/* RIGHT: detail */}
+  <Col xs={12} lg={leftCollapsed ? 12 : 8}>
+    <Card className="shadow-sm border-0">
+      <Card.Header className="bg-white d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <div className="d-flex align-items-center gap-2 flex-wrap">
+          <div className="fw-semibold">Details</div>
+          {leftCollapsed && (
+            <Button
+              size="sm"
+              variant="outline-secondary"
+              onClick={() => setLeftCollapsed(false)}
+            >
+              Show Evaluations
+            </Button>
+          )}
+        </div>
 
-                <div className="d-flex gap-2 flex-wrap">
-                  <Button
-                    size="sm"
-                    variant="outline-secondary"
-                    disabled={!activeEvalId || activeLoading}
-                    onClick={() => fetchEvaluationById(activeEvalId)}
-                  >
-                    Reload
-                  </Button>
+        <div className="d-flex gap-2 flex-wrap">
+          <Button
+            size="sm"
+            variant="outline-secondary"
+            disabled={!activeEvalId || activeLoading}
+            onClick={() => fetchEvaluationById(activeEvalId)}
+          >
+            Reload
+          </Button>
 
-                  <Button
-                    size="sm"
-                    variant="outline-primary"
-                    disabled={!activeEvalId || analyticsBusy}
-                    onClick={() => loadAnalytics(activeEvalId)}
-                  >
-                    {analyticsBusy ? "Analytics..." : "Analytics"}
-                  </Button>
+          <Button
+            size="sm"
+            variant="outline-primary"
+            disabled={!activeEvalId || analyticsBusy}
+            onClick={() => loadAnalytics(activeEvalId)}
+          >
+            {analyticsBusy ? "Analytics..." : "Analytics"}
+          </Button>
 
-                  <Button
-                    size="sm"
-                    variant="outline-success"
-                    disabled={!activeEvalId}
-                    onClick={() => downloadResultPdf({ evalId: activeEvalId })}
-                    title="Download Result PDF (All Students)"
-                  >
-                    🧾 Result PDF
-                  </Button>
+          <Button
+            size="sm"
+            variant="outline-success"
+            disabled={!activeEvalId}
+            onClick={() => downloadResultPdf({ evalId: activeEvalId })}
+            title="Download Result PDF (All Students)"
+          >
+            🧾 Result PDF
+          </Button>
 
-                  <Button
-                    size="sm"
-                    variant="outline-dark"
-                    disabled={!activeEvalId}
-                    onClick={() => downloadEvaluationPdf(activeEvalId, false)}
-                    title="Open Question Paper PDF"
-                  >
-                    📄 PDF
-                  </Button>
+          <Button
+            size="sm"
+            variant="outline-dark"
+            disabled={!activeEvalId}
+            onClick={() => downloadEvaluationPdf(activeEvalId, false)}
+            title="Open Question Paper PDF"
+          >
+            📄 PDF
+          </Button>
 
-                  <Button
-                    size="sm"
-                    variant="dark"
-                    disabled={!activeEvalId}
-                    onClick={() => downloadEvaluationPdf(activeEvalId, true)}
-                    title="Open PDF with answers"
-                  >
-                    📄 Answers
-                  </Button>
+          <Button
+            size="sm"
+            variant="dark"
+            disabled={!activeEvalId}
+            onClick={() => downloadEvaluationPdf(activeEvalId, true)}
+            title="Open PDF with answers"
+          >
+            📄 Answers
+          </Button>
 
-                  <Button size="sm" variant="primary" disabled={!activeEvalId || !canEditActive} onClick={openEdit}>
-                    Edit
-                  </Button>
+          <Button size="sm" variant="primary" disabled={!activeEvalId || !canEditActive} onClick={openEdit}>
+            Edit
+          </Button>
 
-                  <Button
-                    size="sm"
-                    variant="outline-danger"
-                    disabled={!activeEvalId}
-                    onClick={() => deleteEvaluation(activeEvalId)}
-                  >
-                    Delete
-                  </Button>
+          <Button
+            size="sm"
+            variant="outline-danger"
+            disabled={!activeEvalId}
+            onClick={() => deleteEvaluation(activeEvalId)}
+          >
+            Delete
+          </Button>
 
-                  <Button
-                    size="sm"
-                    variant="success"
-                    disabled={!activeEvalId || asUpper(activeEval?.status) === "PUBLISHED"}
-                    onClick={() => publishEvaluation(activeEvalId)}
-                  >
-                    Publish
-                  </Button>
+          <Button
+            size="sm"
+            variant="success"
+            disabled={!activeEvalId || asUpper(activeEval?.status) === "PUBLISHED"}
+            onClick={() => publishEvaluation(activeEvalId)}
+          >
+            Publish
+          </Button>
+        </div>
+      </Card.Header>
+
+      <Card.Body>
+        {!activeEvalId ? (
+          <div className="text-muted">Select an evaluation from the left.</div>
+        ) : activeLoading ? (
+          <div className="text-center py-4">
+            <Spinner animation="border" className="me-2" />
+            Loading...
+          </div>
+        ) : !activeEval ? (
+          <div className="text-muted">Evaluation not found.</div>
+        ) : (
+          <>
+            {/* Top meta */}
+            <Row className="g-2 mb-3">
+              <Col xs={12} md={7}>
+                <div className="fw-semibold">{safeStr(activeEval.title)}</div>
+                <div className="text-muted small">
+                  Evaluation ID: #{activeEval.id} • LessonPlan: #{lessonPlanId}
                 </div>
-              </Card.Header>
+              </Col>
+              <Col xs={12} md={5} className="d-flex justify-content-md-end gap-2 flex-wrap">
+                <Badge bg={typeBadge(activeEval.type)} className="px-3 py-2">
+                  {asUpper(activeEval.type)}
+                </Badge>
+                <Badge bg={statusBadge(activeEval.status)} className="px-3 py-2">
+                  {asUpper(activeEval.status || "DRAFT")}
+                </Badge>
+                <Badge bg="light" text="dark" className="px-3 py-2">
+                  Marks: {activeEval.totalMarks ?? "-"}
+                </Badge>
+                <Badge bg="light" text="dark" className="px-3 py-2">
+                  Time: {activeEval.timeMinutes ?? "-"} min
+                </Badge>
+              </Col>
+            </Row>
 
-              <Card.Body>
-                {!activeEvalId ? (
-                  <div className="text-muted">Select an evaluation from the left.</div>
-                ) : activeLoading ? (
-                  <div className="text-center py-4">
-                    <Spinner animation="border" className="me-2" />
-                    Loading...
+            {/* Instructions */}
+            {safeStr(activeEval?.config?.instructions || activeEval?.instructions).trim() ? (
+              <Card className="border-0 bg-light mb-3">
+                <Card.Body className="py-2">
+                  <div className="text-muted small mb-1">Instructions</div>
+                  <div className="small">
+                    {safeStr(activeEval?.config?.instructions || activeEval?.instructions)}
                   </div>
-                ) : !activeEval ? (
-                  <div className="text-muted">Evaluation not found.</div>
-                ) : (
-                  <>
-                    {/* Top meta */}
-                    <Row className="g-2 mb-3">
-                      <Col xs={12} md={7}>
-                        <div className="fw-semibold">{safeStr(activeEval.title)}</div>
-                        <div className="text-muted small">
-                          Evaluation ID: #{activeEval.id} • LessonPlan: #{lessonPlanId}
-                        </div>
-                      </Col>
-                      <Col xs={12} md={5} className="d-flex justify-content-md-end gap-2 flex-wrap">
-                        <Badge bg={typeBadge(activeEval.type)} className="px-3 py-2">
-                          {asUpper(activeEval.type)}
-                        </Badge>
-                        <Badge bg={statusBadge(activeEval.status)} className="px-3 py-2">
-                          {asUpper(activeEval.status || "DRAFT")}
-                        </Badge>
-                        <Badge bg="light" text="dark" className="px-3 py-2">
-                          Marks: {activeEval.totalMarks ?? "-"}
-                        </Badge>
-                        <Badge bg="light" text="dark" className="px-3 py-2">
-                          Time: {activeEval.timeMinutes ?? "-"} min
-                        </Badge>
-                      </Col>
-                    </Row>
+                </Card.Body>
+              </Card>
+            ) : null}
 
-                    {/* Instructions */}
-                    {safeStr(activeEval?.config?.instructions || activeEval?.instructions).trim() ? (
-                      <Card className="border-0 bg-light mb-3">
+            <Accordion activeKey={openKeys} alwaysOpen onSelect={() => {}}>
+              {/* Questions */}
+              <Accordion.Item eventKey="0">
+                <Accordion.Header
+                  onClick={() =>
+                    setOpenKeys((prev) =>
+                      prev.includes("0") ? prev.filter((k) => k !== "0") : [...prev, "0"]
+                    )
+                  }
+                >
+                  Questions ({activeItems.length})
+                </Accordion.Header>
+                <Accordion.Body>
+                  {!activeItems.length ? (
+                    <div className="text-muted">No items found for this evaluation.</div>
+                  ) : (
+                    <div className="table-responsive">
+                      <Table className="mb-0 align-middle" hover>
+                        <thead className="table-light">
+                          <tr>
+                            <th style={{ width: 70 }}>#</th>
+                            <th>Question</th>
+                            <th style={{ width: 120 }}>Type</th>
+                            <th style={{ width: 110 }}>Marks</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {activeItems.map((it, idx) => (
+                            <tr key={it.id || `${idx}`}>
+                              <td className="text-muted">{idx + 1}</td>
+                              <td>
+                                <div className="fw-semibold">{safeStr(it.question || "-")}</div>
+
+                                {asUpper(it.type) === "MCQ" &&
+                                Array.isArray(it.options) &&
+                                it.options.length ? (
+                                  <div className="text-muted small mt-1">
+                                    {(it.options || []).slice(0, 4).map((o, i) => (
+                                      <div key={i}>
+                                        {String.fromCharCode(65 + i)}. {safeStr(o)}
+                                        {Number(it.correctIndex) === i ? (
+                                          <Badge bg="success" className="ms-2">
+                                            Correct
+                                          </Badge>
+                                        ) : null}
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : null}
+
+                                {asUpper(it.type) === "SUBJECTIVE" && safeStr(it.answerKey).trim() ? (
+                                  <div className="text-muted small mt-1">
+                                    <span className="fw-semibold">Answer Key:</span>{" "}
+                                    {safeStr(it.answerKey)}
+                                  </div>
+                                ) : null}
+                              </td>
+                              <td>
+                                <Badge bg={itemTypeBadge(it.type)}>{asUpper(it.type || "-")}</Badge>
+                              </td>
+                              <td className="fw-semibold">{it.marks ?? "-"}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </Table>
+                    </div>
+                  )}
+
+                  {!canEditActive ? (
+                    <div className="text-muted small mt-2">
+                      Items are locked because this evaluation is <b>{asUpper(activeEval.status)}</b>.
+                    </div>
+                  ) : (
+                    <div className="text-muted small mt-2">You can edit because this evaluation is DRAFT.</div>
+                  )}
+                </Accordion.Body>
+              </Accordion.Item>
+
+              {/* Marks Entry */}
+              <Accordion.Item eventKey="1">
+                <Accordion.Header
+                  onClick={() =>
+                    setOpenKeys((prev) =>
+                      prev.includes("1") ? prev.filter((k) => k !== "1") : [...prev, "1"]
+                    )
+                  }
+                >
+                  Marks Entry (Students Auto List)
+                </Accordion.Header>
+                <Accordion.Body>
+                  {!lessonPlan?.classId ? (
+                    <div className="text-muted">Lesson plan class not found. Cannot load students.</div>
+                  ) : studentsLoading ? (
+                    <div className="text-center py-4">
+                      <Spinner animation="border" size="sm" className="me-2" />
+                      Loading students...
+                    </div>
+                  ) : !students.length ? (
+                    <div className="text-muted">
+                      No students found for this lesson plan/class.
+                      <div className="mt-2">
+                        <Button size="sm" variant="outline-secondary" onClick={fetchStudentsForEvaluation}>
+                          Reload Students
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <Row className="g-2 align-items-end mb-2">
+                        <Col xs={12} md={5}>
+                          <Form.Label className="small mb-1">
+                            Search student (name / admission / roll / section)
+                          </Form.Label>
+                          <Form.Control
+                            value={studentSearch}
+                            onChange={(e) => setStudentSearch(e.target.value)}
+                            placeholder="Type to search..."
+                          />
+                        </Col>
+
+                        <Col xs={12} md={3}>
+                          <Form.Label className="small mb-1">Filter Section</Form.Label>
+                          <Form.Select
+                            value={sectionFilter}
+                            onChange={(e) => setSectionFilter(e.target.value)}
+                            disabled={!planSections.length}
+                            title={planSections.length ? "Filter by section" : "No sections in plan"}
+                          >
+                            <option value="">{planSections.length ? "All Sections" : "No sections"}</option>
+                            {planSections.map((s) => (
+                              <option key={s.id} value={s.id}>
+                                {safeStr(s.section_name || s.name || `#${s.id}`)}
+                              </option>
+                            ))}
+                          </Form.Select>
+                        </Col>
+
+                        <Col xs={12} md={4} className="d-flex gap-2 flex-wrap">
+                          <Button size="sm" variant="outline-secondary" onClick={fetchStudentsForEvaluation}>
+                            Reload
+                          </Button>
+
+                          <Button
+                            size="sm"
+                            variant="outline-dark"
+                            onClick={fillEmptyWithZero}
+                            title="Fill empty inputs with 0 (not saved until you Save)"
+                          >
+                            Fill 0
+                          </Button>
+
+                          <Button size="sm" variant="outline-danger" onClick={clearAllMarks}>
+                            Clear
+                          </Button>
+                        </Col>
+                      </Row>
+
+                      {/* ✅ AI Remarks toolbar */}
+                      <Card className="border-0 bg-light mb-2">
                         <Card.Body className="py-2">
-                          <div className="text-muted small mb-1">Instructions</div>
-                          <div className="small">
-                            {safeStr(activeEval?.config?.instructions || activeEval?.instructions)}
+                          <div className="d-flex justify-content-between align-items-center gap-2 flex-wrap">
+                            <div className="text-muted small">
+                              Showing <b>{marksStats.total}</b> students • Filled <b>{marksStats.filled}</b>
+                              {activeEval?.totalMarks != null ? (
+                                <>
+                                  {" "}
+                                  • Out of <b>{activeEval.totalMarks}</b>
+                                </>
+                              ) : null}
+                              {resultsLoaded ? (
+                                <span className="ms-2 badge bg-white text-dark">
+                                  Loaded existing (if available)
+                                </span>
+                              ) : null}
+                            </div>
+
+                            <div className="d-flex gap-2 flex-wrap align-items-center">
+                              <Form.Select
+                                size="sm"
+                                value={remarksLanguage}
+                                onChange={(e) => setRemarksLanguage(e.target.value)}
+                                style={{ width: 140 }}
+                                disabled={remarksBusy}
+                                title="Remarks Language"
+                              >
+                                <option value="en">English</option>
+                                <option value="hi">Hindi</option>
+                                <option value="pa">Punjabi</option>
+                              </Form.Select>
+
+                              <Button
+                                size="sm"
+                                variant={canGenerateRemarks ? "dark" : "outline-dark"}
+                                disabled={!canGenerateRemarks || remarksBusy}
+                                onClick={generateAiRemarks}
+                                title={
+                                  canGenerateRemarks
+                                    ? "Generate remarks from marks + topic"
+                                    : "Fill at least one student mark first"
+                                }
+                              >
+                                {remarksBusy ? (
+                                  <>
+                                    <Spinner size="sm" animation="border" className="me-2" />
+                                    AI...
+                                  </>
+                                ) : (
+                                  "✨ AI Remarks"
+                                )}
+                              </Button>
+
+                              <Button
+                                size="sm"
+                                variant="outline-secondary"
+                                onClick={clearRemarks}
+                                disabled={remarksBusy}
+                              >
+                                Clear Remarks
+                              </Button>
+
+                              <Button
+                                size="sm"
+                                variant="outline-success"
+                                disabled={!activeEvalId}
+                                onClick={() => downloadResultPdf({ evalId: activeEvalId })}
+                                title="Download Result PDF (All Students)"
+                              >
+                                🧾 Result PDF
+                              </Button>
+
+                              <Button
+                                size="sm"
+                                variant="primary"
+                                disabled={resultsSaving || !activeEvalId}
+                                onClick={saveResults}
+                              >
+                                {resultsSaving ? "Saving..." : "Save Marks"}
+                              </Button>
+                            </div>
+                          </div>
+
+                          <div className="text-muted small mt-1">
+                            Tip: Remarks show short in table. Click student name to open full details + graphs.
                           </div>
                         </Card.Body>
                       </Card>
-                    ) : null}
 
-                    <Accordion activeKey={openKeys} alwaysOpen onSelect={() => {}}>
-                      {/* Questions */}
-                      <Accordion.Item eventKey="0">
-                        <Accordion.Header
-                          onClick={() =>
-                            setOpenKeys((prev) =>
-                              prev.includes("0") ? prev.filter((k) => k !== "0") : [...prev, "0"]
-                            )
-                          }
-                        >
-                          Questions ({activeItems.length})
-                        </Accordion.Header>
-                        <Accordion.Body>
-                          {!activeItems.length ? (
-                            <div className="text-muted">No items found for this evaluation.</div>
-                          ) : (
-                            <div className="table-responsive">
-                              <Table className="mb-0 align-middle" hover>
-                                <thead className="table-light">
-                                  <tr>
-                                    <th style={{ width: 70 }}>#</th>
-                                    <th>Question</th>
-                                    <th style={{ width: 120 }}>Type</th>
-                                    <th style={{ width: 110 }}>Marks</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {activeItems.map((it, idx) => (
-                                    <tr key={it.id || `${idx}`}>
-                                      <td className="text-muted">{idx + 1}</td>
-                                      <td>
-                                        <div className="fw-semibold">{safeStr(it.question || "-")}</div>
+                      <div className="table-responsive">
+                        <Table className="mb-0 align-middle" hover size="sm">
+                          <thead className="table-light">
+                            <tr>
+                              <th style={{ width: 60 }}>#</th>
+                              <th style={{ minWidth: 220 }}>Student</th>
+                              <th style={{ width: 170 }}>Admission No</th>
+                              <th style={{ width: 90 }}>Roll</th>
+                              <th style={{ width: 140 }}>Section</th>
+                              <th style={{ width: 160 }}>Marks</th>
+                              <th style={{ width: 260, minWidth: 220 }}>AI Remark</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {filteredStudents.map((s, i) => {
+                              const ref = pickStudentRef(s);
+                              const name = pickStudentName(s);
+                              const roll = safeStr(s?.roll_number || s?.rollNumber || "");
+                              const secName =
+                                safeStr(
+                                  s?.Section?.section_name ||
+                                    s?.Section?.name ||
+                                    s?.section_name ||
+                                    ""
+                                ) ||
+                                (() => {
+                                  const secId = s?.section_id || s?.sectionId || "";
+                                  return secId ? `#${secId}` : "-";
+                                })();
 
-                                        {asUpper(it.type) === "MCQ" &&
-                                        Array.isArray(it.options) &&
-                                        it.options.length ? (
-                                          <div className="text-muted small mt-1">
-                                            {(it.options || []).slice(0, 4).map((o, i) => (
-                                              <div key={i}>
-                                                {String.fromCharCode(65 + i)}. {safeStr(o)}
-                                                {Number(it.correctIndex) === i ? (
-                                                  <Badge bg="success" className="ms-2">
-                                                    Correct
-                                                  </Badge>
-                                                ) : null}
-                                              </div>
-                                            ))}
-                                          </div>
-                                        ) : null}
+                              const raw = marksMap?.[ref] ?? "";
+                              const total = safeNum(activeEval?.totalMarks);
+                              const bad =
+                                raw !== "" &&
+                                (!Number.isFinite(Number(raw)) ||
+                                  (total != null && Number(raw) > total) ||
+                                  Number(raw) < 0);
 
-                                        {asUpper(it.type) === "SUBJECTIVE" && safeStr(it.answerKey).trim() ? (
-                                          <div className="text-muted small mt-1">
-                                            <span className="fw-semibold">Answer Key:</span>{" "}
-                                            {safeStr(it.answerKey)}
-                                          </div>
-                                        ) : null}
-                                      </td>
-                                      <td>
-                                        <Badge bg={itemTypeBadge(it.type)}>{asUpper(it.type || "-")}</Badge>
-                                      </td>
-                                      <td className="fw-semibold">{it.marks ?? "-"}</td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </Table>
-                            </div>
-                          )}
+                              const remark = safeStr(remarksMap?.[ref] || "").trim();
 
-                          {!canEditActive ? (
-                            <div className="text-muted small mt-2">
-                              Items are locked because this evaluation is <b>{asUpper(activeEval.status)}</b>.
-                            </div>
-                          ) : (
-                            <div className="text-muted small mt-2">You can edit because this evaluation is DRAFT.</div>
-                          )}
-                        </Accordion.Body>
-                      </Accordion.Item>
+                              const marksNum = raw === "" || raw == null ? null : Number(raw);
+                              const validMarks = Number.isFinite(marksNum);
+                              const percent =
+                                validMarks && Number(total || 0) > 0
+                                  ? clampPercent((marksNum / Number(total)) * 100)
+                                  : null;
+                              const status =
+                                !validMarks ? "NA" : marksNum >= passMarks ? "PASS" : "FAIL";
 
-                      {/* Marks Entry */}
-                      <Accordion.Item eventKey="1">
-                        <Accordion.Header
-                          onClick={() =>
-                            setOpenKeys((prev) =>
-                              prev.includes("1") ? prev.filter((k) => k !== "1") : [...prev, "1"]
-                            )
-                          }
-                        >
-                          Marks Entry (Students Auto List)
-                        </Accordion.Header>
-                        <Accordion.Body>
-                          {!lessonPlan?.classId ? (
-                            <div className="text-muted">Lesson plan class not found. Cannot load students.</div>
-                          ) : studentsLoading ? (
-                            <div className="text-center py-4">
-                              <Spinner animation="border" size="sm" className="me-2" />
-                              Loading students...
-                            </div>
-                          ) : !students.length ? (
-                            <div className="text-muted">
-                              No students found for this lesson plan/class.
-                              <div className="mt-2">
-                                <Button size="sm" variant="outline-secondary" onClick={fetchStudentsForEvaluation}>
-                                  Reload Students
-                                </Button>
-                              </div>
-                            </div>
-                          ) : (
-                            <>
-                              <Row className="g-2 align-items-end mb-2">
-                                <Col xs={12} md={5}>
-                                  <Form.Label className="small mb-1">
-                                    Search student (name / admission / roll / section)
-                                  </Form.Label>
-                                  <Form.Control
-                                    value={studentSearch}
-                                    onChange={(e) => setStudentSearch(e.target.value)}
-                                    placeholder="Type to search..."
-                                  />
-                                </Col>
-
-                                <Col xs={12} md={3}>
-                                  <Form.Label className="small mb-1">Filter Section</Form.Label>
-                                  <Form.Select
-                                    value={sectionFilter}
-                                    onChange={(e) => setSectionFilter(e.target.value)}
-                                    disabled={!planSections.length}
-                                    title={planSections.length ? "Filter by section" : "No sections in plan"}
-                                  >
-                                    <option value="">{planSections.length ? "All Sections" : "No sections"}</option>
-                                    {planSections.map((s) => (
-                                      <option key={s.id} value={s.id}>
-                                        {safeStr(s.section_name || s.name || `#${s.id}`)}
-                                      </option>
-                                    ))}
-                                  </Form.Select>
-                                </Col>
-
-                                <Col xs={12} md={4} className="d-flex gap-2 flex-wrap">
-                                  <Button size="sm" variant="outline-secondary" onClick={fetchStudentsForEvaluation}>
-                                    Reload
-                                  </Button>
-
-                                  <Button
-                                    size="sm"
-                                    variant="outline-dark"
-                                    onClick={fillEmptyWithZero}
-                                    title="Fill empty inputs with 0 (not saved until you Save)"
-                                  >
-                                    Fill 0
-                                  </Button>
-
-                                  <Button size="sm" variant="outline-danger" onClick={clearAllMarks}>
-                                    Clear
-                                  </Button>
-                                </Col>
-                              </Row>
-
-                              {/* ✅ AI Remarks toolbar */}
-                              <Card className="border-0 bg-light mb-2">
-                                <Card.Body className="py-2">
-                                  <div className="d-flex justify-content-between align-items-center gap-2 flex-wrap">
-                                    <div className="text-muted small">
-                                      Showing <b>{marksStats.total}</b> students • Filled <b>{marksStats.filled}</b>
-                                      {activeEval?.totalMarks != null ? (
-                                        <>
-                                          {" "}
-                                          • Out of <b>{activeEval.totalMarks}</b>
-                                        </>
+                              return (
+                                <tr key={ref || `${i}`}>
+                                  <td className="text-muted">{i + 1}</td>
+                                  <td>
+                                    <Button
+                                      variant="link"
+                                      className="p-0 text-decoration-none text-start"
+                                      onClick={() =>
+                                        openStudentDetail({
+                                          ref,
+                                          name,
+                                          section: secName,
+                                          marks: validMarks ? marksNum : null,
+                                          percent,
+                                          status,
+                                          remark: remark || null,
+                                          photoUrl: photoMap?.[ref] || pickStudentPhoto(s),
+                                        })
+                                      }
+                                      title="Open student details"
+                                    >
+                                      <div className="fw-semibold">{name}</div>
+                                      <div className="text-muted small">
+                                        Father: {safeStr(s?.father_name || "-")}
+                                      </div>
+                                    </Button>
+                                  </td>
+                                  <td className="fw-semibold">{ref || "-"}</td>
+                                  <td>{roll || "-"}</td>
+                                  <td>{secName}</td>
+                                  <td>
+                                    <InputGroup size="sm">
+                                      <Form.Control
+                                        type="number"
+                                        min={0}
+                                        value={raw}
+                                        onChange={(e) => patchMark(ref, e.target.value)}
+                                        onBlur={(e) => {
+                                          const v = e.target.value;
+                                          if (v === "" || v == null) return;
+                                          const next =
+                                            total != null
+                                              ? clampToTotal(v, total)
+                                              : String(Number(v));
+                                          patchMark(ref, next);
+                                        }}
+                                        placeholder="—"
+                                        isInvalid={!!bad}
+                                      />
+                                      {raw !== "" ? (
+                                        <Button
+                                          variant="outline-secondary"
+                                          onClick={() => patchMark(ref, "")}
+                                          title="Clear"
+                                        >
+                                          ×
+                                        </Button>
                                       ) : null}
-                                      {resultsLoaded ? (
-                                        <span className="ms-2 badge bg-white text-dark">
-                                          Loaded existing (if available)
-                                        </span>
-                                      ) : null}
-                                    </div>
+                                    </InputGroup>
+                                    {bad ? (
+                                      <div className="text-danger small mt-1">
+                                        {Number.isFinite(total) ? `Enter 0 to ${total}` : "Enter valid number"}
+                                      </div>
+                                    ) : null}
+                                  </td>
+                                  <td style={{ maxWidth: 260, whiteSpace: "normal", wordBreak: "break-word" }}>
+                                        {remark ? (
+                                          <div className="small" style={{ whiteSpace: "normal", wordBreak: "break-word", lineHeight: 1.4 }}>
+                                            <span className="me-2">📝</span>
+                                            {truncateText(remark)}
+                                            {remark.length > REMARK_PREVIEW ? (
+                                              <Button
+                                                variant="link"
+                                                size="sm"
+                                                className="p-0 ms-2 align-baseline"
+                                                onClick={() =>
+                                                  openStudentDetail({
+                                                    ref,
+                                                    name,
+                                                    section: secName,
+                                                    marks: validMarks ? marksNum : null,
+                                                    percent,
+                                                    status,
+                                                    remark: remark || null,
+                                                    photoUrl: pickStudentPhoto(s),
+                                                  })
+                                                }
+                                              >
+                                                View
+                                              </Button>
+                                            ) : null}
+                                          </div>
+                                        ) : (
+                                          <span className="text-muted small">—</span>
+                                        )}
+                                    </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </Table>
+                      </div>
 
-                                    <div className="d-flex gap-2 flex-wrap align-items-center">
-                                      <Form.Select
-                                        size="sm"
-                                        value={remarksLanguage}
-                                        onChange={(e) => setRemarksLanguage(e.target.value)}
-                                        style={{ width: 140 }}
-                                        disabled={remarksBusy}
-                                        title="Remarks Language"
-                                      >
-                                        <option value="en">English</option>
-                                        <option value="hi">Hindi</option>
-                                        <option value="pa">Punjabi</option>
-                                      </Form.Select>
+                      <div className="d-flex justify-content-end gap-2 flex-wrap mt-2">
+                        <Button
+                          size="sm"
+                          variant="outline-secondary"
+                          onClick={() => {
+                            setStudentSearch("");
+                            setSectionFilter("");
+                          }}
+                        >
+                          Reset Filters
+                        </Button>
 
+                        <Button
+                          size="sm"
+                          variant="primary"
+                          disabled={resultsSaving || !activeEvalId}
+                          onClick={saveResults}
+                        >
+                          {resultsSaving ? "Saving..." : "Save Marks"}
+                        </Button>
+                      </div>
+
+                      <div className="text-muted small mt-2">
+                        Note: Only filled marks are sent to server. Blank students are skipped.
+                      </div>
+                    </>
+                  )}
+                </Accordion.Body>
+              </Accordion.Item>
+
+              {/* Analytics */}
+              <Accordion.Item eventKey="2">
+                <Accordion.Header
+                  onClick={() =>
+                    setOpenKeys((prev) =>
+                      prev.includes("2") ? prev.filter((k) => k !== "2") : [...prev, "2"]
+                    )
+                  }
+                >
+                  Analytics
+                </Accordion.Header>
+                <Accordion.Body>
+                  {!analytics ? (
+                    <div className="text-muted">Click <b>Analytics</b> button on top to load summary.</div>
+                  ) : (
+                    <Tabs
+                      activeKey={analyticsTab}
+                      onSelect={(k) => setAnalyticsTab(k || "dashboard")}
+                      className="mb-3"
+                    >
+                      <Tab eventKey="dashboard" title="Dashboard">
+                        <Row className="g-3">
+                          <Col xs={12} md={4}>
+                            <Card className="border-0 bg-light">
+                              <Card.Body className="py-3">
+                                <div className="text-muted small">Students Evaluated</div>
+                                <div className="fs-4 fw-bold">
+                                  {analytics.studentsEvaluated ?? analytics.attempted ?? 0}
+                                </div>
+                              </Card.Body>
+                            </Card>
+                          </Col>
+
+                          <Col xs={12} md={4}>
+                            <Card className="border-0 bg-light">
+                              <Card.Body className="py-3">
+                                <div className="text-muted small">Average %</div>
+                                <div className="fs-4 fw-bold">
+                                  {analytics.averagePercent != null ? `${analytics.averagePercent}%` : "-"}
+                                </div>
+                              </Card.Body>
+                            </Card>
+                          </Col>
+
+                          <Col xs={12} md={4}>
+                            <Card className="border-0 bg-light">
+                              <Card.Body className="py-3">
+                                <div className="text-muted small">Pass Marks</div>
+                                <div className="fs-4 fw-bold">{passMarks}</div>
+                              </Card.Body>
+                            </Card>
+                          </Col>
+
+                          <Col xs={12} md={7}>
+                            <Card className="border-0 shadow-sm">
+                              <Card.Header className="bg-white fw-semibold">Marks Distribution</Card.Header>
+                              <Card.Body style={{ height: 280 }}>
+                                <ResponsiveContainer width="100%" height="100%">
+                                  <BarChart data={marksChartData.buckets}>
+                                    <XAxis dataKey="name" />
+                                    <YAxis allowDecimals={false} />
+                                    <Tooltip />
+                                    <Bar dataKey="count" />
+                                  </BarChart>
+                                </ResponsiveContainer>
+                              </Card.Body>
+                            </Card>
+                          </Col>
+
+                          <Col xs={12} md={5}>
+                            <Card className="border-0 shadow-sm">
+                              <Card.Header className="bg-white fw-semibold">Pass / Fail</Card.Header>
+                              <Card.Body style={{ height: 280 }}>
+                                <ResponsiveContainer width="100%" height="100%">
+                                  <PieChart>
+                                    <Pie
+                                      data={marksChartData.passFail}
+                                      dataKey="value"
+                                      nameKey="name"
+                                      outerRadius={90}
+                                      label
+                                    >
+                                      {marksChartData.passFail.map((_, i) => (
+                                        <Cell key={i} />
+                                      ))}
+                                    </Pie>
+                                    <Tooltip />
+                                    <Legend />
+                                  </PieChart>
+                                </ResponsiveContainer>
+                              </Card.Body>
+                            </Card>
+                          </Col>
+
+                          <Col xs={12}>
+                            <Card className="border-0 bg-light">
+                              <Card.Body className="py-2 d-flex flex-wrap gap-3">
+                                <div className="small text-muted">
+                                  Highest: <b>{marksChartData.maxMarks != null ? marksChartData.maxMarks : "-"}</b>
+                                </div>
+                                <div className="small text-muted">
+                                  Lowest: <b>{marksChartData.minMarks != null ? marksChartData.minMarks : "-"}</b>
+                                </div>
+                                <div className="small text-muted">
+                                  Total Marks: <b>{activeEval?.totalMarks ?? "-"}</b>
+                                </div>
+                              </Card.Body>
+                            </Card>
+                          </Col>
+                        </Row>
+                      </Tab>
+
+                      <Tab eventKey="students" title="Students Progress">
+                        <div className="d-flex justify-content-between align-items-center gap-2 flex-wrap mb-2">
+                          <div className="text-muted small">
+                            Showing <b>{studentProgressRows.length}</b> row(s) • Remarks:{" "}
+                            <b>{Object.keys(remarksMap || {}).length}</b>
+                          </div>
+                          <div className="d-flex gap-2 flex-wrap">
+                            <Button
+                              size="sm"
+                              variant={canGenerateRemarks ? "dark" : "outline-dark"}
+                              disabled={!canGenerateRemarks || remarksBusy}
+                              onClick={generateAiRemarks}
+                            >
+                              {remarksBusy ? (
+                                <>
+                                  <Spinner size="sm" animation="border" className="me-2" />
+                                  AI...
+                                </>
+                              ) : (
+                                "✨ AI Remarks"
+                              )}
+                            </Button>
+
+                            <Button
+                              size="sm"
+                              variant="outline-secondary"
+                              onClick={clearRemarks}
+                              disabled={remarksBusy}
+                            >
+                              Clear Remarks
+                            </Button>
+
+                            <Button
+                              size="sm"
+                              variant="outline-success"
+                              disabled={!activeEvalId}
+                              onClick={() => downloadResultPdf({ evalId: activeEvalId })}
+                            >
+                              🧾 Result PDF
+                            </Button>
+                          </div>
+                        </div>
+
+                        <div className="table-responsive">
+                          <Table hover size="sm" className="align-middle">
+                            <thead className="table-light">
+                              <tr>
+                                <th style={{ width: 60 }}>#</th>
+                                <th style={{ minWidth: 220 }}>Student</th>
+                                <th style={{ width: 140 }}>Section</th>
+                                <th style={{ width: 120 }}>Marks</th>
+                                <th style={{ minWidth: 240 }}>Progress</th>
+                                <th style={{ width: 120 }}>Status</th>
+                                <th style={{ width: 260, minWidth: 220 }}>AI Remark</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {studentProgressRows.map((r, idx) => {
+                                const total = Number(activeEval?.totalMarks || 0) || 0;
+                                const pct = r.percent ?? 0;
+                                const status = r.status;
+
+                                return (
+                                  <tr key={r.ref || idx}>
+                                    <td className="text-muted">{idx + 1}</td>
+                                    <td>
                                       <Button
-                                        size="sm"
-                                        variant={canGenerateRemarks ? "dark" : "outline-dark"}
-                                        disabled={!canGenerateRemarks || remarksBusy}
-                                        onClick={generateAiRemarks}
-                                        title={
-                                          canGenerateRemarks
-                                            ? "Generate remarks from marks + topic"
-                                            : "Fill at least one student mark first"
+                                        variant="link"
+                                        className="p-0 text-decoration-none text-start"
+                                        onClick={() => {
+                                          const st = (students || []).find((x) => pickStudentRef(x) === r.ref);
+                                          openStudentDetail({
+                                            ...r,
+                                            photoUrl: photoMap?.[r.ref] || (st ? pickStudentPhoto(st) : ""),
+                                          });
+                                        }}
+                                        title="Open student details"
+                                      >
+                                        <div className="fw-semibold">{r.name}</div>
+                                        <div className="text-muted small">{r.ref}</div>
+                                      </Button>
+                                    </td>
+                                    <td>{r.section}</td>
+                                    <td className="fw-semibold">
+                                      {r.marks == null ? "-" : `${r.marks}/${total}`}
+                                    </td>
+                                    <td>
+                                      <ProgressBar
+                                        now={r.marks == null ? 0 : pct}
+                                        label={r.marks == null ? "" : `${pct}%`}
+                                      />
+                                    </td>
+                                    <td>
+                                      <Badge
+                                        bg={
+                                          status === "PASS"
+                                            ? "success"
+                                            : status === "FAIL"
+                                            ? "danger"
+                                            : "secondary"
                                         }
                                       >
-                                        {remarksBusy ? (
-                                          <>
-                                            <Spinner size="sm" animation="border" className="me-2" />
-                                            AI...
-                                          </>
-                                        ) : (
-                                          "✨ AI Remarks"
-                                        )}
-                                      </Button>
-
-                                      <Button
-                                        size="sm"
-                                        variant="outline-secondary"
-                                        onClick={clearRemarks}
-                                        disabled={remarksBusy}
-                                      >
-                                        Clear Remarks
-                                      </Button>
-
-                                      <Button
-                                        size="sm"
-                                        variant="outline-success"
-                                        disabled={!activeEvalId}
-                                        onClick={() => downloadResultPdf({ evalId: activeEvalId })}
-                                        title="Download Result PDF (All Students)"
-                                      >
-                                        🧾 Result PDF
-                                      </Button>
-
-                                      <Button
-                                        size="sm"
-                                        variant="primary"
-                                        disabled={resultsSaving || !activeEvalId}
-                                        onClick={saveResults}
-                                      >
-                                        {resultsSaving ? "Saving..." : "Save Marks"}
-                                      </Button>
-                                    </div>
-                                  </div>
-
-                                  <div className="text-muted small mt-1">
-                                    Tip: Remarks show short in table. Click student name to open full details + graphs.
-                                  </div>
-                                </Card.Body>
-                              </Card>
-
-                              <div className="table-responsive">
-                                <Table className="mb-0 align-middle" hover size="sm">
-                                  <thead className="table-light">
-                                    <tr>
-                                      <th style={{ width: 60 }}>#</th>
-                                      <th style={{ minWidth: 220 }}>Student</th>
-                                      <th style={{ width: 170 }}>Admission No</th>
-                                      <th style={{ width: 90 }}>Roll</th>
-                                      <th style={{ width: 140 }}>Section</th>
-                                      <th style={{ width: 160 }}>Marks</th>
-                                      <th style={{ minWidth: 260 }}>AI Remark</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {filteredStudents.map((s, i) => {
-                                      const ref = pickStudentRef(s);
-                                      const name = pickStudentName(s);
-                                      const roll = safeStr(s?.roll_number || s?.rollNumber || "");
-                                      const secName =
-                                        safeStr(
-                                          s?.Section?.section_name ||
-                                            s?.Section?.name ||
-                                            s?.section_name ||
-                                            ""
-                                        ) ||
-                                        (() => {
-                                          const secId = s?.section_id || s?.sectionId || "";
-                                          return secId ? `#${secId}` : "-";
-                                        })();
-
-                                      const raw = marksMap?.[ref] ?? "";
-                                      const total = safeNum(activeEval?.totalMarks);
-                                      const bad =
-                                        raw !== "" &&
-                                        (!Number.isFinite(Number(raw)) ||
-                                          (total != null && Number(raw) > total) ||
-                                          Number(raw) < 0);
-
-                                      const remark = safeStr(remarksMap?.[ref] || "").trim();
-
-                                      const marksNum = raw === "" || raw == null ? null : Number(raw);
-                                      const validMarks = Number.isFinite(marksNum);
-                                      const percent =
-                                        validMarks && Number(total || 0) > 0
-                                          ? clampPercent((marksNum / Number(total)) * 100)
-                                          : null;
-                                      const status =
-                                        !validMarks ? "NA" : marksNum >= passMarks ? "PASS" : "FAIL";
-
-                                      return (
-                                        <tr key={ref || `${i}`}>
-                                          <td className="text-muted">{i + 1}</td>
-                                          <td>
-                                            <Button
-                                              variant="link"
-                                              className="p-0 text-decoration-none text-start"
-                                              onClick={() =>
-                                                openStudentDetail({
-                                                  ref,
-                                                  name,
-                                                  section: secName,
-                                                  marks: validMarks ? marksNum : null,
-                                                  percent,
-                                                  status,
-                                                  remark: remark || null,
-                                                  photoUrl: photoMap?.[ref] || pickStudentPhoto(s),
-                                                })
-                                              }
-                                              title="Open student details"
-                                            >
-                                              <div className="fw-semibold">{name}</div>
-                                              <div className="text-muted small">
-                                                Father: {safeStr(s?.father_name || "-")}
-                                              </div>
-                                            </Button>
-                                          </td>
-                                          <td className="fw-semibold">{ref || "-"}</td>
-                                          <td>{roll || "-"}</td>
-                                          <td>{secName}</td>
-                                          <td>
-                                            <InputGroup size="sm">
-                                              <Form.Control
-                                                type="number"
-                                                min={0}
-                                                value={raw}
-                                                onChange={(e) => patchMark(ref, e.target.value)}
-                                                onBlur={(e) => {
-                                                  const v = e.target.value;
-                                                  if (v === "" || v == null) return;
-                                                  const next =
-                                                    total != null
-                                                      ? clampToTotal(v, total)
-                                                      : String(Number(v));
-                                                  patchMark(ref, next);
-                                                }}
-                                                placeholder="—"
-                                                isInvalid={!!bad}
-                                              />
-                                              {raw !== "" ? (
-                                                <Button
-                                                  variant="outline-secondary"
-                                                  onClick={() => patchMark(ref, "")}
-                                                  title="Clear"
-                                                >
-                                                  ×
-                                                </Button>
-                                              ) : null}
-                                            </InputGroup>
-                                            {bad ? (
-                                              <div className="text-danger small mt-1">
-                                                {Number.isFinite(total) ? `Enter 0 to ${total}` : "Enter valid number"}
-                                              </div>
-                                            ) : null}
-                                          </td>
-                                          <td>
-                                            {remark ? (
-                                              <div className="small">
-                                                <span className="me-2">📝</span>
-                                                {truncateText(remark)}
-                                                {remark.length > REMARK_PREVIEW ? (
+                                        {status}
+                                      </Badge>
+                                    </td>
+                                        <td style={{ maxWidth: 260, whiteSpace: "normal", wordBreak: "break-word" }}>
+                                            {r.remark ? (
+                                              <div className="small" style={{ whiteSpace: "normal", wordBreak: "break-word", lineHeight: 1.4 }}>
+                                                📝 {truncateText(r.remark)}
+                                                {r.remark.length > REMARK_PREVIEW ? (
                                                   <Button
                                                     variant="link"
                                                     size="sm"
                                                     className="p-0 ms-2 align-baseline"
-                                                    onClick={() =>
-                                                      openStudentDetail({
-                                                        ref,
-                                                        name,
-                                                        section: secName,
-                                                        marks: validMarks ? marksNum : null,
-                                                        percent,
-                                                        status,
-                                                        remark: remark || null,
-                                                        photoUrl: pickStudentPhoto(s), // ✅ ADD
-                                                      })
-                                                    }
+                                                    onClick={() => openStudentDetail(r)}
                                                   >
                                                     View
                                                   </Button>
@@ -2192,310 +2489,37 @@
                                               <span className="text-muted small">—</span>
                                             )}
                                           </td>
-                                        </tr>
-                                      );
-                                    })}
-                                  </tbody>
-                                </Table>
-                              </div>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </Table>
+                        </div>
 
-                              <div className="d-flex justify-content-end gap-2 flex-wrap mt-2">
-                                <Button
-                                  size="sm"
-                                  variant="outline-secondary"
-                                  onClick={() => {
-                                    setStudentSearch("");
-                                    setSectionFilter("");
-                                  }}
-                                >
-                                  Reset Filters
-                                </Button>
+                        <div className="text-muted small mt-2">
+                          Tip: After saving marks, this tab opens automatically.
+                        </div>
+                      </Tab>
 
-                                <Button
-                                  size="sm"
-                                  variant="primary"
-                                  disabled={resultsSaving || !activeEvalId}
-                                  onClick={saveResults}
-                                >
-                                  {resultsSaving ? "Saving..." : "Save Marks"}
-                                </Button>
-                              </div>
-
-                              <div className="text-muted small mt-2">
-                                Note: Only filled marks are sent to server. Blank students are skipped.
-                              </div>
-                            </>
-                          )}
-                        </Accordion.Body>
-                      </Accordion.Item>
-
-                      {/* Analytics */}
-                      <Accordion.Item eventKey="2">
-                        <Accordion.Header
-                          onClick={() =>
-                            setOpenKeys((prev) =>
-                              prev.includes("2") ? prev.filter((k) => k !== "2") : [...prev, "2"]
-                            )
-                          }
+                      <Tab eventKey="raw" title="Raw JSON">
+                        <pre
+                          className="mb-0 p-3 rounded bg-light small"
+                          style={{ maxHeight: 320, overflow: "auto" }}
                         >
-                          Analytics
-                        </Accordion.Header>
-                        <Accordion.Body>
-                          {!analytics ? (
-                            <div className="text-muted">Click <b>Analytics</b> button on top to load summary.</div>
-                          ) : (
-                            <Tabs
-                              activeKey={analyticsTab}
-                              onSelect={(k) => setAnalyticsTab(k || "dashboard")}
-                              className="mb-3"
-                            >
-                              <Tab eventKey="dashboard" title="Dashboard">
-                                <Row className="g-3">
-                                  <Col xs={12} md={4}>
-                                    <Card className="border-0 bg-light">
-                                      <Card.Body className="py-3">
-                                        <div className="text-muted small">Students Evaluated</div>
-                                        <div className="fs-4 fw-bold">
-                                          {analytics.studentsEvaluated ?? analytics.attempted ?? 0}
-                                        </div>
-                                      </Card.Body>
-                                    </Card>
-                                  </Col>
-
-                                  <Col xs={12} md={4}>
-                                    <Card className="border-0 bg-light">
-                                      <Card.Body className="py-3">
-                                        <div className="text-muted small">Average %</div>
-                                        <div className="fs-4 fw-bold">
-                                          {analytics.averagePercent != null ? `${analytics.averagePercent}%` : "-"}
-                                        </div>
-                                      </Card.Body>
-                                    </Card>
-                                  </Col>
-
-                                  <Col xs={12} md={4}>
-                                    <Card className="border-0 bg-light">
-                                      <Card.Body className="py-3">
-                                        <div className="text-muted small">Pass Marks</div>
-                                        <div className="fs-4 fw-bold">{passMarks}</div>
-                                      </Card.Body>
-                                    </Card>
-                                  </Col>
-
-                                  <Col xs={12} md={7}>
-                                    <Card className="border-0 shadow-sm">
-                                      <Card.Header className="bg-white fw-semibold">Marks Distribution</Card.Header>
-                                      <Card.Body style={{ height: 280 }}>
-                                        <ResponsiveContainer width="100%" height="100%">
-                                          <BarChart data={marksChartData.buckets}>
-                                            <XAxis dataKey="name" />
-                                            <YAxis allowDecimals={false} />
-                                            <Tooltip />
-                                            <Bar dataKey="count" />
-                                          </BarChart>
-                                        </ResponsiveContainer>
-                                      </Card.Body>
-                                    </Card>
-                                  </Col>
-
-                                  <Col xs={12} md={5}>
-                                    <Card className="border-0 shadow-sm">
-                                      <Card.Header className="bg-white fw-semibold">Pass / Fail</Card.Header>
-                                      <Card.Body style={{ height: 280 }}>
-                                        <ResponsiveContainer width="100%" height="100%">
-                                          <PieChart>
-                                            <Pie
-                                              data={marksChartData.passFail}
-                                              dataKey="value"
-                                              nameKey="name"
-                                              outerRadius={90}
-                                              label
-                                            >
-                                              {marksChartData.passFail.map((_, i) => (
-                                                <Cell key={i} />
-                                              ))}
-                                            </Pie>
-                                            <Tooltip />
-                                            <Legend />
-                                          </PieChart>
-                                        </ResponsiveContainer>
-                                      </Card.Body>
-                                    </Card>
-                                  </Col>
-
-                                  <Col xs={12}>
-                                    <Card className="border-0 bg-light">
-                                      <Card.Body className="py-2 d-flex flex-wrap gap-3">
-                                        <div className="small text-muted">
-                                          Highest: <b>{marksChartData.maxMarks != null ? marksChartData.maxMarks : "-"}</b>
-                                        </div>
-                                        <div className="small text-muted">
-                                          Lowest: <b>{marksChartData.minMarks != null ? marksChartData.minMarks : "-"}</b>
-                                        </div>
-                                        <div className="small text-muted">
-                                          Total Marks: <b>{activeEval?.totalMarks ?? "-"}</b>
-                                        </div>
-                                      </Card.Body>
-                                    </Card>
-                                  </Col>
-                                </Row>
-                              </Tab>
-
-                              <Tab eventKey="students" title="Students Progress">
-                                <div className="d-flex justify-content-between align-items-center gap-2 flex-wrap mb-2">
-                                  <div className="text-muted small">
-                                    Showing <b>{studentProgressRows.length}</b> row(s) • Remarks:{" "}
-                                    <b>{Object.keys(remarksMap || {}).length}</b>
-                                  </div>
-                                  <div className="d-flex gap-2 flex-wrap">
-                                    <Button
-                                      size="sm"
-                                      variant={canGenerateRemarks ? "dark" : "outline-dark"}
-                                      disabled={!canGenerateRemarks || remarksBusy}
-                                      onClick={generateAiRemarks}
-                                    >
-                                      {remarksBusy ? (
-                                        <>
-                                          <Spinner size="sm" animation="border" className="me-2" />
-                                          AI...
-                                        </>
-                                      ) : (
-                                        "✨ AI Remarks"
-                                      )}
-                                    </Button>
-
-                                    <Button
-                                      size="sm"
-                                      variant="outline-secondary"
-                                      onClick={clearRemarks}
-                                      disabled={remarksBusy}
-                                    >
-                                      Clear Remarks
-                                    </Button>
-
-                                    <Button
-                                      size="sm"
-                                      variant="outline-success"
-                                      disabled={!activeEvalId}
-                                      onClick={() => downloadResultPdf({ evalId: activeEvalId })}
-                                    >
-                                      🧾 Result PDF
-                                    </Button>
-                                  </div>
-                                </div>
-
-                                <div className="table-responsive">
-                                  <Table hover size="sm" className="align-middle">
-                                    <thead className="table-light">
-                                      <tr>
-                                        <th style={{ width: 60 }}>#</th>
-                                        <th style={{ minWidth: 220 }}>Student</th>
-                                        <th style={{ width: 140 }}>Section</th>
-                                        <th style={{ width: 120 }}>Marks</th>
-                                        <th style={{ minWidth: 240 }}>Progress</th>
-                                        <th style={{ width: 120 }}>Status</th>
-                                        <th style={{ minWidth: 320 }}>AI Remark</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody>
-                                      {studentProgressRows.map((r, idx) => {
-                                        const total = Number(activeEval?.totalMarks || 0) || 0;
-                                        const pct = r.percent ?? 0;
-                                        const status = r.status;
-
-                                        return (
-                                          <tr key={r.ref || idx}>
-                                            <td className="text-muted">{idx + 1}</td>
-                                            <td>
-                                              <Button
-                                                variant="link"
-                                                className="p-0 text-decoration-none text-start"
-                                                onClick={() => {
-                                                  const st = (students || []).find((x) => pickStudentRef(x) === r.ref);
-                                                  openStudentDetail({
-                                                    ...r,
-                                                    photoUrl: photoMap?.[r.ref] || (st ? pickStudentPhoto(st) : ""),
-                                                  });
-                                                }}
-                                                title="Open student details"
-                                              >
-                                                <div className="fw-semibold">{r.name}</div>
-                                                <div className="text-muted small">{r.ref}</div>
-                                              </Button>
-                                            </td>
-                                            <td>{r.section}</td>
-                                            <td className="fw-semibold">
-                                              {r.marks == null ? "-" : `${r.marks}/${total}`}
-                                            </td>
-                                            <td>
-                                              <ProgressBar
-                                                now={r.marks == null ? 0 : pct}
-                                                label={r.marks == null ? "" : `${pct}%`}
-                                              />
-                                            </td>
-                                            <td>
-                                              <Badge
-                                                bg={
-                                                  status === "PASS"
-                                                    ? "success"
-                                                    : status === "FAIL"
-                                                    ? "danger"
-                                                    : "secondary"
-                                                }
-                                              >
-                                                {status}
-                                              </Badge>
-                                            </td>
-                                            <td>
-                                              {r.remark ? (
-                                                <span className="small">
-                                                  📝 {truncateText(r.remark)}
-                                                  {r.remark.length > REMARK_PREVIEW ? (
-                                                    <Button
-                                                      variant="link"
-                                                      size="sm"
-                                                      className="p-0 ms-2 align-baseline"
-                                                      onClick={() => openStudentDetail(r)}
-                                                    >
-                                                      View
-                                                    </Button>
-                                                  ) : null}
-                                                </span>
-                                              ) : (
-                                                <span className="text-muted small">—</span>
-                                              )}
-                                            </td>
-                                          </tr>
-                                        );
-                                      })}
-                                    </tbody>
-                                  </Table>
-                                </div>
-
-                                <div className="text-muted small mt-2">
-                                  Tip: After saving marks, this tab opens automatically.
-                                </div>
-                              </Tab>
-
-                              <Tab eventKey="raw" title="Raw JSON">
-                                <pre
-                                  className="mb-0 p-3 rounded bg-light small"
-                                  style={{ maxHeight: 320, overflow: "auto" }}
-                                >
-                                  {JSON.stringify(analytics, null, 2)}
-                                </pre>
-                              </Tab>
-                            </Tabs>
-                          )}
-                        </Accordion.Body>
-                      </Accordion.Item>
-                    </Accordion>
-                  </>
-                )}
-              </Card.Body>
-            </Card>
-          </Col>
-        </Row>
+                          {JSON.stringify(analytics, null, 2)}
+                        </pre>
+                      </Tab>
+                    </Tabs>
+                  )}
+                </Accordion.Body>
+              </Accordion.Item>
+            </Accordion>
+          </>
+        )}
+      </Card.Body>
+    </Card>
+  </Col>
+</Row>
 
         {/* ✅ Student Detail Modal */}
         <Modal

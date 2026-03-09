@@ -1,5 +1,4 @@
-// src/components/Navbar.js
-
+// File: src/components/Navbar.jsx
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate, Link, useLocation } from "react-router-dom";
 import axios from "axios";
@@ -7,39 +6,33 @@ import "bootstrap/dist/css/bootstrap.min.css";
 import { FaBell } from "react-icons/fa";
 import { useRoles } from "../hooks/useRoles";
 
-/* ================= BRANDING ================= */
-
-const BRAND_NAME = "NEW MILTON PUBLIC SCHOOL";
-const BRAND_LOGO = `${process.env.PUBLIC_URL}/images/milton_logo.png`;
-
-/* ========================================== */
-
 const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const dropdownRef = useRef(null);
 
   const [dropdownOpen, setDropdownOpen] = useState(false);
-  const [profilePhoto, setProfilePhoto] = useState(
-    "https://via.placeholder.com/40"
-  );
+  const [profilePhoto, setProfilePhoto] = useState("https://via.placeholder.com/40");
   const [userName, setUserName] = useState("");
 
-  // NEW: Pendings dropdown state (kept for parity)
+  // NEW: Pendings dropdown state
   const [pendingOpen, setPendingOpen] = useState(false);
 
   // NEW: family + active student admission for switcher
   const [family, setFamily] = useState(null);
-  const [activeStudentAdmission, setActiveStudentAdmission] = useState(() =>
-    localStorage.getItem("activeStudentAdmission") ||
-    localStorage.getItem("username") ||
-    ""
+  const [activeStudentAdmission, setActiveStudentAdmission] = useState(
+    () =>
+      localStorage.getItem("activeStudentAdmission") ||
+      localStorage.getItem("username") ||
+      ""
   );
 
   const { roles = [], activeRole, changeRole } = useRoles();
 
   // --- role helpers ---
   const roleLower = (activeRole || "").toLowerCase();
+  const isSuperAdmin = roleLower === "superadmin" || roleLower === "super_admin";
+  const isAdmin = isSuperAdmin || roleLower === "admin";
   const isStudent = roleLower === "student";
   const isParent = roleLower === "parent";
 
@@ -49,9 +42,7 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
   // --- api base + helpers ---
   const API_BASE = (process.env.REACT_APP_API_URL || "").replace(/\/+$/, "");
   const buildStudentPhotoURL = (fileName) =>
-    fileName
-      ? `${API_BASE}/uploads/photoes/students/${encodeURIComponent(fileName)}`
-      : "";
+    fileName ? `${API_BASE}/uploads/photoes/students/${encodeURIComponent(fileName)}` : "";
 
   const NO_STUDENT_PHOTO_SVG =
     "data:image/svg+xml;utf8," +
@@ -86,17 +77,13 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
 
       const tryEndpoints = [
         username
-          ? `${API_BASE}/students?admission_number=${encodeURIComponent(
-              username
-            )}`
+          ? `${API_BASE}/students?admission_number=${encodeURIComponent(username)}`
           : null,
         username
           ? `${API_BASE}/students?username=${encodeURIComponent(username)}`
           : null,
         `${API_BASE}/students/me`,
-        userId
-          ? `${API_BASE}/students/by-user/${encodeURIComponent(userId)}`
-          : null,
+        userId ? `${API_BASE}/students/by-user/${encodeURIComponent(userId)}` : null,
       ].filter(Boolean);
 
       let student = null;
@@ -117,9 +104,7 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
         }
       }
 
-      const studentPhoto = student?.photo
-        ? buildStudentPhotoURL(student.photo)
-        : null;
+      const studentPhoto = student?.photo ? buildStudentPhotoURL(student.photo) : null;
       setProfilePhoto(studentPhoto || NO_STUDENT_PHOTO_SVG);
     } catch {
       setProfilePhoto(NO_STUDENT_PHOTO_SVG);
@@ -168,10 +153,7 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
         const user = data?.user || {};
         if (user.name) setUserName(user.name);
 
-        if (
-          (isStudent || isParent) &&
-          localStorage.getItem("activeStudentAdmission")
-        ) {
+        if ((isStudent || isParent) && localStorage.getItem("activeStudentAdmission")) {
           await trySetStudentPhoto();
         } else if (user.profilePhoto) {
           const full = user.profilePhoto.startsWith("http")
@@ -205,7 +187,7 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
     navigate("/");
   };
 
-  // Close profile dropdown on outside click + on Escape
+  // Close dropdown on outside click + on Escape
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
@@ -236,6 +218,11 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
     navigate("/dashboard", { replace: true });
   };
 
+  const closeDropdownAnd = (fn) => () => {
+    setDropdownOpen(false);
+    if (typeof fn === "function") fn();
+  };
+
   // Open chat widget when bell is clicked
   const handleBellClick = () => {
     window.dispatchEvent(new Event("chat:open-request"));
@@ -251,16 +238,10 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
     try {
       localStorage.setItem("activeStudentAdmission", admissionNumber);
       setActiveStudentAdmission(admissionNumber);
-
-      // Update header photo to the selected student's
       trySetStudentPhoto();
-
-      // Notify app to refetch student-bound data (attendance, fees, diary, etc.)
       window.dispatchEvent(
         new CustomEvent("student-switched", { detail: { admissionNumber } })
       );
-
-      // Optional UX: navigate to dashboard
       if (isStudent || isParent) {
         navigate("/dashboard", { replace: true });
       }
@@ -269,28 +250,136 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
     }
   };
 
-  // (Optional) keep quick links empty here; you can add later
-  const quickLinks = [];
+  // ---------- ROLE-BASED QUICK LINKS ----------
+  const QUICK_LINKS_BY_ROLE = {
+    // Admin & Superadmin
+    admin: [
+      { label: "Collect", href: "/transactions", icon: "bi-cash-stack" },
+      { label: "Fee Due", href: "/student-due", icon: "bi-receipt" },
+      {
+        label: "Pendings",
+        href: "/reports/school-fee-summary",
+        icon: "bi-list-check",
+        isPendingDropdown: true,
+      },
+      { label: "Day", href: "/reports/day-wise", icon: "bi-calendar2-check" },
+      { label: "Transport", href: "/reports/transport-summary", icon: "bi-truck" },
+      { label: "Students", href: "/students", icon: "bi-people" },
+      { label: "Enquiries", href: "/enquiries", icon: "bi-inbox" },
+      { label: "Tracking", href: "/users-tracking", icon: "bi-activity" },
+    ],
+    superadmin: [
+      { label: "Collect", href: "/transactions", icon: "bi-cash-stack" },
+      { label: "Fee Due", href: "/student-due", icon: "bi-receipt" },
+      {
+        label: "Pendings",
+        href: "/reports/school-fee-summary",
+        icon: "bi-list-check",
+        isPendingDropdown: true,
+      },
+      { label: "Day", href: "/reports/day-wise", icon: "bi-calendar2-check" },
+      { label: "Transport", href: "/reports/transport-summary", icon: "bi-truck" },
+      { label: "Students", href: "/students", icon: "bi-people" },
+      { label: "Enquiries", href: "/enquiries", icon: "bi-inbox" },
+      { label: "Tracking", href: "/users-tracking", icon: "bi-activity" },
+    ],
+    // Accounts
+    accounts: [
+      { label: "Collect", href: "/transactions", icon: "bi-cash-stack" },
+      { label: "Fee Due", href: "/student-due", icon: "bi-receipt" },
+      { label: "Day", href: "/reports/day-wise", icon: "bi-calendar2-check" },
+      {
+        label: "Pendings",
+        href: "/reports/school-fee-summary",
+        icon: "bi-list-check",
+        isPendingDropdown: true,
+      },
+      { label: "Students", href: "/students", icon: "bi-people" },
+      { label: "Cancel", href: "/cancelled-transactions", icon: "bi-trash3" },
+    ],
+    account: [
+      { label: "Collect", href: "/transactions", icon: "bi-cash-stack" },
+      { label: "Fee Due", href: "/student-due", icon: "bi-receipt" },
+      { label: "Day", href: "/reports/day-wise", icon: "bi-calendar2-check" },
+      {
+        label: "Pendings",
+        href: "/reports/school-fee-summary",
+        icon: "bi-list-check",
+        isPendingDropdown: true,
+      },
+      { label: "Students", href: "/students", icon: "bi-people" },
+      { label: "Cancel", href: "/cancelled-transactions", icon: "bi-trash3" },
+    ],
+    fee_manager: [
+      { label: "Collect", href: "/transactions", icon: "bi-cash-stack" },
+      { label: "Fee Due", href: "/student-due", icon: "bi-receipt" },
+      { label: "Day", href: "/reports/day-wise", icon: "bi-calendar2-check" },
+      {
+        label: "Pendings",
+        href: "/reports/school-fee-summary",
+        icon: "bi-list-check",
+        isPendingDropdown: true,
+      },
+      { label: "Students", href: "/students", icon: "bi-people" },
+      { label: "Cancel", href: "/cancelled-transactions", icon: "bi-trash3" },
+    ],
+    // Academic Coordinator
+    academic_coordinator: [
+      { label: "TT", href: "/combined-timetable", icon: "bi-table" },
+      { label: "Students", href: "/students", icon: "bi-people" },
+      { label: "Assign", href: "/teacher-assignment", icon: "bi-person-check" },
+      { label: "Subs", href: "/substitution", icon: "bi-arrow-repeat" },
+      { label: "Exams", href: "/exams", icon: "bi-journal-bookmark" },
+    ],
+    // Teacher
+    teacher: [
+      { label: "Mark Att.", href: "/mark-attendance", icon: "bi-check2-square" },
+      { label: "TT", href: "/teacher-timetable-display", icon: "bi-table" },
+      { label: "Marks", href: "/marks-entry", icon: "bi-pencil-square" },
+      { label: "Subs", href: "/combined-teacher-substitution", icon: "bi-arrow-repeat" },
+      { label: "Assign", href: "/assignments", icon: "bi-clipboard" },
+    ],
+    // HR
+    hr: [
+      { label: "Employees", href: "/employees", icon: "bi-person-badge" },
+      { label: "Att.", href: "/employee-attendance", icon: "bi-person-check-fill" },
+      { label: "Summary", href: "/employee-attendance-summary", icon: "bi-calendar-range" },
+      { label: "Leave Req", href: "/hr-leave-requests", icon: "bi-clipboard-check" },
+      { label: "Balances", href: "/employee-leave-balances", icon: "bi-calendar-check" },
+    ],
+    // Student
+    student: [
+      { label: "Home", href: "/dashboard", icon: "bi-house" },
+      { label: "Attend.", href: "/student-attendance", icon: "bi-calendar2-check" },
+      { label: "Diary", href: "/student-diary", icon: "bi-journal-text" },
+      { label: "Assign", href: "/my-assignments", icon: "bi-journal-check" },
+      { label: "Fees", href: "/student-fee", icon: "bi-cash-coin" },
+    ],
+    // Parent
+    parent: [
+      { label: "Home", href: "/dashboard", icon: "bi-house" },
+      { label: "Attend.", href: "/student-attendance", icon: "bi-calendar2-check" },
+      { label: "Diary", href: "/student-diary", icon: "bi-journal-text" },
+      { label: "Fees", href: "/student-fee", icon: "bi-cash-coin" },
+    ],
+  };
+
+  const quickLinks = QUICK_LINKS_BY_ROLE[roleLower] || [];
+  const brandLogo = `${process.env.PUBLIC_URL}/images/DemoLogo.png`;
 
   return (
     <>
       <nav
-        className="navbar fixed-top navbar-expand-lg navbar-light border-bottom app-header shadow-sm"
+        className="navbar fixed-top navbar-expand-lg navbar-light bg-white border-bottom app-header shadow-sm"
         role="navigation"
-        style={{
-          zIndex: 3000,
-          backgroundColor: "#ffffff",
-        }}
+        style={{ zIndex: 3000 }}
       >
         <div className="container-fluid px-3">
           {/* Brand */}
-          <Link
-            to="/dashboard"
-            className="navbar-brand d-flex align-items-center gap-2 ms-2"
-          >
+          <Link to="/dashboard" className="navbar-brand d-flex align-items-center gap-2 ms-2">
             <img
-              src={BRAND_LOGO}
-              alt={BRAND_NAME}
+              src={brandLogo}
+              alt="Demo Public School logo"
               width={34}
               height={34}
               className="rounded"
@@ -299,7 +388,7 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
                 e.currentTarget.style.display = "none";
               }}
             />
-            <span className="fw-semibold">{BRAND_NAME}</span>
+            <span className="fw-semibold">Demo Public School</span>
           </Link>
 
           {/* Student switcher (desktop pills) */}
@@ -310,8 +399,7 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
               aria-label="Switch student"
             >
               {studentsList.map((s) => {
-                const isActiveStu =
-                  s.admission_number === activeStudentAdmission;
+                const isActiveStu = s.admission_number === activeStudentAdmission;
                 return (
                   <button
                     key={s.admission_number}
@@ -322,9 +410,7 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
                       isActiveStu ? "btn-primary" : "btn-outline-primary"
                     } rounded-pill px-3`}
                     onClick={() => handleStudentSwitch(s.admission_number)}
-                    title={`${s.name} (${s.class?.name || "—"}-${
-                      s.section?.name || "—"
-                    })`}
+                    title={`${s.name} (${s.class?.name || "—"}-${s.section?.name || "—"})`}
                     style={{
                       maxWidth: 180,
                       overflow: "hidden",
@@ -334,9 +420,7 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
                   >
                     {s.isSelf ? "Me" : s.name}
                     <span className="ms-1 text-white-50">
-                      {s.class?.name
-                        ? ` · ${s.class.name}-${s.section?.name || "—"}`
-                        : ""}
+                      {s.class?.name ? ` · ${s.class.name}-${s.section?.name || "—"}` : ""}
                     </span>
                   </button>
                 );
@@ -368,14 +452,65 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
           )}
 
           {/* Right cluster */}
-          <div
-            className="ms-auto d-flex align-items-center gap-2 me-3"
-            ref={dropdownRef}
-          >
-            {/* Quick links strip (kept, even if empty now) */}
+          <div className="ms-auto d-flex align-items-center gap-2 me-3" ref={dropdownRef}>
+            {/* Quick links strip */}
             {quickLinks.length > 0 && (
               <div className="d-flex align-items-center gap-2 gap-sm-3 me-2 quick-links-strip">
                 {quickLinks.map((q) => {
+                  // Special case: Pendings dropdown (two pending pages)
+                  if (q.isPendingDropdown) {
+                    const pendingActive =
+                      isActive("/reports/school-fee-summary") ||
+                      isActive("/reports/student-total-due");
+
+                    return (
+                      <div
+                        key="pending-dropdown"
+                        className="dropdown quick-link-dropdown"
+                        onMouseEnter={() => setPendingOpen(true)}
+                        onMouseLeave={() => setPendingOpen(false)}
+                      >
+                        <button
+                          type="button"
+                          className={`btn btn-link p-0 border-0 text-decoration-none text-center small quick-link-icon ${
+                            pendingActive ? "ql-active" : ""
+                          }`}
+                          onClick={() => setPendingOpen((v) => !v)}
+                        >
+                          <span className="ql-icon-wrap">
+                            <i className={`bi ${q.icon}`} aria-hidden="true" />
+                          </span>
+                          <span className="qlabel">{q.label}</span>
+                        </button>
+                        <ul
+                          className={`dropdown-menu dropdown-menu-end shadow-sm ${
+                            pendingOpen ? "show" : ""
+                          }`}
+                        >
+                          <li>
+                            <Link
+                              className="dropdown-item small"
+                              to="/reports/school-fee-summary"
+                              onClick={() => setPendingOpen(false)}
+                            >
+                              Fee Heading Wise Pending
+                            </Link>
+                          </li>
+                          <li>
+                            <Link
+                              className="dropdown-item small"
+                              to="/reports/student-total-due"
+                              onClick={() => setPendingOpen(false)}
+                            >
+                              Student Wise Pending Till Date
+                            </Link>
+                          </li>
+                        </ul>
+                      </div>
+                    );
+                  }
+
+                  // Default quick-link card
                   const active = isActive(q.href);
                   return (
                     <Link
@@ -437,17 +572,11 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
                   referrerPolicy="no-referrer"
                 />
                 <span className="d-none d-sm-inline">{userName || "User"}</span>
-                <i
-                  className={`bi ${
-                    dropdownOpen ? "bi-chevron-up" : "bi-chevron-down"
-                  } ms-1`}
-                />
+                <i className={`bi ${dropdownOpen ? "bi-chevron-up" : "bi-chevron-down"} ms-1`} />
               </button>
 
               <ul
-                className={`dropdown-menu dropdown-menu-end ${
-                  dropdownOpen ? "show" : ""
-                }`}
+                className={`dropdown-menu dropdown-menu-end ${dropdownOpen ? "show" : ""}`}
                 aria-labelledby="profileDropdown"
               >
                 <li>
@@ -472,13 +601,7 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
                   <hr className="dropdown-divider" />
                 </li>
                 <li>
-                  <button
-                    className="dropdown-item"
-                    onClick={() => {
-                      setDropdownOpen(false);
-                      handleLogout();
-                    }}
-                  >
+                  <button className="dropdown-item" onClick={closeDropdownAnd(handleLogout)}>
                     Logout
                   </button>
                 </li>
@@ -489,10 +612,7 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
             <div className="ms-2 d-md-none d-flex align-items-center gap-2">
               {roles.length > 0 && (
                 <div>
-                  <label
-                    htmlFor="roleSwitcherMobile"
-                    className="visually-hidden"
-                  >
+                  <label htmlFor="roleSwitcherMobile" className="visually-hidden">
                     Switch role
                   </label>
                   <select
@@ -513,10 +633,7 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
 
               {canSeeStudentSwitcher && studentsList.length > 0 && (
                 <div className="w-100">
-                  <label
-                    htmlFor="studentSwitcherMobile"
-                    className="visually-hidden"
-                  >
+                  <label htmlFor="studentSwitcherMobile" className="visually-hidden">
                     Switch student
                   </label>
                   <select
@@ -526,10 +643,7 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
                     onChange={(e) => handleStudentSwitch(e.target.value)}
                   >
                     {studentsList.map((s) => (
-                      <option
-                        key={s.admission_number}
-                        value={s.admission_number}
-                      >
+                      <option key={s.admission_number} value={s.admission_number}>
                         {(s.isSelf ? "Me: " : "") + s.name}{" "}
                         {s.class?.name
                           ? `(${s.class.name}-${s.section?.name || "—"})`
@@ -544,17 +658,9 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
         </div>
       </nav>
 
-      {/* Little CSS helpers (same vibe as your first navbar) */}
+      {/* Little CSS helpers */}
       <style>{`
-        .app-header {
-          background-color: #ffffff !important;
-        }
-
-        .navbar-brand span {
-          color: #0a1f44;
-          text-shadow: none;
-        }
-
+        /* Keep quick links in one line and compact */
         .quick-links-strip { white-space: nowrap; }
 
         .quick-link-icon {
@@ -593,6 +699,7 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
           letter-spacing: .3px;
         }
 
+        /* Hover state */
         .quick-link-icon:hover {
           color: #0d6efd !important;
           transform: translateY(-2px) scale(1.05);
@@ -603,6 +710,7 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
           box-shadow: 0 4px 8px rgba(13,110,253,.2);
         }
 
+        /* Active route state */
         .quick-link-icon.ql-active {
           color: #0b5ed7 !important;
         }
@@ -612,10 +720,23 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
           box-shadow: 0 0 0 3px rgba(13,110,253,.2), 0 4px 10px rgba(13,110,253,.25);
         }
 
-        @media (prefers-color-scheme: dark) {
-          .app-header { background-color: #111 !important; }
-          .navbar-brand span { color: #e9ecef; }
+        /* Pendings dropdown behaviour */
+        .quick-link-dropdown .dropdown-menu {
+          min-width: 260px;
+          padding: 0.25rem 0;
+        }
+        .quick-link-dropdown .dropdown-item {
+          font-size: 0.8rem;
+          padding: 0.35rem 0.8rem;
+        }
 
+        /* Tighten pill buttons a bit */
+        @media (min-width: 992px) {
+          .btn.rounded-pill { line-height: 1.1; }
+        }
+
+        /* Dark mode tweaks */
+        @media (prefers-color-scheme: dark) {
           .quick-link-icon { color: #e9ecef !important; }
           .quick-link-icon .ql-icon-wrap {
             background: linear-gradient(145deg, #2a2f36, #23272e);

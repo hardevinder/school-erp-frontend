@@ -162,11 +162,17 @@ import AIChatBox from "./components/AIChatBox";
 
 import SyllabusTeacherAssignment from "./pages/SyllabusTeacherAssignment";
 import SyllabusBreakdownCRUD from "./pages/SyllabusBreakdownCRUD";
+import AdmissionSyllabusAssignee from "./pages/AdmissionSyllabusAssignee";
+import AdmissionSyllabusCRUD from "./pages/AdmissionSyllabusCRUD";
 
 // ✅ NEW: Coordinator Approval Page
 import SyllabusApprovalCoordinator from "./pages/SyllabusApprovalCoordinator";
 
 import LessonPlanEvaluations from "./pages/LessonPlanEvaluations";
+import AdmissionAssessments from "./pages/AdmissionAssessments";
+import EntranceExamPortal from "./pages/EntranceExamPortal";
+
+
 
 // ---------- auth guard ----------
 const RequireRole = ({ roles = [], children }) => {
@@ -714,6 +720,37 @@ function App() {
             }
           />
 
+          <Route
+            path="/admission-syllabus-assignee"
+            element={
+              <RequireRole roles={["admin", "superadmin", "academic_coordinator", "coordinator", "admission", "frontoffice"]}>
+                <AdmissionSyllabusAssignee />
+              </RequireRole>
+            }
+          />
+
+          <Route
+              path="/admission-syllabus"
+              element={
+                <RequireRole
+                  roles={[
+                    "teacher",
+                    "academic_coordinator",
+                    "coordinator",
+                    "admin",
+                    "superadmin",
+                    "principal",
+                    "admission",
+                    "admission_manager",
+                    "staff",
+                    "frontoffice",
+                  ]}
+                >
+                  <AdmissionSyllabusCRUD />
+                </RequireRole>
+              }
+            />
+
           {/* ✅ Syllabus Breakdown CRUD */}
           <Route
             path="/syllabus-breakdown"
@@ -722,6 +759,37 @@ function App() {
                 roles={["teacher", "academic_coordinator", "admin", "superadmin", "principal", "coordinator"]}
               >
                 <SyllabusBreakdownCRUD />
+              </RequireRole>
+            }
+          />
+
+          <Route
+            path="/admission-assessments"
+            element={
+              <RequireRole
+                roles={[
+                  "admin",
+                  "superadmin",
+                  "academic_coordinator",
+                  "coordinator",
+                  "principal",
+                  "admission",
+                  "admission_manager",
+                  "staff",
+                  "frontoffice",
+                  "examination",
+                ]}
+              >
+                <AdmissionAssessments />
+              </RequireRole>
+            }
+          />
+
+          <Route
+            path="/entrance-exam"
+            element={
+              <RequireRole roles={["student", "applicant", "admission_student"]}>
+                <EntranceExamPortal />
               </RequireRole>
             }
           />

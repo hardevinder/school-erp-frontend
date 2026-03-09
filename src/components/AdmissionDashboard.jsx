@@ -1,5 +1,5 @@
 // File: src/components/AdmissionDashboard.jsx
-// ✅ Admission Dashboard (Enquiries + Registrations + Quick Links)
+// ✅ Admission Dashboard (Enquiries + Registrations + Admission Assessments + Quick Links)
 // ✅ Role-safe (admission/frontoffice/admin/superadmin can view; others see warning)
 // ✅ Recent Enquiries + Recent Registrations
 // ✅ IMPORTANT: Uses React Router navigation (Link / useNavigate) so NO FULL PAGE RELOAD
@@ -88,9 +88,13 @@ export default function AdmissionDashboard() {
 
   const POLLING_INTERVAL = 25000; // 25s
 
-  // API base paths (change if your backend uses /api/...)
+  // API base paths
   const ENQ_BASE = "/enquiries";
   const REG_BASE = "/registrations";
+
+  // App routes
+  const PROJECTION_HREF = "/reports/student-strength-projection";
+  const ADMISSION_ASSESSMENTS_HREF = "/admission-assessments";
 
   /* ---------------- Fetchers ---------------- */
   const fetchRecentEnquiries = useCallback(async () => {
@@ -163,10 +167,7 @@ export default function AdmissionDashboard() {
     return { total, paid, admitted };
   }, [recentRegistrations]);
 
-  // ✅ NEW: Projection report link (same as App.js)
-  const PROJECTION_HREF = "/reports/student-strength-projection";
-
-  // ✅ UPDATED: Added Projection Report quick-link
+  /* ---------------- Quick Links ---------------- */
   const quickLinks = useMemo(
     () => [
       {
@@ -180,6 +181,12 @@ export default function AdmissionDashboard() {
         icon: "bi-person-plus",
         href: "/registrations",
         gradient: "linear-gradient(135deg, #22c55e, #16a34a)",
+      },
+      {
+        label: "Admission Assessments",
+        icon: "bi-ui-checks-grid",
+        href: ADMISSION_ASSESSMENTS_HREF,
+        gradient: "linear-gradient(135deg, #a855f7, #7e22ce)",
       },
       {
         label: "Projection Report",
@@ -197,7 +204,7 @@ export default function AdmissionDashboard() {
     []
   );
 
-  // ✅ UPDATED: Added KPI tile "Projection Report"
+  /* ---------------- KPI Tiles ---------------- */
   const kpiTiles = useMemo(
     () => [
       { title: "Recent Enquiries", value: enqKpis.total, variant: "info" },
@@ -205,7 +212,20 @@ export default function AdmissionDashboard() {
       { title: "Recent Registrations", value: regKpis.total, variant: "success" },
       { title: "Paid (Recent)", value: regKpis.paid, variant: "primary" },
       { title: "Admitted (Recent)", value: regKpis.admitted, variant: "warning" },
-      { title: "Projection Report", value: "Open", variant: "dark", isLink: true, href: PROJECTION_HREF },
+      {
+        title: "Admission Assessments",
+        value: "Open",
+        variant: "dark",
+        isLink: true,
+        href: ADMISSION_ASSESSMENTS_HREF,
+      },
+      {
+        title: "Projection Report",
+        value: "Open",
+        variant: "dark",
+        isLink: true,
+        href: PROJECTION_HREF,
+      },
     ],
     [enqKpis, regKpis]
   );
@@ -233,7 +253,7 @@ export default function AdmissionDashboard() {
           <div>
             <h4 className="mb-1 fw-semibold">Admission Dashboard</h4>
             <div className="text-muted small">
-              Enquiries · Registrations · Quick Links{" · "}
+              Enquiries · Registrations · Admission Assessments · Quick Links{" · "}
               {lastUpdated ? `Last updated: ${lastUpdated.toLocaleString("en-IN")}` : "—"}
             </div>
           </div>
@@ -267,11 +287,11 @@ export default function AdmissionDashboard() {
         {/* Quick Links */}
         <div className="row g-3 mb-4">
           {quickLinks.map((q) => (
-            <div key={q.label} className="col-12 col-sm-6 col-lg-3">
+            <div key={q.label} className="col-12 col-sm-6 col-lg-4 col-xxl">
               <Link
                 to={q.href}
                 className="btn w-100 text-white shadow-sm rounded-4 p-3 d-flex align-items-center gap-3"
-                style={{ backgroundImage: q.gradient, textDecoration: "none" }}
+                style={{ backgroundImage: q.gradient, textDecoration: "none", minHeight: 88 }}
               >
                 <span
                   className="d-inline-grid place-items-center rounded-circle"
@@ -280,6 +300,7 @@ export default function AdmissionDashboard() {
                     height: 44,
                     background: "rgba(255,255,255,0.22)",
                     border: "1px solid rgba(255,255,255,0.25)",
+                    flexShrink: 0,
                   }}
                 >
                   <i className={`bi ${q.icon} fs-4`} />
@@ -310,7 +331,11 @@ export default function AdmissionDashboard() {
                   <div className="text-uppercase small text-muted mb-1">{k.title}</div>
                   <div className="display-6 fw-semibold">{k.value}</div>
                   <div className="small text-muted">
-                    {k.isLink ? "Open module" : loading.enquiries || loading.registrations ? "Updating…" : "Live snapshot"}
+                    {k.isLink
+                      ? "Open module"
+                      : loading.enquiries || loading.registrations
+                      ? "Updating…"
+                      : "Live snapshot"}
                   </div>
                 </div>
               </div>
@@ -372,9 +397,14 @@ export default function AdmissionDashboard() {
             <div className="card shadow-sm rounded-4 h-100">
               <div className="card-header bg-white border-0 d-flex justify-content-between align-items-center">
                 <div className="fw-semibold">Recent Registrations</div>
-                <Link className="btn btn-sm btn-outline-primary" to="/registrations">
-                  Open module
-                </Link>
+                <div className="d-flex gap-2">
+                  <Link className="btn btn-sm btn-outline-secondary" to={ADMISSION_ASSESSMENTS_HREF}>
+                    Assessments
+                  </Link>
+                  <Link className="btn btn-sm btn-outline-primary" to="/registrations">
+                    Open module
+                  </Link>
+                </div>
               </div>
 
               <div className="table-responsive">
@@ -441,8 +471,15 @@ export default function AdmissionDashboard() {
         {/* Styles */}
         <style>{`
           .card { animation: fadeInUp .5s ease-out; }
-          @keyframes fadeInUp { from { opacity: 0; transform: translateY(12px);} to { opacity: 1; transform: translateY(0);} }
-          code { background: rgba(0,0,0,.04); padding: 2px 6px; border-radius: 8px; }
+          @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(12px); }
+            to { opacity: 1; transform: translateY(0); }
+          }
+          code {
+            background: rgba(0,0,0,.04);
+            padding: 2px 6px;
+            border-radius: 8px;
+          }
         `}</style>
 
         {/* Bootstrap Icons */}

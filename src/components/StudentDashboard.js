@@ -2,6 +2,7 @@
 // ✅ FULL UPDATED FILE
 // ✅ FIX: No page reload on dashboard links (uses react-router Link instead of <a href>)
 // ✅ NEW: Academic Calendar card/link added
+// ✅ NEW: Entrance Exam card/link added
 // ✅ Chat + Notifications unchanged
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -423,7 +424,6 @@ export default function StudentDashboard() {
     </div>
   );
 
-  // ✅ QuickLink now uses Link
   const QuickLink = ({ to, icon, label, desc, badge }) => (
     <div className="col-6 col-md-4 col-lg-3">
       <Link to={to} className="text-decoration-none">
@@ -582,13 +582,19 @@ export default function StudentDashboard() {
           desc="Dues, concessions & payments"
           badge={<span className="badge rounded-pill text-bg-warning text-dark fs-6">{fmtINR(feeSummary.vanDue)} van due</span>}
         />
-        {/* ✅ NEW: Academic Calendar */}
         <QuickLink
           to="/academic-calendar-view"
           icon={<i className="bi bi-calendar3 text-primary"></i>}
           label="Academic Calendar"
           desc="Holidays, events & exams"
           badge={<span className="badge rounded-pill text-bg-primary fs-6">Open</span>}
+        />
+        <QuickLink
+          to="/entrance-exam"
+          icon={<i className="bi bi-ui-checks-grid text-danger"></i>}
+          label="Entrance Exam"
+          desc="Start or continue your entrance exam"
+          badge={<span className="badge rounded-pill text-bg-danger fs-6">Open</span>}
         />
         <QuickLink
           to="/chat"
@@ -883,7 +889,6 @@ export default function StudentDashboard() {
         .pulse{ animation: pulse 2s infinite; background: linear-gradient(45deg, #ff0000, #ff4444); }
         @keyframes pulse { 0%{ box-shadow:0 0 0 0 rgba(255,0,0,.7);} 70%{ box-shadow:0 0 0 10px rgba(255,0,0,0);} 100%{ box-shadow:0 0 0 0 rgba(255,0,0,0);} }
 
-        /* Notifications overlay */
         .overlay{
           position: fixed; inset: 0; z-index: 1200;
           background: rgba(0,0,0,.5);

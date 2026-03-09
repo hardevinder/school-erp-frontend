@@ -2,7 +2,7 @@
 import React, { useEffect, useRef, useState, useMemo } from "react";
 import api from "../api";
 import Swal from "sweetalert2";
-import { Modal, Button, ProgressBar, Badge } from "react-bootstrap";
+import { Modal, Button, ProgressBar } from "react-bootstrap";
 
 /* ============================================================
  * ✅ CONFIG
@@ -10,7 +10,7 @@ import { Modal, Button, ProgressBar, Badge } from "react-bootstrap";
 const PDF_ENDPOINT = "/report-card/generate-pdf/report-card";
 
 /* ============================================================
- * ✅ Student photo helpers (same style as Students.js)
+ * ✅ Student photo helpers
  * ============================================================ */
 const apiBase = (() => {
   const b = api?.defaults?.baseURL;
@@ -20,11 +20,10 @@ const apiBase = (() => {
 const buildStudentPhotoURL = (fileName) =>
   fileName ? `${apiBase}/uploads/photoes/students/${encodeURIComponent(fileName)}` : "";
 
-// Neutral "no photo" SVG placeholder (works in browser + PDF HTML)
 const NO_PHOTO_SVG =
   "data:image/svg+xml;utf8," +
   encodeURIComponent(
-    `<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96">
+    `<svg xmlns="http://www.w3.org/2000/svg" width="120" height="140">
        <defs>
          <linearGradient id="g" x1="0" x2="1">
            <stop offset="0" stop-color="#e0f2fe"/>
@@ -32,13 +31,13 @@ const NO_PHOTO_SVG =
          </linearGradient>
        </defs>
        <rect width="100%" height="100%" fill="url(#g)"/>
-       <circle cx="48" cy="36" r="18" fill="#cbd5e1"/>
-       <rect x="18" y="62" width="60" height="18" rx="9" fill="#cbd5e1"/>
+       <circle cx="60" cy="48" r="24" fill="#cbd5e1"/>
+       <rect x="20" y="82" width="80" height="26" rx="12" fill="#cbd5e1"/>
      </svg>`
   );
 
 /* ============================================================
- * ✅ Date helpers (DOB dd-mm-yyyy)
+ * ✅ Date helpers
  * ============================================================ */
 const pad2 = (n) => String(n).padStart(2, "0");
 
@@ -47,18 +46,14 @@ const formatDOB = (raw) => {
   const s = String(raw).trim();
   if (!s) return "-";
 
-  // already dd-mm-yyyy
   if (/^\d{2}-\d{2}-\d{4}$/.test(s)) return s;
 
-  // dd/mm/yyyy
   const m1 = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
   if (m1) return `${pad2(m1[1])}-${pad2(m1[2])}-${m1[3]}`;
 
-  // yyyy-mm-dd or yyyy-mm-ddTHH:mm:ss...
   const m2 = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
   if (m2) return `${pad2(m2[3])}-${pad2(m2[2])}-${m2[1]}`;
 
-  // fallback parse
   const d = new Date(s);
   if (!Number.isNaN(d.getTime())) {
     return `${pad2(d.getDate())}-${pad2(d.getMonth() + 1)}-${d.getFullYear()}`;
@@ -104,7 +99,6 @@ const pickGrade = (arr = []) => {
   return hit?.grade || "-";
 };
 
-// Weighted helpers
 const sumWeightedOnly = (arr = []) =>
   (arr || []).reduce(
     (a, x) => a + (isNumeric(x?.weighted_marks) ? Number(x.weighted_marks) : 0),
@@ -116,6 +110,12 @@ const sumMaxWeight = (arr = []) =>
     (a, x) => a + (isNumeric(x?.weightage_percent) ? Number(x.weightage_percent) : 0),
     0
   );
+
+const hasDisplayRank = (rank) => {
+  if (rank == null) return false;
+  const s = String(rank).trim();
+  return s !== "" && s !== "-" && s.toLowerCase() !== "null" && s.toLowerCase() !== "undefined";
+};
 
 /* ============================================================
  * ✅ Grade from schema
@@ -131,6 +131,78 @@ const gradeFromSchema = (percent, gradeSchema = []) => {
     }
   }
   return "-";
+};
+
+/* ============================================================
+ * ✅ Header HTML cleanup
+ * ============================================================ */
+const sanitizeHeaderHtml = (raw) => {
+  if (!raw) return "";
+
+  let html = String(raw);
+
+  html = html.replace(/<[^>]*>\s*Excellence\s*\/\s*Discipline\s*<\/[^>]*>/gi, "");
+  html = html.replace(/Excellence\s*\/\s*Discipline/gi, "");
+
+  html = html.replace(
+    /(ACADEMIC SESSION[^<]*)(\s*)(Annual Report Card)/gi,
+    `<div style="display:block;">$1</div><div style="display:block;">$3</div>`
+  );
+
+  html = html.replace(
+    /(Academic Session[^<]*)(\s*)(Annual Report Card)/gi,
+    `<div style="display:block;">$1</div><div style="display:block;">$3</div>`
+  );
+
+  return html;
+};
+
+/* ============================================================
+ * ✅ Subject helpers
+ * ============================================================ */
+const isDrawingSubject = (name = "") => {
+  const s = String(name || "").trim().toLowerCase();
+  return ["drawing", "art", "arts", "drawing / art", "art & craft", "craft"].includes(s);
+};
+
+const getNonDrawingSubjects = (student) =>
+  Array.from(new Set((student?.components || []).map((c) => c.subject_name))).filter(
+    (name) => !isDrawingSubject(name)
+  );
+
+const getDrawingGradeForTerm = (student, termId, exams, gradeSchema) => {
+  if (!termId) return "-";
+
+  const items = (student?.components || []).filter((c) => {
+    const exTerm = exams.find((e) => e.id === c.exam_id)?.term_id;
+    return isDrawingSubject(c.subject_name) && Number(exTerm) === Number(termId);
+  });
+
+  if (!items.length) return "-";
+
+  const directGrade = pickGrade(items);
+  if (directGrade && directGrade !== "-") return directGrade;
+
+  const wTotal = sumWeightedOnly(items);
+  const wMax = sumMaxWeight(items);
+  const percent = wMax > 0 ? (wTotal / wMax) * 100 : null;
+
+  return percent != null ? gradeFromSchema(percent, gradeSchema) : "-";
+};
+
+const buildGradeRangeFooterText = (gradeSchema = []) => {
+  if (!gradeSchema?.length) return "";
+
+  return (gradeSchema || [])
+    .map((g) => {
+      const min = g?.min_percent;
+      const max = g?.max_percent;
+      const grade = g?.grade;
+      if (min == null || max == null || !grade) return "";
+      return `${min}-${max} = ${grade}`;
+    })
+    .filter(Boolean)
+    .join(", ");
 };
 
 const FinalResultSummary = () => {
@@ -162,17 +234,15 @@ const FinalResultSummary = () => {
     rounding: "none",
   });
 
-  // PDF generation progress UI
   const [pdfProgressVisible, setPdfProgressVisible] = useState(false);
   const [pdfPercent, setPdfPercent] = useState(0);
   const [pdfMessage, setPdfMessage] = useState("Preparing…");
   const abortGenRef = useRef(null);
 
-  // ✅ PDF selection controls
-  const [pdfMode, setPdfMode] = useState("all"); // all | single | range
-  const [pdfSingleId, setPdfSingleId] = useState(""); // student.id
-  const [pdfFrom, setPdfFrom] = useState(""); // roll start
-  const [pdfTo, setPdfTo] = useState(""); // roll end
+  const [pdfMode, setPdfMode] = useState("all");
+  const [pdfSingleId, setPdfSingleId] = useState("");
+  const [pdfFrom, setPdfFrom] = useState("");
+  const [pdfTo, setPdfTo] = useState("");
 
   useEffect(() => {
     loadClasses();
@@ -237,9 +307,6 @@ const FinalResultSummary = () => {
     }
   };
 
-  /* ============================================================
-   * ✅ Preselect all subjects + all components (term-wise)
-   * ============================================================ */
   const selectAllComponentsTermWise = (availableComponents = []) => {
     const selected = {};
     for (const c of availableComponents) {
@@ -297,7 +364,6 @@ const FinalResultSummary = () => {
     setRemarksByTerm({});
     setAttendanceByTerm({});
 
-    // reset PDF mode selection
     setPdfMode("all");
     setPdfSingleId("");
     setPdfFrom("");
@@ -394,9 +460,6 @@ const FinalResultSummary = () => {
     setFilters((prev) => ({ ...prev, [name]: value }));
   };
 
-  /* ============================================================
-   * ✅ Term helpers (two terms)
-   * ============================================================ */
   const getSelectedTermIds = () => {
     const ids = (filters.exam_ids || [])
       .map((exId) => exams.find((e) => e.id === exId)?.term_id)
@@ -413,9 +476,6 @@ const FinalResultSummary = () => {
 
   const termLabel = (tid) => (tid ? `Term-${tid}` : "Term");
 
-  /* ============================================================
-   * ✅ Attendance fetcher (returns attendanceMap)
-   * ============================================================ */
   const fetchAttendanceSummary = async ({ class_id, section_id, term_id }) => {
     const endpoints = [
       "/report-card/attendance-summary",
@@ -453,9 +513,6 @@ const FinalResultSummary = () => {
     throw lastErr || new Error("Attendance summary API failed");
   };
 
-  /* ============================================================
-   * ✅ Component columns: unique per TERM
-   * ============================================================ */
   const getUniqueComponentsByTerm = (termId) => {
     if (!termId) return [];
     const compMap = new Map();
@@ -488,9 +545,6 @@ const FinalResultSummary = () => {
     [term2Id, filters.subjectComponents]
   );
 
-  /* ============================================================
-   * ✅ Student term calculations
-   * ============================================================ */
   const isCompInTerm = (c, termId) => {
     if (!termId) return false;
     const exTerm = exams.find((e) => e.id === c.exam_id)?.term_id;
@@ -539,9 +593,6 @@ const FinalResultSummary = () => {
     return { total_weighted: wTotal, percent, grade };
   };
 
-  /* ============================================================
-   * ✅ Fetch Report
-   * ============================================================ */
   const fetchReport = async () => {
     const { class_id, section_id, exam_ids } = filters;
     if (!class_id || !section_id || !exam_ids.length) {
@@ -570,7 +621,7 @@ const FinalResultSummary = () => {
 
     try {
       const res = await api.post("/report-card/detailed-summary", payload);
-      const reportStudents = res.data.students || []; // backend returns TOP 10
+      const reportStudents = res.data.students || [];
 
       if (!reportStudents.length) {
         Swal.fire("No Data", "No students found for the selected filters", "info");
@@ -585,7 +636,6 @@ const FinalResultSummary = () => {
 
       setReportData(reportStudents);
 
-      // reset selection (safe)
       setPdfMode("all");
       setPdfSingleId("");
       setPdfFrom("");
@@ -593,7 +643,6 @@ const FinalResultSummary = () => {
 
       const studentIds = reportStudents.map((s) => s.id);
 
-      // ✅ Student info
       const infoRes = await api.get("/report-card/students", {
         params: { student_ids: studentIds },
       });
@@ -603,7 +652,6 @@ const FinalResultSummary = () => {
 
       const termIdsLocal = getSelectedTermIds();
 
-      // ✅ Co-scholastic
       const coByTerm = {};
       for (const tid of termIdsLocal.slice(0, 2)) {
         try {
@@ -618,7 +666,6 @@ const FinalResultSummary = () => {
       }
       setCoScholasticByTerm(coByTerm);
 
-      // ✅ Remarks
       const remarksTermMap = {};
       for (const tid of termIdsLocal.slice(0, 2)) {
         try {
@@ -640,7 +687,6 @@ const FinalResultSummary = () => {
       }
       setRemarksByTerm(remarksTermMap);
 
-      // ✅ Attendance
       const attTermMap = {};
       for (const tid of termIdsLocal.slice(0, 2)) {
         try {
@@ -675,59 +721,6 @@ const FinalResultSummary = () => {
 
   const formatPercent = (p) => (p != null ? `${formatNumber(p)}%` : "-");
 
-  /* ============================================================
-   * ✅ Grade Schema inline (shown ABOVE Co-Scholastic)
-   * ============================================================ */
-  const buildGradeSchemaInlineText = () => {
-    if (!gradeSchema || !gradeSchema.length) return "";
-    return gradeSchema
-      .map((g) => {
-        const range =
-          g?.min_percent != null && g?.max_percent != null
-            ? `${g.min_percent}-${g.max_percent}`
-            : "";
-        const grade = g?.grade ?? "";
-        if (!range && !grade) return "";
-        return `${range}: ${grade}`.trim();
-      })
-      .filter(Boolean)
-      .join("   •   ");
-  };
-
-  const renderGradeSchemaInline = () => {
-    const line = buildGradeSchemaInlineText();
-    if (!line) return null;
-
-    return (
-      <div className="mt-3">
-        <div className="d-flex align-items-center justify-content-between" style={{ gap: 10 }}>
-          <h5 className="mb-2">Grade Schema</h5>
-          <Badge bg="info" pill>
-            Grading Scale
-          </Badge>
-        </div>
-        <div className="schema-box small">{line}</div>
-      </div>
-    );
-  };
-
-  const buildGradeSchemaInlineHtml = () => {
-    const line = buildGradeSchemaInlineText();
-    if (!line) return "";
-    return `
-      <div class="section-title">
-        <div class="section-title-left">
-          <div class="section-pill">Grading Scale</div>
-          <h5 style="margin:0;color:#0b1b3a">Grade Schema</h5>
-        </div>
-      </div>
-      <div class="schema-box">${line}</div>
-    `;
-  };
-
-  /* ============================================================
-   * ✅ PDF Header + Body
-   * ============================================================ */
   const buildScholasticHeaderHtml_TermWise = () => {
     const t1Cols = (term1Components?.length || 0) + (showTotals ? 2 : 0);
     const t2Cols = (term2Components?.length || 0) + (showTotals ? 2 : 0);
@@ -758,7 +751,11 @@ const FinalResultSummary = () => {
             : ""
         }
 
-        ${showTotals ? `<th class="th-comp strong">Total</th><th class="th-comp strong">Grade</th>` : ""}
+        ${
+          showTotals
+            ? `<th class="th-comp strong">Total</th><th class="th-comp strong">Grade</th>`
+            : ""
+        }
       </tr>
     `;
 
@@ -810,7 +807,17 @@ const FinalResultSummary = () => {
     return row;
   };
 
-  // ✅ PDF totals footer row
+  const getScholasticColumnCount = () => {
+    return (
+      1 +
+      term1Components.length +
+      (showTotals ? 2 : 0) +
+      term2Components.length +
+      (showTotals ? 2 : 0) +
+      (showTotals ? 2 : 0)
+    );
+  };
+
   const buildTotalsFooterRowHtml = (student) => {
     if (!showTotals) return "";
 
@@ -832,15 +839,22 @@ const FinalResultSummary = () => {
     const blank1 = term1Components.map(() => `<td></td>`).join("");
     const blank2 = term2Components.map(() => `<td></td>`).join("");
 
-    // ✅ Rank only here (Grand Total cell)
-    const rankHtml = student?.rank ? `<div class="rank-inline">Rank ${student.rank}</div>` : "";
+    const rankRow = hasDisplayRank(student?.rank)
+      ? `
+        <tr>
+          <td class="td-rank-label">Rank</td>
+          <td colspan="${getScholasticColumnCount() - 1}" class="td-rank-value">
+            <span class="rank-highlight">${student.rank}</span>
+          </td>
+        </tr>
+      `
+      : "";
 
     const grandGradeCell = `
       ${computedGrandGrade ? `<div class="grand-grade-big">${computedGrandGrade}</div>` : ``}
       <div class="grand-percent-highlight">
         ${grandPct != null ? `${formatNumber(grandPct)}%` : "-"}
       </div>
-      ${rankHtml}
     `;
 
     const term1PctCell = `<div style="font-weight:900">${formatPercent(t1?.percent)}</div>`;
@@ -851,20 +865,22 @@ const FinalResultSummary = () => {
         <td class="td-total-label">TOTAL</td>
 
         ${blank1}
-        <td class="td-total">${t1 ? formatNumber(t1.total_weighted) : "-"}</td>
+        <td class="td-total"><div class="grand-total-small">${t1 ? formatNumber(t1.total_weighted) : "-"}</div></td>
         <td class="td-total">${term1PctCell}</td>
 
         ${blank2}
-        <td class="td-total">${t2 ? formatNumber(t2.total_weighted) : "-"}</td>
+        <td class="td-total"><div class="grand-total-small">${t2 ? formatNumber(t2.total_weighted) : "-"}</div></td>
         <td class="td-total">${term2PctCell}</td>
 
-        <td class="td-grand"><div class="grand-total-big">${formatNumber(grandTotal)}</div></td>
+        <td class="td-grand"><div class="grand-total-small">${formatNumber(grandTotal)}</div></td>
         <td class="td-grand">${grandGradeCell}</td>
       </tr>
+      ${rankRow}
     `;
   };
 
-  const buildCoScholasticPdfHtml_TwoTerms = (studentId) => {
+  const buildCoScholasticPdfHtml_TwoTerms = (student) => {
+    const studentId = student?.id;
     const t1 = term1Id ? coScholasticByTerm[String(term1Id)] || [] : [];
     const t2 = term2Id ? coScholasticByTerm[String(term2Id)] || [] : [];
 
@@ -881,13 +897,24 @@ const FinalResultSummary = () => {
       else areasMap.set(g.area_id, { area_name: g.area_name, t1: null, t2: g });
     });
 
+    const drawingT1 = getDrawingGradeForTerm(student, term1Id, exams, gradeSchema);
+    const drawingT2 = getDrawingGradeForTerm(student, term2Id, exams, gradeSchema);
+
+    if (drawingT1 !== "-" || drawingT2 !== "-") {
+      areasMap.set("__drawing__", {
+        area_name: "Drawing",
+        t1: { grade: drawingT1 },
+        t2: { grade: drawingT2 },
+      });
+    }
+
     const rows = Array.from(areasMap.values());
 
     return `
       <div class="section-title">
         <div class="section-title-left">
           <div class="section-pill">Co-Scholastic</div>
-          <h5 style="margin:0;color:#0b1b3a">Co-Scholastic (Term-wise)</h5>
+          <h5 style="margin:0;color:#0b1b3a;font-size:15px">Co-Scholastic Area</h5>
         </div>
       </div>
       <table class="tbl">
@@ -933,7 +960,7 @@ const FinalResultSummary = () => {
       <div class="section-title">
         <div class="section-title-left">
           <div class="section-pill">Attendance</div>
-          <h5 style="margin:0;color:#0b1b3a">Attendance (Term-wise)</h5>
+          <h5 style="margin:0;color:#0b1b3a;font-size:15px">Attendance</h5>
         </div>
       </div>
       <table class="tbl">
@@ -947,13 +974,13 @@ const FinalResultSummary = () => {
           <tr>
             <td>
               <div style="font-weight:900">${t1Text}</div>
-              <div class="muted" style="margin-top:2px;font-size:10px">${
+              <div class="muted" style="margin-top:1px;font-size:11px">${
                 t1Pct != null ? `${formatNumber(t1Pct)}%` : "-"
               }</div>
             </td>
             <td>
               <div style="font-weight:900">${t2Text}</div>
-              <div class="muted" style="margin-top:2px;font-size:10px">${
+              <div class="muted" style="margin-top:1px;font-size:11px">${
                 t2Pct != null ? `${formatNumber(t2Pct)}%` : "-"
               }</div>
             </td>
@@ -963,7 +990,6 @@ const FinalResultSummary = () => {
     `;
   };
 
-  // ✅ Remarks ONLY Term-II data BUT no term label/tag (PDF)
   const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
     const r2 = term2Id ? remarksByTerm[String(term2Id)]?.[studentId] : null;
 
@@ -971,7 +997,7 @@ const FinalResultSummary = () => {
       <div class="section-title">
         <div class="section-title-left">
           <div class="section-pill">Remarks</div>
-          <h5 style="margin:0;color:#0b1b3a">Remarks</h5>
+          <h5 style="margin:0;color:#0b1b3a;font-size:15px">Teacher's Remarks</h5>
         </div>
       </div>
 
@@ -981,9 +1007,6 @@ const FinalResultSummary = () => {
     `;
   };
 
-  /* ============================================================
-   * ✅ PDF Selection helper
-   * ============================================================ */
   const getStudentsForPdf = () => {
     if (!reportData?.length) return [];
 
@@ -1000,7 +1023,6 @@ const FinalResultSummary = () => {
       const minV = Math.min(a, b);
       const maxV = Math.max(a, b);
 
-      // Range by Roll No. (from studentInfoMap)
       return reportData.filter((stu) => {
         const info = studentInfoMap[stu.id] || {};
         const roll = Number(info?.roll_number);
@@ -1012,13 +1034,12 @@ const FinalResultSummary = () => {
   };
 
   const buildCardsHtml = (studentsForPdf = reportData || []) => {
-    // ✅ Styles ONCE (not repeated per student) + tightened for 1-page
     const styles = `
       <style>
         * { box-sizing: border-box; }
         body {
           font-family: "Helvetica", Arial, sans-serif;
-          font-size: 12px;
+          font-size: 13px;
           color: #0f172a;
           background:
             radial-gradient(1100px 600px at 12% 0%, rgba(59,130,246,0.18), transparent 60%),
@@ -1027,8 +1048,7 @@ const FinalResultSummary = () => {
             linear-gradient(180deg, #eef5ff 0%, #fbfdff 100%);
         }
 
-        /* ✅ smaller margins to prevent 2 pages */
-        @page { margin: 22px 16px; }
+        @page { margin: 12px 10px; }
 
         section { page-break-after: always; }
         section:last-child { page-break-after: auto; }
@@ -1037,62 +1057,69 @@ const FinalResultSummary = () => {
 
         .panel {
           border: 1px solid rgba(199,210,254,0.85);
-          border-radius: 16px;
-          padding: 10px;
+          border-radius: 14px;
+          padding: 9px;
           background: linear-gradient(180deg, rgba(255,255,255,0.96) 0%, rgba(248,251,255,0.96) 100%);
-          box-shadow: 0 10px 22px rgba(10, 30, 80, 0.10);
+          box-shadow: 0 8px 18px rgba(10, 30, 80, 0.09);
           position: relative;
           overflow: hidden;
         }
-        .panel:before{
-          content:"";
-          position:absolute; inset:-60px -60px auto auto;
-          width:180px; height:180px; border-radius:999px;
-          background: radial-gradient(circle at 30% 30%, rgba(99,102,241,0.22), transparent 60%);
-          transform: rotate(12deg);
-          pointer-events:none;
+
+        .header-flex {
+          display:flex;
+          align-items:flex-start;
+          justify-content:space-between;
+          gap:10px;
         }
 
-        .header-flex { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+        .header-logo {
+          height: 100px;
+          width: auto;
+          object-fit: contain;
+        }
+
         .student-photo {
-          width: 76px; height: 88px; border-radius: 14px;
+          width: 104px;
+          height: 126px;
+          border-radius: 12px;
           object-fit: cover;
           border: 2px solid rgba(191,219,254,1);
           box-shadow: 0 6px 14px rgba(0,0,0,0.14);
           background:#fff;
         }
 
-        .top-strip{
-          display:flex; align-items:center; justify-content:space-between; gap:12px;
-          padding:8px 10px;
-          border-radius: 16px;
-          background: linear-gradient(90deg, rgba(59,130,246,0.18), rgba(16,185,129,0.12), rgba(168,85,247,0.10));
-          border: 1px solid rgba(203,213,225,0.75);
-          margin-bottom: 8px;
-        }
-
         .grid-info{
           display:grid;
           grid-template-columns: repeat(3, minmax(0, 1fr));
           gap: 6px 8px;
-          font-size: 12px;
-          margin-top: 8px;
+          font-size: 13px;
+          margin-top: 2px;
         }
-        .kv{ padding: 6px 8px; border-radius: 14px; background: rgba(255,255,255,0.75); border:1px solid rgba(226,232,240,0.9); }
+
+        .kv{
+          padding: 6px 8px;
+          border-radius: 10px;
+          background: rgba(255,255,255,0.8);
+          border:1px solid rgba(226,232,240,0.9);
+          line-height: 1.25;
+        }
+
         .kv b{ color:#0b1b3a; }
 
         .section-title{
           display:flex;
           align-items:center;
           justify-content:space-between;
-          margin-top: 10px;
-          margin-bottom: 6px;
+          margin-top: 8px;
+          margin-bottom: 4px;
         }
-        .section-title-left{ display:flex; align-items:center; gap:10px; }
+
+        .section-title-left{ display:flex; align-items:center; gap:8px; }
+
         .section-pill{
-          font-size: 10px;
+          font-size: 9px;
           font-weight: 900;
-          padding: 4px 10px;
+          padding: 3px 8px;
           border-radius: 999px;
           background: rgba(59,130,246,0.12);
           border: 1px solid rgba(59,130,246,0.22);
@@ -1101,23 +1128,22 @@ const FinalResultSummary = () => {
           text-transform: uppercase;
         }
 
-        .schema-box{
-          border: 1px solid rgba(203,213,225,0.9);
-          padding: 8px 10px;
-          border-radius: 14px;
-          background: rgba(255,255,255,0.86);
-          line-height: 1.45;
-        }
-
         .tbl { width: 100%; border-collapse: collapse; background: rgba(255,255,255,0.90); }
 
-        /* ✅ Slightly bigger font, but less padding so it doesn't take more space */
         .tbl th, .tbl td {
           border: 1px solid rgba(148,163,184,0.9);
-          padding: 4px 4px;
+          padding: 4px 5px;
           text-align: center;
           vertical-align: middle;
-          line-height: 1.12;
+          line-height: 1.15;
+          font-size: 12px;
+          white-space: nowrap;
+        }
+
+        .tbl td:first-child,
+        .tbl th:first-child {
+          text-align: left !important;
+          white-space: normal !important;
         }
 
         .tbl tbody tr:nth-child(odd) td { background: rgba(255,255,255,0.92); }
@@ -1127,16 +1153,22 @@ const FinalResultSummary = () => {
           background: linear-gradient(180deg,#e6f7ff,#dbeafe);
           color:#08335a;
           text-align:left;
+          font-size: 12px;
         }
+
         .th-term{
           background: linear-gradient(180deg,#dbeafe,#bfdbfe);
           color:#08335a;
+          font-size: 12px;
         }
+
         .th-grand{
           background: linear-gradient(180deg,#c7d2fe,#a5b4fc);
           color:#08335a;
+          font-size: 12px;
         }
-        .th-comp{ background:#eef6ff; font-weight:700; }
+
+        .th-comp{ background:#eef6ff; font-weight:700; font-size:12px; }
         .th-comp.strong{ font-weight:900; }
 
         .td-subject{
@@ -1144,95 +1176,118 @@ const FinalResultSummary = () => {
           font-weight: 900;
           text-align:left;
           white-space: normal;
+          font-size: 12px;
         }
+
         .td-strong{ font-weight: 900; }
-        .td-total-label{
+
+        .td-total-label,
+        .td-rank-label{
           background: linear-gradient(180deg,#c7d2fe,#a5b4fc);
           font-weight: 900;
           text-align:left;
           color:#0b1b3a;
+          font-size: 12px;
         }
+
         .td-total{ background:#f2f7ff; font-weight:900; }
         .td-grand{ background:#e0f2fe; font-weight:900; }
 
-        /* ✅ Grand Total font normal (not bigger), bold ok */
-        .grand-total-big{
+        .td-rank-value{
+          background: rgba(255,255,255,0.92);
           font-weight: 900;
+          text-align: right !important;
+          padding-right: 10px !important;
+          color:#0b1b3a;
           font-size: 12px;
+        }
+
+        .grand-total-small{
+          font-weight: 900;
+          font-size: 11px;
           letter-spacing: 0.1px;
         }
+
         .grand-grade-big{
           font-weight: 900;
           font-size: 12px;
         }
 
-        /* ✅ Highlight Grand Total %age */
         .grand-percent-highlight{
-          margin-top: 2px;
+          margin-top: 1px;
           font-size: 11px;
           font-weight: 900;
           display: inline-block;
-          padding: 2px 8px;
-          border-radius: 10px;
+          padding: 1px 7px;
+          border-radius: 8px;
           background: rgba(255, 243, 199, 0.95);
           border: 1px solid rgba(251, 191, 36, 0.55);
           color: #0b1b3a;
+        }
+
+        .rank-highlight{
+          display: inline-block;
+          padding: 1px 7px;
+          border-radius: 8px;
+          background: rgba(255, 243, 199, 0.95);
+          border: 1px solid rgba(251, 191, 36, 0.55);
+          color: #0b1b3a;
+          font-size: 11px;
+          font-weight: 900;
+          line-height: 1.1;
         }
 
         .muted{ color:#475569; }
 
         .remarks-card{
           border:1px solid rgba(226,232,240,0.9);
-          border-radius: 14px;
+          border-radius: 12px;
           background: rgba(255,255,255,0.86);
           overflow:hidden;
         }
+
         .remarks-body{
-          padding: 8px 9px;
-          min-height: 34px;
-          line-height: 1.45;
+          padding: 7px 9px;
+          min-height: 32px;
+          line-height: 1.35;
+          font-size: 13px;
         }
 
-        /* ✅ side-by-side blocks to save height */
         .two-col{
           display:grid;
           grid-template-columns: 1.35fr 0.65fr;
-          gap: 10px;
-          margin-top: 10px;
+          gap: 8px;
+          margin-top: 6px;
         }
 
-        /* ✅ rank only in Grand Total cell */
-        .rank-inline{
-          display:inline-block;
-          margin-top:6px;
-          padding:2px 10px;
-          border-radius:999px;
-          border:1px solid rgba(148,163,184,0.9);
-          background: rgba(255,255,255,0.75);
-          font-weight:900;
-          color:#334155;
-          font-size:10px;
+        .grade-footer-note{
+          margin-top: 6px;
+          margin-bottom: 6px;
+          font-size: 11px;
+          color: #334155;
+          border-top: 1px dashed rgba(148,163,184,0.7);
+          padding-top: 5px;
+          line-height: 1.2;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
         }
-
-        /* ✅ Slight increase in table font without growing height */
-        th, td { font-size: 11px; white-space: nowrap; }
-        td:first-child, th:first-child { white-space: normal; }
       </style>
     `;
+
+    const gradeFooterText = buildGradeRangeFooterText(gradeSchema);
 
     const blocks = (studentsForPdf || []).map((student) => {
       const info = studentInfoMap[student.id] || {};
       const studentPhotoSrc = info?.photo ? buildStudentPhotoURL(info.photo) : NO_PHOTO_SVG;
 
-      const subjectsForStudent = Array.from(
-        new Set((student.components || []).map((c) => c.subject_name))
-      );
+      const subjectsForStudent = getNonDrawingSubjects(student);
 
       const scholasticTable = `
         <div class="section-title">
           <div class="section-title-left">
             <div class="section-pill">Scholastic</div>
-            <h5 style="margin:0;color:#0b1b3a">Scholastic Areas (Term-wise)</h5>
+            <h5 style="margin:0;color:#0b1b3a;font-size:15px">Scholastic Areas (Term-wise)</h5>
           </div>
         </div>
         <table class="tbl">
@@ -1244,21 +1299,22 @@ const FinalResultSummary = () => {
         </table>
       `;
 
-      const gradeSchemaBlock = buildGradeSchemaInlineHtml(); // ✅ ABOVE Co-Scholastic
-      const coScholasticTable = buildCoScholasticPdfHtml_TwoTerms(student.id);
+      const coScholasticTable = buildCoScholasticPdfHtml_TwoTerms(student);
       const attendanceTable = buildAttendancePdfHtml_TermWise(student.id);
       const remarksBlock = buildTeacherRemarksPdfHtml_TermWise(student.id);
 
-      const headerHtml = reportFormat?.header_html
+      const cleanHeaderHtml = sanitizeHeaderHtml(reportFormat?.header_html || "");
+
+      const headerHtml = cleanHeaderHtml
         ? `
-          <div style="margin-bottom:8px">
+          <div style="margin-bottom:6px">
             <div class="header-flex">
               ${
                 reportFormat.school_logo_url
-                  ? `<img src="${reportFormat.school_logo_url}" alt="School Logo" style="height:68px" />`
-                  : `<span style="width:68px"></span>`
+                  ? `<img src="${reportFormat.school_logo_url}" alt="School Logo" class="header-logo" />`
+                  : `<span style="width:90px"></span>`
               }
-              <div style="text-align:center;flex:1">${reportFormat.header_html}</div>
+              <div style="text-align:center;flex:1;font-size:14px;line-height:1.32">${cleanHeaderHtml}</div>
               <img src="${studentPhotoSrc}" alt="Student Photo" class="student-photo" />
             </div>
           </div>
@@ -1266,7 +1322,7 @@ const FinalResultSummary = () => {
         : "";
 
       const footerHtml = reportFormat?.footer_html
-        ? `<div style="margin-top:8px;text-align:center;font-size:11px">${reportFormat.footer_html}</div>`
+        ? `<div style="margin-top:6px;text-align:center;font-size:11px">${reportFormat.footer_html}</div>`
         : "";
 
       const dobValRaw = info?.Date_Of_Birth || info?.date_of_birth || info?.dob || "";
@@ -1274,25 +1330,16 @@ const FinalResultSummary = () => {
       const fatherVal = info?.father_name || "-";
       const motherVal = info?.mother_name || "-";
 
-      // ✅ Rank REMOVED from top-strip + grid (now only in Grand Total cell)
       const studentInfoBlock = `
-        <div class="top-strip">
-          <div style="font-weight:900;color:#0b1b3a;font-size:13px">Report Card</div>
-        </div>
-
-        <div class="panel" style="margin-bottom:10px">
+        <div class="panel" style="margin-bottom:8px">
           <div class="grid-info">
             <div class="kv"><b>Student Name:</b> ${info?.name || "-"}</div>
             <div class="kv"><b>Admission No.:</b> ${info?.admission_number || "-"}</div>
-            <div class="kv"><b>Roll No.:</b> ${info?.roll_number || "-"}</div>
-
             <div class="kv"><b>Class / Section:</b> ${(info?.Class?.class_name || "-")} - ${(info?.Section?.section_name || "-")}</div>
-            <div class="kv"><b>Date of Birth (DOB):</b> ${dobVal}</div>
-            <div class="kv"><b>Father / Guardian:</b> ${fatherVal}</div>
 
-            <div class="kv"><b>Mother Name:</b> ${motherVal}</div>
-
-            <div class="kv"><b> </b> </div>
+            <div class="kv"><b>Date of Birth:</b> ${dobVal}</div>
+            <div class="kv"><b>Mother's Name:</b> ${motherVal}</div>
+            <div class="kv"><b>Father's Name:</b> ${fatherVal}</div>
           </div>
         </div>
       `;
@@ -1302,10 +1349,17 @@ const FinalResultSummary = () => {
           ${headerHtml}
           ${studentInfoBlock}
           ${scholasticTable}
-          ${gradeSchemaBlock}
+
+          ${
+            gradeFooterText
+              ? `<div class="grade-footer-note"><b>Grade Scale:</b> ${gradeFooterText}</div>`
+              : ""
+          }
 
           <div class="two-col">
-            <div>${coScholasticTable}</div>
+            <div>
+              ${coScholasticTable}
+            </div>
             <div>${attendanceTable}</div>
           </div>
 
@@ -1315,7 +1369,6 @@ const FinalResultSummary = () => {
       `;
     });
 
-    // ✅ styles once in head
     return `<!doctype html><html><head><meta charset="utf-8" />${styles}</head><body>${blocks.join(
       ""
     )}</body></html>`;
@@ -1416,10 +1469,8 @@ const FinalResultSummary = () => {
     }
   };
 
-  /* ============================================================
-   * ✅ Co-Scholastic screen (2 terms)
-   * ============================================================ */
-  const renderCoScholasticTwoTermsTable = (studentId) => {
+  const renderCoScholasticTwoTermsTable = (student) => {
+    const studentId = student?.id;
     const t1 = term1Id ? coScholasticByTerm[String(term1Id)] || [] : [];
     const t2 = term2Id ? coScholasticByTerm[String(term2Id)] || [] : [];
 
@@ -1436,6 +1487,17 @@ const FinalResultSummary = () => {
       else areasMap.set(g.area_id, { area_name: g.area_name, t1: null, t2: g });
     });
 
+    const drawingT1 = getDrawingGradeForTerm(student, term1Id, exams, gradeSchema);
+    const drawingT2 = getDrawingGradeForTerm(student, term2Id, exams, gradeSchema);
+
+    if (drawingT1 !== "-" || drawingT2 !== "-") {
+      areasMap.set("__drawing__", {
+        area_name: "Drawing",
+        t1: { grade: drawingT1 },
+        t2: { grade: drawingT2 },
+      });
+    }
+
     const rows = Array.from(areasMap.values());
 
     return (
@@ -1448,6 +1510,7 @@ const FinalResultSummary = () => {
                   background: "linear-gradient(180deg,#e6f7ff,#dbeafe)",
                   color: "#08335a",
                   textAlign: "left",
+                  fontSize: "14px",
                 }}
               >
                 Area
@@ -1456,6 +1519,7 @@ const FinalResultSummary = () => {
                 style={{
                   background: "linear-gradient(180deg,#dbeafe,#bfdbfe)",
                   color: "#08335a",
+                  fontSize: "14px",
                 }}
               >
                 {term1Id ? termLabel(term1Id) : "Term-I"} Grade
@@ -1464,6 +1528,7 @@ const FinalResultSummary = () => {
                 style={{
                   background: "linear-gradient(180deg,#dbeafe,#bfdbfe)",
                   color: "#08335a",
+                  fontSize: "14px",
                 }}
               >
                 {term2Id ? termLabel(term2Id) : "Term-II"} Grade
@@ -1473,9 +1538,11 @@ const FinalResultSummary = () => {
           <tbody>
             {rows.map((r, idx) => (
               <tr key={idx}>
-                <td style={{ textAlign: "left", fontWeight: "bold" }}>{r.area_name || "-"}</td>
-                <td>{r.t1?.grade || "-"}</td>
-                <td>{r.t2?.grade || "-"}</td>
+                <td style={{ textAlign: "left", fontWeight: "bold", fontSize: "14px" }}>
+                  {r.area_name || "-"}
+                </td>
+                <td style={{ fontSize: "14px" }}>{r.t1?.grade || "-"}</td>
+                <td style={{ fontSize: "14px" }}>{r.t2?.grade || "-"}</td>
               </tr>
             ))}
             {rows.length === 0 && (
@@ -1506,25 +1573,37 @@ const FinalResultSummary = () => {
         <table className="table table-bordered text-center small">
           <thead>
             <tr>
-              <th style={{ background: "linear-gradient(180deg,#e6f7ff,#dbeafe)", color: "#08335a" }}>
+              <th
+                style={{
+                  background: "linear-gradient(180deg,#e6f7ff,#dbeafe)",
+                  color: "#08335a",
+                  fontSize: "14px",
+                }}
+              >
                 {term1Id ? termLabel(term1Id) : "Term-I"}
               </th>
-              <th style={{ background: "linear-gradient(180deg,#e6f7ff,#dbeafe)", color: "#08335a" }}>
+              <th
+                style={{
+                  background: "linear-gradient(180deg,#e6f7ff,#dbeafe)",
+                  color: "#08335a",
+                  fontSize: "14px",
+                }}
+              >
                 {term2Id ? termLabel(term2Id) : "Term-II"}
               </th>
             </tr>
           </thead>
           <tbody>
             <tr>
-              <td style={{ fontWeight: 900 }}>
+              <td style={{ fontWeight: 900, fontSize: "14px" }}>
                 <div>{t1Text}</div>
-                <div className="text-muted" style={{ fontSize: 11 }}>
+                <div className="text-muted" style={{ fontSize: 12 }}>
                   {t1Pct != null ? `${formatNumber(t1Pct)}%` : "-"}
                 </div>
               </td>
-              <td style={{ fontWeight: 900 }}>
+              <td style={{ fontWeight: 900, fontSize: "14px" }}>
                 <div>{t2Text}</div>
-                <div className="text-muted" style={{ fontSize: 11 }}>
+                <div className="text-muted" style={{ fontSize: 12 }}>
                   {t2Pct != null ? `${formatNumber(t2Pct)}%` : "-"}
                 </div>
               </td>
@@ -1535,16 +1614,17 @@ const FinalResultSummary = () => {
     );
   };
 
-  // ✅ Remarks ONLY Term-II data (screen) but NO term label/tag
   const renderTeacherRemarksTermWise = (studentId) => {
     const r2 = term2Id ? remarksByTerm[String(term2Id)]?.[studentId] : null;
 
     return (
       <div className="panel small">
-        <div>{(r2 || "-").trim() || "-"}</div>
+        <div style={{ fontSize: "14px", lineHeight: 1.45 }}>{(r2 || "-").trim() || "-"}</div>
       </div>
     );
   };
+
+  const gradeFooterText = buildGradeRangeFooterText(gradeSchema);
 
   return (
     <div className="container mt-4">
@@ -1575,50 +1655,31 @@ const FinalResultSummary = () => {
           position: relative;
           overflow: hidden;
         }
-        .report-card:before{
-          content:"";
-          position:absolute; inset:-90px -90px auto auto;
-          width:220px; height:220px; border-radius:999px;
-          background: radial-gradient(circle at 30% 30%, rgba(99,102,241,0.22), transparent 60%);
-          transform: rotate(10deg);
-          pointer-events:none;
-        }
         .panel {
           background: rgba(255,255,255,0.92);
           border: 1px solid rgba(199,210,254,0.75);
           border-radius: 16px;
-          padding: 12px;
+          padding: 10px;
           box-shadow: 0 8px 18px rgba(10, 30, 80, 0.08);
-        }
-        .schema-box{
-          border: 1px solid rgba(203,213,225,0.9);
-          padding: 10px 12px;
-          border-radius: 14px;
-          background: rgba(255,255,255,0.86);
-          line-height: 1.45;
         }
         .report-card .table-responsive {
           overflow-x: auto;
           -webkit-overflow-scrolling: touch;
         }
-
-        /* ✅ Slightly bigger font, but less padding so it doesn't take more space */
         .report-card .table>:not(caption)>*>*{
-          padding: 0.35rem 0.42rem !important;
+          padding: 0.4rem 0.46rem !important;
           line-height: 1.12;
         }
         .report-card th, .report-card td {
           white-space: nowrap;
-          font-size: 13px;
+          font-size: 14px;
           vertical-align: middle;
         }
-
         .report-card tbody tr:nth-child(odd) td { background: rgba(255,255,255,0.92); }
         .report-card tbody tr:nth-child(even) td { background: rgba(241,245,255,0.75); }
-
         .report-card td:first-child, .report-card th:first-child {
           white-space: normal;
-          min-width: 150px; /* was 160px (saves space) */
+          min-width: 180px;
         }
         .sticky-first-col {
           position: sticky;
@@ -1626,7 +1687,7 @@ const FinalResultSummary = () => {
           z-index: 2;
           background: linear-gradient(180deg,#e6f7ff,#dbeafe);
           text-align: left;
-          font-size: 13px;
+          font-size: 14px;
         }
         .sticky-first-col-td {
           position: sticky;
@@ -1634,12 +1695,11 @@ const FinalResultSummary = () => {
           z-index: 1;
           background: rgba(230,247,255,0.92);
           text-align: left;
-          font-size: 13px;
+          font-size: 14px;
           font-weight: 900;
         }
-
         .section-pill {
-          font-size: 11px;
+          font-size: 10px;
           font-weight: 900;
           padding: 4px 10px;
           border-radius: 999px;
@@ -1649,19 +1709,15 @@ const FinalResultSummary = () => {
           letter-spacing: 0.3px;
           text-transform: uppercase;
         }
-
-        /* ✅ Grand Total font normal (not bigger), bold ok */
-        .grand-total-big {
+        .grand-total-small {
           font-weight: 900;
-          font-size: 13px;
+          font-size: 12px;
           letter-spacing: 0.1px;
         }
         .grand-grade-big {
           font-weight: 900;
-          font-size: 12px;
+          font-size: 13px;
         }
-
-        /* ✅ Highlight Grand Total %age (screen) */
         .grand-percent-highlight{
           margin-top: 2px;
           font-size: 12px;
@@ -1673,18 +1729,51 @@ const FinalResultSummary = () => {
           border: 1px solid rgba(251, 191, 36, 0.55);
           color: #0b1b3a;
         }
-
-        /* ✅ Rank inline only in Grand Total cell */
-        .rank-pill-inline{
-          display:inline-block;
-          margin-top:4px;
-          padding:2px 10px;
-          border-radius:999px;
-          border:1px solid rgba(148,163,184,0.9);
-          background: rgba(255,255,255,0.75);
-          font-weight:900;
-          color:#334155;
-          font-size:11px;
+        .rank-highlight{
+          display: inline-block;
+          padding: 2px 8px;
+          border-radius: 10px;
+          background: rgba(255, 243, 199, 0.95);
+          border: 1px solid rgba(251, 191, 36, 0.55);
+          color: #0b1b3a;
+          font-size: 12px;
+          font-weight: 900;
+          line-height: 1.1;
+        }
+        .student-info-grid {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 8px 10px;
+        }
+        .student-info-item {
+          font-size: 14px;
+          line-height: 1.3;
+        }
+        .rank-row-label {
+          background: linear-gradient(180deg,#c7d2fe,#a5b4fc) !important;
+          color: #0b1b3a;
+          font-weight: 900;
+          text-align: left;
+          font-size: 14px;
+        }
+        .rank-row-value {
+          font-weight: 900;
+          text-align: right;
+          padding-right: 16px !important;
+          background: rgba(255,255,255,0.92);
+          color:#0b1b3a;
+          font-size: 14px;
+        }
+        .grade-footer-note{
+          margin-top: 8px;
+          margin-bottom: 8px;
+          font-size: 13px;
+          color: #334155;
+          border-top: 1px dashed rgba(148,163,184,0.7);
+          padding-top: 6px;
+          line-height: 1.2;
+          white-space: nowrap;
+          overflow-x: auto;
         }
       `}</style>
 
@@ -1693,7 +1782,7 @@ const FinalResultSummary = () => {
           <div>
             <h2 className="mb-0">📘 Final Result Summary (Term-I & Term-II)</h2>
             <div className="text-muted small mt-1">
-              Professional print-ready report cards • Term-wise totals • Term-wise attendance
+              Professional print-ready report cards • compact layout • better single-page fit
             </div>
           </div>
           <div className="section-pill">Print Ready</div>
@@ -1817,13 +1906,12 @@ const FinalResultSummary = () => {
             onChange={() => setShowTotals((prev) => !prev)}
           />
           <label className="form-check-label" htmlFor="toggleTotals">
-            Show Total + Grade Columns (No separate % column)
+            Show Total + Grade Columns
           </label>
         </div>
 
         {!loading && reportData.length > 0 && (
           <div className="mt-4">
-            {/* ✅ Print controls (All / Single / Range) */}
             <div className="panel mb-3">
               <div className="row g-2 align-items-end">
                 <div className="col-md-3">
@@ -1853,7 +1941,6 @@ const FinalResultSummary = () => {
                         const info = studentInfoMap[s.id] || {};
                         return (
                           <option key={s.id} value={s.id}>
-                            {info?.roll_number ? `Roll ${info.roll_number} - ` : ""}
                             {info?.name || `Student #${s.id}`}
                           </option>
                         );
@@ -1904,9 +1991,7 @@ const FinalResultSummary = () => {
               const info = studentInfoMap[student.id] || {};
               const studentPhotoSrc = info?.photo ? buildStudentPhotoURL(info.photo) : NO_PHOTO_SVG;
 
-              const subjectsForStudent = Array.from(
-                new Set((student.components || []).map((c) => c.subject_name))
-              );
+              const subjectsForStudent = getNonDrawingSubjects(student);
 
               const t1 = term1Id ? getStudentTermOverall(student, term1Id) : null;
               const t2 = term2Id ? getStudentTermOverall(student, term2Id) : null;
@@ -1916,33 +2001,36 @@ const FinalResultSummary = () => {
               const fatherVal = info?.father_name || "-";
               const motherVal = info?.mother_name || "-";
 
+              const cleanHeaderHtml = sanitizeHeaderHtml(reportFormat?.header_html || "");
+
               return (
                 <div key={student.id} className="mb-5 p-3 report-card">
-                  {reportFormat?.header_html && (
-                    <div className="report-header mb-3">
-                      <div className="d-flex align-items-center justify-content-between gap-2 flex-wrap">
+                  {cleanHeaderHtml && (
+                    <div className="report-header mb-2">
+                      <div className="d-flex align-items-start justify-content-between gap-3 flex-wrap">
                         {reportFormat.school_logo_url ? (
                           <img
                             src={reportFormat.school_logo_url}
                             alt="School Logo"
-                            style={{ height: "80px" }}
+                            style={{ height: "100px", width: "auto", objectFit: "contain" }}
                           />
                         ) : (
-                          <div style={{ width: "80px" }} />
+                          <div style={{ width: "100px" }} />
                         )}
 
                         <div
                           className="flex-grow-1 text-center"
-                          dangerouslySetInnerHTML={{ __html: reportFormat.header_html }}
+                          style={{ fontSize: "15px", lineHeight: 1.32 }}
+                          dangerouslySetInnerHTML={{ __html: cleanHeaderHtml }}
                         />
 
                         <img
                           src={studentPhotoSrc}
                           alt="Student Photo"
                           style={{
-                            height: "98px",
-                            width: "84px",
-                            borderRadius: "14px",
+                            height: "126px",
+                            width: "104px",
+                            borderRadius: "12px",
                             objectFit: "cover",
                             border: "2px solid #bfdbfe",
                             boxShadow: "0 6px 14px rgba(0,0,0,0.14)",
@@ -1953,34 +2041,32 @@ const FinalResultSummary = () => {
                     </div>
                   )}
 
-                  <div className="panel mb-3">
-                    <div className="row g-2 small">
-                      <div className="col-md-6">
+                  <div className="panel mb-2">
+                    <div className="student-info-grid">
+                      <div className="student-info-item">
                         <strong>Student Name:</strong> {info?.name || "-"}
                       </div>
-                      <div className="col-md-6">
+                      <div className="student-info-item">
                         <strong>Admission No.:</strong> {info?.admission_number || "-"}
                       </div>
-                      <div className="col-md-4">
-                        <strong>Roll No.:</strong> {info?.roll_number || "-"}
-                      </div>
-                      <div className="col-md-4">
-                        <strong>Date of Birth (DOB):</strong> {dobVal}
-                      </div>
-                      <div className="col-md-4">
+                      <div className="student-info-item">
                         <strong>Class / Section:</strong> {info?.Class?.class_name || "-"} -{" "}
                         {info?.Section?.section_name || "-"}
                       </div>
-                      <div className="col-md-6">
-                        <strong>Father / Guardian:</strong> {fatherVal}
+
+                      <div className="student-info-item">
+                        <strong>Date of Birth:</strong> {dobVal}
                       </div>
-                      <div className="col-md-6">
-                        <strong>Mother Name:</strong> {motherVal}
+                      <div className="student-info-item">
+                        <strong>Mother's Name:</strong> {motherVal}
+                      </div>
+                      <div className="student-info-item">
+                        <strong>Father's Name:</strong> {fatherVal}
                       </div>
                     </div>
                   </div>
 
-                  <h5>Scholastic Areas (Term-wise)</h5>
+                  <h5 style={{ fontSize: "18px" }}>Scholastic Areas (Term-wise)</h5>
 
                   <div className="table-responsive">
                     <table className="table table-bordered text-center small">
@@ -2121,7 +2207,9 @@ const FinalResultSummary = () => {
 
                               {showTotals && (
                                 <>
-                                  <td style={{ fontWeight: 900 }}>{gMarks != null ? gMarks : "-"}</td>
+                                  <td style={{ fontWeight: 900 }}>
+                                    <div className="grand-total-small">{gMarks != null ? gMarks : "-"}</div>
+                                  </td>
                                   <td style={{ fontWeight: 900 }}>{gGrade || "-"}</td>
                                 </>
                               )}
@@ -2130,91 +2218,100 @@ const FinalResultSummary = () => {
                         })}
 
                         {showTotals && (
-                          <tr>
-                            <td
-                              className="sticky-first-col-td"
-                              style={{
-                                background: "linear-gradient(180deg,#c7d2fe,#a5b4fc)",
-                                fontWeight: 900,
-                                textAlign: "left",
-                                color: "#0b1b3a",
-                              }}
-                            >
-                              TOTAL
-                            </td>
+                          <>
+                            <tr>
+                              <td
+                                className="sticky-first-col-td"
+                                style={{
+                                  background: "linear-gradient(180deg,#c7d2fe,#a5b4fc)",
+                                  fontWeight: 900,
+                                  textAlign: "left",
+                                  color: "#0b1b3a",
+                                }}
+                              >
+                                TOTAL
+                              </td>
 
-                            {term1Components.map((_, idx) => (
-                              <td key={`b1-${idx}`}></td>
-                            ))}
-                            <td style={{ backgroundColor: "#f2f7ff", fontWeight: 900 }}>
-                              {t1 ? formatNumber(t1.total_weighted) : "-"}
-                            </td>
-                            <td style={{ backgroundColor: "#f2f7ff", fontWeight: 900 }}>
-                              {formatPercent(t1?.percent)}
-                            </td>
+                              {term1Components.map((_, idx) => (
+                                <td key={`b1-${idx}`}></td>
+                              ))}
+                              <td style={{ backgroundColor: "#f2f7ff", fontWeight: 900 }}>
+                                <div className="grand-total-small">{t1 ? formatNumber(t1.total_weighted) : "-"}</div>
+                              </td>
+                              <td style={{ backgroundColor: "#f2f7ff", fontWeight: 900 }}>
+                                {formatPercent(t1?.percent)}
+                              </td>
 
-                            {term2Components.map((_, idx) => (
-                              <td key={`b2-${idx}`}></td>
-                            ))}
-                            <td style={{ backgroundColor: "#f2f7ff", fontWeight: 900 }}>
-                              {t2 ? formatNumber(t2.total_weighted) : "-"}
-                            </td>
-                            <td style={{ backgroundColor: "#f2f7ff", fontWeight: 900 }}>
-                              {formatPercent(t2?.percent)}
-                            </td>
+                              {term2Components.map((_, idx) => (
+                                <td key={`b2-${idx}`}></td>
+                              ))}
+                              <td style={{ backgroundColor: "#f2f7ff", fontWeight: 900 }}>
+                                <div className="grand-total-small">{t2 ? formatNumber(t2.total_weighted) : "-"}</div>
+                              </td>
+                              <td style={{ backgroundColor: "#f2f7ff", fontWeight: 900 }}>
+                                {formatPercent(t2?.percent)}
+                              </td>
 
-                            <td style={{ backgroundColor: "#e0f2fe" }}>
-                              <div className="grand-total-big">{formatNumber(student.total_weighted)}</div>
-                            </td>
+                              <td style={{ backgroundColor: "#e0f2fe" }}>
+                                <div className="grand-total-small">{formatNumber(student.total_weighted)}</div>
+                              </td>
 
-                            <td style={{ backgroundColor: "#e0f2fe" }}>
-                              {(() => {
-                                const gp = student?.grand_percent_weighted;
-                                const gGrade =
-                                  student?.total_grade_weighted ||
-                                  (gp != null ? gradeFromSchema(gp, gradeSchema) : null);
+                              <td style={{ backgroundColor: "#e0f2fe" }}>
+                                {(() => {
+                                  const gp = student?.grand_percent_weighted;
+                                  const gGrade =
+                                    student?.total_grade_weighted ||
+                                    (gp != null ? gradeFromSchema(gp, gradeSchema) : null);
 
-                                return (
-                                  <>
-                                    {gGrade && gGrade !== "-" ? (
-                                      <div className="grand-grade-big">{gGrade}</div>
-                                    ) : null}
-
-                                    <div className="grand-percent-highlight">
-                                      {gp != null ? `${formatNumber(gp)}%` : "-"}
-                                    </div>
-
-                                    <div style={{ marginTop: 4 }}>
-                                      {student?.rank ? (
-                                        <span className="rank-pill-inline">Rank {student.rank}</span>
+                                  return (
+                                    <>
+                                      {gGrade && gGrade !== "-" ? (
+                                        <div className="grand-grade-big">{gGrade}</div>
                                       ) : null}
-                                    </div>
-                                  </>
-                                );
-                              })()}
-                            </td>
-                          </tr>
+
+                                      <div className="grand-percent-highlight">
+                                        {gp != null ? `${formatNumber(gp)}%` : "-"}
+                                      </div>
+                                    </>
+                                  );
+                                })()}
+                              </td>
+                            </tr>
+
+                            {hasDisplayRank(student?.rank) && (
+                              <tr>
+                                <td className="rank-row-label">Rank</td>
+                                <td colSpan={getScholasticColumnCount() - 1} className="rank-row-value">
+                                  <span className="rank-highlight">{student.rank}</span>
+                                </td>
+                              </tr>
+                            )}
+                          </>
                         )}
                       </tbody>
                     </table>
                   </div>
 
-                  {renderGradeSchemaInline()}
+                  {gradeFooterText ? (
+                    <div className="grade-footer-note">
+                      <strong>Grade Scale:</strong> {gradeFooterText}
+                    </div>
+                  ) : null}
 
-                  <div className="d-flex align-items-center justify-content-between mt-4">
-                    <h5 className="mb-0">Co-Scholastic Areas (Term-wise)</h5>
+                  <div className="d-flex align-items-center justify-content-between mt-3">
+                    <h5 className="mb-0" style={{ fontSize: "18px" }}>Co-Scholastic Area</h5>
                     <div className="section-pill">Co-Scholastic</div>
                   </div>
-                  <div className="mt-2">{renderCoScholasticTwoTermsTable(student.id)}</div>
+                  <div className="mt-2">{renderCoScholasticTwoTermsTable(student)}</div>
 
-                  <div className="d-flex align-items-center justify-content-between mt-4">
-                    <h5 className="mb-0">Attendance (Term-wise)</h5>
+                  <div className="d-flex align-items-center justify-content-between mt-3">
+                    <h5 className="mb-0" style={{ fontSize: "18px" }}>Attendance</h5>
                     <div className="section-pill">Attendance</div>
                   </div>
                   <div className="mt-2">{renderAttendanceTermWise(student.id)}</div>
 
-                  <div className="d-flex align-items-center justify-content-between mt-4">
-                    <h5 className="mb-0">Remarks</h5>
+                  <div className="d-flex align-items-center justify-content-between mt-3">
+                    <h5 className="mb-0" style={{ fontSize: "18px" }}>Teacher's Remarks</h5>
                     <div className="section-pill">Remarks</div>
                   </div>
                   <div className="mt-2">{renderTeacherRemarksTermWise(student.id)}</div>
@@ -2231,7 +2328,6 @@ const FinalResultSummary = () => {
           </div>
         )}
 
-        {/* Progress Modal */}
         <Modal show={pdfProgressVisible} centered backdrop="static" keyboard={false}>
           <Modal.Header>
             <Modal.Title>Generating PDF</Modal.Title>

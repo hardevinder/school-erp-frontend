@@ -479,6 +479,14 @@ export default function TeacherDashboard() {
             badge: "NEW",
           },
 
+          {
+            label: "Admission Syllabus",
+            icon: "bi-journal-check",
+            path: "/admission-syllabus",
+            color: "var(--qa-orange)",
+            badge: "NEW",
+          },
+
           { label: "Request Leave", icon: "bi-box-arrow-in-down-left", path: "/employee-leave-request", color: "var(--qa-orange)" },
           { label: "My Attendance", icon: "bi-calendar2-week", path: "/my-attendance-calendar", color: "var(--qa-slate)" },
           { label: "Marks Entry", icon: "bi-pencil-square", path: "/marks-entry", color: "var(--qa-lime)" },
@@ -587,6 +595,16 @@ export default function TeacherDashboard() {
 
                 <button
                   type="button"
+                  className="btn btn-outline-light btn-sm"
+                  onClick={() => go("/admission-syllabus")}
+                  title="Open Admission Syllabus"
+                >
+                  <i className="bi bi-journal-check me-1" />
+                  Admission Syllabus
+                </button>
+
+                <button
+                  type="button"
                   className="btn btn-primary btn-sm"
                   onClick={() => setShowRemarks((s) => !s)}
                   title="Toggle Student Remarks (inline)"
@@ -609,6 +627,11 @@ export default function TeacherDashboard() {
             <button className="btn btn-outline-light btn-sm" onClick={() => go("/attendance-entry")}>
               <i className="bi bi-upload me-1" />
               Bulk Attendance Upload
+            </button>
+
+            <button className="btn btn-outline-light btn-sm" onClick={() => go("/admission-syllabus")}>
+              <i className="bi bi-journal-check me-1" />
+              Admission Syllabus
             </button>
 
             <button className="btn btn-outline-light btn-sm" onClick={() => go("/teacher-timetable-display")}>
