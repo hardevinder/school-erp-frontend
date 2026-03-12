@@ -1128,109 +1128,79 @@ const FinalResultSummary = () => {
           text-transform: uppercase;
         }
 
-        .tbl { 
-            width: 100%; 
-            border-collapse: collapse; 
-            background: rgba(255,255,255,0.95); 
-          }
+        .tbl { width: 100%; border-collapse: collapse; background: rgba(255,255,255,0.90); }
 
-          .tbl th, .tbl td {
-            border: 1px solid rgba(148,163,184,0.9);
-            padding: 7px 9px;
-            text-align: center;
-            vertical-align: middle;
-            line-height: 1.25;
-            font-size: 12px;
-            white-space: nowrap;
-          }
+        .tbl th, .tbl td {
+          border: 1px solid rgba(148,163,184,0.9);
+          padding: 4px 5px;
+          text-align: center;
+          vertical-align: middle;
+          line-height: 1.15;
+          font-size: 12px;
+          white-space: nowrap;
+        }
 
-          .tbl td:first-child,
-          .tbl th:first-child {
-            text-align: left !important;
-            white-space: normal !important;
-          }
+        .tbl td:first-child,
+        .tbl th:first-child {
+          text-align: left !important;
+          white-space: normal !important;
+        }
 
-          .tbl thead th{
-            background: linear-gradient(180deg,#1e3a8a,#1e40af);
-            color: #ffffff;
-            font-weight: 800;
-          }
+        .tbl tbody tr:nth-child(odd) td { background: rgba(255,255,255,0.92); }
+        .tbl tbody tr:nth-child(even) td { background: rgba(241,245,255,0.72); }
 
-          .tbl tbody td{
-            background: #fff7cc;
-          }
+        .th-subject{
+          background: linear-gradient(180deg,#e6f7ff,#dbeafe);
+          color:#08335a;
+          text-align:left;
+          font-size: 12px;
+        }
 
-          .tbl tbody tr:nth-child(even) td{
-            background: #fff2a8;
-          }
+        .th-term{
+          background: linear-gradient(180deg,#dbeafe,#bfdbfe);
+          color:#08335a;
+          font-size: 12px;
+        }
 
-          .th-subject{
-            background: linear-gradient(180deg,#1e3a8a,#1e40af);
-            color:#ffffff;
-            text-align:left;
-            font-size: 12px;
-          }
+        .th-grand{
+          background: linear-gradient(180deg,#c7d2fe,#a5b4fc);
+          color:#08335a;
+          font-size: 12px;
+        }
 
-          .th-term{
-            background: linear-gradient(180deg,#1e3a8a,#1e40af);
-            color:#ffffff;
-            font-size: 12px;
-          }
+        .th-comp{ background:#eef6ff; font-weight:700; font-size:12px; }
+        .th-comp.strong{ font-weight:900; }
 
-          .th-grand{
-            background: linear-gradient(180deg,#172554,#1e3a8a);
-            color:#ffffff;
-            font-size: 12px;
-          }
+        .td-subject{
+          background: rgba(230,247,255,0.90);
+          font-weight: 900;
+          text-align:left;
+          white-space: normal;
+          font-size: 12px;
+        }
 
-          .th-comp{
-            background: linear-gradient(180deg,#1e40af,#2563eb);
-            color:#ffffff;
-            font-weight:700;
-            font-size:12px;
-          }
+        .td-strong{ font-weight: 900; }
 
-          .th-comp.strong{ font-weight:900; }
+        .td-total-label,
+        .td-rank-label{
+          background: linear-gradient(180deg,#c7d2fe,#a5b4fc);
+          font-weight: 900;
+          text-align:left;
+          color:#0b1b3a;
+          font-size: 12px;
+        }
 
-          .td-subject{
-            background: #ffe68a;
-            font-weight: 900;
-            text-align:left;
-            white-space: normal;
-            font-size: 12px;
-          }
+        .td-total{ background:#f2f7ff; font-weight:900; }
+        .td-grand{ background:#e0f2fe; font-weight:900; }
 
-          .td-strong{ 
-            font-weight: 900; 
-          }
-
-          .td-total-label,
-          .td-rank-label{
-            background: linear-gradient(180deg,#1e3a8a,#1e40af);
-            font-weight: 900;
-            text-align:left;
-            color:#ffffff;
-            font-size: 12px;
-          }
-
-          .td-total{ 
-            background:#ffe066; 
-            font-weight:900; 
-          }
-
-          .td-grand{ 
-            background:#ffd43b; 
-            font-weight:900; 
-          }
-
-          .td-rank-value{
-            background: #fff7cc;
-            font-weight: 900;
-            text-align: right !important;
-            padding-right: 12px !important;
-            color:#0b1b3a;
-            font-size: 12px;
-          }
+        .td-rank-value{
+          background: rgba(255,255,255,0.92);
+          font-weight: 900;
+          text-align: right !important;
+          padding-right: 10px !important;
+          color:#0b1b3a;
+          font-size: 12px;
+        }
 
         .grand-total-small{
           font-weight: 900;
