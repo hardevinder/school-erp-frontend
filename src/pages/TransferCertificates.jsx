@@ -8,6 +8,7 @@ const getRoleFlags = () => {
   const singleRole = localStorage.getItem("userRole");
   const multiRoles = JSON.parse(localStorage.getItem("roles") || "[]");
   const roles = multiRoles.length ? multiRoles : [singleRole].filter(Boolean);
+
   return {
     roles,
     isAdmin: roles.includes("admin"),
@@ -15,8 +16,14 @@ const getRoleFlags = () => {
   };
 };
 
-// ---------- small helpers ----------
-const esc = (v = "") => String(v ?? "").replace(/"/g, "&quot;");
+// ---------- helpers ----------
+const esc = (v = "") =>
+  String(v ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+
 const toCSV = (arr) => (Array.isArray(arr) ? arr.join(", ") : "");
 const toLines = (arr) =>
   Array.isArray(arr)
@@ -24,6 +31,7 @@ const toLines = (arr) =>
     : String(arr || "")
         .split(",")
         .map((s) => s.trim())
+        .filter(Boolean)
         .join("\n");
 
 const fromLines = (str) =>
@@ -32,7 +40,6 @@ const fromLines = (str) =>
     .map((s) => s.trim())
     .filter(Boolean);
 
-// human-ish date
 const asYMD = (v) => {
   if (!v) return "";
   try {
@@ -48,18 +55,15 @@ const asDDMMYYYY = (v) => {
   if (!v) return "";
   const s = String(v).trim();
   if (/^\d{2}\/\d{2}\/\d{4}$/.test(s)) return s;
+
   const d = new Date(s);
   if (isNaN(d.getTime())) return s;
-  return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(
-    2,
-    "0"
-  )}/${d.getFullYear()}`;
+
+  return `${String(d.getDate()).padStart(2, "0")}/${String(
+    d.getMonth() + 1
+  ).padStart(2, "0")}/${d.getFullYear()}`;
 };
 
-/** ================== DATE NORMALIZER ==================
- * Returns a YYYY-MM-DD string suitable for storage / date input.
- * Accepts: YYYY-MM-DD, YYYY-MM-DDTHH:mm, DD-MM-YYYY, DD/MM/YYYY, etc.
- */
 const toDateInput = (v) => {
   if (!v) return "";
   const s = String(v).trim();
@@ -75,7 +79,10 @@ const toDateInput = (v) => {
   const dmy = s.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
   if (dmy) {
     const [, dd, mm, yyyy] = dmy;
-    return `${yyyy}-${String(mm).padStart(2, "0")}-${String(dd).padStart(2, "0")}`;
+    return `${yyyy}-${String(mm).padStart(2, "0")}-${String(dd).padStart(
+      2,
+      "0"
+    )}`;
   }
 
   const d = new Date(s);
@@ -84,18 +91,44 @@ const toDateInput = (v) => {
   return "";
 };
 
-// Ensure the record we pass to the modal has normalized dates
 const normalizeTcForModal = (tc = {}) => {
   const rawDob =
-    tc?.dob ?? tc?.date_of_birth ?? tc?.DOB ?? tc?.birthdate ?? tc?.birth_date ?? "";
+    tc?.dob ??
+    tc?.date_of_birth ??
+    tc?.DOB ??
+    tc?.birthdate ??
+    tc?.birth_date ??
+    "";
+
   const normDob = toDateInput(rawDob);
+
+  const rawExam = String(tc.last_exam_result || "").trim().toLowerCase();
+
+  let examPreset = "passed_aisse";
+  let examCustom = "";
+
+  if (!rawExam) {
+    examPreset = "passed_annual";
+  } else if (
+    rawExam.includes("passed annual school examination") ||
+    rawExam === "passed annual school examination"
+  ) {
+    examPreset = "passed_annual";
+  } else if (rawExam.includes("failed") || rawExam.includes("studying")) {
+    examPreset = "failed_studying";
+  } else if (rawExam.includes("aisse")) {
+    examPreset = "passed_aisse";
+  } else {
+    examPreset = "custom";
+    examCustom = tc.last_exam_result || "";
+  }
 
   return {
     ...tc,
     dob: normDob,
     dob_figures: asDDMMYYYY(normDob),
     dob_words: tc.dob_words || "",
-    dob_proof: tc.dob_proof || tc.proof_dob || "",
+    dob_proof: tc.dob_proof || tc.proof_dob || "Birth Certificate",
     first_admission_date: toDateInput(tc.first_admission_date),
     first_admission_class: tc.first_admission_class || tc.first_class || "",
     application_date: toDateInput(tc.application_date || tc.date_application),
@@ -106,6 +139,8 @@ const normalizeTcForModal = (tc = {}) => {
     failed_count: tc.failed_count,
     ncc_scout_guide: tc.ncc_scout_guide || tc.ncc_details || "",
     activities: tc.activities || tc.games_eca || "NA",
+    exam_preset: examPreset,
+    exam_custom: examCustom,
   };
 };
 
@@ -127,7 +162,9 @@ async function resolveStudentIdByAdmission(admission_number) {
   try {
     const r = await api.get("/students", { params: { admission_number: adm } });
     const arr = Array.isArray(r.data) ? r.data : [];
-    const hit = arr.find((s) => String(s.admission_number || "").trim() === adm);
+    const hit = arr.find(
+      (s) => String(s.admission_number || "").trim() === adm
+    );
     if (hit?.id) return Number(hit.id);
   } catch (e) {
     console.error("resolve by /students?admission_number failed", e);
@@ -136,14 +173,16 @@ async function resolveStudentIdByAdmission(admission_number) {
   return null;
 }
 
-// ---------- student search (name OR admission) ----------
+// ---------- student search ----------
 async function searchStudentsSmart(term) {
   const qRaw = String(term || "").trim();
   if (!qRaw) return [];
 
   const q = qRaw.toLowerCase();
 
-  const tries = [() => api.get("/students/search", { params: { q: qRaw, limit: 50 } })];
+  const tries = [
+    () => api.get("/students/search", { params: { q: qRaw, limit: 50 } }),
+  ];
 
   let arr = [];
   for (const fn of tries) {
@@ -154,25 +193,41 @@ async function searchStudentsSmart(term) {
       const raw = Array.isArray(data?.data)
         ? data.data
         : Array.isArray(data?.items)
-          ? data.items
-          : Array.isArray(data)
-            ? data
-            : Array.isArray(data?.rows)
-              ? data.rows
-              : [];
+        ? data.items
+        : Array.isArray(data)
+        ? data
+        : Array.isArray(data?.rows)
+        ? data.rows
+        : [];
 
       arr = raw.map((s) => ({
         id: s.id,
         name: (s.name || s.student_name || "").trim(),
-        admission_number: String(s.admission_number || s.admission_no || "").trim(),
+        admission_number: String(
+          s.admission_number || s.admission_no || ""
+        ).trim(),
         father_name: (s.father_name || s.father || "").trim(),
-        class_name: s.class?.name || s.class_name || "",
-        section_name: s.section?.name || s.section_name || "",
+        class_name:
+          s.class?.name ||
+          s.Class?.class_name ||
+          s.class_name ||
+          s.class?.class_name ||
+          "",
+        section_name:
+          s.section?.name ||
+          s.Section?.section_name ||
+          s.section_name ||
+          s.section?.section_name ||
+          "",
       }));
 
       break;
     } catch (e) {
-      console.error("student search failed:", e?.response?.status, e?.response?.data || e.message);
+      console.error(
+        "student search failed:",
+        e?.response?.status,
+        e?.response?.data || e.message
+      );
     }
   }
 
@@ -195,7 +250,6 @@ async function searchStudentsSmart(term) {
     if (name.includes(q)) sc += 150;
     sc += Math.max(0, 50 - adm.length);
     sc += Math.max(0, 50 - name.length);
-
     return sc;
   };
 
@@ -206,9 +260,13 @@ async function searchStudentsSmart(term) {
 function buildStudentLabel(s) {
   const adm = s.admission_number ? `(${s.admission_number})` : "";
   const cls = [s.class_name, s.section_name].filter(Boolean).join("-");
-  const tail = [s.father_name ? `F: ${s.father_name}` : "", cls ? `• ${cls}` : ""]
+  const tail = [
+    s.father_name ? `F: ${s.father_name}` : "",
+    cls ? `• ${cls}` : "",
+  ]
     .filter(Boolean)
     .join(" ");
+
   return `${s.name || "—"} ${adm}${tail ? " — " + tail : ""}`.trim();
 }
 
@@ -220,7 +278,8 @@ const modalHtmlTabbed = (tc = {}) => {
   const scYes = ["sc", "st", "obc", "sc/st/obc"].includes(cat);
 
   const failedYes = Number(s.failed_count || 0) > 0;
-  const qualYes = s.promoted === true || s.promoted === "true" || s.promoted === "Yes";
+  const qualYes =
+    s.promoted === true || s.promoted === "true" || s.promoted === "Yes";
   const feeYes = !!s.fee_concession;
   const nccYes = !!s.ncc_scout_guide;
 
@@ -258,7 +317,7 @@ const modalHtmlTabbed = (tc = {}) => {
 
     .tc-panel{
       padding:10px;
-      max-height: 62vh;
+      max-height:62vh;
       overflow:auto;
     }
 
@@ -269,7 +328,7 @@ const modalHtmlTabbed = (tc = {}) => {
       align-items:start;
     }
     .tc-form-grid.compact{ gap:8px; }
-    .tc-form-grid.expanded{ grid-template-columns: 1fr; }
+    .tc-form-grid.expanded{ grid-template-columns:1fr; }
 
     .full{ grid-column: 1 / -1; }
     .tc-label{ font-weight:600; margin-bottom:4px; font-size:12px; }
@@ -280,12 +339,18 @@ const modalHtmlTabbed = (tc = {}) => {
       border-radius:10px;
       font-size:13px;
       outline:none;
+      background:#fff;
     }
     select.tc-field{ padding:7px 10px; }
     textarea.tc-field{ resize: vertical; }
     .tc-divider{
       height:1px; background:#eef2f7; margin:8px 0;
       grid-column: 1 / -1;
+    }
+    .tc-note{
+      font-size:11px;
+      color:#6b7280;
+      margin-top:4px;
     }
   </style>
 
@@ -314,17 +379,25 @@ const modalHtmlTabbed = (tc = {}) => {
       <div class="tc-form-grid compact" id="tc-grid">
         <div>
           <label class="tc-label">Serial No.</label>
-          <input id="swal-serial" class="tc-field" value="${esc(s.serial_no)}" placeholder="e.g., 0052">
+          <input id="swal-serial" class="tc-field" value="${esc(
+            s.serial_no
+          )}" placeholder="e.g., 0052">
         </div>
+
         <div>
           <label class="tc-label">PEN Number</label>
-          <input id="swal-pen" class="tc-field" value="${esc(s.pen_number || "")}" placeholder="Student PEN">
+          <input id="swal-pen" class="tc-field" value="${esc(
+            s.pen_number || ""
+          )}" placeholder="Student PEN">
         </div>
 
         <div>
           <label class="tc-label">Admission No.</label>
-          <input id="swal-adm" class="tc-field" value="${esc(s.admission_no)}" placeholder="e.g., TPIS-287">
+          <input id="swal-adm" class="tc-field" value="${esc(
+            s.admission_no
+          )}" placeholder="e.g., TPIS-287">
         </div>
+
         <div>
           <label class="tc-label">Session Text</label>
           <input id="swal-session" class="tc-field" value="${esc(
@@ -334,24 +407,34 @@ const modalHtmlTabbed = (tc = {}) => {
 
         <div>
           <label class="tc-label">Student Name</label>
-          <input id="swal-student" class="tc-field" value="${esc(s.student_name)}" placeholder="Student Name">
+          <input id="swal-student" class="tc-field" value="${esc(
+            s.student_name
+          )}" placeholder="Student Name">
         </div>
+
         <div>
           <label class="tc-label">Father's Name</label>
-          <input id="swal-fname" class="tc-field" value="${esc(s.father_name)}" placeholder="Father Name">
+          <input id="swal-fname" class="tc-field" value="${esc(
+            s.father_name
+          )}" placeholder="Father Name">
         </div>
 
         <div class="full">
           <label class="tc-label">Mother's Name</label>
-          <input id="swal-mname" class="tc-field" value="${esc(s.mother_name)}" placeholder="Mother Name">
+          <input id="swal-mname" class="tc-field" value="${esc(
+            s.mother_name
+          )}" placeholder="Mother Name">
         </div>
 
         <div class="full tc-divider"></div>
 
         <div class="full">
           <label class="tc-label">DOB (Figures: DD/MM/YYYY)</label>
-          <input id="swal-dob-fig" class="tc-field" value="${esc(s.dob_figures)}" placeholder="25/01/2010">
+          <input id="swal-dob-fig" class="tc-field" value="${esc(
+            s.dob_figures
+          )}" placeholder="25/01/2010">
         </div>
+
         <div class="full">
           <label class="tc-label">DOB (Words)</label>
           <textarea id="swal-dob-words" class="tc-field" rows="2">${esc(
@@ -365,6 +448,7 @@ const modalHtmlTabbed = (tc = {}) => {
             s.dob_proof || "Birth Certificate"
           )}" placeholder="Birth Certificate">
         </div>
+
         <div>
           <label class="tc-label">SC/ST/OBC</label>
           <select id="swal-scst" class="tc-field">
@@ -378,16 +462,18 @@ const modalHtmlTabbed = (tc = {}) => {
     <div class="tc-tabpanel" data-tabpanel="academic" style="display:none">
       <div class="tc-form-grid compact" id="tc-grid-academic">
         <div>
-          <label class="tc-label">First Admission Date</label>
+          <label class="tc-label">Date of First Admission</label>
           <input id="swal-first-adm-date" type="date" class="tc-field" value="${esc(
             asYMD(s.first_admission_date)
           )}">
+          <div class="tc-note">This should match school admission register.</div>
         </div>
+
         <div>
-          <label class="tc-label">First Admission Class</label>
+          <label class="tc-label">Class at First Admission</label>
           <input id="swal-first-class" class="tc-field" value="${esc(
             s.first_admission_class || ""
-          )}">
+          )}" placeholder="e.g., Nursery / 1st / LKG">
         </div>
 
         <div>
@@ -396,22 +482,41 @@ const modalHtmlTabbed = (tc = {}) => {
             s.last_class_figure || ""
           )}" placeholder="e.g., 10TH">
         </div>
+
         <div>
           <label class="tc-label">Last Class (Words)</label>
           <input id="swal-last-words" class="tc-field" value="${esc(
             s.last_class_words || ""
-          )}" placeholder="e.g., TENTH">
-        </div>
-
-        <div class="full">
-          <label class="tc-label">Last Exam Result</label>
-          <input id="swal-last-res" class="tc-field" value="${esc(
-            s.last_exam_result || "Passed AISSE(X)"
-          )}" placeholder="e.g., Passed AISSE(X)">
+          )}" placeholder="e.g., Tenth">
         </div>
 
         <div>
-          <label class="tc-label">Failed in Class?</label>
+          <label class="tc-label">Last Exam Result</label>
+          <select id="swal-last-res-preset" class="tc-field">
+            <option value="passed_annual" ${
+              s.exam_preset === "passed_annual" ? "selected" : ""
+            }>Passed Annual School Examination</option>
+            <option value="failed_studying" ${
+              s.exam_preset === "failed_studying" ? "selected" : ""
+            }>Failed / Studying in class</option>
+            <option value="passed_aisse" ${
+              s.exam_preset === "passed_aisse" ? "selected" : ""
+            }>Passed AISSE(X)</option>
+            <option value="custom" ${
+              s.exam_preset === "custom" ? "selected" : ""
+            }>Custom</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="tc-label">Custom Last Exam Result</label>
+          <input id="swal-last-res-custom" class="tc-field" value="${esc(
+            s.exam_custom || ""
+          )}" placeholder="Used only when Custom is selected">
+        </div>
+
+        <div>
+          <label class="tc-label">Failed in Same Class?</label>
           <select id="swal-failed" class="tc-field">
             <option value="No" ${!failedYes ? "selected" : ""}>No</option>
             <option value="Yes" ${failedYes ? "selected" : ""}>Yes</option>
@@ -429,7 +534,18 @@ const modalHtmlTabbed = (tc = {}) => {
         <div class="full">
           <label class="tc-label">Subjects Studied (one per line)</label>
           <textarea id="swal-subjects" class="tc-field" rows="6">${esc(
-            toLines(s.subjects || [])
+            toLines(
+              s.subjects?.length
+                ? s.subjects
+                : [
+                    "English",
+                    "Hindi",
+                    "Mathematics",
+                    "Science/Evs",
+                    "Social Science",
+                    "Computer/AI",
+                  ]
+            )
           )}</textarea>
         </div>
       </div>
@@ -443,6 +559,7 @@ const modalHtmlTabbed = (tc = {}) => {
             s.working_days || ""
           )}">
         </div>
+
         <div>
           <label class="tc-label">Presence Days</label>
           <input id="swal-pd" type="number" min="0" class="tc-field" value="${esc(
@@ -456,6 +573,7 @@ const modalHtmlTabbed = (tc = {}) => {
             s.fees_paid_upto || ""
           )}" placeholder="e.g., March 2025">
         </div>
+
         <div>
           <label class="tc-label">Fee Concession?</label>
           <select id="swal-fee-yesno" class="tc-field">
@@ -476,21 +594,22 @@ const modalHtmlTabbed = (tc = {}) => {
     <div class="tc-tabpanel" data-tabpanel="activities" style="display:none">
       <div class="tc-form-grid compact" id="tc-grid-act">
         <div>
-          <label class="tc-label">NCC Cadet/Scout/Guide?</label>
+          <label class="tc-label">NCC Cadet / Scout / Guide?</label>
           <select id="swal-ncc-yesno" class="tc-field">
             <option value="No" ${!nccYes ? "selected" : ""}>No</option>
             <option value="Yes" ${nccYes ? "selected" : ""}>Yes</option>
           </select>
         </div>
+
         <div>
-          <label class="tc-label">NCC/Scout/Guide Details</label>
+          <label class="tc-label">NCC / Scout / Guide Details</label>
           <input id="swal-ncc-details" class="tc-field" value="${esc(
             s.ncc_scout_guide || ""
           )}" placeholder="If yes, details">
         </div>
 
         <div class="full">
-          <label class="tc-label">Games/Extra Curricular</label>
+          <label class="tc-label">Games / Extra Curricular Activities</label>
           <input id="swal-games" class="tc-field" value="${esc(
             s.activities || "NA"
           )}" placeholder="NA or details">
@@ -506,12 +625,14 @@ const modalHtmlTabbed = (tc = {}) => {
             asYMD(s.application_date)
           )}">
         </div>
+
         <div>
           <label class="tc-label">Date Struck Off Rolls</label>
           <input id="swal-date-struck" type="date" class="tc-field" value="${esc(
             asYMD(s.struck_off_date)
           )}">
         </div>
+
         <div>
           <label class="tc-label">Date of Issue</label>
           <input id="swal-date-issue" type="date" class="tc-field" value="${esc(
@@ -637,7 +758,7 @@ export default function TransferCertificates() {
             <div class="tc-dd">
               <div class="tc-lbl">Search Student (Name / Admission No.)</div>
               <input id="tc-student-search" class="tc-inp" placeholder="Type name or admission number..." />
-              <div class="tc-h">Start typing… select from the list.</div>
+              <div class="tc-h">Start typing and select from the list.</div>
               <div id="tc-dd-list" class="tc-dd-list"></div>
               <input id="tc-selected-student-id" type="hidden" />
               <input id="tc-selected-adm" type="hidden" />
@@ -677,7 +798,9 @@ export default function TransferCertificates() {
         const setSelected = (s) => {
           selectedStudent = s;
           hiddenId.value = s?.id ? String(s.id) : "";
-          hiddenAdm.value = s?.admission_number ? String(s.admission_number) : "";
+          hiddenAdm.value = s?.admission_number
+            ? String(s.admission_number)
+            : "";
           selectedBox.style.display = "block";
           selectedBox.innerHTML = `
             <div><b>Selected:</b> ${esc(buildStudentLabel(s))}</div>
@@ -698,15 +821,17 @@ export default function TransferCertificates() {
               (s) => `
                 <div class="tc-dd-item" data-id="${esc(s.id)}">
                   <div><b>${esc(s.name || "—")}</b>${
-                    s.admission_number
-                      ? `<span class="tc-pill">${esc(s.admission_number)}</span>`
-                      : ""
-                  }</div>
+                s.admission_number
+                  ? `<span class="tc-pill">${esc(s.admission_number)}</span>`
+                  : ""
+              }</div>
                   <div style="color:#6b7280; font-size:12px; margin-top:3px;">${esc(
                     [
                       s.father_name ? `F: ${s.father_name}` : "",
                       s.class_name || s.section_name
-                        ? `${s.class_name || ""}${s.section_name ? "-" + s.section_name : ""}`
+                        ? `${s.class_name || ""}${
+                            s.section_name ? "-" + s.section_name : ""
+                          }`
                         : "",
                     ]
                       .filter(Boolean)
@@ -769,9 +894,13 @@ export default function TransferCertificates() {
         const p = Swal.getPopup();
         const schoolId = (p.querySelector("#tc-schoolid")?.value || "").trim();
 
-        const selectedStudentId = (p.querySelector("#tc-selected-student-id")?.value || "").trim();
+        const selectedStudentId = (
+          p.querySelector("#tc-selected-student-id")?.value || ""
+        ).trim();
         const typedAdm = (p.querySelector("#tc-admno")?.value || "").trim();
-        const selectedAdm = (p.querySelector("#tc-selected-adm")?.value || "").trim();
+        const selectedAdm = (
+          p.querySelector("#tc-selected-adm")?.value || ""
+        ).trim();
 
         let studentId = null;
 
@@ -780,12 +909,16 @@ export default function TransferCertificates() {
         } else {
           const admRaw = typedAdm || selectedAdm;
           if (!admRaw) {
-            Swal.showValidationMessage("Please select a student OR enter Admission No.");
+            Swal.showValidationMessage(
+              "Please select a student or enter Admission No."
+            );
             return false;
           }
           studentId = await resolveStudentIdByAdmission(admRaw);
           if (!studentId) {
-            Swal.showValidationMessage(`No student found with Admission No. "${admRaw}".`);
+            Swal.showValidationMessage(
+              `No student found with Admission No. "${admRaw}".`
+            );
             return false;
           }
         }
@@ -803,7 +936,9 @@ export default function TransferCertificates() {
 
         Swal.fire(
           "Draft Created",
-          `TC #${data?.serial_no || data?.id} created for ${data?.student_name || ""} (${data?.admission_no || ""}).`,
+          `TC #${data?.serial_no || data?.id} created for ${
+            data?.student_name || ""
+          } (${data?.admission_no || ""}).`,
           "success"
         );
 
@@ -811,11 +946,19 @@ export default function TransferCertificates() {
         await fetchList({ page: 1 });
 
         if (data?.id) {
-          handleEdit({ id: data.id, status: data.status || "draft", serial_no: data.serial_no });
+          handleEdit({
+            id: data.id,
+            status: data.status || "draft",
+            serial_no: data.serial_no,
+          });
         }
       } catch (err) {
         console.error("create TC error:", err);
-        Swal.fire("Error", err?.response?.data?.error || "Failed to create TC.", "error");
+        Swal.fire(
+          "Error",
+          err?.response?.data?.error || "Failed to create TC.",
+          "error"
+        );
       }
     });
   };
@@ -837,7 +980,7 @@ export default function TransferCertificates() {
     const tc = normalizeTcForModal(full);
 
     await Swal.fire({
-      title: `Edit TC`,
+      title: "Edit TC",
       width: "980px",
       html: modalHtmlTabbed(tc),
       showCancelButton: true,
@@ -849,9 +992,12 @@ export default function TransferCertificates() {
         const panels = Array.from(popup.querySelectorAll(".tc-tabpanel"));
 
         const showTab = (key) => {
-          tabs.forEach((t) => t.classList.toggle("active", t.getAttribute("data-tab") === key));
+          tabs.forEach((t) =>
+            t.classList.toggle("active", t.getAttribute("data-tab") === key)
+          );
           panels.forEach((p) => {
-            p.style.display = p.getAttribute("data-tabpanel") === key ? "" : "none";
+            p.style.display =
+              p.getAttribute("data-tabpanel") === key ? "" : "none";
           });
         };
 
@@ -874,7 +1020,10 @@ export default function TransferCertificates() {
             g.classList.toggle("expanded", expanded);
             g.classList.toggle("compact", !expanded);
           });
-          if (btn) btn.textContent = expanded ? "Compact / 2-Column" : "Expand / 1-Column";
+          if (btn)
+            btn.textContent = expanded
+              ? "Compact / 2-Column"
+              : "Expand / 1-Column";
         };
         apply();
 
@@ -884,6 +1033,19 @@ export default function TransferCertificates() {
             apply();
           });
         }
+
+        const examPreset = popup.querySelector("#swal-last-res-preset");
+        const examCustom = popup.querySelector("#swal-last-res-custom");
+        const syncExamCustom = () => {
+          if (!examPreset || !examCustom) return;
+          const isCustom = examPreset.value === "custom";
+          examCustom.disabled = !isCustom;
+          examCustom.style.opacity = isCustom ? "1" : "0.7";
+        };
+        syncExamCustom();
+        if (examPreset) {
+          examPreset.addEventListener("change", syncExamCustom);
+        }
       },
       preConfirm: () => {
         const p = Swal.getPopup();
@@ -892,7 +1054,23 @@ export default function TransferCertificates() {
         const qualifiedVal = p.querySelector("#swal-qualified")?.value;
         const feeYesNo = p.querySelector("#swal-fee-yesno")?.value;
         const nccYesNo = p.querySelector("#swal-ncc-yesno")?.value;
-        const nccDetails = p.querySelector("#swal-ncc-details")?.value.trim() || null;
+        const nccDetails =
+          p.querySelector("#swal-ncc-details")?.value.trim() || null;
+
+        const examPreset = p.querySelector("#swal-last-res-preset")?.value;
+        const examCustom =
+          p.querySelector("#swal-last-res-custom")?.value.trim() || "";
+
+        let lastExamResult = null;
+        if (examPreset === "passed_annual") {
+          lastExamResult = "Passed Annual School Examination";
+        } else if (examPreset === "failed_studying") {
+          lastExamResult = "Failed/Studying in Class";
+        } else if (examPreset === "passed_aisse") {
+          lastExamResult = "Passed AISSE(X)";
+        } else {
+          lastExamResult = examCustom || null;
+        }
 
         const payload = {
           serial_no: p.querySelector("#swal-serial")?.value.trim() || null,
@@ -903,38 +1081,57 @@ export default function TransferCertificates() {
           mother_name: p.querySelector("#swal-mname")?.value.trim() || null,
 
           dob: toDateInput(p.querySelector("#swal-dob-fig")?.value) || null,
-          dob_words: p.querySelector("#swal-dob-words")?.value.trim() || null,
-          dob_proof: p.querySelector("#swal-proof-dob")?.value.trim() || null,
+          dob_words:
+            p.querySelector("#swal-dob-words")?.value.trim() || null,
+          dob_proof:
+            p.querySelector("#swal-proof-dob")?.value.trim() || null,
 
-          category: p.querySelector("#swal-scst")?.value === "Yes" ? "SC/ST/OBC" : "General",
+          category:
+            p.querySelector("#swal-scst")?.value === "Yes"
+              ? "SC/ST/OBC"
+              : "General",
 
-          first_admission_date: toDateInput(p.querySelector("#swal-first-adm-date")?.value) || null,
-          first_admission_class: p.querySelector("#swal-first-class")?.value.trim() || null,
-          last_class_figure: p.querySelector("#swal-last-fig")?.value.trim() || null,
-          last_class_words: p.querySelector("#swal-last-words")?.value.trim() || null,
-          last_exam_result: p.querySelector("#swal-last-res")?.value.trim() || null,
+          first_admission_date:
+            toDateInput(p.querySelector("#swal-first-adm-date")?.value) || null,
+          first_admission_class:
+            p.querySelector("#swal-first-class")?.value.trim() || null,
+
+          last_class_figure:
+            p.querySelector("#swal-last-fig")?.value.trim() || null,
+          last_class_words:
+            p.querySelector("#swal-last-words")?.value.trim() || null,
+          last_exam_result: lastExamResult,
 
           failed_count: failedVal === "Yes" ? 1 : 0,
           subjects: fromLines(p.querySelector("#swal-subjects")?.value),
           promoted: qualifiedVal === "Yes",
 
-          working_days: Number(p.querySelector("#swal-wd")?.value) || null,
-          presence_days: Number(p.querySelector("#swal-pd")?.value) || null,
+          working_days:
+            Number(p.querySelector("#swal-wd")?.value) || null,
+          presence_days:
+            Number(p.querySelector("#swal-pd")?.value) || null,
 
-          fees_paid_upto: p.querySelector("#swal-feeupto")?.value.trim() || null,
+          fees_paid_upto:
+            p.querySelector("#swal-feeupto")?.value.trim() || null,
           fee_concession:
             feeYesNo === "Yes"
               ? p.querySelector("#swal-fee-nature")?.value.trim() || null
               : null,
 
-          ncc_scout_guide: nccYesNo === "Yes" ? nccDetails || "Yes" : null,
+          ncc_scout_guide:
+            nccYesNo === "Yes" ? nccDetails || "Yes" : null,
           activities: p.querySelector("#swal-games")?.value.trim() || null,
 
-          application_date: toDateInput(p.querySelector("#swal-date-app")?.value) || null,
-          struck_off_date: toDateInput(p.querySelector("#swal-date-struck")?.value) || null,
+          application_date:
+            toDateInput(p.querySelector("#swal-date-app")?.value) || null,
+          struck_off_date:
+            toDateInput(p.querySelector("#swal-date-struck")?.value) || null,
+          issue_date:
+            toDateInput(p.querySelector("#swal-date-issue")?.value) || null,
 
           remarks: p.querySelector("#swal-remarks")?.value.trim() || null,
-          session_text: p.querySelector("#swal-session")?.value.trim() || null,
+          session_text:
+            p.querySelector("#swal-session")?.value.trim() || null,
         };
 
         if (!payload.student_name) {
@@ -952,7 +1149,11 @@ export default function TransferCertificates() {
         fetchList();
       } catch (err) {
         console.error("update TC error:", err);
-        Swal.fire("Error", err?.response?.data?.error || "Failed to update TC.", "error");
+        Swal.fire(
+          "Error",
+          err?.response?.data?.error || "Failed to update TC.",
+          "error"
+        );
       }
     });
   };
@@ -962,6 +1163,7 @@ export default function TransferCertificates() {
       Swal.fire("Already Issued", "This TC is already issued.", "info");
       return;
     }
+
     const ok = await Swal.fire({
       title: "Issue Certificate?",
       text: `This will lock the TC (Serial: ${tc.serial_no}).`,
@@ -977,7 +1179,11 @@ export default function TransferCertificates() {
       fetchList();
     } catch (err) {
       console.error("issue TC error:", err);
-      Swal.fire("Error", err?.response?.data?.error || "Failed to issue TC.", "error");
+      Swal.fire(
+        "Error",
+        err?.response?.data?.error || "Failed to issue TC.",
+        "error"
+      );
     }
   };
 
@@ -997,7 +1203,11 @@ export default function TransferCertificates() {
       fetchList();
     } catch (err) {
       console.error("cancel TC error:", err);
-      Swal.fire("Error", err?.response?.data?.error || "Failed to cancel TC.", "error");
+      Swal.fire(
+        "Error",
+        err?.response?.data?.error || "Failed to cancel TC.",
+        "error"
+      );
     }
   };
 
@@ -1006,6 +1216,7 @@ export default function TransferCertificates() {
       Swal.fire("Forbidden", "Only Super Admin can delete.", "warning");
       return;
     }
+
     const ok = await Swal.fire({
       title: "Delete TC?",
       text: `Permanently delete TC (Serial: ${tc.serial_no}).`,
@@ -1022,7 +1233,11 @@ export default function TransferCertificates() {
       fetchList({ page: 1 });
     } catch (err) {
       console.error("delete TC error:", err);
-      Swal.fire("Error", err?.response?.data?.error || "Failed to delete TC.", "error");
+      Swal.fire(
+        "Error",
+        err?.response?.data?.error || "Failed to delete TC.",
+        "error"
+      );
     }
   };
 
@@ -1032,6 +1247,7 @@ export default function TransferCertificates() {
       const blob = new Blob([resp.data], { type: "application/pdf" });
       const url = URL.createObjectURL(blob);
       const w = window.open(url, "_blank", "noopener,noreferrer");
+
       if (!w) {
         const a = document.createElement("a");
         a.href = url;
@@ -1040,7 +1256,8 @@ export default function TransferCertificates() {
         a.click();
         a.remove();
       }
-      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
     } catch (err) {
       console.error("PDF error:", err);
       const msg =
@@ -1063,14 +1280,13 @@ export default function TransferCertificates() {
     fetchList({ search: "", status: "", page: 1 });
   };
 
-  function tc_father(tc) {
-    return tc.father_name || tc.father || "";
-  }
+  const tcFather = (tc) => tc.father_name || tc.father || "";
 
   return (
     <div className="container mt-4">
       <div className="d-flex justify-content-between align-items-center mb-3">
         <h1 className="h3 mb-0">Transfer Certificates</h1>
+
         <div className="d-flex gap-2">
           <button
             className="btn btn-outline-secondary"
@@ -1098,6 +1314,7 @@ export default function TransferCertificates() {
             onChange={(e) => setQ(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && onSearch()}
           />
+
           <select
             className="form-select"
             style={{ maxWidth: 180 }}
@@ -1114,12 +1331,15 @@ export default function TransferCertificates() {
             <option value="issued">Issued</option>
             <option value="cancelled">Cancelled</option>
           </select>
+
           <button className="btn btn-outline-primary" onClick={onSearch}>
             Search
           </button>
+
           <button className="btn btn-outline-secondary" onClick={resetFilters}>
             Reset
           </button>
+
           <div className="ms-auto small text-muted">
             Page {page} / {totalPages}
           </div>
@@ -1137,6 +1357,8 @@ export default function TransferCertificates() {
               <th>Father</th>
               <th>Status</th>
               <th>Issue Date</th>
+              {!compactTable && <th>First Admission</th>}
+              {!compactTable && <th>Last Exam</th>}
               {!compactTable && <th>Subjects</th>}
               {!compactTable && <th>Working/Presence</th>}
               {!compactTable && <th>Fees Upto</th>}
@@ -1144,19 +1366,22 @@ export default function TransferCertificates() {
               <th style={{ minWidth: 230 }}>Actions</th>
             </tr>
           </thead>
+
           <tbody>
             {items.map((tc, i) => {
               const details = {
                 Student: tc.student_name,
-                Father: tc_father(tc),
+                Father: tcFather(tc),
                 Mother: tc.mother_name,
                 DOB: `${asDDMMYYYY(tc.dob)} (${tc.dob_words || ""})`,
                 "Proof DOB": tc.dob_proof || "—",
                 "SC/ST/OBC": tc.category || "No",
-                "First Admission": `${asDDMMYYYY(tc.first_admission_date)} Class ${
-                  tc.first_admission_class || ""
-                }`,
-                "Last Class": `${tc.last_class_figure || ""} (${tc.last_class_words || ""})`,
+                "First Admission": `${asDDMMYYYY(
+                  tc.first_admission_date
+                )} Class ${tc.first_admission_class || ""}`,
+                "Last Class": `${tc.last_class_figure || ""} (${
+                  tc.last_class_words || ""
+                })`,
                 "Last Exam": tc.last_exam_result || "—",
                 Failed: Number(tc.failed_count || 0) > 0 ? "Yes" : "No",
                 Subjects: toCSV(tc.subjects),
@@ -1165,12 +1390,14 @@ export default function TransferCertificates() {
                 Presence: tc.presence_days || 0,
                 "Attendance %":
                   tc.presence_days && tc.working_days
-                    ? Math.round((tc.presence_days / tc.working_days) * 100) + "%"
+                    ? Math.round((tc.presence_days / tc.working_days) * 100) +
+                      "%"
                     : "—",
                 "Fees Upto": tc.fees_paid_upto || "—",
                 "Fee Concession": tc.fee_concession || "No",
                 NCC: tc.ncc_scout_guide || "No",
                 "Games/ECA": tc.activities || "NA",
+                "Date of Application": asDDMMYYYY(tc.application_date) || "—",
                 "Struck Off": asDDMMYYYY(tc.struck_off_date) || "—",
                 "Issue Date": asDDMMYYYY(tc.issue_date) || "—",
                 Remarks: tc.remarks || "—",
@@ -1182,13 +1409,44 @@ export default function TransferCertificates() {
                   <td className="fw-semibold">{tc.serial_no}</td>
                   <td>{tc.admission_no}</td>
                   <td>{tc.student_name}</td>
-                  <td>{tc_father(tc)}</td>
+                  <td>{tcFather(tc)}</td>
+
                   <td>
-                    {tc.status === "draft" && <span className="badge bg-warning text-dark">Draft</span>}
-                    {tc.status === "issued" && <span className="badge bg-success">Issued</span>}
-                    {tc.status === "cancelled" && <span className="badge bg-secondary">Cancelled</span>}
+                    {tc.status === "draft" && (
+                      <span className="badge bg-warning text-dark">Draft</span>
+                    )}
+                    {tc.status === "issued" && (
+                      <span className="badge bg-success">Issued</span>
+                    )}
+                    {tc.status === "cancelled" && (
+                      <span className="badge bg-secondary">Cancelled</span>
+                    )}
                   </td>
+
                   <td>{asYMD(tc.issue_date) || "—"}</td>
+
+                  {!compactTable && (
+                    <td>
+                      {asDDMMYYYY(tc.first_admission_date) || "—"}
+                      {tc.first_admission_class
+                        ? ` • ${tc.first_admission_class}`
+                        : ""}
+                    </td>
+                  )}
+
+                  {!compactTable && (
+                    <td
+                      title={tc.last_exam_result || ""}
+                      style={{
+                        maxWidth: 180,
+                        whiteSpace: "nowrap",
+                        textOverflow: "ellipsis",
+                        overflow: "hidden",
+                      }}
+                    >
+                      {tc.last_exam_result || "—"}
+                    </td>
+                  )}
 
                   {!compactTable && (
                     <td
@@ -1221,9 +1479,14 @@ export default function TransferCertificates() {
                           Swal.fire({
                             title: `TC Details (Serial: ${tc.serial_no})`,
                             html: `
-                              <div style="text-align:left; white-space: pre-wrap;">
+                              <div style="text-align:left; white-space:pre-wrap;">
                                 ${Object.entries(details)
-                                  .map(([k, v]) => `<div style="margin:4px 0;"><b>${k}:</b> ${esc(v)}</div>`)
+                                  .map(
+                                    ([k, v]) =>
+                                      `<div style="margin:4px 0;"><b>${esc(
+                                        k
+                                      )}:</b> ${esc(v)}</div>`
+                                  )
                                   .join("")}
                               </div>
                             `,
@@ -1236,30 +1499,45 @@ export default function TransferCertificates() {
                       </button>
 
                       {canManage && tc.status === "draft" && (
-                        <button className="btn btn-primary btn-sm" onClick={() => handleEdit(tc)}>
+                        <button
+                          className="btn btn-primary btn-sm"
+                          onClick={() => handleEdit(tc)}
+                        >
                           Edit
                         </button>
                       )}
 
                       {canManage && tc.status !== "issued" && (
-                        <button className="btn btn-success btn-sm" onClick={() => handleIssue(tc)}>
+                        <button
+                          className="btn btn-success btn-sm"
+                          onClick={() => handleIssue(tc)}
+                        >
                           Issue
                         </button>
                       )}
 
                       {canManage && tc.status !== "cancelled" && (
-                        <button className="btn btn-warning btn-sm" onClick={() => handleCancel(tc)}>
+                        <button
+                          className="btn btn-warning btn-sm"
+                          onClick={() => handleCancel(tc)}
+                        >
                           Cancel
                         </button>
                       )}
 
                       {canManage && (
-                        <button className="btn btn-outline-danger btn-sm" onClick={() => handleDelete(tc)}>
+                        <button
+                          className="btn btn-outline-danger btn-sm"
+                          onClick={() => handleDelete(tc)}
+                        >
                           Delete
                         </button>
                       )}
 
-                      <button className="btn btn-outline-primary btn-sm" onClick={() => handlePdf(tc)}>
+                      <button
+                        className="btn btn-outline-primary btn-sm"
+                        onClick={() => handlePdf(tc)}
+                      >
                         PDF
                       </button>
                     </div>
@@ -1270,7 +1548,7 @@ export default function TransferCertificates() {
 
             {!loading && items.length === 0 && (
               <tr>
-                <td colSpan={compactTable ? 8 : 12} className="text-center">
+                <td colSpan={compactTable ? 8 : 14} className="text-center">
                   No records found
                 </td>
               </tr>
@@ -1278,7 +1556,7 @@ export default function TransferCertificates() {
 
             {loading && (
               <tr>
-                <td colSpan={compactTable ? 8 : 12} className="text-center">
+                <td colSpan={compactTable ? 8 : 14} className="text-center">
                   Loading…
                 </td>
               </tr>
@@ -1291,6 +1569,7 @@ export default function TransferCertificates() {
         <div className="small text-muted">
           Showing page {page} of {totalPages}
         </div>
+
         <div className="btn-group">
           <button
             className="btn btn-outline-secondary"
@@ -1303,6 +1582,7 @@ export default function TransferCertificates() {
           >
             Prev
           </button>
+
           <button
             className="btn btn-outline-secondary"
             disabled={page >= totalPages}

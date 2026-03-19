@@ -1,4 +1,3 @@
-// src/App.js
 import React, { useEffect } from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import axios from "axios";
@@ -24,6 +23,7 @@ import Sessions from "./pages/Sessions";
 import Subjects from "./pages/Subjects";
 import Student from "./pages/Students";
 import FeeStructure from "./pages/FeeStructure";
+import StudentFeeStructure from "./pages/StudentFeeStructure";
 import FeeHeadings from "./pages/FeeHeadings";
 import Sections from "./pages/Sections";
 import Transportation from "./pages/Transportation";
@@ -110,7 +110,7 @@ import StudentRemarksEntry from "./pages/StudentRemarksEntry";
 import StudentTransport from "./pages/StudentTransport";
 import OpeningBalances from "./pages/OpeningBalances";
 import CasteGenderReport from "./pages/CasteGenderReport";
-import ReligionGenderReport from "./pages/ReligionGenderReport"; // ✅ ADDED
+import ReligionGenderReport from "./pages/ReligionGenderReport";
 import DigitalDiary from "./pages/DigitalDiary";
 import StudentDiary from "./pages/StudentDiary";
 import DiaryDetail from "./pages/DiaryDetail";
@@ -123,7 +123,7 @@ import StudentFeeReport from "./pages/StudentFeeReport";
 // ✅ NEW pages
 import TransferCertificates from "./pages/TransferCertificates";
 import Enquiries from "./pages/Enquiries";
-import Registrations from "./pages/Registrations"; // ✅ ADD THIS
+import Registrations from "./pages/Registrations";
 import BonafideCertificates from "./pages/BonafideCertificates";
 import DisciplinaryActions from "./pages/DisciplinaryActions";
 import FeeCertificates from "./pages/FeeCertificates";
@@ -171,8 +171,6 @@ import SyllabusApprovalCoordinator from "./pages/SyllabusApprovalCoordinator";
 import LessonPlanEvaluations from "./pages/LessonPlanEvaluations";
 import AdmissionAssessments from "./pages/AdmissionAssessments";
 import EntranceExamPortal from "./pages/EntranceExamPortal";
-
-
 
 // ---------- auth guard ----------
 const RequireRole = ({ roles = [], children }) => {
@@ -414,6 +412,14 @@ function App() {
 
           {/* Fee & Reports */}
           <Route path="/fee-structure" element={<FeeStructure />} />
+          <Route
+            path="/student-fee-structure"
+            element={
+              <RequireRole roles={["accounts", "admin", "superadmin"]}>
+                <StudentFeeStructure />
+              </RequireRole>
+            }
+          />
           <Route path="/fee-headings" element={<FeeHeadings />} />
           <Route path="/fee-category" element={<FeeCategory />} />
           <Route path="/concessions" element={<Concessions />} />
@@ -451,7 +457,6 @@ function App() {
               </RequireRole>
             }
           />
-          {/* Alias (old singular) */}
           <Route path="/transportation" element={<Navigate to="/transportations" replace />} />
 
           {/* ✅ Transport: Buses (guarded) */}
@@ -515,13 +520,13 @@ function App() {
           <Route path="/combined-teacher-substitution" element={<TeacherCombinedSubstitutionPage />} />
           <Route path="/lesson-plan" element={<LessonPlan />} />
           <Route
-          path="/lesson-plans/:lessonPlanId/evaluations"
-          element={
-            <RequireRole roles={["teacher", "academic_coordinator", "admin", "superadmin", "principal", "coordinator"]}>
-              <LessonPlanEvaluations />
-            </RequireRole>
-          }
-        />
+            path="/lesson-plans/:lessonPlanId/evaluations"
+            element={
+              <RequireRole roles={["teacher", "academic_coordinator", "admin", "superadmin", "principal", "coordinator"]}>
+                <LessonPlanEvaluations />
+              </RequireRole>
+            }
+          />
           <Route path="/mark-attendance" element={<MarkAttendance />} />
           <Route path="/attendance-calendar" element={<AttendanceCalendar />} />
           <Route path="/leave-requests" element={<TeacherLeaveRequests />} />
@@ -730,26 +735,26 @@ function App() {
           />
 
           <Route
-              path="/admission-syllabus"
-              element={
-                <RequireRole
-                  roles={[
-                    "teacher",
-                    "academic_coordinator",
-                    "coordinator",
-                    "admin",
-                    "superadmin",
-                    "principal",
-                    "admission",
-                    "admission_manager",
-                    "staff",
-                    "frontoffice",
-                  ]}
-                >
-                  <AdmissionSyllabusCRUD />
-                </RequireRole>
-              }
-            />
+            path="/admission-syllabus"
+            element={
+              <RequireRole
+                roles={[
+                  "teacher",
+                  "academic_coordinator",
+                  "coordinator",
+                  "admin",
+                  "superadmin",
+                  "principal",
+                  "admission",
+                  "admission_manager",
+                  "staff",
+                  "frontoffice",
+                ]}
+              >
+                <AdmissionSyllabusCRUD />
+              </RequireRole>
+            }
+          />
 
           {/* ✅ Syllabus Breakdown CRUD */}
           <Route

@@ -3,13 +3,13 @@ import React, { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import "bootstrap/dist/css/bootstrap.min.css";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useRoles } from "../hooks/useRoles";
-
 import "./Sidebar.css";
 
 const DESKTOP_BP = 992; // Bootstrap lg
 
 function useIsMobile() {
   const [mobile, setMobile] = useState(() => window.innerWidth < DESKTOP_BP);
+
   useEffect(() => {
     const mql = window.matchMedia(`(max-width: ${DESKTOP_BP - 0.02}px)`);
     const onChange = () => setMobile(mql.matches);
@@ -17,6 +17,7 @@ function useIsMobile() {
     mql.addEventListener?.("change", onChange);
     return () => mql.removeEventListener?.("change", onChange);
   }, []);
+
   return mobile;
 }
 
@@ -47,36 +48,77 @@ const sidebarGradients = [
   "linear-gradient(135deg, #84cc16 0%, #4d7c0f 100%)",
 ];
 
+const GROUP_ORDER = {
+  Main: 1,
+  "Daily Work": 2,
+  Operations: 3,
+  Management: 4,
+  Academic: 5,
+  Examination: 6,
+  "Exam Settings": 7,
+  Admissions: 8,
+  "Fee Collection": 9,
+  "Fee Setup": 10,
+  Transport: 11,
+  Library: 12,
+  "Front Office": 13,
+  "HR Management": 14,
+  Certificates: 15,
+  Reports: 16,
+  "Fee Reports": 17,
+  "School Info": 18,
+  Leave: 19,
+  "Leave Management": 20,
+  Disciplinary: 21,
+  Quick: 22,
+  Utilities: 23,
+  Student: 24,
+};
+
+function cleanGroups(groups = []) {
+  return groups
+    .map((g) => ({
+      ...g,
+      items: Array.isArray(g.items) ? g.items.filter(Boolean) : [],
+    }))
+    .filter((g) => g.items.length > 0);
+}
+
+function sortGroups(groups = []) {
+  return [...groups].sort((a, b) => {
+    const ao = GROUP_ORDER[a.heading] ?? 999;
+    const bo = GROUP_ORDER[b.heading] ?? 999;
+    if (ao !== bo) return ao - bo;
+    return (a.heading || "").localeCompare(b.heading || "");
+  });
+}
+
 export default function Sidebar({ headerHeight = 56 }) {
   const navigate = useNavigate();
   const location = useLocation();
   const { activeRole } = useRoles();
   const isMobile = useIsMobile();
 
-  // Read once from localStorage; default to collapsed (false) if no saved value
   const initialExpanded = (() => {
     const saved = localStorage.getItem("sidebarExpanded");
     return saved === null ? false : saved === "true";
   })();
+
   const [isExpanded, setIsExpanded] = useState(initialExpanded);
 
-  // Apply body classes before first paint to avoid flicker
   useLayoutEffect(() => {
     document.body.classList.toggle("sb-expanded", isExpanded);
     document.body.classList.toggle("sb-collapsed", !isExpanded);
   }, [isExpanded]);
 
-  // Persist preference
   useEffect(() => {
     localStorage.setItem("sidebarExpanded", String(isExpanded));
   }, [isExpanded]);
 
-  // Close bottom sheet/drawer after navigation on mobile
   useEffect(() => {
     if (isMobile) setIsExpanded(false);
   }, [location.pathname, isMobile]);
 
-  // roles
   const roleLower = (activeRole || "").toLowerCase();
   const isSuperAdmin = roleLower === "superadmin" || roleLower === "super_admin";
   const isAdmin = isSuperAdmin || roleLower === "admin";
@@ -86,18 +128,10 @@ export default function Sidebar({ headerHeight = 56 }) {
   const isHR = roleLower === "hr";
   const isAccounts = roleLower === "accounts" || roleLower === "account";
   const isFrontoffice = roleLower === "frontoffice";
-
-  // ✅ NEW: Admission role flags
   const isAdmission = roleLower === "admission";
-
-  // ✅ NEW: Librarian role flags
   const isLibrarian =
     roleLower === "librarian" || roleLower === "library" || roleLower === "libraryadmin";
-
-  // ✅ NEW: Transport role flags
   const isTransport = roleLower === "transport" || roleLower === "transporter";
-
-  // ✅ NEW: Examination role flags
   const isExamination = roleLower === "examination";
 
   const hasAccess = (item) => {
@@ -106,14 +140,37 @@ export default function Sidebar({ headerHeight = 56 }) {
     return item.roles.map((r) => (r || "").toLowerCase()).includes(roleLower);
   };
 
-  // search state (desktop)
   const [q, setQ] = useState("");
 
-  // ===== MENU GROUPS =====
+  const [openGroups, setOpenGroups] = useState(() => {
+    try {
+      const saved = localStorage.getItem(`sidebarOpenGroups:${roleLower || "default"}`);
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        `sidebarOpenGroups:${roleLower || "default"}`,
+        JSON.stringify(openGroups)
+      );
+    } catch {}
+  }, [openGroups, roleLower]);
+
+  const toggleGroup = (heading) => {
+    setOpenGroups((prev) => ({
+      ...prev,
+      [heading]: !(prev[heading] ?? true),
+    }));
+  };
+
   const menuGroups = useMemo(() => {
     const groups = [];
 
-  // ✅ EXAMINATION MENU (NEW ROLE)
+    // ====== EXAMINATION ======
     if (isExamination) {
       groups.push({
         heading: "Main",
@@ -122,8 +179,6 @@ export default function Sidebar({ headerHeight = 56 }) {
             key: "exam-dashboard",
             label: "Examination Dashboard",
             icon: "bi-speedometer2",
-            // ✅ keep it consistent with your App.js (you already have /dashboard)
-            // If you actually create /exam-dashboard route later, change this back.
             path: "/dashboard",
             roles: ["examination"],
           },
@@ -140,34 +195,22 @@ export default function Sidebar({ headerHeight = 56 }) {
       groups.push({
         heading: "Examination",
         items: [
-          // ✅ NEW: Subjects (you asked to add in sidebar too)
           { key: "subjects", label: "Subjects", icon: "bi-book", path: "/subjects", roles: ["examination"] },
-
           { key: "exams", label: "Exams", icon: "bi-journal-bookmark", path: "/exams", roles: ["examination"] },
           { key: "exam-schemes", label: "Exam Schemes", icon: "bi-card-checklist", path: "/exam-schemes", roles: ["examination"] },
           { key: "exam-schedules", label: "Exam Schedule", icon: "bi-calendar2-check", path: "/exam-schedules", roles: ["examination"] },
-
           { key: "assessment-components", label: "Assessment Components", icon: "bi-diagram-3", path: "/assessment-components", roles: ["examination"] },
           { key: "term-management", label: "Terms", icon: "bi-calendar3-range", path: "/term-management", roles: ["examination"] },
           { key: "grade-schemes", label: "Grade Schemes", icon: "bi-ui-checks", path: "/grade-schemes", roles: ["examination"] },
-
-          // ✅ NEW: Incharge Assignment (you asked to add in sidebar)
           { key: "incharge-assignment", label: "Incharge Assignment", icon: "bi-person-badge", path: "/incharge-assignment", roles: ["examination"] },
-
-          // Co-scholastic
           { key: "co-scholastic-areas", label: "Co-Scholastic Areas", icon: "bi-easel3", path: "/co-scholastic-areas", roles: ["examination"] },
           { key: "co-scholastic-grades", label: "Co-Scholastic Grades", icon: "bi-star", path: "/co-scholastic-grades", roles: ["examination"] },
           { key: "class-co-scholastic-mapping", label: "Class Co-Scholastic Mapping", icon: "bi-grid-3x3-gap", path: "/class-co-scholastic-mapping", roles: ["examination"] },
-          // ✅ FIX: key typo (was "coscholastic-entry" but route is "/co-scholastic-entry")
           { key: "co-scholastic-entry", label: "Co-Scholastic Entry", icon: "bi-stars", path: "/co-scholastic-entry", roles: ["examination"] },
-
-          // Marks / Results
           { key: "roll-numbers", label: "Roll Numbers", icon: "bi-list-ol", path: "/roll-numbers", roles: ["examination"] },
           { key: "marks-entry", label: "Marks Entry", icon: "bi-pencil-square", path: "/marks-entry", roles: ["examination"] },
           { key: "classwise-result-summary", label: "Result Summary", icon: "bi-bar-chart", path: "/reports/classwise-result-summary", roles: ["examination"] },
           { key: "final-result-summary", label: "Final Result Summary", icon: "bi-bar-chart-line", path: "/reports/final-result-summary", roles: ["examination"] },
-
-          // Report cards
           { key: "report-card-formats", label: "Report Card Formats", icon: "bi-file-earmark-font", path: "/report-card-formats", roles: ["examination"] },
           { key: "assign-report-card-format", label: "Assign Report Format", icon: "bi-link", path: "/assign-report-card-format", roles: ["examination"] },
           { key: "student-remarks-entry", label: "Student Remarks Entry", icon: "bi-chat-square-text", path: "/student-remarks-entry", roles: ["examination"] },
@@ -184,8 +227,7 @@ export default function Sidebar({ headerHeight = 56 }) {
       });
     }
 
-
-    // ✅ TRANSPORT MENU (NEW ROLE)
+    // ====== TRANSPORT ======
     if (isTransport) {
       groups.push({
         heading: "Main",
@@ -195,7 +237,7 @@ export default function Sidebar({ headerHeight = 56 }) {
             label: "Dashboard",
             icon: "bi-speedometer2",
             path: "/dashboard",
-            roles: ["transport"],
+            roles: ["transport", "transporter"],
           },
         ],
       });
@@ -208,28 +250,28 @@ export default function Sidebar({ headerHeight = 56 }) {
             label: "Transport Dashboard",
             icon: "bi-truck-front-fill",
             path: "/transport-dashboard",
-            roles: ["transport"],
+            roles: ["transport", "transporter"],
           },
           {
             key: "transportations",
-            label: "Routes / Cost",
+            label: "Transport Routes",
             icon: "bi-signpost-split",
             path: "/transportations",
-            roles: ["transport"],
+            roles: ["transport", "transporter"],
           },
           {
             key: "buses",
             label: "Buses",
             icon: "bi-bus-front-fill",
             path: "/buses",
-            roles: ["transport"],
+            roles: ["transport", "transporter"],
           },
           {
             key: "student-transport-assignments",
             label: "Assign Bus to Students",
             icon: "bi-person-check-fill",
             path: "/student-transport-assignments",
-            roles: ["transport"],
+            roles: ["transport", "transporter"],
           },
         ],
       });
@@ -242,20 +284,20 @@ export default function Sidebar({ headerHeight = 56 }) {
             label: "Circulars",
             icon: "bi-megaphone",
             path: "/combined-circulars",
-            roles: ["transport"],
+            roles: ["transport", "transporter"],
           },
           {
             key: "chat",
             label: "Chat",
             icon: "bi-chat-dots",
             path: "/chat",
-            roles: ["transport"],
+            roles: ["transport", "transporter"],
           },
         ],
       });
     }
 
-    // ✅ LIBRARY MENU (Librarian)
+    // ====== LIBRARY ======
     if (isLibrarian) {
       groups.push({
         heading: "Main",
@@ -353,7 +395,7 @@ export default function Sidebar({ headerHeight = 56 }) {
       });
     }
 
-    // ✅ FRONT OFFICE MENU
+    // ====== FRONT OFFICE ======
     if (isFrontoffice) {
       groups.push({
         heading: "Main",
@@ -410,7 +452,7 @@ export default function Sidebar({ headerHeight = 56 }) {
       });
     }
 
-    // ✅ ADMISSION MENU (NEW ROLE)
+    // ====== ADMISSION ======
     if (isAdmission) {
       groups.push({
         heading: "Main",
@@ -456,8 +498,6 @@ export default function Sidebar({ headerHeight = 56 }) {
             path: "/academic-calendar-view",
             roles: ["admission"],
           },
-
-          // ✅ Next Session Projection (Admission only)
           {
             key: "student-strength-projection",
             label: "Next Session Projection",
@@ -469,7 +509,7 @@ export default function Sidebar({ headerHeight = 56 }) {
       });
     }
 
-    // ====== ACCOUNTS-ONLY MENU (Fee focus) ======
+    // ====== ACCOUNTS ======
     if (isAccounts) {
       groups.push({
         heading: "Main",
@@ -479,107 +519,62 @@ export default function Sidebar({ headerHeight = 56 }) {
             label: "Accounts Dashboard",
             icon: "bi-speedometer2",
             path: "/accounts-dashboard",
-            roles: ["accounts"],
+            roles: ["accounts", "account"],
           },
           {
             key: "combined-circulars",
             label: "Circulars",
             icon: "bi-megaphone",
             path: "/combined-circulars",
-            roles: ["accounts"],
+            roles: ["accounts", "account"],
           },
         ],
       });
+
       groups.push({
-        heading: "Fee Management",
+        heading: "Daily Work",
         items: [
           {
             key: "transactions",
             label: "Collect Fee",
             icon: "bi-receipt",
             path: "/transactions",
-            roles: ["accounts"],
+            roles: ["accounts", "account"],
           },
           {
             key: "cancelledTransactions",
             label: "Cancelled Transactions",
             icon: "bi-trash3",
             path: "/cancelled-transactions",
-            roles: ["accounts"],
+            roles: ["accounts", "account"],
           },
           {
-            key: "dayWiseReport",
-            label: "Day Wise Report",
-            icon: "bi-calendar",
-            path: "/reports/day-wise",
-            roles: ["accounts"],
+            key: "opening-balances",
+            label: "Opening Balances",
+            icon: "bi-clipboard-data",
+            path: "/opening-balances",
+            roles: ["accounts", "admin", "superadmin"],
           },
-          {
-            key: "dayWiseCategoryReports",
-            label: "Day Wise (By Category)",
-            icon: "bi-calendar-check",
-            path: "/reports/day-wise-category",
-            roles: ["accounts"],
-          },
-          {
-            key: "studentDue",
-            label: "Fee Due Report",
-            icon: "bi-file-earmark-text",
-            path: "/student-due",
-            roles: ["accounts"],
-          },
-          {
-            key: "schoolFeeSummary",
-            label: "Session Summary",
-            icon: "bi-graph-up",
-            path: "/reports/school-fee-summary",
-            roles: ["accounts"],
-          },
-          {
-            key: "transportSummary",
-            label: "Transport Summary",
-            icon: "bi-truck-front",
-            path: "/reports/transport-summary",
-            roles: ["accounts"],
-          },
-          {
-            key: "vanFeeDetailedReport",
-            label: "Van Fee Report",
-            icon: "bi-truck-front",
-            path: "/reports/van-fee",
-            roles: ["accounts"],
-          },
-          {
-            key: "concessionReport",
-            label: "Concession Report",
-            icon: "bi-journal-check",
-            path: "/reports/concession",
-            roles: ["accounts"],
-          },
+        ],
+      });
 
-          // Transport modules (accounts may view/manage)
+      groups.push({
+        heading: "Fee Setup",
+        items: [
           {
-            key: "transportations",
-            label: "Transport Routes / Cost",
-            icon: "bi-signpost-split",
-            path: "/transportations",
-            roles: ["accounts", "admin", "superadmin", "transport"],
+            key: "feeStructure",
+            label: "Class Fee Structure",
+            icon: "bi-cash-coin",
+            path: "/fee-structure",
+            roles: ["accounts", "admin", "superadmin"],
           },
           {
-            key: "buses",
-            label: "Buses",
-            icon: "bi-bus-front",
-            path: "/buses",
-            roles: ["accounts", "admin", "superadmin", "transport"],
+            key: "studentFeeStructure",
+            label: "Student Fee Structure",
+            icon: "bi-person-vcard",
+            path: "/student-fee-structure",
+            roles: ["accounts", "admin", "superadmin"],
           },
-          {
-            key: "student-transport-assignments",
-            label: "Bus Assignments",
-            icon: "bi-person-check",
-            path: "/student-transport-assignments",
-            roles: ["accounts", "admin", "superadmin", "transport"],
-          },
-
           {
             key: "feeHeadings",
             label: "Fee Headings",
@@ -594,11 +589,107 @@ export default function Sidebar({ headerHeight = 56 }) {
             path: "/fee-category",
             roles: ["accounts", "admin", "superadmin"],
           },
+          {
+            key: "concessions",
+            label: "Concessions",
+            icon: "bi-percent",
+            path: "/concessions",
+            roles: ["accounts", "admin", "superadmin"],
+          },
+        ],
+      });
+
+      groups.push({
+        heading: "Reports",
+        items: [
+          {
+            key: "studentDue",
+            label: "Fee Due Report",
+            icon: "bi-file-earmark-text",
+            path: "/student-due",
+            roles: ["accounts", "account"],
+          },
+          {
+            key: "student-total-due",
+            label: "Total Due Report",
+            icon: "bi-cash-stack",
+            path: "/reports/student-total-due",
+            roles: ["accounts", "admin", "superadmin"],
+          },
+          {
+            key: "dayWiseReport",
+            label: "Day Wise Report",
+            icon: "bi-calendar",
+            path: "/reports/day-wise",
+            roles: ["accounts", "account"],
+          },
+          {
+            key: "dayWiseCategoryReports",
+            label: "Category-wise Daily Report",
+            icon: "bi-calendar-check",
+            path: "/reports/day-wise-category",
+            roles: ["accounts", "account"],
+          },
+          {
+            key: "schoolFeeSummary",
+            label: "Session Summary",
+            icon: "bi-graph-up",
+            path: "/reports/school-fee-summary",
+            roles: ["accounts", "account"],
+          },
+          {
+            key: "concessionReport",
+            label: "Concession Report",
+            icon: "bi-journal-check",
+            path: "/reports/concession",
+            roles: ["accounts", "account"],
+          },
+          {
+            key: "vanFeeDetailedReport",
+            label: "Van Fee Report",
+            icon: "bi-truck-front",
+            path: "/reports/van-fee",
+            roles: ["accounts", "account"],
+          },
+          {
+            key: "transportSummary",
+            label: "Transport Summary",
+            icon: "bi-truck-front",
+            path: "/reports/transport-summary",
+            roles: ["accounts", "account"],
+          },
+        ],
+      });
+
+      groups.push({
+        heading: "Transport",
+        items: [
+          {
+            key: "transportations",
+            label: "Transport Routes",
+            icon: "bi-signpost-split",
+            path: "/transportations",
+            roles: ["accounts", "admin", "superadmin", "transport", "account"],
+          },
+          {
+            key: "buses",
+            label: "Buses",
+            icon: "bi-bus-front",
+            path: "/buses",
+            roles: ["accounts", "admin", "superadmin", "transport", "account"],
+          },
+          {
+            key: "student-transport-assignments",
+            label: "Bus Assignments",
+            icon: "bi-person-check",
+            path: "/student-transport-assignments",
+            roles: ["accounts", "admin", "superadmin", "transport", "account"],
+          },
         ],
       });
     }
 
-    // ====== ADMIN MENU ======
+    // ====== ADMIN / SUPERADMIN ======
     if (isAdmin) {
       groups.push({
         heading: "Main",
@@ -609,29 +700,36 @@ export default function Sidebar({ headerHeight = 56 }) {
       });
 
       groups.push({
-        heading: "Fee Management",
+        heading: "Management",
+        items: [
+          { key: "users", label: "Users", icon: "bi-person", path: "/users", roles: ["superadmin"] },
+          { key: "users-tracking", label: "User Tracking", icon: "bi-activity", path: "/users-tracking", roles: ["admin", "superadmin"] },
+          { key: "classes", label: "Classes", icon: "bi-list-task", path: "/classes" },
+          { key: "sections", label: "Sections", icon: "bi-grid", path: "/sections" },
+          { key: "sessions", label: "Sessions", icon: "bi-calendar4-week", path: "/sessions" },
+          { key: "students", label: "Students", icon: "bi-people", path: "/students" },
+        ],
+      });
+
+      groups.push({
+        heading: "Fee Collection",
         items: [
           { key: "transactions", label: "Collect Fee", icon: "bi-receipt", path: "/transactions" },
           { key: "cancelledTransactions", label: "Cancelled Transactions", icon: "bi-trash3", path: "/cancelled-transactions" },
-          { key: "dayWiseReport", label: "Fee Report", icon: "bi-calendar", path: "/reports/day-wise" },
-          { key: "dayWiseCategoryReports", label: "Fee Report (New)", icon: "bi-calendar-check", path: "/reports/day-wise-category" },
           { key: "studentDue", label: "Fee Due Report", icon: "bi-file-earmark-text", path: "/student-due" },
-          { key: "schoolFeeSummary", label: "Fee Summary(New)", icon: "bi-graph-up", path: "/reports/school-fee-summary" },
-          { key: "transportSummary", label: "Transport Summary", icon: "bi-truck-front", path: "/reports/transport-summary" },
-          { key: "concessionReport", label: "Concession Report", icon: "bi-journal-check", path: "/reports/concession" },
-          { key: "vanFeeDetailedReport", label: "Van Fee Report", icon: "bi-truck-front", path: "/reports/van-fee" },
-          { key: "feeStructure", label: "Fee Structure", icon: "bi-cash-coin", path: "/fee-structure" },
+          { key: "opening-balances", label: "Opening Balances", icon: "bi-clipboard-data", path: "/opening-balances", roles: ["admin", "superadmin"] },
+          { key: "student-total-due", label: "Total Due Report", icon: "bi-cash-stack", path: "/reports/student-total-due", roles: ["accounts", "admin", "superadmin"] },
+        ],
+      });
 
-          // transport paths
-          { key: "transportations", label: "Transportation Cost", icon: "bi-truck", path: "/transportations" },
-          { key: "buses", label: "Buses", icon: "bi-bus-front", path: "/buses" },
-          { key: "student-transport-assignments", label: "Transport Assignments", icon: "bi-person-check", path: "/student-transport-assignments" },
-
+      groups.push({
+        heading: "Fee Setup",
+        items: [
+          { key: "feeStructure", label: "Class Fee Structure", icon: "bi-cash-coin", path: "/fee-structure" },
+          { key: "studentFeeStructure", label: "Student Fee Structure", icon: "bi-person-vcard", path: "/student-fee-structure", roles: ["accounts", "admin", "superadmin"] },
           { key: "feeHeadings", label: "Fee Headings", icon: "bi-bookmark", path: "/fee-headings" },
           { key: "feeCategory", label: "Fee Category", icon: "bi-tags", path: "/fee-category" },
           { key: "concessions", label: "Concessions", icon: "bi-percent", path: "/concessions" },
-          { key: "opening-balances", label: "Opening Balances", icon: "bi-clipboard-data", path: "/opening-balances", roles: ["admin", "superadmin"] },
-          { key: "caste-gender-report", label: "Caste/Gender Report", icon: "bi-people-fill", path: "/reports/caste-gender" },
         ],
       });
 
@@ -639,9 +737,6 @@ export default function Sidebar({ headerHeight = 56 }) {
         heading: "Admissions",
         items: [
           { key: "enquiries", label: "Enquiries", icon: "bi-person-lines-fill", path: "/enquiries", roles: ["admin", "superadmin"] },
-          { key: "classes", label: "Classes", icon: "bi-list-task", path: "/classes" },
-          { key: "sections", label: "Sections", icon: "bi-grid", path: "/sections" },
-          { key: "sessions", label: "Sessions", icon: "bi-calendar4-week", path: "/sessions" },
         ],
       });
 
@@ -650,7 +745,16 @@ export default function Sidebar({ headerHeight = 56 }) {
         items: [
           { key: "transfer-certificates", label: "Transfer Certificates", icon: "bi-award", path: "/transfer-certificates", roles: ["admin", "superadmin"] },
           { key: "bonafide-certificates", label: "Bonafide Certificates", icon: "bi-patch-check", path: "/bonafide-certificates", roles: ["admin", "superadmin"] },
-          { key: "disciplinary-actions", label: "Disciplinary Actions", icon: "bi-exclamation-octagon", path: "/disciplinary-actions", roles: ["admin", "superadmin", "academic_coordinator"] },
+          { key: "fee-certificates", label: "Fee Certificates", icon: "bi-file-earmark-check", path: "/fee-certificates", roles: ["admin", "superadmin"] },
+        ],
+      });
+
+      groups.push({
+        heading: "Transport",
+        items: [
+          { key: "transportations", label: "Transport Routes", icon: "bi-truck", path: "/transportations" },
+          { key: "buses", label: "Buses", icon: "bi-bus-front", path: "/buses" },
+          { key: "student-transport-assignments", label: "Transport Assignments", icon: "bi-person-check", path: "/student-transport-assignments" },
         ],
       });
 
@@ -663,12 +767,40 @@ export default function Sidebar({ headerHeight = 56 }) {
       });
 
       groups.push({
+        heading: "Reports",
+        items: [
+          { key: "dayWiseReport", label: "Day Wise Fee Report", icon: "bi-calendar", path: "/reports/day-wise" },
+          { key: "dayWiseCategoryReports", label: "Category-wise Daily Report", icon: "bi-calendar-check", path: "/reports/day-wise-category" },
+          { key: "schoolFeeSummary", label: "Fee Summary", icon: "bi-graph-up", path: "/reports/school-fee-summary" },
+          { key: "transportSummary", label: "Transport Summary", icon: "bi-truck-front", path: "/reports/transport-summary" },
+          { key: "concessionReport", label: "Concession Report", icon: "bi-journal-check", path: "/reports/concession" },
+          { key: "vanFeeDetailedReport", label: "Van Fee Report", icon: "bi-truck-front", path: "/reports/van-fee" },
+          { key: "caste-gender-report", label: "Caste / Gender Report", icon: "bi-people-fill", path: "/reports/caste-gender" },
+        ],
+      });
+
+      groups.push({
         heading: "Leave",
-        items: [{ key: "employee-leave-request", label: "Leave Request", icon: "bi-box-arrow-in-down-left", path: "/employee-leave-request" }],
+        items: [
+          { key: "employee-leave-request", label: "Leave Request", icon: "bi-box-arrow-in-down-left", path: "/employee-leave-request" },
+        ],
+      });
+
+      groups.push({
+        heading: "Disciplinary",
+        items: [
+          {
+            key: "disciplinary-actions",
+            label: "Disciplinary Actions",
+            icon: "bi-exclamation-octagon",
+            path: "/disciplinary-actions",
+            roles: ["admin", "superadmin", "academic_coordinator"],
+          },
+        ],
       });
     }
 
-    // ====== ACADEMIC COORDINATOR MENU ======
+    // ====== ACADEMIC COORDINATOR ======
     if (isAcademic) {
       groups.push({
         heading: "Main",
@@ -692,8 +824,7 @@ export default function Sidebar({ headerHeight = 56 }) {
           { key: "substitutionListing", label: "Substitution Listing", icon: "bi-list-ul", path: "/substitution-listing" },
           { key: "studentUserAccounts", label: "Create Student Login", icon: "bi-person-plus", path: "/student-user-accounts" },
           { key: "sessions", label: "Sessions", icon: "bi-calendar4-week", path: "/sessions" },
-          { key: "student-transport", label: "Transport (Old)", icon: "bi-truck", path: "/student-transport" },
-          { key: "caste-gender-report", label: "Caste/Gender Report", icon: "bi-people-fill", path: "/reports/caste-gender" },
+          { key: "caste-gender-report", label: "Caste / Gender Report", icon: "bi-people-fill", path: "/reports/caste-gender" },
         ],
       });
 
@@ -717,7 +848,9 @@ export default function Sidebar({ headerHeight = 56 }) {
 
       groups.push({
         heading: "Leave",
-        items: [{ key: "employee-leave-request", label: "Leave Request", icon: "bi-box-arrow-in-down-left", path: "/employee-leave-request" }],
+        items: [
+          { key: "employee-leave-request", label: "Leave Request", icon: "bi-box-arrow-in-down-left", path: "/employee-leave-request" },
+        ],
       });
 
       groups.push({
@@ -734,7 +867,7 @@ export default function Sidebar({ headerHeight = 56 }) {
       });
     }
 
-    // ====== HR MENU ======
+    // ====== HR ======
     if (isHR) {
       groups.push({
         heading: "Main",
@@ -743,6 +876,7 @@ export default function Sidebar({ headerHeight = 56 }) {
           { key: "combined-circulars", label: "Circulars", icon: "bi-megaphone", path: "/combined-circulars" },
         ],
       });
+
       groups.push({
         heading: "HR Management",
         items: [
@@ -760,28 +894,27 @@ export default function Sidebar({ headerHeight = 56 }) {
       });
     }
 
-    // ====== TEACHER MENU ======
+    // ====== TEACHER ======
     if (isTeacher) {
       groups.push({
         heading: "Main",
         items: [
           { key: "dashboard", label: "Dashboard", icon: "bi-speedometer2", path: "/dashboard" },
           { key: "view-circulars", label: "Circulars", icon: "bi-megaphone", path: "/view-circulars" },
-          { key: "mark-attendance", label: "Mark Attendance", icon: "bi-check2-square", path: "/mark-attendance" },
-          { key: "attendance-calendar", label: "Attendance Calendar", icon: "bi-calendar2-check", path: "/attendance-calendar" },
-          { key: "assignments", label: "Assignments", icon: "bi-clipboard", path: "/assignments" },
-          { key: "assignment-marking", label: "Assignment Marking", icon: "bi-pencil-square", path: "/assignment-marking" },
-          { key: "teacher-timetable-display", label: "Time Table", icon: "bi-table", path: "/teacher-timetable-display" },
-          { key: "combined-teacher-substitution", label: "My Substitutions", icon: "bi-arrow-repeat", path: "/combined-teacher-substitution" },
-          { key: "lesson-plan", label: "Lesson Plan", icon: "bi-journal-text", path: "/lesson-plan" },
-          { key: "employee-leave-request", label: "Request Leave", icon: "bi-box-arrow-in-down-left", path: "/employee-leave-request" },
-          { key: "my-attendance-calendar", label: "My Attendance", icon: "bi-calendar2-week", path: "/my-attendance-calendar" },
         ],
       });
 
       groups.push({
-        heading: "Leave Management",
-        items: [{ key: "leave-requests", label: "Leave Requests", icon: "bi-envelope", path: "/leave-requests" }],
+        heading: "Daily Work",
+        items: [
+          { key: "mark-attendance", label: "Mark Attendance", icon: "bi-check2-square", path: "/mark-attendance" },
+          { key: "attendance-calendar", label: "Attendance Calendar", icon: "bi-calendar2-check", path: "/attendance-calendar" },
+          { key: "assignments", label: "Assignments", icon: "bi-clipboard", path: "/assignments" },
+          { key: "assignment-marking", label: "Assignment Marking", icon: "bi-pencil-square", path: "/assignment-marking" },
+          { key: "teacher-timetable-display", label: "Timetable", icon: "bi-table", path: "/teacher-timetable-display" },
+          { key: "combined-teacher-substitution", label: "My Substitutions", icon: "bi-arrow-repeat", path: "/combined-teacher-substitution" },
+          { key: "lesson-plan", label: "Lesson Plan", icon: "bi-journal-text", path: "/lesson-plan" },
+        ],
       });
 
       groups.push({
@@ -793,7 +926,7 @@ export default function Sidebar({ headerHeight = 56 }) {
       });
 
       groups.push({
-        heading: "Exam",
+        heading: "Examination",
         items: [
           { key: "roll-numbers", label: "Roll Numbers", icon: "bi-list-ol", path: "/roll-numbers" },
           { key: "marks-entry", label: "Marks Entry", icon: "bi-pencil-square", path: "/marks-entry" },
@@ -804,9 +937,18 @@ export default function Sidebar({ headerHeight = 56 }) {
           { key: "report-card-generator", label: "Print Report Cards", icon: "bi-printer", path: "/report-card-generator" },
         ],
       });
+
+      groups.push({
+        heading: "Leave Management",
+        items: [
+          { key: "employee-leave-request", label: "Request Leave", icon: "bi-box-arrow-in-down-left", path: "/employee-leave-request" },
+          { key: "leave-requests", label: "Leave Requests", icon: "bi-envelope", path: "/leave-requests" },
+          { key: "my-attendance-calendar", label: "My Attendance", icon: "bi-calendar2-week", path: "/my-attendance-calendar" },
+        ],
+      });
     }
 
-    // ====== STUDENT MENU ======
+    // ====== STUDENT ======
     if (isStudent) {
       groups.push({
         heading: "Student",
@@ -823,19 +965,11 @@ export default function Sidebar({ headerHeight = 56 }) {
       });
     }
 
-    // Admin inserts User Management group
-    if (isAdmin) {
-      groups.splice(1, 0, {
-        heading: "User Management",
-        items: [
-          { key: "users", label: "Users", icon: "bi-person", path: "/users", roles: ["superadmin"] },
-          { key: "users-tracking", label: "User Tracking", icon: "bi-activity", path: "/users-tracking", roles: ["admin", "superadmin"] },
-        ],
-      });
+    for (const g of groups) {
+      g.items = g.items.filter(hasAccess);
     }
 
-    for (const g of groups) g.items = g.items.filter(hasAccess);
-    return groups;
+    return sortGroups(cleanGroups(groups));
   }, [
     isAdmin,
     isAcademic,
@@ -852,10 +986,10 @@ export default function Sidebar({ headerHeight = 56 }) {
     roleLower,
   ]);
 
-  // filter groups by desktop search query (q)
   const filteredGroups = useMemo(() => {
     const s = (q || "").trim().toLowerCase();
     if (!s) return menuGroups;
+
     const out = [];
     for (const g of menuGroups) {
       const matchedItems = g.items.filter((it) => {
@@ -864,8 +998,10 @@ export default function Sidebar({ headerHeight = 56 }) {
         const group = (g.heading || "").toLowerCase();
         return label.includes(s) || path.includes(s) || group.includes(s);
       });
+
       if (matchedItems.length) out.push({ ...g, items: matchedItems });
     }
+
     return out;
   }, [q, menuGroups]);
 
@@ -882,7 +1018,6 @@ export default function Sidebar({ headerHeight = 56 }) {
     "--header-h": `${headerHeight}px`,
   };
 
-  // --------- Mobile bottom bar helpers ----------
   const flattenMenu = (groups) =>
     groups.flatMap((g) => g.items.map((it) => ({ ...it, group: g.heading })));
 
@@ -894,19 +1029,14 @@ export default function Sidebar({ headerHeight = 56 }) {
     teacher: ["dashboard", "mark-attendance", "teacher-timetable-display", "marks-entry"],
     student: ["student-home", "student-diary", "student-attendance", "student-timetable-display"],
     hr: ["dashboard", "employees", "employee-attendance", "hr-leave-requests"],
-    superadmin: ["dashboard", "users", "reports/day-wise", "transactions", "opening-balances"],
+    superadmin: ["dashboard", "users", "transactions", "opening-balances"],
     accounts: ["accounts-dashboard", "transactions", "studentDue", "dayWiseReport"],
+    account: ["accounts-dashboard", "transactions", "studentDue", "dayWiseReport"],
     frontoffice: ["frontoffice-dashboard", "gate-pass", "visitors", "enquiries", "students"],
     admission: ["admission-dashboard", "enquiries", "student-strength-projection", "students"],
-
-    // ✅ NEW: Examination bottom-nav priorities
     examination: ["exam-dashboard", "exams", "exam-schemes", "marks-entry", "report-card-generator"],
-
-    // ✅ Transport bottom-nav priorities
     transport: ["transport-dashboard-direct", "transportations", "buses", "student-transport-assignments"],
     transporter: ["transport-dashboard-direct", "transportations", "buses", "student-transport-assignments"],
-
-    // ✅ Librarian bottom-nav priorities
     librarian: ["library-dashboard", "library-books", "library-issue-return", "library-members"],
     library: ["library-dashboard", "library-books", "library-issue-return", "library-members"],
     libraryadmin: ["library-dashboard", "library-books", "library-issue-return", "library-members"],
@@ -916,7 +1046,6 @@ export default function Sidebar({ headerHeight = 56 }) {
   const primaryItems = allItems.filter((i) => primaryKeys.includes(i.key)).slice(0, 5);
   const moreItems = allItems.filter((i) => !primaryKeys.includes(i.key));
 
-  // Mobile: bottom nav
   if (isMobile) {
     return (
       <BottomNav
@@ -928,7 +1057,6 @@ export default function Sidebar({ headerHeight = 56 }) {
     );
   }
 
-  // Desktop: sidebar
   return (
     <>
       <aside className="app-sidebar" style={asideStyle} aria-label="Sidebar navigation">
@@ -955,47 +1083,72 @@ export default function Sidebar({ headerHeight = 56 }) {
         </div>
 
         <nav className="mt-1">
-          {filteredGroups.map((group, gi) => (
-            <div key={gi}>
-              {isExpanded && (
-                <h6 className="group-heading text-uppercase px-3 mt-3 mb-1">{group.heading}</h6>
-              )}
-              <ul className="nav flex-column">
-                {group.items.map((item, ii) => {
-                  const active = isPathActive(item.path);
-                  const gradient = sidebarGradients[ii % sidebarGradients.length];
-                  return (
-                    <li
-                      key={item.key}
-                      className={`nav-item sidebar-item ${active ? "active" : ""}`}
-                      onClick={() => handleMenuClick(item)}
-                      title={!isExpanded ? item.label : undefined}
-                      role="button"
-                      tabIndex={0}
-                      onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && handleMenuClick(item)}
-                      style={{ "--item-gradient": gradient }}
-                    >
-                      <span className="active-indicator" />
-                      <div className={`item-content ${isExpanded ? "expanded" : "collapsed"}`}>
-                        <i
-                          className={`bi ${item.icon} item-icon`}
-                          aria-hidden="true"
-                          style={{ color: palette[ii % palette.length] }}
-                        />
-                        <span className="item-label">{item.label}</span>
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
-          ))}
+          {filteredGroups.map((group, gi) => {
+            const isOpen = openGroups[group.heading] ?? true;
+
+            return (
+              <div key={gi} className="sidebar-group">
+                {isExpanded ? (
+                  <button
+                    type="button"
+                    className="group-toggle w-100 d-flex align-items-center justify-content-between px-3 mt-3 mb-1"
+                    onClick={() => toggleGroup(group.heading)}
+                    style={{
+                      background: "transparent",
+                      border: "none",
+                      color: "inherit",
+                    }}
+                  >
+                    <span className="group-heading text-uppercase mb-0">{group.heading}</span>
+                    <i className={`bi ${isOpen ? "bi-chevron-down" : "bi-chevron-right"}`} />
+                  </button>
+                ) : (
+                  <div className="group-divider my-2" />
+                )}
+
+                {(!isExpanded || isOpen) && (
+                  <ul className="nav flex-column">
+                    {group.items.map((item, ii) => {
+                      const active = isPathActive(item.path);
+                      const gradient = sidebarGradients[ii % sidebarGradients.length];
+
+                      return (
+                        <li
+                          key={item.key}
+                          className={`nav-item sidebar-item ${active ? "active" : ""}`}
+                          onClick={() => handleMenuClick(item)}
+                          title={!isExpanded ? item.label : undefined}
+                          role="button"
+                          tabIndex={0}
+                          onKeyDown={(e) =>
+                            (e.key === "Enter" || e.key === " ") && handleMenuClick(item)
+                          }
+                          style={{ "--item-gradient": gradient }}
+                        >
+                          <span className="active-indicator" />
+                          <div className={`item-content ${isExpanded ? "expanded" : "collapsed"}`}>
+                            <i
+                              className={`bi ${item.icon} item-icon`}
+                              aria-hidden="true"
+                              style={{ color: palette[ii % palette.length] }}
+                            />
+                            <span className="item-label">{item.label}</span>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+            );
+          })}
 
           {filteredGroups.length === 0 && (
             <div className="px-3 py-2 text-muted small">No menu items match “{q}”.</div>
           )}
         </nav>
       </aside>
+
       <div className="sidebar-scrim" aria-hidden="true" />
     </>
   );
@@ -1010,7 +1163,10 @@ function BottomNav({ items, moreItems, isActive, onClick }) {
     const s = q.trim().toLowerCase();
     if (!s) return moreItems;
     return moreItems.filter(
-      (i) => i.label.toLowerCase().includes(s) || i.group?.toLowerCase().includes(s)
+      (i) =>
+        i.label.toLowerCase().includes(s) ||
+        i.group?.toLowerCase().includes(s) ||
+        i.path?.toLowerCase().includes(s)
     );
   }, [q, moreItems]);
 
@@ -1064,6 +1220,7 @@ function BottomNav({ items, moreItems, isActive, onClick }) {
                 Close
               </button>
             </div>
+
             <div className="bn-list">
               {filtered.map((it, i) => (
                 <button
@@ -1082,6 +1239,7 @@ function BottomNav({ items, moreItems, isActive, onClick }) {
                   </div>
                 </button>
               ))}
+
               {filtered.length === 0 && (
                 <div className="text-muted small px-3 py-2">No items match that search.</div>
               )}

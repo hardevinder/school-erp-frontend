@@ -836,47 +836,125 @@ const FinalResultSummary = () => {
         ? String(computedGrandGradeRaw).trim()
         : null;
 
-    const blank1 = term1Components.map(() => `<td></td>`).join("");
-    const blank2 = term2Components.map(() => `<td></td>`).join("");
+    const blank1 = term1Components
+      .map(() => `<td style="color:#0b1b3a !important;"></td>`)
+      .join("");
+
+    const blank2 = term2Components
+      .map(() => `<td style="color:#0b1b3a !important;"></td>`)
+      .join("");
 
     const rankRow = hasDisplayRank(student?.rank)
       ? `
-        <tr>
-          <td class="td-rank-label">Rank</td>
-          <td colspan="${getScholasticColumnCount() - 1}" class="td-rank-value">
-            <span class="rank-highlight">${student.rank}</span>
-          </td>
-        </tr>
-      `
+      <tr>
+        <td
+          class="td-rank-label"
+          style="background:linear-gradient(180deg,#1e3a8a,#1e40af);color:#ffffff !important;font-weight:900;text-align:left;"
+        >
+          Rank
+        </td>
+        <td
+          colspan="${getScholasticColumnCount() - 1}"
+          class="td-rank-value"
+          style="background:#fff7cc !important;color:#0b1b3a !important;font-weight:900;text-align:right !important;padding-right:12px !important;"
+        >
+          <span
+            class="rank-highlight"
+            style="display:inline-block;padding:1px 7px;border-radius:8px;background:rgba(255,243,199,0.95);border:1px solid rgba(251,191,36,0.55);color:#0b1b3a !important;font-size:11px;font-weight:900;line-height:1.1;"
+          >
+            ${student.rank}
+          </span>
+        </td>
+      </tr>
+    `
       : "";
 
     const grandGradeCell = `
-      ${computedGrandGrade ? `<div class="grand-grade-big">${computedGrandGrade}</div>` : ``}
-      <div class="grand-percent-highlight">
-        ${grandPct != null ? `${formatNumber(grandPct)}%` : "-"}
-      </div>
-    `;
+    ${computedGrandGrade
+      ? `<div style="font-weight:900;font-size:12px;color:#0b1b3a !important;">${computedGrandGrade}</div>`
+      : ``}
+    <div
+      style="margin-top:1px;font-size:11px;font-weight:900;display:inline-block;padding:1px 7px;border-radius:8px;background:rgba(255,243,199,0.95);border:1px solid rgba(251,191,36,0.55);color:#0b1b3a !important;"
+    >
+      ${grandPct != null ? `${formatNumber(grandPct)}%` : "-"}
+    </div>
+  `;
 
-    const term1PctCell = `<div style="font-weight:900">${formatPercent(t1?.percent)}</div>`;
-    const term2PctCell = `<div style="font-weight:900">${formatPercent(t2?.percent)}</div>`;
+    const term1PctCell = `
+    <div style="font-weight:900;color:#0b1b3a !important;">
+      ${formatPercent(t1?.percent)}
+    </div>
+  `;
+
+    const term2PctCell = `
+    <div style="font-weight:900;color:#0b1b3a !important;">
+      ${formatPercent(t2?.percent)}
+    </div>
+  `;
 
     return `
-      <tr>
-        <td class="td-total-label">TOTAL</td>
+    <tr>
+      <td
+        class="td-total-label"
+        style="background:linear-gradient(180deg,#1e3a8a,#1e40af);color:#ffffff !important;font-weight:900;text-align:left;"
+      >
+        TOTAL
+      </td>
 
-        ${blank1}
-        <td class="td-total"><div class="grand-total-small">${t1 ? formatNumber(t1.total_weighted) : "-"}</div></td>
-        <td class="td-total">${term1PctCell}</td>
+      ${blank1}
 
-        ${blank2}
-        <td class="td-total"><div class="grand-total-small">${t2 ? formatNumber(t2.total_weighted) : "-"}</div></td>
-        <td class="td-total">${term2PctCell}</td>
+      <td
+        class="td-total"
+        style="background:#ffe066 !important;color:#0b1b3a !important;font-weight:900;"
+      >
+        <div style="font-weight:900;font-size:11px;letter-spacing:0.1px;color:#0b1b3a !important;">
+          ${t1 ? formatNumber(t1.total_weighted) : "-"}
+        </div>
+      </td>
 
-        <td class="td-grand"><div class="grand-total-small">${formatNumber(grandTotal)}</div></td>
-        <td class="td-grand">${grandGradeCell}</td>
-      </tr>
-      ${rankRow}
-    `;
+      <td
+        class="td-total"
+        style="background:#ffe066 !important;color:#0b1b3a !important;font-weight:900;"
+      >
+        ${term1PctCell}
+      </td>
+
+      ${blank2}
+
+      <td
+        class="td-total"
+        style="background:#ffe066 !important;color:#0b1b3a !important;font-weight:900;"
+      >
+        <div style="font-weight:900;font-size:11px;letter-spacing:0.1px;color:#0b1b3a !important;">
+          ${t2 ? formatNumber(t2.total_weighted) : "-"}
+        </div>
+      </td>
+
+      <td
+        class="td-total"
+        style="background:#ffe066 !important;color:#0b1b3a !important;font-weight:900;"
+      >
+        ${term2PctCell}
+      </td>
+
+      <td
+        class="td-grand"
+        style="background:#ffd43b !important;color:#0b1b3a !important;font-weight:900;"
+      >
+        <div style="font-weight:900;font-size:11px;letter-spacing:0.1px;color:#0b1b3a !important;">
+          ${formatNumber(grandTotal)}
+        </div>
+      </td>
+
+      <td
+        class="td-grand"
+        style="background:#ffd43b !important;color:#0b1b3a !important;font-weight:900;"
+      >
+        ${grandGradeCell}
+      </td>
+    </tr>
+    ${rankRow}
+  `;
   };
 
   const buildCoScholasticPdfHtml_TwoTerms = (student) => {
@@ -1035,275 +1113,321 @@ const FinalResultSummary = () => {
 
   const buildCardsHtml = (studentsForPdf = reportData || []) => {
     const styles = `
-      <style>
-        * { box-sizing: border-box; }
-        body {
-          font-family: "Helvetica", Arial, sans-serif;
-          font-size: 13px;
-          color: #0f172a;
-          background:
-            radial-gradient(1100px 600px at 12% 0%, rgba(59,130,246,0.18), transparent 60%),
-            radial-gradient(1000px 520px at 88% 8%, rgba(16,185,129,0.16), transparent 60%),
-            radial-gradient(900px 520px at 50% 90%, rgba(168,85,247,0.10), transparent 60%),
-            linear-gradient(180deg, #eef5ff 0%, #fbfdff 100%);
-        }
+    <style>
+      * { box-sizing: border-box; }
 
-        @page { margin: 12px 10px; }
+      body {
+        font-family: "Helvetica", Arial, sans-serif;
+        font-size: 13px;
+        color: #0f172a;
+        background:
+          radial-gradient(1100px 600px at 12% 0%, rgba(59,130,246,0.18), transparent 60%),
+          radial-gradient(1000px 520px at 88% 8%, rgba(16,185,129,0.16), transparent 60%),
+          radial-gradient(900px 520px at 50% 90%, rgba(168,85,247,0.10), transparent 60%),
+          linear-gradient(180deg, #eef5ff 0%, #fbfdff 100%);
+      }
 
-        section { page-break-after: always; }
-        section:last-child { page-break-after: auto; }
+      @page { margin: 12px 10px; }
 
-        .card { margin-bottom: 0px; }
+      section { page-break-after: always; }
+      section:last-child { page-break-after: auto; }
 
-        .panel {
-          border: 1px solid rgba(199,210,254,0.85);
-          border-radius: 14px;
-          padding: 9px;
-          background: linear-gradient(180deg, rgba(255,255,255,0.96) 0%, rgba(248,251,255,0.96) 100%);
-          box-shadow: 0 8px 18px rgba(10, 30, 80, 0.09);
-          position: relative;
-          overflow: hidden;
-        }
+      .card { margin-bottom: 0px; }
 
-        .header-flex {
-          display:flex;
-          align-items:flex-start;
-          justify-content:space-between;
-          gap:10px;
-        }
+      .panel {
+        border: 1px solid rgba(199,210,254,0.85);
+        border-radius: 14px;
+        padding: 9px;
+        background: linear-gradient(180deg, rgba(255,255,255,0.96) 0%, rgba(248,251,255,0.96) 100%);
+        box-shadow: 0 8px 18px rgba(10, 30, 80, 0.09);
+        position: relative;
+        overflow: hidden;
+      }
 
-        .header-logo {
-          height: 100px;
-          width: auto;
-          object-fit: contain;
-        }
+      .header-flex {
+        display: grid;
+        grid-template-columns: 120px 1fr 120px;
+        align-items: center;
+        gap: 10px;
+      }
 
-        .student-photo {
-          width: 104px;
-          height: 126px;
-          border-radius: 12px;
-          object-fit: cover;
-          border: 2px solid rgba(191,219,254,1);
-          box-shadow: 0 6px 14px rgba(0,0,0,0.14);
-          background:#fff;
-        }
+      .header-left {
+        display: flex;
+        justify-content: flex-start;
+        align-items: flex-start;
+        padding-top: 18px;
+      }
 
-        .grid-info{
-          display:grid;
-          grid-template-columns: repeat(3, minmax(0, 1fr));
-          gap: 6px 8px;
-          font-size: 13px;
-          margin-top: 2px;
-        }
+      .header-center {
+        text-align: center;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 126px;
+        padding: 0 10px;
+        font-size: 14px;
+        line-height: 1.32;
+        color: #0b1b3a;
+      }
 
-        .kv{
-          padding: 6px 8px;
-          border-radius: 10px;
-          background: rgba(255,255,255,0.8);
-          border:1px solid rgba(226,232,240,0.9);
-          line-height: 1.25;
-        }
+      .header-right {
+        display: flex;
+        justify-content: flex-end;
+        align-items: flex-start;
+      }
 
-        .kv b{ color:#0b1b3a; }
+      .header-logo {
+        height: 95px;
+        width: auto;
+        object-fit: contain;
+        display: block;
+        flex-shrink: 0;
+      }
 
-        .section-title{
-          display:flex;
-          align-items:center;
-          justify-content:space-between;
-          margin-top: 8px;
-          margin-bottom: 4px;
-        }
+      .student-photo {
+        width: 104px;
+        height: 126px;
+        border-radius: 12px;
+        object-fit: cover;
+        border: 2px solid rgba(191,219,254,1);
+        box-shadow: 0 6px 14px rgba(0,0,0,0.14);
+        background:#fff;
+      }
 
-        .section-title-left{ display:flex; align-items:center; gap:8px; }
+      .grid-info{
+        display:grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 6px 8px;
+        font-size: 13px;
+        margin-top: 2px;
+      }
 
-        .section-pill{
-          font-size: 9px;
-          font-weight: 900;
-          padding: 3px 8px;
-          border-radius: 999px;
-          background: rgba(59,130,246,0.12);
-          border: 1px solid rgba(59,130,246,0.22);
-          color:#0b1b3a;
-          letter-spacing: 0.3px;
-          text-transform: uppercase;
-        }
+      .kv{
+        padding: 6px 8px;
+        border-radius: 10px;
+        background: rgba(255,255,255,0.8);
+        border:1px solid rgba(226,232,240,0.9);
+        line-height: 1.25;
+      }
 
-        .tbl { 
-            width: 100%; 
-            border-collapse: collapse; 
-            background: rgba(255,255,255,0.95); 
-          }
+      .kv b{ color:#0b1b3a; }
 
-          .tbl th, .tbl td {
-            border: 1px solid rgba(148,163,184,0.9);
-            padding: 7px 9px;
-            text-align: center;
-            vertical-align: middle;
-            line-height: 1.25;
-            font-size: 12px;
-            white-space: nowrap;
-          }
+      .section-title{
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        margin-top: 8px;
+        margin-bottom: 4px;
+      }
 
-          .tbl td:first-child,
-          .tbl th:first-child {
-            text-align: left !important;
-            white-space: normal !important;
-          }
+      .section-title-left{
+        display:flex;
+        align-items:center;
+        gap:8px;
+      }
 
-          .tbl thead th{
-            background: linear-gradient(180deg,#1e3a8a,#1e40af);
-            color: #ffffff;
-            font-weight: 800;
-          }
+      .section-pill{
+        font-size: 9px;
+        font-weight: 900;
+        padding: 3px 8px;
+        border-radius: 999px;
+        background: rgba(59,130,246,0.12);
+        border: 1px solid rgba(59,130,246,0.22);
+        color:#0b1b3a;
+        letter-spacing: 0.3px;
+        text-transform: uppercase;
+      }
 
-          .tbl tbody td{
-            background: #fff7cc;
-          }
+      .tbl {
+        width: 100%;
+        border-collapse: collapse;
+        background: rgba(255,255,255,0.95);
+      }
 
-          .tbl tbody tr:nth-child(even) td{
-            background: #fff2a8;
-          }
+      .tbl th,
+      .tbl td {
+        border: 1px solid rgba(148,163,184,0.9);
+        padding: 7px 9px;
+        text-align: center;
+        vertical-align: middle;
+        line-height: 1.25;
+        font-size: 12px;
+        white-space: nowrap;
+      }
 
-          .th-subject{
-            background: linear-gradient(180deg,#1e3a8a,#1e40af);
-            color:#ffffff;
-            text-align:left;
-            font-size: 12px;
-          }
+      .tbl td:first-child,
+      .tbl th:first-child {
+        text-align: left !important;
+        white-space: normal !important;
+      }
 
-          .th-term{
-            background: linear-gradient(180deg,#1e3a8a,#1e40af);
-            color:#ffffff;
-            font-size: 12px;
-          }
+      .tbl thead th{
+        background: linear-gradient(180deg,#1e3a8a,#1e40af);
+        color: #ffffff;
+        font-weight: 800;
+      }
 
-          .th-grand{
-            background: linear-gradient(180deg,#172554,#1e3a8a);
-            color:#ffffff;
-            font-size: 12px;
-          }
+      .tbl tbody td{
+        background: #fff7cc;
+        color: #0f172a;
+      }
 
-          .th-comp{
-            background: linear-gradient(180deg,#1e40af,#2563eb);
-            color:#ffffff;
-            font-weight:700;
-            font-size:12px;
-          }
+      .tbl tbody tr:nth-child(even) td{
+        background: #fff2a8;
+        color: #0f172a;
+      }
 
-          .th-comp.strong{ font-weight:900; }
+      .th-subject{
+        background: linear-gradient(180deg,#1e3a8a,#1e40af);
+        color:#ffffff;
+        text-align:left;
+        font-size: 12px;
+      }
 
-          .td-subject{
-            background: #ffe68a;
-            font-weight: 900;
-            text-align:left;
-            white-space: normal;
-            font-size: 12px;
-          }
+      .th-term{
+        background: linear-gradient(180deg,#1e3a8a,#1e40af);
+        color:#ffffff;
+        font-size: 12px;
+      }
 
-          .td-strong{ 
-            font-weight: 900; 
-          }
+      .th-grand{
+        background: linear-gradient(180deg,#172554,#1e3a8a);
+        color:#ffffff;
+        font-size: 12px;
+      }
 
-          .td-total-label,
-          .td-rank-label{
-            background: linear-gradient(180deg,#1e3a8a,#1e40af);
-            font-weight: 900;
-            text-align:left;
-            color:#ffffff;
-            font-size: 12px;
-          }
+      .th-comp{
+        background: linear-gradient(180deg,#1e40af,#2563eb);
+        color:#ffffff;
+        font-weight:700;
+        font-size:12px;
+      }
 
-          .td-total{ 
-            background:#ffe066; 
-            font-weight:900; 
-          }
+      .th-comp.strong{
+        font-weight:900;
+      }
 
-          .td-grand{ 
-            background:#ffd43b; 
-            font-weight:900; 
-          }
+      .td-subject{
+        background: #ffe68a !important;
+        color: #0b1b3a !important;
+        font-weight: 900;
+        text-align:left;
+        white-space: normal;
+        font-size: 12px;
+      }
 
-          .td-rank-value{
-            background: #fff7cc;
-            font-weight: 900;
-            text-align: right !important;
-            padding-right: 12px !important;
-            color:#0b1b3a;
-            font-size: 12px;
-          }
+      .td-strong{
+        font-weight: 900;
+        color:#0b1b3a !important;
+      }
 
-        .grand-total-small{
-          font-weight: 900;
-          font-size: 11px;
-          letter-spacing: 0.1px;
-        }
+      .td-total-label,
+      .td-rank-label{
+        background: linear-gradient(180deg,#1e3a8a,#1e40af);
+        font-weight: 900;
+        text-align:left;
+        color:#ffffff !important;
+        font-size: 12px;
+      }
 
-        .grand-grade-big{
-          font-weight: 900;
-          font-size: 12px;
-        }
+      .td-total{
+        background:#ffe066 !important;
+        font-weight:900;
+        color:#0b1b3a !important;
+      }
 
-        .grand-percent-highlight{
-          margin-top: 1px;
-          font-size: 11px;
-          font-weight: 900;
-          display: inline-block;
-          padding: 1px 7px;
-          border-radius: 8px;
-          background: rgba(255, 243, 199, 0.95);
-          border: 1px solid rgba(251, 191, 36, 0.55);
-          color: #0b1b3a;
-        }
+      .td-grand{
+        background:#ffd43b !important;
+        font-weight:900;
+        color:#0b1b3a !important;
+      }
 
-        .rank-highlight{
-          display: inline-block;
-          padding: 1px 7px;
-          border-radius: 8px;
-          background: rgba(255, 243, 199, 0.95);
-          border: 1px solid rgba(251, 191, 36, 0.55);
-          color: #0b1b3a;
-          font-size: 11px;
-          font-weight: 900;
-          line-height: 1.1;
-        }
+      .td-rank-value{
+        background: #fff7cc !important;
+        font-weight: 900;
+        text-align: right !important;
+        padding-right: 12px !important;
+        color:#0b1b3a !important;
+        font-size: 12px;
+      }
 
-        .muted{ color:#475569; }
+      .grand-total-small{
+        font-weight: 900;
+        font-size: 11px;
+        letter-spacing: 0.1px;
+        color:#0b1b3a !important;
+      }
 
-        .remarks-card{
-          border:1px solid rgba(226,232,240,0.9);
-          border-radius: 12px;
-          background: rgba(255,255,255,0.86);
-          overflow:hidden;
-        }
+      .grand-grade-big{
+        font-weight: 900;
+        font-size: 12px;
+        color:#0b1b3a !important;
+      }
 
-        .remarks-body{
-          padding: 7px 9px;
-          min-height: 32px;
-          line-height: 1.35;
-          font-size: 13px;
-        }
+      .grand-percent-highlight{
+        margin-top: 1px;
+        font-size: 11px;
+        font-weight: 900;
+        display: inline-block;
+        padding: 1px 7px;
+        border-radius: 8px;
+        background: rgba(255, 243, 199, 0.95);
+        border: 1px solid rgba(251, 191, 36, 0.55);
+        color: #0b1b3a !important;
+      }
 
-        .two-col{
-          display:grid;
-          grid-template-columns: 1.35fr 0.65fr;
-          gap: 8px;
-          margin-top: 6px;
-        }
+      .rank-highlight{
+        display: inline-block;
+        padding: 1px 7px;
+        border-radius: 8px;
+        background: rgba(255, 243, 199, 0.95);
+        border: 1px solid rgba(251, 191, 36, 0.55);
+        color: #0b1b3a !important;
+        font-size: 11px;
+        font-weight: 900;
+        line-height: 1.1;
+      }
 
-        .grade-footer-note{
-          margin-top: 6px;
-          margin-bottom: 6px;
-          font-size: 11px;
-          color: #334155;
-          border-top: 1px dashed rgba(148,163,184,0.7);
-          padding-top: 5px;
-          line-height: 1.2;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-      </style>
-    `;
+      .muted{
+        color:#475569;
+      }
+
+      .remarks-card{
+        border:1px solid rgba(226,232,240,0.9);
+        border-radius: 12px;
+        background: rgba(255,255,255,0.86);
+        overflow:hidden;
+      }
+
+      .remarks-body{
+        padding: 7px 9px;
+        min-height: 32px;
+        line-height: 1.35;
+        font-size: 13px;
+        color:#0f172a;
+      }
+
+      .two-col{
+        display:grid;
+        grid-template-columns: 1.35fr 0.65fr;
+        gap: 8px;
+        margin-top: 6px;
+      }
+
+      .grade-footer-note{
+        margin-top: 6px;
+        margin-bottom: 6px;
+        font-size: 11px;
+        color: #334155;
+        border-top: 1px dashed rgba(148,163,184,0.7);
+        padding-top: 5px;
+        line-height: 1.2;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+    </style>
+  `;
 
     const gradeFooterText = buildGradeRangeFooterText(gradeSchema);
 
@@ -1314,20 +1438,20 @@ const FinalResultSummary = () => {
       const subjectsForStudent = getNonDrawingSubjects(student);
 
       const scholasticTable = `
-        <div class="section-title">
-          <div class="section-title-left">
-            <div class="section-pill">Scholastic</div>
-            <h5 style="margin:0;color:#0b1b3a;font-size:15px">Scholastic Areas (Term-wise)</h5>
-          </div>
+      <div class="section-title">
+        <div class="section-title-left">
+          <div class="section-pill">Scholastic</div>
+          <h5 style="margin:0;color:#0b1b3a;font-size:15px">Scholastic Areas (Term-wise)</h5>
         </div>
-        <table class="tbl">
-          <thead>${buildScholasticHeaderHtml_TermWise()}</thead>
-          <tbody>
-            ${subjectsForStudent.map((sub) => buildScholasticBodyRowHtml_TermWise(student, sub)).join("")}
-            ${buildTotalsFooterRowHtml(student)}
-          </tbody>
-        </table>
-      `;
+      </div>
+      <table class="tbl">
+        <thead>${buildScholasticHeaderHtml_TermWise()}</thead>
+        <tbody>
+          ${subjectsForStudent.map((sub) => buildScholasticBodyRowHtml_TermWise(student, sub)).join("")}
+          ${buildTotalsFooterRowHtml(student)}
+        </tbody>
+      </table>
+    `;
 
       const coScholasticTable = buildCoScholasticPdfHtml_TwoTerms(student);
       const attendanceTable = buildAttendancePdfHtml_TermWise(student.id);
@@ -1337,22 +1461,30 @@ const FinalResultSummary = () => {
 
       const headerHtml = cleanHeaderHtml
         ? `
-          <div style="margin-bottom:6px">
-            <div class="header-flex">
+        <div style="margin-bottom:8px">
+          <div class="header-flex">
+            <div class="header-left">
               ${
                 reportFormat.school_logo_url
                   ? `<img src="${reportFormat.school_logo_url}" alt="School Logo" class="header-logo" />`
-                  : `<span style="width:90px"></span>`
+                  : `<span style="width:95px;display:block;"></span>`
               }
-              <div style="text-align:center;flex:1;font-size:14px;line-height:1.32">${cleanHeaderHtml}</div>
+            </div>
+
+            <div class="header-center">
+              <div>${cleanHeaderHtml}</div>
+            </div>
+
+            <div class="header-right">
               <img src="${studentPhotoSrc}" alt="Student Photo" class="student-photo" />
             </div>
           </div>
-        `
+        </div>
+      `
         : "";
 
       const footerHtml = reportFormat?.footer_html
-        ? `<div style="margin-top:6px;text-align:center;font-size:11px">${reportFormat.footer_html}</div>`
+        ? `<div style="margin-top:6px;text-align:center;font-size:11px;color:#334155">${reportFormat.footer_html}</div>`
         : "";
 
       const dobValRaw = info?.Date_Of_Birth || info?.date_of_birth || info?.dob || "";
@@ -1361,42 +1493,42 @@ const FinalResultSummary = () => {
       const motherVal = info?.mother_name || "-";
 
       const studentInfoBlock = `
-        <div class="panel" style="margin-bottom:8px">
-          <div class="grid-info">
-            <div class="kv"><b>Student Name:</b> ${info?.name || "-"}</div>
-            <div class="kv"><b>Admission No.:</b> ${info?.admission_number || "-"}</div>
-            <div class="kv"><b>Class / Section:</b> ${(info?.Class?.class_name || "-")} - ${(info?.Section?.section_name || "-")}</div>
+      <div class="panel" style="margin-bottom:8px">
+        <div class="grid-info">
+          <div class="kv"><b>Student Name:</b> ${info?.name || "-"}</div>
+          <div class="kv"><b>Admission No.:</b> ${info?.admission_number || "-"}</div>
+          <div class="kv"><b>Class / Section:</b> ${(info?.Class?.class_name || "-")} - ${(info?.Section?.section_name || "-")}</div>
 
-            <div class="kv"><b>Date of Birth:</b> ${dobVal}</div>
-            <div class="kv"><b>Mother's Name:</b> ${motherVal}</div>
-            <div class="kv"><b>Father's Name:</b> ${fatherVal}</div>
-          </div>
+          <div class="kv"><b>Date of Birth:</b> ${dobVal}</div>
+          <div class="kv"><b>Mother's Name:</b> ${motherVal}</div>
+          <div class="kv"><b>Father's Name:</b> ${fatherVal}</div>
         </div>
-      `;
+      </div>
+    `;
 
       return `
-        <section class="card">
-          ${headerHtml}
-          ${studentInfoBlock}
-          ${scholasticTable}
+      <section class="card">
+        ${headerHtml}
+        ${studentInfoBlock}
+        ${scholasticTable}
 
-          ${
-            gradeFooterText
-              ? `<div class="grade-footer-note"><b>Grade Scale:</b> ${gradeFooterText}</div>`
-              : ""
-          }
+        ${
+          gradeFooterText
+            ? `<div class="grade-footer-note"><b>Grade Scale:</b> ${gradeFooterText}</div>`
+            : ""
+        }
 
-          <div class="two-col">
-            <div>
-              ${coScholasticTable}
-            </div>
-            <div>${attendanceTable}</div>
+        <div class="two-col">
+          <div>
+            ${coScholasticTable}
           </div>
+          <div>${attendanceTable}</div>
+        </div>
 
-          ${remarksBlock}
-          ${footerHtml}
-        </section>
-      `;
+        ${remarksBlock}
+        ${footerHtml}
+      </section>
+    `;
     });
 
     return `<!doctype html><html><head><meta charset="utf-8" />${styles}</head><body>${blocks.join(
@@ -2042,7 +2174,14 @@ const FinalResultSummary = () => {
                           <img
                             src={reportFormat.school_logo_url}
                             alt="School Logo"
-                            style={{ height: "100px", width: "auto", objectFit: "contain" }}
+                            style={{
+                              height: "100px",
+                              width: "auto",
+                              objectFit: "contain",
+                              marginTop: "12px",
+                              display: "block",
+                              flexShrink: 0,
+                            }}
                           />
                         ) : (
                           <div style={{ width: "100px" }} />

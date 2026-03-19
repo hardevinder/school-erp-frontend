@@ -123,6 +123,47 @@ const normalizeSectionRow = (x) => {
   return { id, section_name: name || "" };
 };
 
+const normalizeCustomFields = (s) => {
+  const direct =
+    s?.custom_fields ||
+    s?.customFields ||
+    s?.custom_field_values ||
+    s?.student_custom_fields ||
+    s?.studentCustomFields;
+
+  if (direct && typeof direct === "object" && !Array.isArray(direct)) {
+    return direct;
+  }
+
+  const arr =
+    s?.StudentCustomFields ||
+    s?.studentCustomFieldsList ||
+    s?.customFieldRows ||
+    s?.custom_fields_array;
+
+  if (Array.isArray(arr)) {
+    const obj = {};
+    arr.forEach((item) => {
+      const key =
+        item?.field_name ||
+        item?.name ||
+        item?.label ||
+        item?.custom_field_name ||
+        item?.title;
+      const value =
+        item?.field_value ??
+        item?.value ??
+        item?.custom_field_value ??
+        item?.answer ??
+        "";
+      if (key) obj[String(key)] = value;
+    });
+    return obj;
+  }
+
+  return {};
+};
+
 const normalizeStudentRow = (s) => {
   const id = Number(s?.id ?? s?.student_id ?? s?.Student_ID ?? 0);
   const name =
@@ -151,7 +192,9 @@ const normalizeStudentRow = (s) => {
     ? { id: Number(s.Section.id ?? s.section_id ?? 0), section_name }
     : { id: Number(s?.section_id ?? 0), section_name };
 
-  return { ...s, id, name, admission_number, Class, Section };
+  const custom_fields = normalizeCustomFields(s);
+
+  return { ...s, id, name, admission_number, Class, Section, custom_fields };
 };
 
 const formatINR = (n) =>
@@ -402,6 +445,72 @@ const Transactions = () => {
       ? data.data
       : [];
 
+  const renderCustomFieldsBlock = (studentObj) => {
+    const fields = normalizeCustomFields(studentObj);
+    const entries = Object.entries(fields || {}).filter(
+      ([key, value]) =>
+        String(key || "").trim() !== "" &&
+        String(value ?? "").trim() !== "" &&
+        String(value ?? "").toLowerCase() !== "null" &&
+        String(value ?? "").toLowerCase() !== "undefined"
+    );
+
+    if (!entries.length) return null;
+
+    return (
+      <Card
+        className="mb-3 shadow-sm border-0"
+        style={{
+          background: "linear-gradient(135deg, #eef7ff 0%, #dff1ff 100%)",
+          borderLeft: "6px solid #0d6efd",
+        }}
+      >
+        <Card.Body>
+          <div className="fw-bold text-primary mb-3" style={{ fontSize: "1rem" }}>
+            Student Important Details
+          </div>
+
+          <Row className="g-2">
+            {entries.map(([key, value]) => (
+              <Col md={6} key={key}>
+                <div
+                  className="h-100"
+                  style={{
+                    background: "#fff",
+                    border: "1px solid #cfe2ff",
+                    borderRadius: "10px",
+                    padding: "0.65rem 0.8rem",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: "0.78rem",
+                      color: "#6c757d",
+                      fontWeight: 600,
+                      textTransform: "uppercase",
+                      marginBottom: "2px",
+                    }}
+                  >
+                    {key}
+                  </div>
+                  <div
+                    style={{
+                      fontSize: "0.95rem",
+                      fontWeight: 700,
+                      color: "#0b3d91",
+                    }}
+                  >
+                    {String(value)}
+                  </div>
+                </div>
+              </Col>
+            ))}
+          </Row>
+        </Card.Body>
+      </Card>
+    );
+  };
+
   const fetchStudentsInline = async (term) => {
     if (!term || term.trim().length < 1) {
       setSbResults([]);
@@ -449,10 +558,6 @@ const Transactions = () => {
     return () => document.removeEventListener("click", onDocClick);
   }, []);
 
-  /**
-   * ✅ Remaining due (dynamic) - reduces as user types
-   * (kept because you use remaining calculations in some cells/tooltips)
-   */
   const dueIncludingVanForRow = (row) => {
     const academicNetDue = Math.max(
       0,
@@ -470,10 +575,6 @@ const Transactions = () => {
     return academicNetDue + fineDue + vanOutstanding;
   };
 
-  /**
-   * ✅ Base due (constant) - DOES NOT reduce when user types
-   * Used for: Total Due (top) + Selected Due
-   */
   const baseDueForRow = (row) => {
     const academicPayable = Math.max(
       0,
@@ -493,7 +594,7 @@ const Transactions = () => {
       (sum, row) => sum + baseDueForRow(row),
       0
     );
-  }, [newTransactionDetails]); // base includes concession edits too
+  }, [newTransactionDetails]);
 
   const selectedDueBase = useMemo(() => {
     if (!newTransactionDetails?.length || selectedHeads.size === 0) return 0;
@@ -573,7 +674,6 @@ const Transactions = () => {
     }
   };
 
-  // ✅ Auto-fill row (same as your logic)
   const fillRowAuto = (index) => {
     setNewTransactionDetails((prev) => {
       if (!prev?.length) return prev;
@@ -581,7 +681,6 @@ const Transactions = () => {
       const updated = [...prev];
       const row = { ...updated[index] };
 
-      // Opening balance: only academic
       if (row.isOpeningBalance) {
         const acadNeed = Math.max(
           0,
@@ -637,7 +736,6 @@ const Transactions = () => {
     });
   };
 
-  // ✅ NEW: Clear row values when deselected
   const clearRowAuto = (index) => {
     setNewTransactionDetails((prev) => {
       if (!prev?.length) return prev;
@@ -831,7 +929,9 @@ const Transactions = () => {
       );
 
       const feeDetailsData = feeResponse.data.feeDetails || [];
-      const baseStudent = feeResponse?.data?.student || baseStudentFromAdmission || {};
+      const baseStudent = normalizeStudentRow(
+        feeResponse?.data?.student || baseStudentFromAdmission || {}
+      );
       const studentRouteFromFeeDetails = baseStudent?.route || null;
 
       const [
@@ -1264,7 +1364,7 @@ const Transactions = () => {
       setNewTransactionDetails(feeDetails);
 
       if (feeResponse.data.student) {
-        setSelectedStudentInfo(feeResponse.data.student);
+        setSelectedStudentInfo(normalizeStudentRow(feeResponse.data.student));
       }
     } catch (error) {
       console.error("Error fetching fee details:", error);
@@ -1554,7 +1654,7 @@ const Transactions = () => {
   useEffect(() => {
     fetchSections(selectedClass);
     fetchStudentsByClassAndSection();
-  }, [selectedClass, selectedSection]); // keeping your existing behavior
+  }, [selectedClass, selectedSection]);
 
   useEffect(() => {
     fetchTransactions();
@@ -1564,7 +1664,7 @@ const Transactions = () => {
       fetchDaySummary();
     }, POLLING_INTERVAL);
     return () => clearInterval(intervalId);
-  }, []); // keeping your existing behavior
+  }, []);
 
   const cashCollection = useMemo(() => {
     return (daySummary.paymentSummary || [])
@@ -1922,7 +2022,6 @@ const Transactions = () => {
         )}
       </div>
 
-      {/* Collect / Edit Modal */}
       <Modal
         show={showModal}
         onHide={() => setShowModal(false)}
@@ -2057,28 +2156,30 @@ const Transactions = () => {
                   </Form.Group>
 
                   {selectedAdmissionStudent && (
-                    <div className="student-brief-inline mb-3">
-                      <span>
-                        <strong>Name:</strong> {selectedAdmissionStudent?.name || "—"}
-                      </span>
-                      <span>
-                        | <strong>Class:</strong>{" "}
-                        {selectedAdmissionStudent?.Class?.class_name ||
-                          selectedAdmissionStudent?.class_name ||
-                          "—"}
-                      </span>
-                      <span>
-                        | <strong>Section:</strong>{" "}
-                        {selectedAdmissionStudent?.Section?.section_name ||
-                          selectedAdmissionStudent?.section_name ||
-                          "—"}
-                      </span>
-                      <span>
-                        | <strong>Father:</strong> {selectedAdmissionStudent?.father_name || "—"}
-                      </span>
-                      <span>
-                        | <strong>Adm No:</strong> {selectedAdmissionStudent?.admission_number || "—"}
-                      </span>
+                    <div className="mb-3">
+                      <div className="student-brief-inline">
+                        <span>
+                          <strong>Name:</strong> {selectedAdmissionStudent?.name || "—"}
+                        </span>
+                        <span>
+                          | <strong>Class:</strong>{" "}
+                          {selectedAdmissionStudent?.Class?.class_name ||
+                            selectedAdmissionStudent?.class_name ||
+                            "—"}
+                        </span>
+                        <span>
+                          | <strong>Section:</strong>{" "}
+                          {selectedAdmissionStudent?.Section?.section_name ||
+                            selectedAdmissionStudent?.section_name ||
+                            "—"}
+                        </span>
+                        <span>
+                          | <strong>Father:</strong> {selectedAdmissionStudent?.father_name || "—"}
+                        </span>
+                        <span>
+                          | <strong>Adm No:</strong> {selectedAdmissionStudent?.admission_number || "—"}
+                        </span>
+                      </div>
                     </div>
                   )}
                 </Tab>
@@ -2146,32 +2247,36 @@ const Transactions = () => {
                   </Form.Group>
 
                   {selectedStudentInfo && (
-                    <div className="student-brief-inline mb-2">
-                      <div>
-                        <strong>Name:</strong> {selectedStudentInfo?.name || "—"}
-                      </div>
-                      <div>
-                        | <strong>Class:</strong>{" "}
-                        {selectedStudentInfo?.Class?.class_name ||
-                          selectedStudentInfo?.class_name ||
-                          "—"}
-                      </div>
-                      <div>
-                        | <strong>Section:</strong>{" "}
-                        {selectedStudentInfo?.Section?.section_name ||
-                          selectedStudentInfo?.section_name ||
-                          "—"}
-                      </div>
-                      <div>
-                        | <strong>Father:</strong> {selectedStudentInfo?.father_name || "—"}
-                      </div>
-                      <div>
-                        | <strong>Adm No:</strong> {selectedStudentInfo?.admission_number || "—"}
+                    <div className="mb-2">
+                      <div className="student-brief-inline">
+                        <div>
+                          <strong>Name:</strong> {selectedStudentInfo?.name || "—"}
+                        </div>
+                        <div>
+                          | <strong>Class:</strong>{" "}
+                          {selectedStudentInfo?.Class?.class_name ||
+                            selectedStudentInfo?.class_name ||
+                            "—"}
+                        </div>
+                        <div>
+                          | <strong>Section:</strong>{" "}
+                          {selectedStudentInfo?.Section?.section_name ||
+                            selectedStudentInfo?.section_name ||
+                            "—"}
+                        </div>
+                        <div>
+                          | <strong>Father:</strong> {selectedStudentInfo?.father_name || "—"}
+                        </div>
+                        <div>
+                          | <strong>Adm No:</strong> {selectedStudentInfo?.admission_number || "—"}
+                        </div>
                       </div>
                     </div>
                   )}
                 </Tab>
               </Tabs>
+
+              {selectedStudentInfo && renderCustomFieldsBlock(selectedStudentInfo)}
 
               {feeHeads.length > 0 && (
                 <Card className="mb-3 shadow-sm">
@@ -2238,7 +2343,6 @@ const Transactions = () => {
                                 const checked = e.target.checked;
 
                                 if (checked) {
-                                  // ✅ select all + autofill all
                                   setSelectedHeads(() => {
                                     const all = new Set();
                                     newTransactionDetails.forEach((row) =>
@@ -2248,7 +2352,6 @@ const Transactions = () => {
                                   });
                                   newTransactionDetails.forEach((_, idx) => fillRowAuto(idx));
                                 } else {
-                                  // ✅ unselect all + clear all filled boxes
                                   setSelectedHeads(new Set());
                                   newTransactionDetails.forEach((_, idx) => clearRowAuto(idx));
                                 }
@@ -2289,7 +2392,7 @@ const Transactions = () => {
                                   });
 
                                   if (checked) fillRowAuto(index);
-                                  else clearRowAuto(index); // ✅ deselect clears boxes
+                                  else clearRowAuto(index);
                                 }}
                               />
                             </td>
@@ -2311,7 +2414,6 @@ const Transactions = () => {
                               {feeDetail.Fee_Heading_Name}
                             </td>
 
-                            {/* Due cell */}
                             <td>
                               <OverlayTrigger
                                 placement="top"
@@ -2467,7 +2569,6 @@ const Transactions = () => {
                               />
                             </td>
 
-                            {/* Van Recv */}
                             <td>
                               {feeDetail.ShowVanFeeInput ? (
                                 <div>
@@ -2489,7 +2590,6 @@ const Transactions = () => {
                               )}
                             </td>
 
-                            {/* Van Fee Cons. */}
                             <td>
                               {feeDetail.ShowVanFeeInput ? (
                                 <Form.Control
@@ -2528,7 +2628,6 @@ const Transactions = () => {
                               )}
                             </td>
 
-                            {/* Van Fee */}
                             <td>
                               {feeDetail.ShowVanFeeInput ? (
                                 <Form.Control
@@ -2593,7 +2692,6 @@ const Transactions = () => {
             </>
           ) : (
             <>
-              {/* EDIT MODE */}
               <h5 className="mb-3">Edit Transaction</h5>
               <table className="table table-bordered align-middle">
                 <thead className="table-light">
