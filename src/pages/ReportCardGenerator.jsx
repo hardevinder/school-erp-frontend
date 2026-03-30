@@ -62,6 +62,22 @@ const formatDOB = (raw) => {
   return s;
 };
 
+const formatDisplayDate = (raw) => {
+  if (!raw) return "-";
+  const s = String(raw).trim();
+  if (!s) return "-";
+
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+
+  const d = new Date(s);
+  if (!Number.isNaN(d.getTime())) {
+    return `${pad2(d.getDate())}-${pad2(d.getMonth() + 1)}-${d.getFullYear()}`;
+  }
+
+  return s;
+};
+
 /* ============================================================
  * ✅ Attendance helpers
  * ============================================================ */
@@ -206,6 +222,7 @@ const buildGradeRangeFooterText = (gradeSchema = []) => {
 };
 
 const FinalResultSummary = () => {
+  const [sessions, setSessions] = useState([]);
   const [classList, setClassList] = useState([]);
   const [sections, setSections] = useState([]);
   const [subjects, setSubjects] = useState([]);
@@ -216,9 +233,11 @@ const FinalResultSummary = () => {
   const [coScholasticByTerm, setCoScholasticByTerm] = useState({});
   const [remarksByTerm, setRemarksByTerm] = useState({});
   const [attendanceByTerm, setAttendanceByTerm] = useState({});
+  const [promotionDecisionByTerm, setPromotionDecisionByTerm] = useState({});
   const [gradeSchema, setGradeSchema] = useState([]);
 
   const [filters, setFilters] = useState({
+    session_id: "",
     class_id: "",
     section_id: "",
     exam_ids: [],
@@ -245,11 +264,38 @@ const FinalResultSummary = () => {
   const [pdfTo, setPdfTo] = useState("");
 
   useEffect(() => {
+    loadSessions();
     loadClasses();
     loadSections();
-    loadExams();
     loadGradeSchema();
   }, []);
+
+  useEffect(() => {
+    loadExams(filters.session_id || undefined);
+  }, [filters.session_id]);
+
+  const loadSessions = async () => {
+    try {
+      const res = await api.get("/sessions");
+      const list = Array.isArray(res.data)
+        ? res.data
+        : Array.isArray(res.data?.sessions)
+        ? res.data.sessions
+        : [];
+
+      setSessions(list);
+
+      const active = list.find((x) => x?.is_active);
+      if (active?.id) {
+        setFilters((prev) => ({
+          ...prev,
+          session_id: prev.session_id || String(active.id),
+        }));
+      }
+    } catch {
+      Swal.fire("Error", "Failed to load sessions", "error");
+    }
+  };
 
   const loadClasses = async () => {
     try {
@@ -269,9 +315,11 @@ const FinalResultSummary = () => {
     }
   };
 
-  const loadExams = async () => {
+  const loadExams = async (sessionId) => {
     try {
-      const res = await api.get("/exams");
+      const params = {};
+      if (sessionId) params.session_id = Number(sessionId);
+      const res = await api.get("/exams", { params });
       setExams(res.data || []);
     } catch {
       Swal.fire("Error", "Failed to load exams", "error");
@@ -294,9 +342,11 @@ const FinalResultSummary = () => {
     setFilters((prev) => ({ ...prev, exam_ids: selectedOptions }));
   };
 
-  const loadSubjects = async (class_id) => {
+  const loadSubjects = async (class_id, session_id) => {
     try {
-      const res = await api.get("/subjects", { params: { class_id } });
+      const params = { class_id };
+      if (session_id) params.session_id = Number(session_id);
+      const res = await api.get("/subjects", { params });
       const list = Array.isArray(res.data.subjects) ? res.data.subjects : [];
       setSubjects(list);
       return list;
@@ -317,22 +367,26 @@ const FinalResultSummary = () => {
     return selected;
   };
 
-  const loadSubjectComponentsAuto = async (class_id, subject_id) => {
+  const loadSubjectComponentsAuto = async (class_id, subject_id, session_id) => {
+    const params = { class_id, subject_id };
+    if (session_id) params.session_id = Number(session_id);
+
     const res = await api.get("/exam-schemes/components/term-wise", {
-      params: { class_id, subject_id },
+      params,
     });
     const availableComponents = res.data || [];
     const selected_components = selectAllComponentsTermWise(availableComponents);
     return { availableComponents, selected_components };
   };
 
-  const preselectAllSubjectsAndComponents = async (class_id, subjectsList) => {
+  const preselectAllSubjectsAndComponents = async (class_id, session_id, subjectsList) => {
     const rows = await Promise.all(
       (subjectsList || []).map(async (s) => {
         try {
           const { availableComponents, selected_components } = await loadSubjectComponentsAuto(
             class_id,
-            s.id
+            s.id,
+            session_id
           );
           return { subject_id: String(s.id), availableComponents, selected_components };
         } catch (e) {
@@ -347,15 +401,40 @@ const FinalResultSummary = () => {
       : [{ subject_id: "", selected_components: {}, availableComponents: [] }];
   };
 
-  const handleClassChange = async (e) => {
-    const class_id = e.target.value;
+  const handleSessionChange = async (e) => {
+    const session_id = e.target.value;
 
     setFilters({
-      class_id,
+      session_id,
+      class_id: "",
       section_id: "",
       exam_ids: [],
       subjectComponents: [{ subject_id: "", selected_components: {}, availableComponents: [] }],
     });
+
+    setStudentInfoMap({});
+    setCoScholasticByTerm({});
+    setRemarksByTerm({});
+    setAttendanceByTerm({});
+    setPromotionDecisionByTerm({});
+    setReportFormat(null);
+
+    setPdfMode("all");
+    setPdfSingleId("");
+    setPdfFrom("");
+    setPdfTo("");
+  };
+
+  const handleClassChange = async (e) => {
+    const class_id = e.target.value;
+
+    setFilters((prev) => ({
+      session_id: prev.session_id,
+      class_id,
+      section_id: "",
+      exam_ids: [],
+      subjectComponents: [{ subject_id: "", selected_components: {}, availableComponents: [] }],
+    }));
 
     setSubjects([]);
     setReportData([]);
@@ -363,6 +442,7 @@ const FinalResultSummary = () => {
     setCoScholasticByTerm({});
     setRemarksByTerm({});
     setAttendanceByTerm({});
+    setPromotionDecisionByTerm({});
 
     setPdfMode("all");
     setPdfSingleId("");
@@ -375,13 +455,16 @@ const FinalResultSummary = () => {
     }
 
     try {
-      const subjectList = await loadSubjects(class_id);
-      const subjectComponents = await preselectAllSubjectsAndComponents(class_id, subjectList);
+      const sessionId = filters.session_id || undefined;
+      const subjectList = await loadSubjects(class_id, sessionId);
+      const subjectComponents = await preselectAllSubjectsAndComponents(class_id, sessionId, subjectList);
 
       setFilters((prev) => ({ ...prev, class_id, subjectComponents }));
 
       try {
-        const res = await api.get("/report-card/format-by-class", { params: { class_id } });
+        const params = { class_id };
+        if (sessionId) params.session_id = Number(sessionId);
+        const res = await api.get("/report-card/format-by-class", { params });
         setReportFormat(res.data?.format || null);
       } catch {
         setReportFormat(null);
@@ -396,6 +479,11 @@ const FinalResultSummary = () => {
   const handleSubjectChange = async (e, index) => {
     const subject_id = e.target.value;
 
+    if (!filters.session_id) {
+      Swal.fire("Select Session", "Please select session first", "warning");
+      return;
+    }
+
     if (!filters.class_id) {
       Swal.fire("Select Class", "Please select class first", "warning");
       return;
@@ -404,7 +492,8 @@ const FinalResultSummary = () => {
     try {
       const { availableComponents, selected_components } = await loadSubjectComponentsAuto(
         filters.class_id,
-        subject_id
+        subject_id,
+        filters.session_id
       );
 
       setFilters((prev) => {
@@ -476,7 +565,7 @@ const FinalResultSummary = () => {
 
   const termLabel = (tid) => (tid ? `Term-${tid}` : "Term");
 
-  const fetchAttendanceSummary = async ({ class_id, section_id, term_id }) => {
+  const fetchAttendanceSummary = async ({ session_id, class_id, section_id, term_id }) => {
     const endpoints = [
       "/report-card/attendance-summary",
       "/attendance-entry/summary",
@@ -488,7 +577,9 @@ const FinalResultSummary = () => {
 
     for (const url of endpoints) {
       try {
-        const res = await api.get(url, { params: { class_id, section_id, term_id } });
+        const params = { class_id, section_id, term_id };
+        if (session_id) params.session_id = Number(session_id);
+        const res = await api.get(url, { params });
 
         const attendanceMap = {};
 
@@ -551,23 +642,30 @@ const FinalResultSummary = () => {
     return Number(exTerm) === Number(termId);
   };
 
-  const getSubjectTermCompDisplay = (student, subjectName, termId, componentId) => {
-    const items = (student.components || []).filter(
-      (c) =>
-        c.subject_name === subjectName &&
-        isCompInTerm(c, termId) &&
-        Number(c.component_id) === Number(componentId)
-    );
+ const getSubjectTermCompDisplay = (student, subjectName, termId, componentId) => {
+  const items = (student.components || []).filter(
+    (c) =>
+      c.subject_name === subjectName &&
+      isCompInTerm(c, termId) &&
+      Number(c.component_id) === Number(componentId)
+  );
 
-    if (!items.length) return "-";
+  if (!items.length) return "-";
 
-    if (items.some((x) => isNumeric(x?.marks))) {
-      return items.reduce((a, x) => a + (isNumeric(x?.marks) ? Number(x.marks) : 0), 0);
-    }
+  const hasAbsent = items.some((x) => {
+    const att = String(x?.attendance || "").trim().toUpperCase();
+    return ["A", "AB", "ABSENT"].includes(att);
+  });
 
-    const g = items.find((x) => x?.grade != null && String(x.grade).trim() !== "");
-    return g?.grade || "-";
-  };
+  if (hasAbsent) return "AB";
+
+  if (items.some((x) => isNumeric(x?.marks))) {
+    return items.reduce((a, x) => a + (isNumeric(x?.marks) ? Number(x.marks) : 0), 0);
+  }
+
+  const g = items.find((x) => x?.grade != null && String(x.grade).trim() !== "");
+  return g?.grade || "-";
+};
 
   const getSubjectTermStats = (student, subjectName, termId) => {
     const items = (student.components || []).filter(
@@ -594,9 +692,9 @@ const FinalResultSummary = () => {
   };
 
   const fetchReport = async () => {
-    const { class_id, section_id, exam_ids } = filters;
-    if (!class_id || !section_id || !exam_ids.length) {
-      return Swal.fire("Missing Field", "Select class, section & exam(s)", "warning");
+    const { session_id, class_id, section_id, exam_ids } = filters;
+    if (!session_id || !class_id || !section_id || !exam_ids.length) {
+      return Swal.fire("Missing Field", "Select session, class, section & exam(s)", "warning");
     }
 
     setLoading(true);
@@ -610,6 +708,7 @@ const FinalResultSummary = () => {
       .filter((x) => x.subject_id);
 
     const payload = {
+      session_id: +session_id,
       class_id: +class_id,
       section_id: +section_id,
       exam_ids,
@@ -630,6 +729,7 @@ const FinalResultSummary = () => {
         setCoScholasticByTerm({});
         setRemarksByTerm({});
         setAttendanceByTerm({});
+        setPromotionDecisionByTerm({});
         setLoading(false);
         return;
       }
@@ -644,7 +744,12 @@ const FinalResultSummary = () => {
       const studentIds = reportStudents.map((s) => s.id);
 
       const infoRes = await api.get("/report-card/students", {
-        params: { student_ids: studentIds },
+        params: {
+          session_id: Number(session_id),
+          class_id: Number(class_id),
+          section_id: Number(section_id),
+          student_ids: studentIds,
+        },
       });
       const studentMap = {};
       for (const s of infoRes.data.students || []) studentMap[s.id] = s;
@@ -652,13 +757,29 @@ const FinalResultSummary = () => {
 
       const termIdsLocal = getSelectedTermIds();
 
-      const coByTerm = {};
+   const coByTerm = {};
       for (const tid of termIdsLocal.slice(0, 2)) {
         try {
-          const coRes = await api.get("/report-card/coscholastic-summary", {
-            params: { class_id, section_id, term_id: tid },
+          console.log("CoScholastic request", {
+            session_id,
+            class_id,
+            section_id,
+            term_id: tid,
           });
-          coByTerm[String(tid)] = coRes.data || [];
+
+          const coRes = await api.get("/report-card/coscholastic-summary", {
+            params: {
+              session_id: Number(session_id),
+              class_id: Number(class_id),
+              section_id: Number(section_id),
+              term_id: Number(tid),
+            },
+          });
+
+          console.log("CoScholastic response", coRes.data);
+
+        coByTerm[String(tid)] =
+          coRes?.data && typeof coRes.data === "object" ? coRes.data : {};
         } catch (e) {
           console.warn("Co-scholastic failed for term", tid, e);
           coByTerm[String(tid)] = [];
@@ -670,7 +791,7 @@ const FinalResultSummary = () => {
       for (const tid of termIdsLocal.slice(0, 2)) {
         try {
           const remarksRes = await api.get("/report-card/remarks-summary", {
-            params: { class_id, section_id, term_id: tid },
+            params: { session_id, class_id, section_id, term_id: tid },
           });
 
           const rm = {};
@@ -686,11 +807,47 @@ const FinalResultSummary = () => {
         }
       }
       setRemarksByTerm(remarksTermMap);
+            const promotionTermMap = {};
+      for (const tid of termIdsLocal.slice(0, 2)) {
+        try {
+          const promoRes = await api.get("/student-promotion-decisions", {
+            params: {
+              session_id: Number(session_id),
+              class_id: Number(class_id),
+              section_id: Number(section_id),
+              term_id: Number(tid),
+            },
+          });
+
+          const pm = {};
+        for (const r of promoRes.data.existingDecisions || []) {
+          const sid = r.student_id ?? r.studentId ?? r?.student?.id;
+          if (sid) {
+            pm[Number(sid)] = {
+              promotion_status: r.promotion_status || "",
+              promoted_to_class_id: r.promoted_to_class_id ?? null,
+              promoted_to_class_name:
+                r.promotedToClass?.class_name ||
+                r.promoted_to_class_name ||
+                "",
+              current_class_id: r.class_id ?? null,
+              promotion_date: r.promotion_date || null,
+            };
+          }
+        }
+          promotionTermMap[String(tid)] = pm;
+        } catch (e) {
+          console.warn("Promotion decision failed for term", tid, e);
+          promotionTermMap[String(tid)] = {};
+        }
+      }
+      setPromotionDecisionByTerm(promotionTermMap);
 
       const attTermMap = {};
       for (const tid of termIdsLocal.slice(0, 2)) {
         try {
           const attendanceMap = await fetchAttendanceSummary({
+            session_id,
             class_id,
             section_id,
             term_id: tid,
@@ -836,13 +993,15 @@ const FinalResultSummary = () => {
         ? String(computedGrandGradeRaw).trim()
         : null;
 
-    const blank1 = term1Components
-      .map(() => `<td style="color:#0b1b3a !important;"></td>`)
-      .join("");
+      const blank1 =
+        term1Components.length > 0
+          ? `<td colspan="${term1Components.length}" style="color:#0b1b3a !important;"></td>`
+          : "";
 
-    const blank2 = term2Components
-      .map(() => `<td style="color:#0b1b3a !important;"></td>`)
-      .join("");
+      const blank2 =
+        term2Components.length > 0
+          ? `<td colspan="${term2Components.length}" style="color:#0b1b3a !important;"></td>`
+          : "";
 
     const rankRow = hasDisplayRank(student?.rank)
       ? `
@@ -958,18 +1117,19 @@ const FinalResultSummary = () => {
   };
 
   const buildCoScholasticPdfHtml_TwoTerms = (student) => {
-    const studentId = student?.id;
-    const t1 = term1Id ? coScholasticByTerm[String(term1Id)] || [] : [];
-    const t2 = term2Id ? coScholasticByTerm[String(term2Id)] || [] : [];
+  const studentId = student?.id;
+  const t1 = term1Id ? coScholasticByTerm[String(term1Id)] || {} : {};
+  const t2 = term2Id ? coScholasticByTerm[String(term2Id)] || {} : {};
 
-    const s1 = t1.find((x) => x.id === studentId) || { grades: [] };
-    const s2 = t2.find((x) => x.id === studentId) || { grades: [] };
+  const s1 = Object.values(t1[String(studentId)] || {});
+  const s2 = Object.values(t2[String(studentId)] || {});
 
     const areasMap = new Map();
-    (s1.grades || []).forEach((g) =>
+    s1.forEach((g) =>
       areasMap.set(g.area_id, { area_name: g.area_name, t1: g, t2: null })
     );
-    (s2.grades || []).forEach((g) => {
+
+    s2.forEach((g) => {
       const prev = areasMap.get(g.area_id);
       if (prev) areasMap.set(g.area_id, { ...prev, t2: g });
       else areasMap.set(g.area_id, { area_name: g.area_name, t1: null, t2: g });
@@ -1068,22 +1228,59 @@ const FinalResultSummary = () => {
     `;
   };
 
-  const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
-    const r2 = term2Id ? remarksByTerm[String(term2Id)]?.[studentId] : null;
+const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
+  const r2 = term2Id ? remarksByTerm[String(term2Id)]?.[studentId] : null;
+  const promotion = term2Id
+    ? promotionDecisionByTerm[String(term2Id)]?.[studentId]
+    : null;
 
-    return `
-      <div class="section-title">
-        <div class="section-title-left">
-          <div class="section-pill">Remarks</div>
-          <h5 style="margin:0;color:#0b1b3a;font-size:15px">Teacher's Remarks</h5>
+  const showPromotionFields =
+    promotion &&
+    promotion.promotion_status === "PROMOTED" &&
+    promotion.promoted_to_class_id &&
+    Number(promotion.promoted_to_class_id) !== Number(promotion.current_class_id);
+
+  return `
+    <div class="section-title">
+      <div class="section-title-left">
+        <div class="section-pill">Remarks</div>
+        <h5 style="margin:0;color:#0b1b3a;font-size:15px">Teacher's Remarks</h5>
+      </div>
+    </div>
+
+    <div class="remarks-grid" style="display:grid;grid-template-columns:1fr;gap:8px;">
+      <div class="remarks-card">
+        <div class="remarks-body">         
+          <div>${(r2 || "-").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div>
         </div>
       </div>
 
-      <div class="remarks-card">
-        <div class="remarks-body">${(r2 || "-").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div>
+      ${
+  showPromotionFields
+    ? `
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+    <div class="remarks-card">
+      <div class="remarks-body" style="font-size:13px;line-height:1.45;color:#0b1b3a;">
+        <span style="font-weight:800;color:#475569;">Promoted To Class:</span>
+        <span style="font-weight:700;"> ${promotion.promoted_to_class_name || "-"}</span>
       </div>
-    `;
-  };
+    </div>
+
+    <div class="remarks-card">
+      <div class="remarks-body" style="font-size:13px;line-height:1.45;color:#0b1b3a;">
+        <span style="font-weight:800;color:#475569;">Promotion Date:</span>
+        <span style="font-weight:700;">
+          ${promotion.promotion_date ? formatDisplayDate(promotion.promotion_date) : "-"}
+        </span>
+      </div>
+    </div>
+  </div>
+`
+    : ""
+}
+    </div>
+  `;
+};
 
   const getStudentsForPdf = () => {
     if (!reportData?.length) return [];
@@ -1156,6 +1353,7 @@ const FinalResultSummary = () => {
         justify-content: flex-start;
         align-items: flex-start;
         padding-top: 18px;
+        padding-left: 8px;
       }
 
       .header-center {
@@ -1166,8 +1364,30 @@ const FinalResultSummary = () => {
         min-height: 126px;
         padding: 0 10px;
         font-size: 14px;
-        line-height: 1.32;
+        line-height: 1.15;
         color: #0b1b3a;
+      }
+
+      .header-center .rc-header {
+        text-align: center;
+        padding: 10px 8px 8px;
+        line-height: 1.15;
+        background: transparent;
+      }
+
+      .header-center .school-address {
+        margin: 2px 0 0 !important;
+      }
+
+      .header-center .rc-session {
+        margin-top: 6px !important;
+        font-size: 17px !important;
+        line-height: 1.1 !important;
+        letter-spacing: 0.6px !important;
+      }
+
+      .header-center .rc-title {
+        margin-top: 2px !important;
       }
 
       .header-right {
@@ -1182,6 +1402,7 @@ const FinalResultSummary = () => {
         object-fit: contain;
         display: block;
         flex-shrink: 0;
+        margin-left: 8px;
       }
 
       .student-photo {
@@ -1578,7 +1799,7 @@ const FinalResultSummary = () => {
         ? `Roll_${pdfFrom || "X"}-${pdfTo || "X"}`
         : "All";
 
-    const fileName = `FinalResult_TermWise_${filters.class_id || "X"}_${filters.section_id || "X"}_${suffix}.pdf`;
+    const fileName = `FinalResult_TermWise_${filters.session_id || "X"}_${filters.class_id || "X"}_${filters.section_id || "X"}_${suffix}.pdf`;
 
     setPdfPercent(2);
     setPdfMessage("Queuing render…");
@@ -1594,6 +1815,7 @@ const FinalResultSummary = () => {
           html,
           fileName,
           orientation: "portrait",
+          session_id: Number(filters.session_id),
           class_id: Number(filters.class_id),
           school_logo_url: reportFormat?.school_logo_url || null,
         },
@@ -1633,17 +1855,18 @@ const FinalResultSummary = () => {
 
   const renderCoScholasticTwoTermsTable = (student) => {
     const studentId = student?.id;
-    const t1 = term1Id ? coScholasticByTerm[String(term1Id)] || [] : [];
-    const t2 = term2Id ? coScholasticByTerm[String(term2Id)] || [] : [];
+    const t1 = term1Id ? coScholasticByTerm[String(term1Id)] || {} : {};
+    const t2 = term2Id ? coScholasticByTerm[String(term2Id)] || {} : {};
 
-    const s1 = t1.find((x) => x.id === studentId) || { grades: [] };
-    const s2 = t2.find((x) => x.id === studentId) || { grades: [] };
+    const s1 = Object.values(t1[String(studentId)] || {});
+    const s2 = Object.values(t2[String(studentId)] || {});
 
     const areasMap = new Map();
-    (s1.grades || []).forEach((g) =>
+    s1.forEach((g) =>
       areasMap.set(g.area_id, { area_name: g.area_name, t1: g, t2: null })
     );
-    (s2.grades || []).forEach((g) => {
+
+    s2.forEach((g) => {
       const prev = areasMap.get(g.area_id);
       if (prev) areasMap.set(g.area_id, { ...prev, t2: g });
       else areasMap.set(g.area_id, { area_name: g.area_name, t1: null, t2: g });
@@ -1776,15 +1999,81 @@ const FinalResultSummary = () => {
     );
   };
 
-  const renderTeacherRemarksTermWise = (studentId) => {
-    const r2 = term2Id ? remarksByTerm[String(term2Id)]?.[studentId] : null;
+const renderTeacherRemarksTermWise = (studentId) => {
+  const r2 = term2Id ? remarksByTerm[String(term2Id)]?.[studentId] : null;
+  const promotion = term2Id
+    ? promotionDecisionByTerm[String(term2Id)]?.[studentId]
+    : null;
 
-    return (
+  const showPromotionFields =
+    promotion &&
+    promotion.promotion_status === "PROMOTED" &&
+    promotion.promoted_to_class_id &&
+    Number(promotion.promoted_to_class_id) !== Number(promotion.current_class_id);
+
+  return (
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "1fr",
+        gap: "8px",
+      }}
+    >
       <div className="panel small">
-        <div style={{ fontSize: "14px", lineHeight: 1.45 }}>{(r2 || "-").trim() || "-"}</div>
+     
+        <div style={{ fontSize: "14px", lineHeight: 1.45 }}>
+          {(r2 || "-").trim() || "-"}
+        </div>
       </div>
-    );
-  };
+
+      {showPromotionFields && (
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: "8px",
+          }}
+        >
+          <div className="panel small">
+            <div
+              style={{
+                fontSize: "13px",
+                lineHeight: 1.45,
+                color: "#0b1b3a",
+              }}
+            >
+              <span style={{ fontWeight: 800, color: "#475569" }}>
+                Promoted To Class:
+              </span>{" "}
+              <span style={{ fontWeight: 700 }}>
+                {promotion.promoted_to_class_name || "-"}
+              </span>
+            </div>
+          </div>
+
+          <div className="panel small">
+            <div
+              style={{
+                fontSize: "13px",
+                lineHeight: 1.45,
+                color: "#0b1b3a",
+              }}
+            >
+              <span style={{ fontWeight: 800, color: "#475569" }}>
+                Promotion Date:
+              </span>{" "}
+              <span style={{ fontWeight: 700 }}>
+                {promotion.promotion_date
+                  ? formatDisplayDate(promotion.promotion_date)
+                  : "-"}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
 
   const gradeFooterText = buildGradeRangeFooterText(gradeSchema);
 
@@ -1951,7 +2240,20 @@ const FinalResultSummary = () => {
         </div>
 
         <div className="row g-3 mt-3">
-          <div className="col-md-4">
+          <div className="col-md-3">
+            <label>Session</label>
+            <select className="form-select" value={filters.session_id} onChange={handleSessionChange}>
+              <option value="">Select Session</option>
+              {sessions.map((session) => (
+                <option key={session.id} value={session.id}>
+                  {session.name}
+                  {session.is_active ? " (Active)" : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="col-md-3">
             <label>Class</label>
             <select className="form-select" value={filters.class_id} onChange={handleClassChange}>
               <option value="">Select Class</option>
@@ -1963,7 +2265,7 @@ const FinalResultSummary = () => {
             </select>
           </div>
 
-          <div className="col-md-4">
+          <div className="col-md-3">
             <label>Section</label>
             <select
               name="section_id"
@@ -1980,7 +2282,7 @@ const FinalResultSummary = () => {
             </select>
           </div>
 
-          <div className="col-md-4">
+          <div className="col-md-3">
             <label>Exam(s)</label>
             <select multiple className="form-select" value={filters.exam_ids} onChange={handleExamChange}>
               {exams.map((e) => (

@@ -28,18 +28,17 @@ const CoScholasticEntry = () => {
   const { roles, isGlobal } = useMemo(getRoleFlags, []);
 
   const [filters, setFilters] = useState({
+    session_id: "",
     class_id: "",
     section_id: "",
     term_id: "",
   });
 
-  // Teacher/incharge assigned classes list
   const [assignedClasses, setAssignedClasses] = useState([]);
 
-  // Global lists
+  const [sessions, setSessions] = useState([]);
   const [classes, setClasses] = useState([]);
   const [sections, setSections] = useState([]);
-
   const [terms, setTerms] = useState([]);
   const [students, setStudents] = useState([]);
   const [areas, setAreas] = useState([]);
@@ -59,7 +58,7 @@ const CoScholasticEntry = () => {
   const init = async () => {
     setLoading(true);
     try {
-      await Promise.all([loadTerms(), loadGrades()]);
+      await Promise.all([loadSessions(), loadTerms(), loadGrades()]);
       if (isGlobal) {
         await loadAllClasses();
       } else {
@@ -71,13 +70,42 @@ const CoScholasticEntry = () => {
   };
 
   /* ---------------- Loaders ---------------- */
+  const loadSessions = async () => {
+    try {
+      const res =
+        (await api.get("/sessions").catch(() => null)) ||
+        (await api.get("/session").catch(() => null)) ||
+        null;
+
+      const list = Array.isArray(res?.data) ? res.data : res?.data?.sessions || [];
+      const normalized = Array.isArray(list) ? list : [];
+
+      setSessions(normalized);
+
+      const active =
+        normalized.find((s) => s.is_active === true) ||
+        normalized.find((s) => s.isActive === true) ||
+        normalized[0];
+
+      if (active && !filters.session_id) {
+        setFilters((prev) => ({
+          ...prev,
+          session_id: String(active.id),
+        }));
+      }
+    } catch (err) {
+      console.error("Failed to load sessions", err);
+      Swal.fire("Error", "Failed to load sessions", "error");
+      setSessions([]);
+    }
+  };
+
   const loadAssignedClasses = async () => {
     try {
       const res = await api.get("/coscholastic-evaluations/assigned-classes");
       const list = Array.isArray(res.data) ? res.data : [];
       setAssignedClasses(list);
 
-      // Auto-select first if empty
       if (list.length > 0 && !filters.class_id && !filters.section_id) {
         const first = list[0];
         setFilters((prev) => ({
@@ -92,10 +120,8 @@ const CoScholasticEntry = () => {
     }
   };
 
-  // ✅ For global roles
   const loadAllClasses = async () => {
     try {
-      // try common endpoints
       const res =
         (await api.get("/classes").catch(() => null)) ||
         (await api.get("/class").catch(() => null)) ||
@@ -111,7 +137,6 @@ const CoScholasticEntry = () => {
 
       setClasses(normalized);
 
-      // Auto-select first class
       if (normalized.length > 0 && !filters.class_id) {
         const firstId = String(normalized[0].id);
         setFilters((prev) => ({ ...prev, class_id: firstId, section_id: "" }));
@@ -126,7 +151,6 @@ const CoScholasticEntry = () => {
   const loadSectionsForClass = async (class_id) => {
     if (!class_id) return;
     try {
-      // try common endpoints
       const res =
         (await api.get("/sections", { params: { class_id } }).catch(() => null)) ||
         (await api.get("/section", { params: { class_id } }).catch(() => null)) ||
@@ -141,12 +165,10 @@ const CoScholasticEntry = () => {
           }))
         : [];
 
-      // If API returns all sections, filter locally by class
       const filtered = normalized.filter((x) => String(x.class_id) === String(class_id));
 
       setSections(filtered);
 
-      // Auto-select first section
       if (filtered.length > 0 && !filters.section_id) {
         setFilters((prev) => ({ ...prev, section_id: String(filtered[0].id) }));
       }
@@ -182,8 +204,8 @@ const CoScholasticEntry = () => {
 
   /* ---------------- Fetch Evaluation Data ---------------- */
   useEffect(() => {
-    const { class_id, section_id, term_id } = filters;
-    if (class_id && section_id && term_id) {
+    const { session_id, class_id, section_id, term_id } = filters;
+    if (session_id && class_id && section_id && term_id) {
       fetchEvaluationData();
     } else {
       setStudents([]);
@@ -191,19 +213,21 @@ const CoScholasticEntry = () => {
       setEvaluations({});
     }
     // eslint-disable-next-line
-  }, [filters.class_id, filters.section_id, filters.term_id]);
+  }, [filters.session_id, filters.class_id, filters.section_id, filters.term_id]);
 
   const fetchEvaluationData = async () => {
-    const { class_id, section_id, term_id } = filters;
+    const { session_id, class_id, section_id, term_id } = filters;
     setLoading(true);
     try {
       const res = await api.get("/coscholastic-evaluations", {
-        params: { class_id, section_id, term_id },
+        params: { session_id, class_id, section_id, term_id },
       });
 
       const studentsData = Array.isArray(res.data.students) ? res.data.students : [];
       const areasData = Array.isArray(res.data.areas) ? res.data.areas : [];
-      const existing = Array.isArray(res.data.existingEvaluations) ? res.data.existingEvaluations : [];
+      const existing = Array.isArray(res.data.existingEvaluations)
+        ? res.data.existingEvaluations
+        : [];
 
       setStudents(studentsData);
       setAreas(areasData);
@@ -221,7 +245,7 @@ const CoScholasticEntry = () => {
         Swal.fire("Info", "No co-scholastic areas mapped for this class.", "info");
       }
       if (Object.values(map).some((e) => e.locked)) {
-        Swal.fire("Notice", "Evaluations for this class-section-term are locked.", "info");
+        Swal.fire("Notice", "Evaluations for this session/class-section-term are locked.", "info");
       }
 
       setLastUpdated(Date.now());
@@ -246,7 +270,6 @@ const CoScholasticEntry = () => {
   };
 
   const handleKeyDown = (e, studentIndex, areaIndex) => {
-    // allow normal typing inside select
     if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Enter"].includes(e.key)) {
       e.preventDefault();
     }
@@ -283,7 +306,9 @@ const CoScholasticEntry = () => {
         break;
       default:
         if (e.key.length === 1) {
-          const grade = grades.find((g) => g.grade?.toLowerCase() === e.key.toLowerCase());
+          const grade = grades.find((g) =>
+            String(g.grade || g.name || "").toLowerCase() === e.key.toLowerCase()
+          );
           if (grade) {
             handleChange(students[studentIndex].id, areas[areaIndex].id, "grade_id", grade.id);
           }
@@ -294,7 +319,7 @@ const CoScholasticEntry = () => {
 
   /* ---------------- Actions ---------------- */
   const handleSave = async () => {
-    const { class_id, section_id, term_id } = filters;
+    const { session_id, class_id, section_id, term_id } = filters;
     const payload = [];
 
     students.forEach((student) => {
@@ -304,8 +329,9 @@ const CoScholasticEntry = () => {
         if (data.grade_id) {
           payload.push({
             student_id: student.id,
+            session_id,
             co_scholastic_area_id: area.id,
-            grade_id: data.grade_id,
+            grade_id: data.grade_id || null,
             class_id,
             section_id,
             term_id,
@@ -314,7 +340,9 @@ const CoScholasticEntry = () => {
       });
     });
 
-    if (payload.length === 0) return Swal.fire("Info", "No grades to save.", "info");
+    if (payload.length === 0) {
+      return Swal.fire("Info", "No grades to save.", "info");
+    }
 
     try {
       await api.post("/coscholastic-evaluations/save", { evaluations: payload });
@@ -327,10 +355,10 @@ const CoScholasticEntry = () => {
   };
 
   const handleExport = async () => {
-    const { class_id, section_id, term_id } = filters;
+    const { session_id, class_id, section_id, term_id } = filters;
     try {
       const res = await api.get("/coscholastic-evaluations/export", {
-        params: { class_id, section_id, term_id },
+        params: { session_id, class_id, section_id, term_id },
         responseType: "blob",
       });
 
@@ -339,7 +367,7 @@ const CoScholasticEntry = () => {
       link.href = url;
       link.setAttribute(
         "download",
-        `co-scholastic-${class_id}-${section_id}-${term_id}-${Date.now()}.xlsx`
+        `co-scholastic-${session_id}-${class_id}-${section_id}-${term_id}-${Date.now()}.xlsx`
       );
       document.body.appendChild(link);
       link.click();
@@ -352,15 +380,20 @@ const CoScholasticEntry = () => {
 
   const handleImport = async (e) => {
     const file = e.target.files[0];
-    const { class_id, section_id, term_id } = filters;
+    const { session_id, class_id, section_id, term_id } = filters;
 
-    if (!file || !class_id || !section_id || !term_id) {
-      Swal.fire("Error", "Please select a file and all filters (class, section, term)", "error");
+    if (!file || !session_id || !class_id || !section_id || !term_id) {
+      Swal.fire(
+        "Error",
+        "Please select a file and all filters (session, class, section, term)",
+        "error"
+      );
       return;
     }
 
     const formData = new FormData();
     formData.append("file", file);
+    formData.append("session_id", session_id);
     formData.append("class_id", class_id);
     formData.append("section_id", section_id);
     formData.append("term_id", term_id);
@@ -390,7 +423,7 @@ const CoScholasticEntry = () => {
   };
 
   const handleLock = async () => {
-    const { class_id, section_id, term_id } = filters;
+    const { session_id, class_id, section_id, term_id } = filters;
 
     const confirm = await Swal.fire({
       title: "Lock Evaluation?",
@@ -403,7 +436,12 @@ const CoScholasticEntry = () => {
     if (!confirm.isConfirmed) return;
 
     try {
-      await api.patch("/coscholastic-evaluations/lock", { class_id, section_id, term_id });
+      await api.post("/coscholastic-evaluations/lock", {
+        session_id,
+        class_id,
+        section_id,
+        term_id,
+      });
       Swal.fire("Locked", "Evaluations locked successfully", "success");
       fetchEvaluationData();
     } catch (err) {
@@ -428,12 +466,18 @@ const CoScholasticEntry = () => {
           <h4 className="mb-1 fw-semibold">Co-Scholastic Evaluation Entry</h4>
           <div className="text-muted small">
             Role:{" "}
-            {roles.length ? roles.map((r) => (
-              <span key={r} className="badge bg-light text-dark border me-1">
-                {r}
-              </span>
-            )) : <span className="badge bg-light text-dark border">unknown</span>}
-            <span className="ms-2 text-muted">• Last update: {new Date(lastUpdated).toLocaleTimeString()}</span>
+            {roles.length ? (
+              roles.map((r) => (
+                <span key={r} className="badge bg-light text-dark border me-1">
+                  {r}
+                </span>
+              ))
+            ) : (
+              <span className="badge bg-light text-dark border">unknown</span>
+            )}
+            <span className="ms-2 text-muted">
+              • Last update: {new Date(lastUpdated).toLocaleTimeString()}
+            </span>
           </div>
         </div>
 
@@ -449,8 +493,32 @@ const CoScholasticEntry = () => {
       <div className="card border-0 shadow-sm rounded-4 mb-3">
         <div className="card-body">
           <div className="row g-3">
-            {/* Class */}
-            <div className="col-md-4">
+            <div className="col-md-3">
+              <label className="form-label fw-semibold">Session</label>
+              <select
+                className="form-select"
+                value={filters.session_id}
+                onChange={(e) => {
+                  const session_id = e.target.value;
+                  setFilters((prev) => ({
+                    ...prev,
+                    session_id,
+                  }));
+                  setStudents([]);
+                  setAreas([]);
+                  setEvaluations({});
+                }}
+              >
+                <option value="">Select Session</option>
+                {sessions.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="col-md-3">
               <label className="form-label fw-semibold">Class</label>
               <select
                 className="form-select"
@@ -487,13 +555,17 @@ const CoScholasticEntry = () => {
               </div>
             </div>
 
-            {/* Section */}
-            <div className="col-md-4">
+            <div className="col-md-3">
               <label className="form-label fw-semibold">Section</label>
               <select
                 className="form-select"
                 value={filters.section_id}
-                onChange={(e) => setFilters((prev) => ({ ...prev, section_id: e.target.value }))}
+                onChange={(e) => {
+                  setFilters((prev) => ({ ...prev, section_id: e.target.value }));
+                  setStudents([]);
+                  setAreas([]);
+                  setEvaluations({});
+                }}
               >
                 <option value="">Select Section</option>
 
@@ -513,18 +585,22 @@ const CoScholasticEntry = () => {
               </select>
             </div>
 
-            {/* Term */}
-            <div className="col-md-4">
+            <div className="col-md-3">
               <label className="form-label fw-semibold">Term</label>
               <select
                 className="form-select"
                 value={filters.term_id}
-                onChange={(e) => setFilters((prev) => ({ ...prev, term_id: e.target.value }))}
+                onChange={(e) => {
+                  setFilters((prev) => ({ ...prev, term_id: e.target.value }));
+                  setStudents([]);
+                  setAreas([]);
+                  setEvaluations({});
+                }}
               >
                 <option value="">Select Term</option>
                 {terms.map((t) => (
                   <option key={t.id} value={t.id}>
-                    {t.name}
+                    {t.name || t.term_name}
                   </option>
                 ))}
               </select>
@@ -539,12 +615,8 @@ const CoScholasticEntry = () => {
           <div className="card-body">
             <div className="d-flex flex-wrap align-items-center gap-2 mb-3">
               <div className="fw-semibold">Evaluation Table</div>
-              <span className="badge bg-light text-dark border">
-                Students: {students.length}
-              </span>
-              <span className="badge bg-light text-dark border">
-                Areas: {areas.length}
-              </span>
+              <span className="badge bg-light text-dark border">Students: {students.length}</span>
+              <span className="badge bg-light text-dark border">Areas: {areas.length}</span>
 
               <div className="ms-auto d-flex gap-2 flex-wrap">
                 <button className="btn btn-success" onClick={handleSave} disabled={loading || anyLocked}>
@@ -558,7 +630,6 @@ const CoScholasticEntry = () => {
                   <input type="file" accept=".xlsx" onChange={handleImport} style={{ display: "none" }} />
                 </label>
 
-                {/* ✅ Lock: show to global roles only (change if you want teacher lock too) */}
                 {isGlobal && (
                   <button className="btn btn-outline-danger" onClick={handleLock} disabled={loading || anyLocked}>
                     🔒 Lock
@@ -570,7 +641,7 @@ const CoScholasticEntry = () => {
             {anyLocked && (
               <div className="alert alert-warning d-flex align-items-center rounded-4">
                 <span className="me-2">🔒</span>
-                <div>Evaluations are locked for this class-section-term.</div>
+                <div>Evaluations are locked for this session/class-section-term.</div>
               </div>
             )}
 
@@ -579,9 +650,9 @@ const CoScholasticEntry = () => {
                 <thead className="table-light sticky-top">
                   <tr>
                     <th style={{ width: 90 }}>Roll</th>
-                    <th style={{ minWidth: 200 }}>Name</th>
+                    <th style={{ minWidth: 220 }}>Name</th>
                     {areas.map((a) => (
-                      <th key={a.id} className="text-center" style={{ minWidth: 160 }}>
+                      <th key={a.id} className="text-center" style={{ minWidth: 180 }}>
                         {a.name}
                       </th>
                     ))}
@@ -591,8 +662,8 @@ const CoScholasticEntry = () => {
                 <tbody>
                   {students.map((s, studentIndex) => (
                     <tr key={s.id}>
-                      <td>{s.roll_number}</td>
-                      <td className="fw-semibold">{s.name}</td>
+                      <td>{s.roll_number || s.roll_no}</td>
+                      <td className="fw-semibold">{s.name || s.student_name}</td>
 
                       {areas.map((area, areaIndex) => {
                         const key = `${s.id}_${area.id}`;
@@ -612,7 +683,7 @@ const CoScholasticEntry = () => {
                               <option value="">-</option>
                               {grades.map((g) => (
                                 <option key={g.id} value={String(g.id)}>
-                                  {g.grade}
+                                  {g.grade || g.name}
                                 </option>
                               ))}
                             </select>
@@ -632,10 +703,10 @@ const CoScholasticEntry = () => {
         </div>
       )}
 
-      {/* Empty state */}
       {!loading &&
         students.length === 0 &&
         areas.length === 0 &&
+        filters.session_id &&
         filters.class_id &&
         filters.section_id &&
         filters.term_id && (

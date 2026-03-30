@@ -208,55 +208,6 @@ const pickNum = (...vals) => {
   return 0;
 };
 
-const EMPTY_CHEQUE_DETAILS = {
-  ChequeNumber: "",
-  ChequeDate: "",
-  BankName: "",
-};
-
-const toUiPaymentMode = (mode) => {
-  const m = String(mode || "").trim().toLowerCase();
-  if (m === "cheque") return "Cheque";
-  if (["online", "hdfc", "smart_hdfc", "smartgateway"].includes(m)) return "Online";
-  return "Cash";
-};
-
-const hasChequeInfo = (details) =>
-  Boolean(
-    String(details?.ChequeNumber || "").trim() ||
-      String(details?.ChequeDate || "").trim() ||
-      String(details?.BankName || "").trim()
-  );
-
-const normalizeDateInput = (value) => {
-  if (!value) return "";
-  const raw = String(value).trim();
-  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
-
-  const parsed = new Date(raw);
-  if (!Number.isNaN(parsed.getTime())) {
-    return parsed.toISOString().slice(0, 10);
-  }
-
-  const m = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-  if (m) return `${m[3]}-${m[2]}-${m[1]}`;
-
-  return "";
-};
-
-const validateChequeInfo = (details) => {
-  if (!String(details?.ChequeNumber || "").trim()) {
-    return "Cheque number is required.";
-  }
-  if (!String(details?.ChequeDate || "").trim()) {
-    return "Cheque date is required.";
-  }
-  if (!String(details?.BankName || "").trim()) {
-    return "Bank name is required.";
-  }
-  return null;
-};
-
 /**
  * Convert an image URL to a base64 data URL usable by @react-pdf/renderer.
  * Returns the original URL on failure (so caller can fallback).
@@ -280,11 +231,138 @@ async function fetchImageAsDataURL(url) {
   }
 }
 
-
 /* ----- Print Receipt (robust for new /schools shape) ----- */
+const handlePrintReceipt = async (slipId) => {
+  try {
+    Swal.fire({
+      title: "Preparing receipt PDF…",
+      didOpen: () => Swal.showLoading(),
+      allowOutsideClick: false,
+      showConfirmButton: false,
+    });
+
+    const [schoolResp, receiptResp] = await Promise.allSettled([
+      api.get("/schools"),
+      api.get(`/transactions/slip/${slipId}`),
+    ]);
+
+    let receipt = null;
+    if (receiptResp.status === "fulfilled") {
+      const r = receiptResp.value?.data;
+      if (r && Array.isArray(r.data)) receipt = r.data;
+      else if (Array.isArray(r)) receipt = r;
+      else if (r && typeof r === "object") {
+        if (r.data && Array.isArray(r.data)) receipt = r.data;
+        else if (r.data && typeof r.data === "object") receipt = [r.data];
+        else if (r.receipt && Array.isArray(r.receipt)) receipt = r.receipt;
+        else receipt = [r];
+      } else {
+        receipt = receiptResp.value?.data ?? null;
+        if (receipt && !Array.isArray(receipt)) receipt = [receipt];
+      }
+    }
+
+    if (!receipt || receipt.length === 0) {
+      Swal.close();
+      Swal.fire("No receipt", "Server returned no receipt data.", "error");
+      return;
+    }
+
+    let school = null;
+    if (schoolResp.status === "fulfilled") {
+      const d = schoolResp.value?.data;
+      if (d && Array.isArray(d.schools) && d.schools.length)
+        school = d.schools[0];
+      else if (Array.isArray(d)) school = d[0];
+      else if (d && Array.isArray(d.data) && d.data.length) school = d.data[0];
+      else if (d && d.school) school = d.school;
+      else if (d && typeof d === "object" && Object.keys(d).length) school = d;
+    }
+
+    if (!school && receipt[0]) {
+      const item = receipt[0];
+      if (item.School || item.school) school = item.School || item.school;
+      else if (item.schoolName || item.institute_name) {
+        school = {
+          name: item.schoolName || item.institute_name,
+          address: item.schoolAddress || item.address || "",
+          logo: item.logo || null,
+        };
+      }
+    }
+
+    if (!school) {
+      school = {
+        name: "Your School",
+        address: "",
+        logo: null,
+        phone: "",
+        email: "",
+      };
+    }
+
+    const isNeg = (v) => typeof v === "number" && !Number.isNaN(v) && v < 0;
+    const stripNeg = (v) => (isNeg(v) ? undefined : v);
+
+    const fieldsToClean = [
+      "feeBalance",
+      "vanFeeBalance",
+      "FinalDue",
+      "finalDue",
+      "Remaining",
+      "remaining",
+      "RemainingBeforeFine",
+      "remainingBeforeFine",
+    ];
+
+    const cleanedReceipt = receipt.map((row) => {
+      const out = { ...row };
+      fieldsToClean.forEach((k) => {
+        if (k in out) out[k] = stripNeg(Number(out[k]));
+      });
+
+      if (out.Student && typeof out.Student === "object") {
+        fieldsToClean.forEach((k) => {
+          if (k in out.Student) out.Student[k] = stripNeg(Number(out.Student[k]));
+        });
+      }
+
+      if (out.Transport || out.Transportation) {
+        const T = out.Transport || out.Transportation;
+        fieldsToClean.forEach((k) => {
+          if (k in T) T[k] = stripNeg(Number(T[k]));
+        });
+        out.Transport = T;
+      }
+
+      return out;
+    });
+
+    const payload = {
+      receipt: cleanedReceipt,
+      school,
+      fileName: `Receipt-${slipId}`,
+      options: { hideNegativeBalances: true },
+    };
+
+    const res = await api.post("/receipt-pdf/receipt/generate-pdf", payload, {
+      responseType: "blob",
+    });
+
+    const blob = new Blob([res.data], { type: "application/pdf" });
+    const url = window.URL.createObjectURL(blob);
+    window.open(url, "_blank");
+    setTimeout(() => window.URL.revokeObjectURL(url), 60 * 1000);
+
+    Swal.close();
+  } catch (err) {
+    Swal.close();
+    console.error("Error preparing receipt PDF:", err);
+    Swal.fire("Error", err?.message || "Failed to prepare receipt PDF", "error");
+  }
+};
 
 const Transactions = () => {
-
   const [userRole, setUserRole] = useState(
     localStorage.getItem("activeRole") || ""
   );
@@ -323,8 +401,6 @@ const Transactions = () => {
   const [activeTab, setActiveTab] = useState("admissionNumber");
   const [paymentMode, setPaymentMode] = useState("Cash");
   const [transactionID, setTransactionID] = useState("");
-  const [chequeDetails, setChequeDetails] = useState(EMPTY_CHEQUE_DETAILS);
-  const [showChequePopup, setShowChequePopup] = useState(false);
   const [remarks, setRemarks] = useState("");
   const [daySummary, setDaySummary] = useState({ data: [], grandTotal: 0 });
   const [searchAdmissionNumber, setSearchAdmissionNumber] = useState("");
@@ -339,209 +415,6 @@ const Transactions = () => {
   const [selectedHeads, setSelectedHeads] = useState(new Set());
   const [prevBalanceHeadId, setPrevBalanceHeadId] = useState(null);
   const [openingBalanceDue, setOpeningBalanceDue] = useState(0);
-
-
-  const handlePrintReceipt = async (slipId) => {
-    try {
-      Swal.fire({
-        title: "Preparing receipt PDF…",
-        didOpen: () => Swal.showLoading(),
-        allowOutsideClick: false,
-        showConfirmButton: false,
-      });
-
-      const [schoolResp, receiptResp] = await Promise.allSettled([
-        api.get("/schools"),
-        api.get(`/transactions/slip/${slipId}`),
-      ]);
-
-      let receipt = null;
-      if (receiptResp.status === "fulfilled") {
-        const r = receiptResp.value?.data;
-        if (r && Array.isArray(r.data)) receipt = r.data;
-        else if (Array.isArray(r)) receipt = r;
-        else if (r && typeof r === "object") {
-          if (r.data && Array.isArray(r.data)) receipt = r.data;
-          else if (r.data && typeof r.data === "object") receipt = [r.data];
-          else if (r.receipt && Array.isArray(r.receipt)) receipt = r.receipt;
-          else receipt = [r];
-        } else {
-          receipt = receiptResp.value?.data ?? null;
-          if (receipt && !Array.isArray(receipt)) receipt = [receipt];
-        }
-      }
-
-      if (!receipt || receipt.length === 0) {
-        Swal.close();
-        Swal.fire("No receipt", "Server returned no receipt data.", "error");
-        return;
-      }
-
-      let school = null;
-      if (schoolResp.status === "fulfilled") {
-        const d = schoolResp.value?.data;
-        if (d && Array.isArray(d.schools) && d.schools.length) school = d.schools[0];
-        else if (Array.isArray(d)) school = d[0];
-        else if (d && Array.isArray(d.data) && d.data.length) school = d.data[0];
-        else if (d && d.school) school = d.school;
-        else if (d && typeof d === "object" && Object.keys(d).length) school = d;
-      }
-
-      if (!school && receipt[0]) {
-        const item = receipt[0];
-        if (item.School || item.school) {
-          school = item.School || item.school;
-        } else if (item.schoolName || item.institute_name) {
-          school = {
-            name: item.schoolName || item.institute_name,
-            address: item.schoolAddress || item.address || "",
-            logo: item.logo || null,
-          };
-        }
-      }
-
-      if (!school) {
-        school = {
-          name: "Your School",
-          address: "",
-          logo: null,
-          phone: "",
-          email: "",
-        };
-      }
-
-      const isNeg = (v) => typeof v === "number" && !Number.isNaN(v) && v < 0;
-      const stripNeg = (v) => (isNeg(v) ? undefined : v);
-
-      const fieldsToClean = [
-        "feeBalance",
-        "vanFeeBalance",
-        "FinalDue",
-        "finalDue",
-        "Remaining",
-        "remaining",
-        "RemainingBeforeFine",
-        "remainingBeforeFine",
-      ];
-
-      const cleanedReceipt = receipt.map((row) => {
-        const out = { ...row };
-
-        fieldsToClean.forEach((k) => {
-          if (k in out) out[k] = stripNeg(Number(out[k]));
-        });
-
-        if (out.Student && typeof out.Student === "object") {
-          out.Student = { ...out.Student };
-          fieldsToClean.forEach((k) => {
-            if (k in out.Student) out.Student[k] = stripNeg(Number(out.Student[k]));
-          });
-        }
-
-        if (out.Transport || out.Transportation) {
-          const T = { ...(out.Transport || out.Transportation) };
-          fieldsToClean.forEach((k) => {
-            if (k in T) T[k] = stripNeg(Number(T[k]));
-          });
-          out.Transport = T;
-          out.Transportation = T;
-        }
-
-        return out;
-      });
-
-      const firstReceipt = cleanedReceipt[0] || {};
-
-      const selectedSessionObj =
-        Array.isArray(sessions) && sessions.length
-          ? sessions.find((s) => Number(s.id) === Number(selectedSession))
-          : null;
-
-      const buildSessionLabelFromDates = (obj) => {
-        if (!obj) return "";
-
-        const start =
-          obj.start_year ||
-          obj.startYear ||
-          obj.from_year ||
-          obj.fromYear ||
-          obj.year_from ||
-          obj.session_from;
-
-        const end =
-          obj.end_year ||
-          obj.endYear ||
-          obj.to_year ||
-          obj.toYear ||
-          obj.year_to ||
-          obj.session_to;
-
-        if (start && end) {
-          return `${start}-${String(end).slice(-2)}`;
-        }
-
-        return "";
-      };
-
-      const sessionLabel =
-        selectedSessionObj?.name ||
-        selectedSessionObj?.label ||
-        selectedSessionObj?.title ||
-        selectedSessionObj?.session_name ||
-        selectedSessionObj?.sessionLabel ||
-        buildSessionLabelFromDates(selectedSessionObj) ||
-        firstReceipt?.session_name ||
-        firstReceipt?.Session_Name ||
-        firstReceipt?.academic_session ||
-        firstReceipt?.session ||
-        firstReceipt?.Session ||
-        firstReceipt?.Student?.session_name ||
-        firstReceipt?.Student?.academic_session ||
-        firstReceipt?.Student?.session ||
-        "";
-
-      const sessionId =
-        firstReceipt?.session_id ||
-        firstReceipt?.Session_ID ||
-        selectedSessionObj?.id ||
-        selectedSession ||
-        null;
-
-      const payload = {
-        receipt: cleanedReceipt,
-        school,
-        fileName: `Receipt-${slipId}`,
-        sessionLabel,
-        session_id: sessionId,
-        options: { hideNegativeBalances: true },
-      };
-
-      console.log("Receipt PDF payload session =>", {
-        slipId,
-        sessionLabel,
-        sessionId,
-        selectedSession,
-        selectedSessionObj,
-        firstReceipt,
-      });
-
-      const res = await api.post("/receipt-pdf/receipt/generate-pdf", payload, {
-        responseType: "blob",
-      });
-
-      const blob = new Blob([res.data], { type: "application/pdf" });
-      const url = window.URL.createObjectURL(blob);
-      window.open(url, "_blank");
-      setTimeout(() => window.URL.revokeObjectURL(url), 60 * 1000);
-
-      Swal.close();
-    } catch (err) {
-      Swal.close();
-      console.error("Error preparing receipt PDF:", err);
-      Swal.fire("Error", err?.message || "Failed to prepare receipt PDF", "error");
-    }
-  };
-
 
   const [sbQuery, setSbQuery] = useState("");
   const [sbResults, setSbResults] = useState([]);
@@ -561,20 +434,6 @@ const Transactions = () => {
   const debounce = (fn, ms = 250) => {
     clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(fn, ms);
-  };
-
-  const openChequePopup = () => setShowChequePopup(true);
-
-  const closeChequePopup = () => setShowChequePopup(false);
-
-  const saveChequePopup = () => {
-    const source = editingTransaction || chequeDetails;
-    const msg = validateChequeInfo(source);
-    if (msg) {
-      Swal.fire("Incomplete cheque details", msg, "warning");
-      return;
-    }
-    setShowChequePopup(false);
   };
 
   const asStudentsArray = (data) =>
@@ -1461,37 +1320,40 @@ const Transactions = () => {
 
       try {
         const headId = await ensurePrevBalanceHeadId();
-        const backendPreviousBalance = Number(
-          feeResponse?.data?.previous_balance_due || 0
-        );
-
-        setOpeningBalanceDue(backendPreviousBalance || 0);
-
-        if (headId && backendPreviousBalance > 0) {
-          const openingRow = {
-            isOpeningBalance: true,
-            Fee_Head: headId,
-            Fee_Heading_Name: "Previous Balance",
-            Original_Fee_Due: backendPreviousBalance,
-            Fee_Due: backendPreviousBalance,
-            Fee_Recieved: 0,
-            Concession: 0,
-            fineAmount: 0,
-            isFineApplicable: false,
-            Fine_Amount: 0,
-            ShowVanFeeInput: false,
-            VanFee: 0,
-            Van_Fee_Due: 0,
-            Van_Fee_Remaining: 0,
-            Van_Fine_Amount: 0,
-            Van_Fee_Concession: 0,
-            _vanFeeConcession: 0,
-            _routeFee: 0,
-            _receivedVanFee: 0,
-            SelectedRoute: null,
-            defaultConcessionAmount: 0,
-          };
-          feeDetails.unshift(openingRow);
+        if (headId && baseStudent?.id && selectedSession) {
+          const obDue = await fetchOpeningBalanceOutstanding(
+            baseStudent.id,
+            selectedSession
+          );
+          setOpeningBalanceDue(obDue || 0);
+          if (obDue > 0) {
+            const openingRow = {
+              isOpeningBalance: true,
+              Fee_Head: headId,
+              Fee_Heading_Name: "Previous Balance",
+              Original_Fee_Due: obDue,
+              Fee_Due: obDue,
+              Fee_Recieved: 0,
+              Concession: 0,
+              fineAmount: 0,
+              isFineApplicable: false,
+              Fine_Amount: 0,
+              ShowVanFeeInput: false,
+              VanFee: 0,
+              Van_Fee_Due: 0,
+              Van_Fee_Remaining: 0,
+              Van_Fine_Amount: 0,
+              Van_Fee_Concession: 0,
+              _vanFeeConcession: 0,
+              _routeFee: 0,
+              _receivedVanFee: 0,
+              SelectedRoute: null,
+              defaultConcessionAmount: 0,
+            };
+            feeDetails.unshift(openingRow);
+          }
+        } else {
+          setOpeningBalanceDue(0);
         }
       } catch (e) {
         console.warn("OB injection failed:", e?.message || e);
@@ -1613,20 +1475,6 @@ const Transactions = () => {
       setModalError(null);
 
       if (editingTransaction) {
-        if (editingTransaction.PaymentMode === "Online" && !String(editingTransaction.Transaction_ID || "").trim()) {
-          setModalError("Transaction ID is required for online payments.");
-          return;
-        }
-
-        if (editingTransaction.PaymentMode === "Cheque") {
-          const chequeError = validateChequeInfo(editingTransaction);
-          if (chequeError) {
-            setModalError(chequeError);
-            setShowChequePopup(true);
-            return;
-          }
-        }
-
         const updatedTransaction = {
           Fee_Recieved: editingTransaction.Fee_Recieved,
           Concession: editingTransaction.Concession,
@@ -1636,19 +1484,7 @@ const Transactions = () => {
           PaymentMode: editingTransaction.PaymentMode,
           Transaction_ID:
             editingTransaction.PaymentMode === "Online"
-              ? String(editingTransaction.Transaction_ID || "").trim()
-              : null,
-          ChequeNumber:
-            editingTransaction.PaymentMode === "Cheque"
-              ? String(editingTransaction.ChequeNumber || "").trim()
-              : null,
-          ChequeDate:
-            editingTransaction.PaymentMode === "Cheque"
-              ? normalizeDateInput(editingTransaction.ChequeDate)
-              : null,
-          BankName:
-            editingTransaction.PaymentMode === "Cheque"
-              ? String(editingTransaction.BankName || "").trim()
+              ? editingTransaction.Transaction_ID
               : null,
           session_id: editingTransaction.session_id ?? null,
           Remarks: editingTransaction.Remarks || null,
@@ -1664,7 +1500,6 @@ const Transactions = () => {
           fetchTransactions();
           fetchDaySummary();
           setShowModal(false);
-          setShowChequePopup(false);
           setEditingTransaction(null);
         } else {
           setModalError(response.data.message || "Unable to update transaction.");
@@ -1681,18 +1516,6 @@ const Transactions = () => {
         if (!selectedSession) {
           setModalError("Please select an academic session before collecting.");
           return;
-        }
-        if (paymentMode === "Online" && !String(transactionID || "").trim()) {
-          setModalError("Transaction ID is required for online payments.");
-          return;
-        }
-        if (paymentMode === "Cheque") {
-          const chequeError = validateChequeInfo(chequeDetails);
-          if (chequeError) {
-            setModalError(chequeError);
-            setShowChequePopup(true);
-            return;
-          }
         }
 
         const transactionsPayload = newTransactionDetails.map((details) => ({
@@ -1719,10 +1542,7 @@ const Transactions = () => {
               ? Number(details.SelectedRoute)
               : null,
           PaymentMode: paymentMode,
-          Transaction_ID: paymentMode === "Online" ? String(transactionID || "").trim() : null,
-          ChequeNumber: paymentMode === "Cheque" ? String(chequeDetails.ChequeNumber || "").trim() : null,
-          ChequeDate: paymentMode === "Cheque" ? normalizeDateInput(chequeDetails.ChequeDate) : null,
-          BankName: paymentMode === "Cheque" ? String(chequeDetails.BankName || "").trim() : null,
+          Transaction_ID: paymentMode === "Online" ? transactionID : null,
           Fine_Amount:
             details.isFineApplicable && !details.isOpeningBalance
               ? details.Fine_Amount || 0
@@ -1779,10 +1599,8 @@ const Transactions = () => {
     setSelectedSection("");
     setStudents([]);
     setShowModal(false);
-    setShowChequePopup(false);
     setPaymentMode("Cash");
     setTransactionID("");
-    setChequeDetails(EMPTY_CHEQUE_DETAILS);
     setQuickAmount("");
     setModalError(null);
     setRemarks("");
@@ -1828,12 +1646,8 @@ const Transactions = () => {
       setNewTransactionDetails([]);
       setPaymentMode("Cash");
       setTransactionID("");
-      setChequeDetails(EMPTY_CHEQUE_DETAILS);
-      setShowChequePopup(false);
       setQuickAmount("");
       setModalError(null);
-    } else {
-      setShowChequePopup(false);
     }
   }, [showModal]);
 
@@ -1982,7 +1796,7 @@ const Transactions = () => {
             <Card className="shadow-sm border-0 h-100">
               <Card.Body className="text-center">
                 <div className="small text-uppercase text-muted mb-1">
-                  {`${toUiPaymentMode(p.PaymentMode)} Collection`}
+                  {p.PaymentMode === "Cash" ? "Cash Collection" : "Online Collection"}
                 </div>
                 <div className="fs-4 fw-bold">
                   {formatINR(parseFloat(p.TotalAmountCollected || 0))}
@@ -2032,8 +1846,6 @@ const Transactions = () => {
                 return;
               }
               setEditingTransaction(null);
-              setChequeDetails(EMPTY_CHEQUE_DETAILS);
-              setShowChequePopup(false);
               resetForm();
               fetchClasses();
               fetchSections();
@@ -2098,7 +1910,7 @@ const Transactions = () => {
                       <td className={t.Fine_Amount > 0 ? "text-danger fw-bold" : ""}>
                         {formatINR(t.Fine_Amount || 0)}
                       </td>
-                      <td>{toUiPaymentMode(t.PaymentMode)}</td>
+                      <td>{t.PaymentMode}</td>
                       <td>
                         <Badge bg="success">Active</Badge>
                       </td>
@@ -2117,11 +1929,8 @@ const Transactions = () => {
                               VanFee: t.VanFee,
                               Fine_Amount: t.Fine_Amount || 0,
                               Van_Fee_Concession: t.Van_Fee_Concession || 0,
-                              PaymentMode: toUiPaymentMode(t.PaymentMode),
+                              PaymentMode: t.PaymentMode,
                               Transaction_ID: t.Transaction_ID || "",
-                              ChequeNumber: t.ChequeNumber || "",
-                              ChequeDate: normalizeDateInput(t.ChequeDate),
-                              BankName: t.BankName || "",
                               FeeHeadingName: t.FeeHeading?.fee_heading || "—",
                               StudentName: t.Student?.name || "—",
                               AdmissionNumber: t.AdmissionNumber,
@@ -2228,10 +2037,7 @@ const Transactions = () => {
 
       <Modal
         show={showModal}
-        onHide={() => {
-          setShowChequePopup(false);
-          setShowModal(false);
-        }}
+        onHide={() => setShowModal(false)}
         centered={false}
         size="lg"
         fullscreen="md-down"
@@ -2484,19 +2290,6 @@ const Transactions = () => {
               </Tabs>
 
               {selectedStudentInfo && renderCustomFieldsBlock(selectedStudentInfo)}
-
-              {openingBalanceDue > 0 && (
-                <div className="d-flex justify-content-end mb-2">
-                  <Badge
-                    bg="danger"
-                    pill
-                    title="Previous session balance is pending"
-                    style={{ fontSize: "0.78rem", padding: "6px 10px" }}
-                  >
-                    Prev. Bal. {formatINR(openingBalanceDue)}
-                  </Badge>
-                </div>
-              )}
 
               {feeHeads.length > 0 && (
                 <Card className="mb-3 shadow-sm">
@@ -3011,22 +2804,16 @@ const Transactions = () => {
                     <td style={{ maxWidth: 160 }}>
                       <Form.Select
                         value={editingTransaction?.PaymentMode || "Cash"}
-                        onChange={(e) => {
-                          const nextMode = e.target.value;
+                        onChange={(e) =>
                           setEditingTransaction((prev) => ({
                             ...prev,
-                            PaymentMode: nextMode,
-                            Transaction_ID: nextMode === "Online" ? prev.Transaction_ID : "",
-                            ChequeNumber: nextMode === "Cheque" ? prev.ChequeNumber || "" : "",
-                            ChequeDate: nextMode === "Cheque" ? normalizeDateInput(prev.ChequeDate) : "",
-                            BankName: nextMode === "Cheque" ? prev.BankName || "" : "",
-                          }));
-                          if (nextMode === "Cheque") setShowChequePopup(true);
-                        }}
+                            PaymentMode: e.target.value,
+                            Transaction_ID: e.target.value === "Online" ? prev.Transaction_ID : "",
+                          }))
+                        }
                       >
                         <option value="Cash">Cash</option>
                         <option value="Online">Online</option>
-                        <option value="Cheque">Cheque</option>
                       </Form.Select>
                     </td>
 
@@ -3083,21 +2870,6 @@ const Transactions = () => {
                   />
                 </Form.Group>
               )}
-
-              {editingTransaction?.PaymentMode === "Cheque" && (
-                <div className="mt-3 d-flex flex-wrap align-items-center gap-2">
-                  <Button variant="outline-primary" size="sm" onClick={openChequePopup}>
-                    {hasChequeInfo(editingTransaction) ? "Edit Cheque Details" : "Add Cheque Details"}
-                  </Button>
-                  {hasChequeInfo(editingTransaction) && (
-                    <div className="small text-muted">
-                      <strong>No:</strong> {editingTransaction?.ChequeNumber || "—"} &nbsp;|&nbsp;
-                      <strong>Date:</strong> {normalizeDateInput(editingTransaction?.ChequeDate) || "—"} &nbsp;|&nbsp;
-                      <strong>Bank:</strong> {editingTransaction?.BankName || "—"}
-                    </div>
-                  )}
-                </div>
-              )}
             </>
           )}
         </Modal.Body>
@@ -3144,21 +2916,11 @@ const Transactions = () => {
                 </Form.Label>
                 <Form.Select
                   value={paymentMode}
-                  onChange={(e) => {
-                    const nextMode = e.target.value;
-                    setPaymentMode(nextMode);
-                    if (nextMode !== "Online") setTransactionID("");
-                    if (nextMode !== "Cheque") {
-                      setChequeDetails(EMPTY_CHEQUE_DETAILS);
-                    } else {
-                      setShowChequePopup(true);
-                    }
-                  }}
+                  onChange={(e) => setPaymentMode(e.target.value)}
                   size="sm"
                 >
                   <option value="Cash">Cash</option>
                   <option value="Online">Online</option>
-                  <option value="Cheque">Cheque</option>
                 </Form.Select>
               </Form.Group>
 
@@ -3187,24 +2949,6 @@ const Transactions = () => {
                     value={transactionID}
                     onChange={(e) => setTransactionID(e.target.value)}
                   />
-                </Form.Group>
-              )}
-
-              {paymentMode === "Cheque" && (
-                <Form.Group className="m-0" style={{ minWidth: 220 }}>
-                  <Form.Label className="m-0 small text-muted fw-semibold" style={{ fontSize: "0.75rem" }}>
-                    Cheque Details
-                  </Form.Label>
-                  <div className="d-flex align-items-center gap-2">
-                    <Button variant="outline-primary" size="sm" onClick={openChequePopup}>
-                      {hasChequeInfo(chequeDetails) ? "Edit Details" : "Add Details"}
-                    </Button>
-                    {hasChequeInfo(chequeDetails) && (
-                      <small className="text-muted text-truncate" style={{ maxWidth: 220 }}>
-                        {chequeDetails.BankName || "Bank"} • {chequeDetails.ChequeNumber || "No."}
-                      </small>
-                    )}
-                  </div>
                 </Form.Group>
               )}
             </div>
@@ -3241,7 +2985,7 @@ const Transactions = () => {
             </div>
 
             <div className="d-flex align-items-center gap-2 flex-shrink-0">
-              <Button variant="secondary" size="sm" onClick={() => { setShowChequePopup(false); setShowModal(false); }}>
+              <Button variant="secondary" size="sm" onClick={() => setShowModal(false)}>
                 Close
               </Button>
 
@@ -3265,79 +3009,6 @@ const Transactions = () => {
               </Button>
             </div>
           </div>
-        </Modal.Footer>
-      </Modal>
-
-      <Modal show={showChequePopup} onHide={closeChequePopup} centered backdrop="static">
-        <Modal.Header closeButton>
-          <Modal.Title>Cheque Details</Modal.Title>
-        </Modal.Header>
-        <Modal.Body>
-          <Row className="g-3">
-            <Col md={12}>
-              <Form.Group>
-                <Form.Label>Cheque Number</Form.Label>
-                <Form.Control
-                  type="text"
-                  placeholder="Enter cheque number"
-                  value={editingTransaction ? editingTransaction?.ChequeNumber || "" : chequeDetails.ChequeNumber}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    if (editingTransaction) {
-                      setEditingTransaction((prev) => ({ ...prev, ChequeNumber: value }));
-                    } else {
-                      setChequeDetails((prev) => ({ ...prev, ChequeNumber: value }));
-                    }
-                  }}
-                />
-              </Form.Group>
-            </Col>
-
-            <Col md={12}>
-              <Form.Group>
-                <Form.Label>Cheque Date</Form.Label>
-                <Form.Control
-                  type="date"
-                  value={editingTransaction ? normalizeDateInput(editingTransaction?.ChequeDate) : normalizeDateInput(chequeDetails.ChequeDate)}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    if (editingTransaction) {
-                      setEditingTransaction((prev) => ({ ...prev, ChequeDate: value }));
-                    } else {
-                      setChequeDetails((prev) => ({ ...prev, ChequeDate: value }));
-                    }
-                  }}
-                />
-              </Form.Group>
-            </Col>
-
-            <Col md={12}>
-              <Form.Group>
-                <Form.Label>Bank Name</Form.Label>
-                <Form.Control
-                  type="text"
-                  placeholder="Enter bank name"
-                  value={editingTransaction ? editingTransaction?.BankName || "" : chequeDetails.BankName}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    if (editingTransaction) {
-                      setEditingTransaction((prev) => ({ ...prev, BankName: value }));
-                    } else {
-                      setChequeDetails((prev) => ({ ...prev, BankName: value }));
-                    }
-                  }}
-                />
-              </Form.Group>
-            </Col>
-          </Row>
-        </Modal.Body>
-        <Modal.Footer>
-          <Button variant="secondary" onClick={closeChequePopup}>
-            Close
-          </Button>
-          <Button variant="primary" onClick={saveChequePopup}>
-            Save Details
-          </Button>
         </Modal.Footer>
       </Modal>
     </div>

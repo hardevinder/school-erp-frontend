@@ -3,6 +3,7 @@
   --fs-font: 13px;
   --fs-pad: 10px;
   --fs-gap: 10px;
+  overflow: visible !important;
 }
 
 .fee-structure-page.fs-compact {
@@ -13,6 +14,7 @@
 
 .fee-structure-page .card-body {
   padding: var(--fs-pad);
+  overflow: visible !important;
 }
 
 /* Header */
@@ -22,6 +24,7 @@
   align-items: flex-end;
   gap: 12px;
   margin-bottom: 10px;
+  overflow: visible !important;
 }
 
 .fs-title {
@@ -47,6 +50,11 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: var(--fs-gap);
+  overflow: visible !important;
+}
+
+.fs-grid-2 > div {
+  overflow: visible !important;
 }
 
 @media (max-width: 900px) {
@@ -58,7 +66,9 @@
 /* Topbar */
 .fs-topbar-body {
   padding: var(--fs-pad);
+  overflow: visible !important;
 }
+
 .fs-actionsRow {
   display: flex;
   gap: 8px;
@@ -68,6 +78,9 @@
 /* Filter body */
 .fs-filter-body {
   padding: var(--fs-pad);
+  position: relative;
+  z-index: 30;
+  overflow: visible !important;
 }
 
 .fs-hint {
@@ -113,6 +126,7 @@
     grid-template-columns: repeat(2, 1fr);
   }
 }
+
 @media (max-width: 700px) {
   .fs-bulk-grid {
     grid-template-columns: 1fr;
@@ -122,7 +136,10 @@
 /* Table compact */
 .fs-tableWrap {
   border-radius: 10px;
-  overflow: hidden;
+  position: relative;
+  z-index: 1;
+  overflow-x: auto;
+  overflow-y: visible !important;
 }
 
 .fs-table {
@@ -157,6 +174,17 @@
 }
 
 /* ---------- MultiSelect compact overrides ---------- */
+.rmsc {
+  position: relative;
+  z-index: 40;
+}
+
+.rmsc .dropdown-container {
+  position: relative;
+  z-index: 41;
+  background: #fff;
+}
+
 .rmsc .dropdown-heading {
   min-height: 34px !important;
   padding: 4px 8px !important;
@@ -169,6 +197,14 @@
 
 .rmsc .select-panel {
   font-size: var(--fs-font) !important;
+}
+
+.rmsc .dropdown-content {
+  position: absolute !important;
+  z-index: 9999 !important;
+  background: #fff !important;
+  border: 1px solid #dcdcdc;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
 }
 
 /* ---------- SweetAlert2 compact modal ---------- */
@@ -230,7 +266,20 @@
   .fs-row-compact {
     grid-template-columns: 1fr;
   }
+
   .fs-span-2 {
     grid-column: auto;
   }
+}
+
+/* Extra safety for Bootstrap/table wrappers */
+.card,
+.card-body,
+.table-responsive,
+.table-responsive-sm,
+.table-responsive-md,
+.table-responsive-lg,
+.table-responsive-xl,
+.table-responsive-xxl {
+  overflow: visible !important;
 }

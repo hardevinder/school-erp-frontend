@@ -91,6 +91,18 @@ const toDateInput = (v) => {
   return "";
 };
 
+// India-safe current date for date inputs
+const todayYMD = () => {
+  const now = new Date();
+  const indiaNow = new Date(
+    now.toLocaleString("en-US", { timeZone: "Asia/Kolkata" })
+  );
+  const yyyy = indiaNow.getFullYear();
+  const mm = String(indiaNow.getMonth() + 1).padStart(2, "0");
+  const dd = String(indiaNow.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+};
+
 const normalizeTcForModal = (tc = {}) => {
   const rawDob =
     tc?.dob ??
@@ -401,8 +413,8 @@ const modalHtmlTabbed = (tc = {}) => {
         <div>
           <label class="tc-label">Session Text</label>
           <input id="swal-session" class="tc-field" value="${esc(
-            s.session_text || "Apr 2024-Mar 2025"
-          )}" placeholder="e.g., Apr 2024-Mar 2025">
+              s.session_text || "2025-26"
+            )}" placeholder="e.g., 2025-26">
         </div>
 
         <div>
@@ -471,9 +483,7 @@ const modalHtmlTabbed = (tc = {}) => {
 
         <div>
           <label class="tc-label">Class at First Admission</label>
-          <input id="swal-first-class" class="tc-field" value="${esc(
-            s.first_admission_class || ""
-          )}" placeholder="e.g., Nursery / 1st / LKG">
+          <input id="swal-first-class" class="tc-field" value="" placeholder="e.g., Nursery / 1st / LKG">
         </div>
 
         <div>
@@ -570,8 +580,8 @@ const modalHtmlTabbed = (tc = {}) => {
         <div>
           <label class="tc-label">Fees Paid Upto</label>
           <input id="swal-feeupto" class="tc-field" value="${esc(
-            s.fees_paid_upto || ""
-          )}" placeholder="e.g., March 2025">
+            s.fees_paid_upto || "March 2026"
+          )}" placeholder="e.g., March 2026">
         </div>
 
         <div>
@@ -629,14 +639,14 @@ const modalHtmlTabbed = (tc = {}) => {
         <div>
           <label class="tc-label">Date Struck Off Rolls</label>
           <input id="swal-date-struck" type="date" class="tc-field" value="${esc(
-            asYMD(s.struck_off_date)
+            asYMD(s.struck_off_date) || todayYMD()
           )}">
         </div>
 
         <div>
           <label class="tc-label">Date of Issue</label>
           <input id="swal-date-issue" type="date" class="tc-field" value="${esc(
-            asYMD(s.issue_date)
+            asYMD(s.issue_date) || todayYMD()
           )}">
         </div>
 

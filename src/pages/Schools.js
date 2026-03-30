@@ -1,6 +1,5 @@
-// src/pages/Schools.jsx
 import React, { useState, useEffect, useMemo } from "react";
-import api from "../api"; // Custom Axios instance
+import api from "../api";
 import Swal from "sweetalert2";
 import "./Schools.css";
 
@@ -94,8 +93,13 @@ const Schools = () => {
       </div>
 
       <div>
-        <label for="swal-affiliation" class="form-label">Affiliation Code</label>
-        <input id="swal-affiliation" class="form-field" placeholder="e.g. 730108" value="${esc(school.affiliation_code)}">
+        <label for="swal-affiliation" class="form-label">Affiliation Number</label>
+        <input id="swal-affiliation" class="form-field" placeholder="e.g. 730108" value="${esc(school.affiliation_number)}">
+      </div>
+
+      <div>
+        <label for="swal-udise" class="form-label">UDISE Number</label>
+        <input id="swal-udise" class="form-field" placeholder="e.g. 12345678901" value="${esc(school.udise_number)}">
       </div>
 
       <div>
@@ -196,7 +200,8 @@ const Schools = () => {
           description: p.querySelector("#swal-description").value.trim(),
           phone: p.querySelector("#swal-phone").value.trim(),
           email: p.querySelector("#swal-email").value.trim(),
-          affiliation_code: p.querySelector("#swal-affiliation").value.trim(),
+          affiliation_number: p.querySelector("#swal-affiliation").value.trim(),
+          udise_number: p.querySelector("#swal-udise").value.trim(),
           school_code: p.querySelector("#swal-school-code").value.trim(),
           tele_fax: p.querySelector("#swal-telefax").value.trim(),
           website: p.querySelector("#swal-website").value.trim(),
@@ -212,7 +217,8 @@ const Schools = () => {
           formData.append("description", v.description || "");
           formData.append("phone", v.phone || "");
           formData.append("email", v.email || "");
-          formData.append("affiliation_code", v.affiliation_code || "");
+          formData.append("affiliation_number", v.affiliation_number || "");
+          formData.append("udise_number", v.udise_number || "");
           formData.append("school_code", v.school_code || "");
           formData.append("website", v.website || "");
           formData.append("tele_fax", v.tele_fax || "");
@@ -289,7 +295,8 @@ const Schools = () => {
           description: p.querySelector("#swal-description").value.trim(),
           phone: p.querySelector("#swal-phone").value.trim(),
           email: p.querySelector("#swal-email").value.trim(),
-          affiliation_code: p.querySelector("#swal-affiliation").value.trim(),
+          affiliation_number: p.querySelector("#swal-affiliation").value.trim(),
+          udise_number: p.querySelector("#swal-udise").value.trim(),
           school_code: p.querySelector("#swal-school-code").value.trim(),
           tele_fax: p.querySelector("#swal-telefax").value.trim(),
           website: p.querySelector("#swal-website").value.trim(),
@@ -305,13 +312,13 @@ const Schools = () => {
           formData.append("description", v.description || "");
           formData.append("phone", v.phone || "");
           formData.append("email", v.email || "");
-          formData.append("affiliation_code", v.affiliation_code || "");
+          formData.append("affiliation_number", v.affiliation_number || "");
+          formData.append("udise_number", v.udise_number || "");
           formData.append("school_code", v.school_code || "");
           formData.append("website", v.website || "");
           formData.append("tele_fax", v.tele_fax || "");
           formData.append("address_line", v.address_line || "");
 
-          // only if a new file was selected
           if (fileLogo) formData.append("logo", fileLogo);
           if (fileBoardLogo) formData.append("board_logo", fileBoardLogo);
 
@@ -364,7 +371,8 @@ const Schools = () => {
     const q = search.toLowerCase();
     return (
       (s.name || "").toLowerCase().includes(q) ||
-      (s.affiliation_code || "").toLowerCase().includes(q) ||
+      (s.affiliation_number || "").toLowerCase().includes(q) ||
+      (s.udise_number || "").toLowerCase().includes(q) ||
       (s.school_code || "").toLowerCase().includes(q) ||
       (s.website || "").toLowerCase().includes(q) ||
       (s.tele_fax || "").toLowerCase().includes(q) ||
@@ -389,7 +397,7 @@ const Schools = () => {
         <input
           type="text"
           className="form-control w-50"
-          placeholder="Search by name, code, website, phone, address..."
+          placeholder="Search by name, affiliation no, UDISE, school code, website, phone, address..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
@@ -403,7 +411,8 @@ const Schools = () => {
               <th>Logo</th>
               <th>Board Logo</th>
               <th>Name & Description</th>
-              <th>Affiliation</th>
+              <th>Affiliation Number</th>
+              <th>UDISE Number</th>
               <th>School Code</th>
               <th>Phone</th>
               <th>Email</th>
@@ -458,7 +467,8 @@ const Schools = () => {
                   <div className="fw-semibold">{school.name}</div>
                   <div className="text-muted small">{school.description || "—"}</div>
                 </td>
-                <td>{school.affiliation_code || "—"}</td>
+                <td>{school.affiliation_number || "—"}</td>
+                <td>{school.udise_number || "—"}</td>
                 <td>{school.school_code || "—"}</td>
                 <td>{school.phone || "—"}</td>
                 <td>{school.email || "—"}</td>
@@ -514,7 +524,7 @@ const Schools = () => {
             ))}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={canEdit ? 12 : 11} className="text-center">
+                <td colSpan={canEdit ? 13 : 12} className="text-center">
                   No schools found
                 </td>
               </tr>

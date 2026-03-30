@@ -502,6 +502,14 @@ export default function TeacherDashboard() {
             color: "var(--qa-teal)",
           },
 
+          {
+            label: "Promotion Decisions",
+            icon: "bi-person-check",
+            path: "/student-promotion-decision-entry",
+            color: "var(--qa-green)",
+            badge: "NEW",
+          },
+
           // ✅ Academic Calendar
           { label: "Academic Calendar", icon: "bi-calendar3", path: "/academic-calendar-view", color: "var(--qa-purple)" },
         ],

@@ -214,6 +214,14 @@ export default function ExaminationDashboard() {
       color: "var(--qa-amber)",
     },
     {
+      title: "Promotion Decisions",
+      sub: "Promoted / not promoted class-wise",
+      icon: "bi-mortarboard",
+      badge: "ENTRY",
+      onClick: () => open("/student-promotion-decision-entry"),
+      color: "var(--qa-indigo)",
+    },
+    {
       title: "Report Card Generator",
       sub: "Generate report cards (PDF)",
       icon: "bi-printer",

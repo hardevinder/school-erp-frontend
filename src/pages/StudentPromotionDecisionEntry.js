@@ -1,11 +1,11 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import api from "../api";
 import Swal from "sweetalert2";
 import "bootstrap/dist/css/bootstrap.min.css";
 
 const HEADER_Z = 1030;
 
-/* ---------------- Role Helpers (same as CoScholasticEntry) ---------------- */
+/* ---------------- Role Helpers ---------------- */
 const getRoleFlags = () => {
   const singleRole = localStorage.getItem("userRole");
   const multiRoles = JSON.parse(localStorage.getItem("roles") || "[]");
@@ -26,7 +26,11 @@ const getRoleFlags = () => {
   };
 };
 
-const StudentRemarksEntry = () => {
+const getTodayDate = () => {
+  return new Date().toISOString().slice(0, 10);
+};
+
+const StudentPromotionDecisionEntry = () => {
   const { isGlobal } = useMemo(getRoleFlags, []);
 
   const [filters, setFilters] = useState({
@@ -36,28 +40,33 @@ const StudentRemarksEntry = () => {
     term_id: "",
   });
 
-  // Teacher/incharge assigned list
   const [assignedClasses, setAssignedClasses] = useState([]);
-
-  // Global meta from backend
   const [classSections, setClassSections] = useState([]);
   const [sessions, setSessions] = useState([]);
-
-  // Fallback global lists
   const [classes, setClasses] = useState([]);
   const [sections, setSections] = useState([]);
-
   const [terms, setTerms] = useState([]);
+
   const [students, setStudents] = useState([]);
-  const [remarksMap, setRemarksMap] = useState({});
+  const [decisionMap, setDecisionMap] = useState({});
   const [loading, setLoading] = useState(false);
 
-  const textRefs = useRef({});
+  const [bulkStatus, setBulkStatus] = useState("PROMOTED");
+  const [bulkPromotedToClassId, setBulkPromotedToClassId] = useState("");
+  const [bulkPromotionDate, setBulkPromotionDate] = useState(getTodayDate());
 
   useEffect(() => {
     init();
     // eslint-disable-next-line
   }, []);
+
+  useEffect(() => {
+    const { session_id, class_id, section_id, term_id } = filters;
+    if (session_id && class_id !== "" && section_id && term_id) {
+      fetchPromotionDecisions();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filters.session_id, filters.class_id, filters.section_id, filters.term_id]);
 
   const init = async () => {
     try {
@@ -69,26 +78,14 @@ const StudentRemarksEntry = () => {
       } else {
         await loadAssignedClasses();
         await loadSessions();
+        await loadAllClasses();
       }
-    } catch (e) {
-      // already handled
+    } catch (err) {
+      console.error(err);
     } finally {
       setLoading(false);
     }
   };
-
-  useEffect(() => {
-    const { session_id, class_id, section_id, term_id } = filters;
-    if (
-      session_id !== "" &&
-      class_id !== "" &&
-      section_id !== "" &&
-      term_id !== ""
-    ) {
-      fetchRemarks();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters.session_id, filters.class_id, filters.section_id, filters.term_id]);
 
   /* ---------------- Loaders ---------------- */
 
@@ -102,7 +99,7 @@ const StudentRemarksEntry = () => {
       const active =
         normalized.find((s) => s.is_active === true || s.is_active === 1) || normalized[0];
 
-      if (active && filters.session_id === "") {
+      if (active && !filters.session_id) {
         setFilters((prev) => ({
           ...prev,
           session_id: String(active.id),
@@ -115,13 +112,32 @@ const StudentRemarksEntry = () => {
     }
   };
 
+  const loadTerms = async () => {
+    try {
+      const res = await api.get("/terms");
+      const list = Array.isArray(res.data) ? res.data : res?.data?.terms || [];
+      const normalized = Array.isArray(list) ? list : [];
+      setTerms(normalized);
+
+      if (normalized.length > 0 && !filters.term_id) {
+        setFilters((prev) => ({
+          ...prev,
+          term_id: String(normalized[0].id),
+        }));
+      }
+    } catch (err) {
+      console.error("Failed to load terms", err);
+      Swal.fire("Error", "Failed to load terms", "error");
+    }
+  };
+
   const loadAssignedClasses = async () => {
     try {
       const res = await api.get("/coscholastic-evaluations/assigned-classes");
       const list = Array.isArray(res.data) ? res.data : [];
       setAssignedClasses(list);
 
-      if (list.length > 0 && filters.class_id === "" && filters.section_id === "") {
+      if (list.length > 0 && !filters.class_id && !filters.section_id) {
         const first = list[0];
         setFilters((prev) => ({
           ...prev,
@@ -135,52 +151,28 @@ const StudentRemarksEntry = () => {
     }
   };
 
-  // ✅ Best path for admin/superadmin/examination
   const loadGlobalMeta = async () => {
     try {
-      const res = await api.get("/student-remarks", {
+      const res = await api.get("/student-promotion-decisions", {
         params: { meta: 1 },
       });
 
       const classSectionsList = Array.isArray(res.data?.classSections) ? res.data.classSections : [];
       const sessionsList = Array.isArray(res.data?.sessions) ? res.data.sessions : [];
+      const classesList = Array.isArray(res.data?.classes) ? res.data.classes : [];
 
       setClassSections(classSectionsList);
       setSessions(sessionsList);
+      setClasses(classesList);
 
-      // derive unique classes
-      const uniqueClasses = Array.from(
-        new Map(
-          classSectionsList.map((x) => [
-            String(x.class_id),
-            {
-              id: x.class_id,
-              class_name: x.class_name,
-            },
-          ])
-        ).values()
-      );
-
-      setClasses(uniqueClasses);
-
-      // auto-select active session
       const activeSession =
         sessionsList.find((s) => s.is_active === true || s.is_active === 1) || sessionsList[0];
-
-      // auto-select first class
-      const firstClass = uniqueClasses[0];
+      const firstClass = classesList[0];
 
       setFilters((prev) => {
         const next = { ...prev };
-
-        if (next.session_id === "" && activeSession) {
-          next.session_id = String(activeSession.id);
-        }
-
-        if (next.class_id === "" && firstClass) {
-          next.class_id = String(firstClass.id);
-        }
-
+        if (!next.session_id && activeSession) next.session_id = String(activeSession.id);
+        if (next.class_id === "" && firstClass) next.class_id = String(firstClass.id);
         return next;
       });
 
@@ -211,20 +203,15 @@ const StudentRemarksEntry = () => {
         setFilters((prev) => ({
           ...prev,
           section_id:
-            prev.section_id === "" && uniqueSections[0]
-              ? String(uniqueSections[0].id)
-              : prev.section_id,
+            !prev.section_id && uniqueSections[0] ? String(uniqueSections[0].id) : prev.section_id,
         }));
       }
     } catch (err) {
       console.error("Failed to load global meta", err);
-
-      // fallback older flow
       await Promise.all([loadSessions(), loadAllClasses()]);
     }
   };
 
-  // fallback for global roles if meta endpoint not usable
   const loadAllClasses = async () => {
     try {
       const res =
@@ -236,7 +223,7 @@ const StudentRemarksEntry = () => {
       const normalized = Array.isArray(list)
         ? list.map((c) => ({
             id: c.id ?? c.class_id ?? c.classId,
-            class_name: c.class_name ?? c.name ?? c.title ?? `Class ${c.id}`,
+            class_name: c.class_name ?? c.name ?? `Class ${c.id}`,
           }))
         : [];
 
@@ -258,7 +245,6 @@ const StudentRemarksEntry = () => {
     if (class_id === "" || class_id === null || class_id === undefined) return;
 
     try {
-      // Prefer meta-derived sections for global roles
       if (isGlobal && classSections.length > 0) {
         const filteredSections = classSections
           .filter((x) => String(x.class_id) === String(class_id))
@@ -286,9 +272,7 @@ const StudentRemarksEntry = () => {
         setFilters((prev) => ({
           ...prev,
           section_id:
-            prev.section_id === "" && uniqueSections[0]
-              ? String(uniqueSections[0].id)
-              : prev.section_id,
+            !prev.section_id && uniqueSections[0] ? String(uniqueSections[0].id) : prev.section_id,
         }));
         return;
       }
@@ -302,7 +286,7 @@ const StudentRemarksEntry = () => {
       const normalized = Array.isArray(list)
         ? list.map((s) => ({
             id: s.id ?? s.section_id ?? s.sectionId,
-            section_name: s.section_name ?? s.name ?? s.title ?? `Section ${s.id}`,
+            section_name: s.section_name ?? s.name ?? `Section ${s.id}`,
             class_id: s.class_id ?? s.classId ?? class_id,
           }))
         : [];
@@ -310,7 +294,7 @@ const StudentRemarksEntry = () => {
       const filtered = normalized.filter((x) => String(x.class_id) === String(class_id));
       setSections(filtered);
 
-      if (filtered.length > 0 && filters.section_id === "") {
+      if (filtered.length > 0 && !filters.section_id) {
         setFilters((prev) => ({ ...prev, section_id: String(filtered[0].id) }));
       }
     } catch (err) {
@@ -320,72 +304,127 @@ const StudentRemarksEntry = () => {
     }
   };
 
-  const loadTerms = async () => {
-    try {
-      const res = await api.get("/terms");
-      const list = Array.isArray(res.data) ? res.data : res?.data?.terms || [];
-      const normalized = Array.isArray(list) ? list : [];
-      setTerms(normalized);
+  /* ---------------- API ---------------- */
 
-      if (normalized.length > 0 && filters.term_id === "") {
-        setFilters((prev) => ({
-          ...prev,
-          term_id: String(normalized[0].id),
-        }));
-      }
-    } catch (err) {
-      console.error("Failed to load terms", err);
-      Swal.fire("Error", "Failed to load terms", "error");
-    }
-  };
-
-  /* ---------------- API: remarks ---------------- */
-
-  const fetchRemarks = async () => {
+  const fetchPromotionDecisions = async () => {
     const { session_id, class_id, section_id, term_id } = filters;
 
     try {
       setLoading(true);
 
-      const res = await api.get("/student-remarks", {
-        params: {
-          session_id,
-          class_id,
-          section_id,
-          term_id,
-        },
+      const res = await api.get("/student-promotion-decisions", {
+        params: { session_id, class_id, section_id, term_id },
       });
+
+      const studentsList = Array.isArray(res.data?.students) ? res.data.students : [];
+      const allClasses = Array.isArray(res.data?.classes) ? res.data.classes : classes;
+      const existing = Array.isArray(res.data?.existingDecisions) ? res.data.existingDecisions : [];
+
+      setStudents(studentsList);
+      if (allClasses.length > 0) setClasses(allClasses);
 
       const map = {};
-      (res.data?.existingRemarks || []).forEach((r) => {
-        map[String(r.student_id)] = r.remark || "";
+      existing.forEach((d) => {
+        map[String(d.student_id)] = {
+          promotion_status: d.promotion_status || "PROMOTED",
+          promoted_to_class_id:
+            d.promoted_to_class_id !== null && d.promoted_to_class_id !== undefined
+              ? String(d.promoted_to_class_id)
+              : "",
+          promotion_date: d.promotion_date
+            ? String(d.promotion_date).slice(0, 10)
+            : getTodayDate(),
+          remarks: d.remarks || "",
+        };
       });
 
-      setStudents(res.data?.students || []);
-      setRemarksMap(map);
+      studentsList.forEach((s) => {
+        if (!map[String(s.id)]) {
+          map[String(s.id)] = {
+            promotion_status: "PROMOTED",
+            promoted_to_class_id: "",
+            promotion_date: getTodayDate(),
+            remarks: "",
+          };
+        }
+      });
+
+      setDecisionMap(map);
     } catch (err) {
-      console.error("Failed to fetch remarks", err);
-      Swal.fire("Error", err?.response?.data?.message || "Failed to fetch remarks", "error");
+      console.error("Failed to fetch promotion decisions", err);
+      Swal.fire(
+        "Error",
+        err?.response?.data?.message || "Failed to fetch promotion decisions",
+        "error"
+      );
       setStudents([]);
-      setRemarksMap({});
+      setDecisionMap({});
     } finally {
       setLoading(false);
     }
   };
 
-  const handleChange = (student_id, value) => {
-    setRemarksMap((prev) => ({ ...prev, [String(student_id)]: value }));
+  const handleDecisionChange = (studentId, key, value) => {
+    setDecisionMap((prev) => {
+      const current = prev[String(studentId)] || {
+        promotion_status: "PROMOTED",
+        promoted_to_class_id: "",
+        promotion_date: getTodayDate(),
+        remarks: "",
+      };
+
+      const next = {
+        ...prev,
+        [String(studentId)]: {
+          ...current,
+          [key]: value,
+        },
+      };
+
+      if (key === "promotion_status" && value === "NOT_PROMOTED") {
+        next[String(studentId)].promoted_to_class_id = "";
+      }
+
+      return next;
+    });
+  };
+
+  const handleBulkApply = () => {
+    if (students.length === 0) {
+      Swal.fire("Info", "No students available to apply bulk action.", "info");
+      return;
+    }
+
+    if (bulkStatus === "PROMOTED" && !bulkPromotedToClassId) {
+      Swal.fire("Warning", "Please select bulk promoted class first.", "warning");
+      return;
+    }
+
+    const next = { ...decisionMap };
+
+    students.forEach((s) => {
+      next[String(s.id)] = {
+        ...(next[String(s.id)] || {
+          promotion_status: "PROMOTED",
+          promoted_to_class_id: "",
+          promotion_date: getTodayDate(),
+          remarks: "",
+        }),
+        promotion_status: bulkStatus,
+        promoted_to_class_id: bulkStatus === "PROMOTED" ? String(bulkPromotedToClassId) : "",
+        promotion_date: bulkPromotionDate || getTodayDate(),
+      };
+    });
+
+    setDecisionMap(next);
+
+    Swal.fire("Success", "Bulk action applied.", "success");
   };
 
   const handleSave = async () => {
     const { session_id, class_id, section_id, term_id } = filters;
 
-    if (
-      session_id === "" ||
-      class_id === "" ||
-      section_id === "" ||
-      term_id === ""
-    ) {
+    if (!session_id || class_id === "" || !section_id || !term_id) {
       Swal.fire(
         "Missing filters",
         "Please select Session, Class, Section and Term first.",
@@ -394,29 +433,60 @@ const StudentRemarksEntry = () => {
       return;
     }
 
-    const payload = students.map((student) => ({
-      student_id: student.id,
-      session_id,
-      class_id,
-      section_id,
-      term_id,
-      remark: remarksMap[String(student.id)] || "",
-    }));
+    const payload = students.map((student) => {
+      const item = decisionMap[String(student.id)] || {
+        promotion_status: "PROMOTED",
+        promoted_to_class_id: "",
+        promotion_date: getTodayDate(),
+        remarks: "",
+      };
+
+      return {
+        student_id: student.id,
+        session_id,
+        class_id,
+        section_id,
+        term_id,
+        promotion_status: item.promotion_status || "PROMOTED",
+        promoted_to_class_id:
+          item.promotion_status === "PROMOTED" && item.promoted_to_class_id
+            ? item.promoted_to_class_id
+            : null,
+        promotion_date: item.promotion_date || null,
+        remarks: item.remarks || "",
+      };
+    });
+
+    const invalidPromoted = payload.find(
+      (x) => x.promotion_status === "PROMOTED" && !x.promoted_to_class_id
+    );
+
+    if (invalidPromoted) {
+      Swal.fire(
+        "Validation Error",
+        "For promoted students, promoted class is required.",
+        "warning"
+      );
+      return;
+    }
 
     try {
       setLoading(true);
-      await api.post("/student-remarks", { remarks: payload });
-      Swal.fire("Success", "Remarks saved successfully", "success");
-      fetchRemarks();
+      await api.post("/student-promotion-decisions", { decisions: payload });
+      Swal.fire("Success", "Promotion decisions saved successfully", "success");
+      fetchPromotionDecisions();
     } catch (err) {
-      console.error("Failed to save remarks", err);
-      Swal.fire("Error", err?.response?.data?.message || "Failed to save remarks", "error");
+      console.error("Failed to save promotion decisions", err);
+      Swal.fire(
+        "Error",
+        err?.response?.data?.message || "Failed to save promotion decisions",
+        "error"
+      );
     } finally {
       setLoading(false);
     }
   };
 
-  // Ctrl/Cmd + S
   useEffect(() => {
     const onKey = (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
@@ -427,9 +497,10 @@ const StudentRemarksEntry = () => {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [students, remarksMap, filters]);
+  }, [students, decisionMap, filters]);
 
-  // Unique class list for teacher assigned
+  /* ---------------- Derived ---------------- */
+
   const uniqueAssignedClasses = useMemo(() => {
     const map = new Map();
     for (const c of assignedClasses) {
@@ -460,7 +531,7 @@ const StudentRemarksEntry = () => {
   return (
     <div className="container-fluid px-3 py-3">
       <div className="d-flex align-items-center mb-2">
-        <h4 className="mb-0">📝 Student Remarks Entry</h4>
+        <h4 className="mb-0">🎓 Student Promotion Decision Entry</h4>
         <div className="ms-auto d-flex gap-2">
           <button className="btn btn-success" onClick={handleSave} disabled={loading}>
             {loading ? (
@@ -486,7 +557,6 @@ const StudentRemarksEntry = () => {
       >
         <div className="card-body py-3">
           <div className="row g-3">
-            {/* Session */}
             <div className="col-md-3">
               <label className="form-label">Select Session</label>
               <select
@@ -496,7 +566,7 @@ const StudentRemarksEntry = () => {
                   const session_id = e.target.value;
                   setFilters((prev) => ({ ...prev, session_id }));
                   setStudents([]);
-                  setRemarksMap({});
+                  setDecisionMap({});
                 }}
               >
                 <option value="">Select Session</option>
@@ -509,7 +579,6 @@ const StudentRemarksEntry = () => {
               </select>
             </div>
 
-            {/* Class */}
             <div className="col-md-3">
               <label className="form-label">Select Class</label>
               <select
@@ -523,7 +592,7 @@ const StudentRemarksEntry = () => {
                     section_id: "",
                   }));
                   setStudents([]);
-                  setRemarksMap({});
+                  setDecisionMap({});
 
                   if (isGlobal) {
                     await loadSectionsForClass(class_id);
@@ -544,16 +613,8 @@ const StudentRemarksEntry = () => {
                       </option>
                     ))}
               </select>
-
-              {!isGlobal && uniqueAssignedClasses.length === 0 && (
-                <div className="form-text text-danger">No assigned classes found for this user.</div>
-              )}
-              {isGlobal && classes.length === 0 && (
-                <div className="form-text text-danger">No classes loaded.</div>
-              )}
             </div>
 
-            {/* Section */}
             <div className="col-md-3">
               <label className="form-label">Select Section</label>
               <select
@@ -562,7 +623,7 @@ const StudentRemarksEntry = () => {
                 onChange={(e) => {
                   setFilters((prev) => ({ ...prev, section_id: e.target.value }));
                   setStudents([]);
-                  setRemarksMap({});
+                  setDecisionMap({});
                 }}
                 disabled={filters.class_id === ""}
               >
@@ -582,7 +643,6 @@ const StudentRemarksEntry = () => {
               </select>
             </div>
 
-            {/* Term */}
             <div className="col-md-3">
               <label className="form-label">Select Term</label>
               <select
@@ -591,7 +651,7 @@ const StudentRemarksEntry = () => {
                 onChange={(e) => {
                   setFilters((prev) => ({ ...prev, term_id: e.target.value }));
                   setStudents([]);
-                  setRemarksMap({});
+                  setDecisionMap({});
                 }}
               >
                 <option value="">Select Term</option>
@@ -604,31 +664,87 @@ const StudentRemarksEntry = () => {
             </div>
           </div>
 
-          <div className="mt-2 d-flex gap-2 flex-wrap">
-            <button
-              className="btn btn-outline-secondary btn-sm"
-              onClick={() => {
-                const activeSession =
-                  sessions.find((s) => s.is_active === true || s.is_active === 1) || sessions[0];
+          <hr />
 
-                setFilters({
-                  session_id: activeSession ? String(activeSession.id) : "",
-                  class_id: "",
-                  section_id: "",
-                  term_id: terms[0] ? String(terms[0].id) : "",
-                });
-                setStudents([]);
-                setRemarksMap({});
-                setSections([]);
-              }}
-              disabled={loading}
-            >
-              Reset Filters
-            </button>
+          <div className="row g-3 align-items-end">
+            <div className="col-md-3">
+              <label className="form-label">Bulk Status</label>
+              <select
+                className="form-select"
+                value={bulkStatus}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setBulkStatus(value);
+                  if (value === "NOT_PROMOTED") {
+                    setBulkPromotedToClassId("");
+                  }
+                }}
+              >
+                <option value="PROMOTED">PROMOTED</option>
+                <option value="NOT_PROMOTED">NOT_PROMOTED</option>
+              </select>
+            </div>
 
-            <button className="btn btn-outline-primary btn-sm" onClick={init} disabled={loading}>
-              Reload
-            </button>
+            <div className="col-md-3">
+              <label className="form-label">Bulk Promote To Class</label>
+              <select
+                className="form-select"
+                value={bulkPromotedToClassId}
+                onChange={(e) => setBulkPromotedToClassId(e.target.value)}
+                disabled={bulkStatus !== "PROMOTED"}
+              >
+                <option value="">Select Class</option>
+                {classes.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.class_name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="col-md-3">
+              <label className="form-label">Bulk Promotion Date</label>
+              <input
+                type="date"
+                className="form-control"
+                value={bulkPromotionDate}
+                onChange={(e) => setBulkPromotionDate(e.target.value)}
+              />
+            </div>
+
+            <div className="col-md-3 d-flex gap-2">
+              <button className="btn btn-primary" onClick={handleBulkApply} disabled={loading}>
+                Apply Bulk Action
+              </button>
+
+              <button
+                className="btn btn-outline-secondary"
+                onClick={() => {
+                  const activeSession =
+                    sessions.find((s) => s.is_active === true || s.is_active === 1) || sessions[0];
+
+                  setFilters({
+                    session_id: activeSession ? String(activeSession.id) : "",
+                    class_id: "",
+                    section_id: "",
+                    term_id: terms[0] ? String(terms[0].id) : "",
+                  });
+                  setStudents([]);
+                  setDecisionMap({});
+                  setSections([]);
+                  setBulkStatus("PROMOTED");
+                  setBulkPromotedToClassId("");
+                  setBulkPromotionDate(getTodayDate());
+                }}
+                disabled={loading}
+              >
+                Reset Filters
+              </button>
+
+              <button className="btn btn-outline-primary" onClick={init} disabled={loading}>
+                Reload
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -636,16 +752,13 @@ const StudentRemarksEntry = () => {
       <div className="card">
         <div className="card-body">
           <div className="d-flex align-items-center mb-3">
-            <h6 className="mb-0">📋 Remarks Table</h6>
+            <h6 className="mb-0">📋 Promotion Decision Table</h6>
             <button className="btn btn-outline-success btn-sm ms-auto" onClick={handleSave} disabled={loading}>
               {loading ? "Saving…" : "Save"}
             </button>
           </div>
 
-          {filters.session_id === "" ||
-          filters.class_id === "" ||
-          filters.section_id === "" ||
-          filters.term_id === "" ? (
+          {!filters.session_id || filters.class_id === "" || !filters.section_id || !filters.term_id ? (
             <div className="alert alert-info mb-0">
               Please select <strong>Session</strong>, <strong>Class</strong>, <strong>Section</strong> and{" "}
               <strong>Term</strong> to view students.
@@ -662,7 +775,7 @@ const StudentRemarksEntry = () => {
               <div
                 className="table-responsive"
                 style={{
-                  maxHeight: 520,
+                  maxHeight: 560,
                   overflow: "auto",
                   border: "1px solid var(--bs-border-color, #dee2e6)",
                   borderRadius: 8,
@@ -673,46 +786,87 @@ const StudentRemarksEntry = () => {
                     <tr>
                       <th style={{ minWidth: 90, ...stickyColStyle(0) }}>Roll No</th>
                       <th style={{ minWidth: 220, ...stickyColStyle(90) }}>Name</th>
-                      <th style={{ minWidth: 480 }}>Remarks</th>
+                      <th style={{ minWidth: 170 }}>Status</th>
+                      <th style={{ minWidth: 220 }}>Promote To Class</th>
+                      <th style={{ minWidth: 170 }}>Promotion Date</th>
+                      <th style={{ minWidth: 260 }}>Remarks</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {students.map((s, idx) => (
-                      <tr key={s.id}>
-                        <td style={stickyColStyle(0)}>
-                          {s.roll_number == null || s.roll_number === "" ? "—" : s.roll_number}
-                        </td>
-                        <td style={stickyColStyle(90)}>
-                          {s.name || s.student_name || "—"}
-                        </td>
-                        <td>
-                          <textarea
-                            ref={(el) => {
-                              if (el) textRefs.current[s.id] = el;
-                            }}
-                            className="form-control"
-                            rows={2}
-                            value={remarksMap[String(s.id)] || ""}
-                            onChange={(e) => handleChange(s.id, e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter" && !e.shiftKey) {
-                                e.preventDefault();
-                                const next = students[idx + 1];
-                                if (next && textRefs.current[next.id]) textRefs.current[next.id].focus();
+                    {students.map((s) => {
+                      const item = decisionMap[String(s.id)] || {
+                        promotion_status: "PROMOTED",
+                        promoted_to_class_id: "",
+                        promotion_date: getTodayDate(),
+                        remarks: "",
+                      };
+
+                      return (
+                        <tr key={s.id}>
+                          <td style={stickyColStyle(0)}>
+                            {s.roll_number == null || s.roll_number === "" ? "—" : s.roll_number}
+                          </td>
+                          <td style={stickyColStyle(90)}>
+                            {s.name || s.student_name || "—"}
+                          </td>
+                          <td>
+                            <select
+                              className="form-select"
+                              value={item.promotion_status}
+                              onChange={(e) =>
+                                handleDecisionChange(s.id, "promotion_status", e.target.value)
                               }
-                            }}
-                            placeholder="Type remark… (Shift+Enter = newline)"
-                          />
-                        </td>
-                      </tr>
-                    ))}
+                            >
+                              <option value="PROMOTED">PROMOTED</option>
+                              <option value="NOT_PROMOTED">NOT_PROMOTED</option>
+                            </select>
+                          </td>
+                          <td>
+                            <select
+                              className="form-select"
+                              value={item.promoted_to_class_id}
+                              onChange={(e) =>
+                                handleDecisionChange(s.id, "promoted_to_class_id", e.target.value)
+                              }
+                              disabled={item.promotion_status !== "PROMOTED"}
+                            >
+                              <option value="">Select Class</option>
+                              {classes.map((c) => (
+                                <option key={c.id} value={c.id}>
+                                  {c.class_name}
+                                </option>
+                              ))}
+                            </select>
+                          </td>
+                          <td>
+                            <input
+                              type="date"
+                              className="form-control"
+                              value={item.promotion_date || ""}
+                              onChange={(e) =>
+                                handleDecisionChange(s.id, "promotion_date", e.target.value)
+                              }
+                            />
+                          </td>
+                          <td>
+                            <input
+                              type="text"
+                              className="form-control"
+                              value={item.remarks}
+                              onChange={(e) => handleDecisionChange(s.id, "remarks", e.target.value)}
+                              placeholder="Optional remarks"
+                            />
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
 
               <div className="mt-3 text-end">
                 <button className="btn btn-success" onClick={handleSave} disabled={loading}>
-                  {loading ? "Saving…" : "💾 Save Remarks"}
+                  {loading ? "Saving…" : "💾 Save Promotion Decisions"}
                 </button>
               </div>
             </>
@@ -723,4 +877,4 @@ const StudentRemarksEntry = () => {
   );
 };
 
-export default StudentRemarksEntry;
+export default StudentPromotionDecisionEntry;

@@ -555,6 +555,20 @@ export default function Sidebar({ headerHeight = 56 }) {
             path: "/opening-balances",
             roles: ["accounts", "admin", "superadmin"],
           },
+          {
+            key: "bulk-promotion",
+            label: "Bulk Promotion",
+            icon: "bi-arrow-up-square",
+            path: "/students/bulk-promotion",
+            roles: ["accounts", "admin", "superadmin"],
+          },
+          {
+            key: "promotion-history",
+            label: "Promotion History",
+            icon: "bi-clock-history",
+            path: "/students/promotion-history",
+            roles: ["accounts", "admin", "superadmin"],
+          },
         ],
       });
 
@@ -708,6 +722,8 @@ export default function Sidebar({ headerHeight = 56 }) {
           { key: "sections", label: "Sections", icon: "bi-grid", path: "/sections" },
           { key: "sessions", label: "Sessions", icon: "bi-calendar4-week", path: "/sessions" },
           { key: "students", label: "Students", icon: "bi-people", path: "/students" },
+          { key: "bulk-promotion", label: "Bulk Promotion", icon: "bi-arrow-up-square", path: "/students/bulk-promotion", roles: ["admin", "superadmin", "accounts"] },
+          { key: "promotion-history", label: "Promotion History", icon: "bi-clock-history", path: "/students/promotion-history", roles: ["admin", "superadmin", "accounts"] },
         ],
       });
 

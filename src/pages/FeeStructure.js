@@ -36,6 +36,32 @@ const formatFineCell = (fee) => {
   return `₹${amt} / ${days}d`;
 };
 
+const getApiErrorMessage = (err, fallback = "Something went wrong.") => {
+  return (
+    err?.response?.data?.details ||
+    err?.response?.data?.error ||
+    err?.response?.data?.message ||
+    err?.message ||
+    fallback
+  );
+};
+
+const normalizeBoolToSelectValue = (value) => {
+  if (
+    value === true ||
+    value === 1 ||
+    value === "1" ||
+    value === "true" ||
+    value === "True" ||
+    value === "Yes" ||
+    value === "YES" ||
+    value === "yes"
+  ) {
+    return "true";
+  }
+  return "false";
+};
+
 const FeeStructure = () => {
   const { isAdmin, isSuperadmin } = useMemo(getRoleFlags, []);
   const canEdit = isAdmin || isSuperadmin;
@@ -45,22 +71,17 @@ const FeeStructure = () => {
   const [feeHeadings, setFeeHeadings] = useState([]);
   const [sessions, setSessions] = useState([]);
 
-  // Selected session
   const [selectedSessionId, setSelectedSessionId] = useState(null);
 
-  // Multi-select filters
   const [selectedClasses, setSelectedClasses] = useState([]);
   const [selectedFeeHeadings, setSelectedFeeHeadings] = useState([]);
 
-  // Quick search
   const [searchText, setSearchText] = useState("");
 
-  // Compact UI toggles
   const [compactMode, setCompactMode] = useState(true);
   const [showBulk, setShowBulk] = useState(false);
   const [showAdvancedCols, setShowAdvancedCols] = useState(false);
 
-  // Bulk fill
   const [bulkValues, setBulkValues] = useState({
     feeDue: "",
     fineType: "percentage",
@@ -72,9 +93,9 @@ const FeeStructure = () => {
     concessionApplicable: "",
     transportApplicable: "",
   });
+
   const [isBulkApplying, setIsBulkApplying] = useState(false);
 
-  // unified fetch
   const fetchFeeStructures = useCallback(
     async ({ sessionId = selectedSessionId } = {}) => {
       try {
@@ -86,7 +107,11 @@ const FeeStructure = () => {
         setFeeStructures(data.fees || []);
       } catch (err) {
         console.error("fetchFeeStructures error", err);
-        Swal.fire("Error", "Failed to fetch fee structures.", "error");
+        Swal.fire(
+          "Error",
+          getApiErrorMessage(err, "Failed to fetch fee structures."),
+          "error"
+        );
       }
     },
     [selectedSessionId]
@@ -99,7 +124,11 @@ const FeeStructure = () => {
       return data;
     } catch (err) {
       console.error(err);
-      Swal.fire("Error", "Failed to fetch classes.", "error");
+      Swal.fire(
+        "Error",
+        getApiErrorMessage(err, "Failed to fetch classes."),
+        "error"
+      );
       return [];
     }
   };
@@ -111,7 +140,11 @@ const FeeStructure = () => {
       return data;
     } catch (err) {
       console.error(err);
-      Swal.fire("Error", "Failed to fetch fee headings.", "error");
+      Swal.fire(
+        "Error",
+        getApiErrorMessage(err, "Failed to fetch fee headings."),
+        "error"
+      );
       return [];
     }
   };
@@ -129,7 +162,11 @@ const FeeStructure = () => {
       return data;
     } catch (err) {
       console.error(err);
-      Swal.fire("Error", "Failed to fetch sessions.", "error");
+      Swal.fire(
+        "Error",
+        getApiErrorMessage(err, "Failed to fetch sessions."),
+        "error"
+      );
       return [];
     }
   };
@@ -159,12 +196,15 @@ const FeeStructure = () => {
       Swal.fire("Deleted!", "Fee structure deleted.", "success");
       fetchFeeStructures({ sessionId: selectedSessionId });
     } catch (error) {
-      Swal.fire("Error", "Failed to delete the fee structure.", "error");
+      Swal.fire(
+        "Error",
+        getApiErrorMessage(error, "Failed to delete the fee structure."),
+        "error"
+      );
     }
   };
 
   const openAddOrEditModal = async (existing = null) => {
-    // ensure dropdown data is loaded
     const classesData = classes.length ? classes : await fetchClasses();
     const feeHeadingsData = feeHeadings.length ? feeHeadings : await fetchFeeHeadings();
     const sessionData = sessions.length ? sessions : await fetchSessions();
@@ -172,14 +212,18 @@ const FeeStructure = () => {
     const classOptionsHtml = classesData
       .map((cls) => `<option value="${cls.id}">${cls.class_name}</option>`)
       .join("");
+
     const feeHeadingOptionsHtml = feeHeadingsData
       .map((fh) => `<option value="${fh.id}">${fh.fee_heading}</option>`)
       .join("");
+
     const sessionOptionsHtml = (sessionData || [])
-      .map((s) => `<option value="${s.id}">${s.name}${s.is_active ? " (Active)" : ""}</option>`)
+      .map(
+        (s) =>
+          `<option value="${s.id}">${s.name}${s.is_active ? " (Active)" : ""}</option>`
+      )
       .join("");
 
-    // ✅ Copy mode support
     const isCopy = Boolean(existing?.__isCopy);
     const isEdit = Boolean(existing) && !isCopy;
 
@@ -187,9 +231,9 @@ const FeeStructure = () => {
       existing && existing.fineStartDate
         ? new Date(existing.fineStartDate).toISOString().split("T")[0]
         : "";
+
     const originalFineType = existing?.fineType || "percentage";
 
-    // ✅ compact sweetalert (smaller title bar + less spacing)
     const swalBaseOpts = {
       width: "640px",
       allowOutsideClick: false,
@@ -198,7 +242,7 @@ const FeeStructure = () => {
       showCancelButton: true,
       customClass: {
         popup: "fs-swal-popup",
-        title: "fs-swal-title", // smaller title
+        title: "fs-swal-title",
         confirmButton: "fs-swal-btn",
         cancelButton: "fs-swal-btn fs-swal-btn-cancel",
       },
@@ -223,9 +267,13 @@ const FeeStructure = () => {
 
         <div>
           <label class="fs-lbl">Fee Due</label>
-          <input type="number" id="feeDue" class="fs-inp" placeholder="e.g. 1500" value="${
-            existing?.feeDue ?? ""
-          }">
+          <input
+            type="number"
+            id="feeDue"
+            class="fs-inp"
+            placeholder="e.g. 1500"
+            value="${existing?.feeDue ?? ""}"
+          >
         </div>
 
         <div>
@@ -242,9 +290,13 @@ const FeeStructure = () => {
           <div class="fs-row-compact">
             <div>
               <label class="fs-lbl">Fine %</label>
-              <input type="number" id="finePercentage" class="fs-inp" placeholder="%" value="${
-                existing?.finePercentage ?? ""
-              }">
+              <input
+                type="number"
+                id="finePercentage"
+                class="fs-inp"
+                placeholder="%"
+                value="${existing?.finePercentage ?? ""}"
+              >
             </div>
           </div>
         </div>
@@ -255,15 +307,23 @@ const FeeStructure = () => {
           <div class="fs-row-compact">
             <div>
               <label class="fs-lbl">Amt/Slab</label>
-              <input type="number" id="fineAmountPerSlab" class="fs-inp" placeholder="₹" value="${
-                existing?.fineAmountPerSlab ?? ""
-              }">
+              <input
+                type="number"
+                id="fineAmountPerSlab"
+                class="fs-inp"
+                placeholder="₹"
+                value="${existing?.fineAmountPerSlab ?? ""}"
+              >
             </div>
             <div>
               <label class="fs-lbl">Slab Days</label>
-              <input type="number" id="fineSlabDuration" class="fs-inp" placeholder="days" value="${
-                existing?.fineSlabDuration ?? ""
-              }">
+              <input
+                type="number"
+                id="fineSlabDuration"
+                class="fs-inp"
+                placeholder="days"
+                value="${existing?.fineSlabDuration ?? ""}"
+              >
             </div>
           </div>
         </div>
@@ -285,22 +345,21 @@ const FeeStructure = () => {
         <div>
           <label class="fs-lbl">Concession</label>
           <select id="concessionApplicable" class="fs-inp">
-            <option value="No">No</option>
-            <option value="Yes">Yes</option>
+            <option value="false">No</option>
+            <option value="true">Yes</option>
           </select>
         </div>
 
         <div>
           <label class="fs-lbl">Transport</label>
           <select id="transportApplicable" class="fs-inp">
-            <option value="No">No</option>
-            <option value="Yes">Yes</option>
+            <option value="false">No</option>
+            <option value="true">Yes</option>
           </select>
         </div>
       </div>
     `;
 
-    // ✅ short title (small height)
     const modalTitle = isEdit ? "Edit Fee" : isCopy ? "Copy Fee" : "Add Fee";
 
     return Swal.fire({
@@ -308,23 +367,28 @@ const FeeStructure = () => {
       title: modalTitle,
       html,
       didOpen: () => {
-        // set current values if edit/copy
         if (existing) {
           document.getElementById("sessionId").value =
-            existing.Session?.id ?? selectedSessionId ?? "";
-          document.getElementById("classId").value = existing.Class?.id ?? "";
-          document.getElementById("feeHeadingId").value = existing.FeeHeading?.id ?? "";
-          document.getElementById("admissionType").value = existing.admissionType ?? "All";
+            existing.Session?.id ?? existing.session_id ?? selectedSessionId ?? "";
+          document.getElementById("classId").value =
+            existing.Class?.id ?? existing.class_id ?? "";
+          document.getElementById("feeHeadingId").value =
+            existing.FeeHeading?.id ?? existing.fee_heading_id ?? "";
+          document.getElementById("admissionType").value =
+            existing.admissionType ?? "All";
           document.getElementById("concessionApplicable").value =
-            existing.concessionApplicable ?? "No";
+            normalizeBoolToSelectValue(existing?.concessionApplicable);
           document.getElementById("transportApplicable").value =
-            existing.transportApplicable ?? "No";
-          document.getElementById("fineType").value = existing.fineType ?? "percentage";
+            normalizeBoolToSelectValue(existing?.transportApplicable);
+          document.getElementById("fineType").value =
+            existing.fineType ?? "percentage";
         } else {
-          if (selectedSessionId) document.getElementById("sessionId").value = selectedSessionId;
+          if (selectedSessionId) {
+            document.getElementById("sessionId").value = selectedSessionId;
+          }
           document.getElementById("admissionType").value = "All";
-          document.getElementById("concessionApplicable").value = "No";
-          document.getElementById("transportApplicable").value = "No";
+          document.getElementById("concessionApplicable").value = "false";
+          document.getElementById("transportApplicable").value = "false";
           document.getElementById("fineType").value = "percentage";
         }
 
@@ -336,6 +400,7 @@ const FeeStructure = () => {
           const isPct = fineTypeSelect.value === "percentage";
           pctWrap.style.display = isPct ? "grid" : "none";
           slabWrap.style.display = isPct ? "none" : "grid";
+
           if (isPct) {
             const a = document.getElementById("fineAmountPerSlab");
             const d = document.getElementById("fineSlabDuration");
@@ -350,18 +415,32 @@ const FeeStructure = () => {
         fineTypeSelect.addEventListener("change", applyFineMode);
         applyFineMode();
 
-        // ✅ UX: when copying, auto-focus class for quick change
         if (isCopy) {
           setTimeout(() => document.getElementById("classId")?.focus(), 50);
         }
       },
       preConfirm: () => {
         const sessionId = document.getElementById("sessionId").value;
+        const classId = document.getElementById("classId").value;
+        const feeHeadingId = document.getElementById("feeHeadingId").value;
+        const feeDue = document.getElementById("feeDue").value;
         const admissionType = document.getElementById("admissionType").value;
         const fineType = document.getElementById("fineType").value;
 
         if (!sessionId) {
           Swal.showValidationMessage("Session is required");
+          return false;
+        }
+        if (!classId) {
+          Swal.showValidationMessage("Class is required");
+          return false;
+        }
+        if (!feeHeadingId) {
+          Swal.showValidationMessage("Category is required");
+          return false;
+        }
+        if (feeDue === "") {
+          Swal.showValidationMessage("Fee Due is required");
           return false;
         }
         if (!admissionType) {
@@ -370,31 +449,34 @@ const FeeStructure = () => {
         }
 
         return {
-          session_id: sessionId,
-          class_id: document.getElementById("classId").value,
-          fee_heading_id: document.getElementById("feeHeadingId").value,
-          feeDue: document.getElementById("feeDue").value,
+          session_id: Number(sessionId),
+          class_id: Number(classId),
+          fee_heading_id: Number(feeHeadingId),
+          feeDue: Number(feeDue),
 
           fineType,
           finePercentage:
             fineType === "percentage"
-              ? document.getElementById("finePercentage")?.value ?? ""
+              ? Number(document.getElementById("finePercentage")?.value || 0)
               : null,
           fineAmountPerSlab:
             fineType === "slab"
-              ? document.getElementById("fineAmountPerSlab")?.value ?? ""
+              ? Number(document.getElementById("fineAmountPerSlab")?.value || 0)
               : null,
           fineSlabDuration:
             fineType === "slab"
-              ? document.getElementById("fineSlabDuration")?.value ?? ""
+              ? Number(document.getElementById("fineSlabDuration")?.value || 0)
               : null,
 
-          // ✅ still saving in same field, only label changed to Due Date
-          fineStartDate: safeDateOrNull(document.getElementById("fineStartDate").value),
+          fineStartDate: safeDateOrNull(
+            document.getElementById("fineStartDate").value
+          ),
 
           admissionType,
-          concessionApplicable: document.getElementById("concessionApplicable").value,
-          transportApplicable: document.getElementById("transportApplicable").value,
+          concessionApplicable:
+            document.getElementById("concessionApplicable").value === "true",
+          transportApplicable:
+            document.getElementById("transportApplicable").value === "true",
         };
       },
     }).then(async (res) => {
@@ -405,16 +487,26 @@ const FeeStructure = () => {
           await api.put(`/fee-structures/${existing.id}`, res.value);
           Swal.fire("Updated!", "Fee structure updated.", "success");
         } else {
-          // ✅ Add OR Copy => POST
           await api.post(`/fee-structures`, res.value);
-          Swal.fire(isCopy ? "Copied!" : "Added!", isCopy ? "Fee structure copied." : "Fee structure added.", "success");
+          Swal.fire(
+            isCopy ? "Copied!" : "Added!",
+            isCopy ? "Fee structure copied." : "Fee structure added.",
+            "success"
+          );
         }
 
         setSelectedSessionId(Number(res.value.session_id));
         fetchFeeStructures({ sessionId: Number(res.value.session_id) });
       } catch (e) {
         console.error(e);
-        Swal.fire("Error", `Failed to ${isEdit ? "update" : "add"} the fee structure.`, "error");
+        Swal.fire(
+          "Error",
+          getApiErrorMessage(
+            e,
+            `Failed to ${isEdit ? "update" : isCopy ? "copy" : "add"} the fee structure.`
+          ),
+          "error"
+        );
       }
     });
   };
@@ -422,9 +514,7 @@ const FeeStructure = () => {
   const handleAdd = () => openAddOrEditModal(null);
   const handleEdit = (fee) => openAddOrEditModal(fee);
 
-  // ✅ COPY ROW
   const handleCopy = (fee) => {
-    // pass a marker so modal knows this is "copy" (POST) but prefilled
     openAddOrEditModal({ ...fee, __isCopy: true, id: null });
   };
 
@@ -433,6 +523,7 @@ const FeeStructure = () => {
     () => classes.map((c) => ({ label: c.class_name, value: String(c.id) })),
     [classes]
   );
+
   const headingOptions = useMemo(
     () => feeHeadings.map((fh) => ({ label: fh.fee_heading, value: String(fh.id) })),
     [feeHeadings]
@@ -451,7 +542,12 @@ const FeeStructure = () => {
 
       const textMatch =
         !text ||
-        [fee.Session?.name, fee.Class?.class_name, fee.FeeHeading?.fee_heading, String(fee.feeDue ?? "")]
+        [
+          fee.Session?.name,
+          fee.Class?.class_name,
+          fee.FeeHeading?.fee_heading,
+          String(fee.feeDue ?? ""),
+        ]
           .filter(Boolean)
           .join(" ")
           .toLowerCase()
@@ -476,6 +572,7 @@ const FeeStructure = () => {
     } = bulkValues;
 
     const payload = {};
+
     if (feeDue !== "") payload.feeDue = Number(feeDue);
     if (fineType) payload.fineType = fineType;
 
@@ -484,31 +581,54 @@ const FeeStructure = () => {
       payload.fineAmountPerSlab = null;
       payload.fineSlabDuration = null;
     } else if (fineType === "slab") {
-      if (fineAmountPerSlab !== "") payload.fineAmountPerSlab = Number(fineAmountPerSlab);
-      if (fineSlabDuration !== "") payload.fineSlabDuration = Number(fineSlabDuration);
+      if (fineAmountPerSlab !== "") {
+        payload.fineAmountPerSlab = Number(fineAmountPerSlab);
+      }
+      if (fineSlabDuration !== "") {
+        payload.fineSlabDuration = Number(fineSlabDuration);
+      }
       payload.finePercentage = null;
     }
 
     if (fineStartDate !== "") payload.fineStartDate = safeDateOrNull(fineStartDate);
-
     if (admissionType !== "") payload.admissionType = admissionType;
-    if (concessionApplicable !== "") payload.concessionApplicable = concessionApplicable;
-    if (transportApplicable !== "") payload.transportApplicable = transportApplicable;
+
+    if (concessionApplicable !== "") {
+      payload.concessionApplicable = concessionApplicable === "true";
+    }
+
+    if (transportApplicable !== "") {
+      payload.transportApplicable = transportApplicable === "true";
+    }
 
     return payload;
   };
 
   const handleBulkApply = async () => {
     if (!canEdit) {
-      return Swal.fire("Forbidden", "Only Admin/Super Admin can perform bulk update.", "warning");
+      return Swal.fire(
+        "Forbidden",
+        "Only Admin/Super Admin can perform bulk update.",
+        "warning"
+      );
     }
+
     if (filteredFeeStructures.length === 0) {
-      return Swal.fire("No Records", "There are no filtered fee structures to update.", "info");
+      return Swal.fire(
+        "No Records",
+        "There are no filtered fee structures to update.",
+        "info"
+      );
     }
 
     const payload = buildBulkPayload();
+
     if (Object.keys(payload).length === 0) {
-      return Swal.fire("Nothing to Update", "Please enter at least one field to apply.", "info");
+      return Swal.fire(
+        "Nothing to Update",
+        "Please enter at least one field to apply.",
+        "info"
+      );
     }
 
     const { value: confirmed } = await Swal.fire({
@@ -536,19 +656,42 @@ const FeeStructure = () => {
     if (!confirmed) return;
 
     setIsBulkApplying(true);
+
     try {
       const results = await Promise.allSettled(
-        filteredFeeStructures.map((fee) => api.put(`/fee-structures/${fee.id}`, payload))
+        filteredFeeStructures.map((fee) =>
+          api.put(`/fee-structures/${fee.id}`, payload)
+        )
       );
 
       const success = results.filter((r) => r.status === "fulfilled").length;
-      const failed = results.length - success;
+      const failedResults = results.filter((r) => r.status === "rejected");
+      const failed = failedResults.length;
 
-      Swal.fire("Bulk Update Complete", `Updated: ${success}\nFailed: ${failed}`, failed ? "warning" : "success");
+      let message = `Updated: ${success}\nFailed: ${failed}`;
+
+      if (failedResults.length > 0) {
+        const firstError = getApiErrorMessage(
+          failedResults[0]?.reason,
+          "Some records failed."
+        );
+        message += `\n\nFirst Error: ${firstError}`;
+      }
+
+      Swal.fire(
+        "Bulk Update Complete",
+        message,
+        failed ? "warning" : "success"
+      );
+
       fetchFeeStructures({ sessionId: selectedSessionId });
     } catch (e) {
       console.error(e);
-      Swal.fire("Error", "Bulk update failed due to an unexpected error.", "error");
+      Swal.fire(
+        "Error",
+        getApiErrorMessage(e, "Bulk update failed due to an unexpected error."),
+        "error"
+      );
     } finally {
       setIsBulkApplying(false);
     }
@@ -562,14 +705,15 @@ const FeeStructure = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // when selectedSessionId changes, fetch fees for that session
   useEffect(() => {
     fetchFeeStructures({ sessionId: selectedSessionId });
   }, [selectedSessionId, fetchFeeStructures]);
 
-  // optional polling - 5s
   useEffect(() => {
-    const polling = setInterval(() => fetchFeeStructures({ sessionId: selectedSessionId }), 5000);
+    const polling = setInterval(
+      () => fetchFeeStructures({ sessionId: selectedSessionId }),
+      5000
+    );
     return () => clearInterval(polling);
   }, [selectedSessionId, fetchFeeStructures]);
 
@@ -605,7 +749,6 @@ const FeeStructure = () => {
         </div>
       </div>
 
-      {/* Top bar */}
       <div className="fs-topbar card shadow-sm mb-2">
         <div className="card-body fs-topbar-body">
           <div className="fs-grid-2">
@@ -650,7 +793,10 @@ const FeeStructure = () => {
               )}
 
               {canEdit && (
-                <button className="btn btn-outline-primary btn-sm" onClick={() => setShowBulk((s) => !s)}>
+                <button
+                  className="btn btn-outline-primary btn-sm"
+                  onClick={() => setShowBulk((s) => !s)}
+                >
                   {showBulk ? "Hide Bulk" : "Bulk Fill"}
                 </button>
               )}
@@ -659,7 +805,6 @@ const FeeStructure = () => {
         </div>
       </div>
 
-      {/* Filters */}
       <div className="card shadow-sm mb-2">
         <div className="card-body fs-filter-body">
           <div className="fs-grid-2">
@@ -694,7 +839,6 @@ const FeeStructure = () => {
         </div>
       </div>
 
-      {/* Bulk Fill (collapsible) */}
       {canEdit && showBulk && (
         <div className="card shadow-sm mb-2">
           <div className="card-body">
@@ -727,7 +871,9 @@ const FeeStructure = () => {
                   type="number"
                   className="form-control fs-inp2"
                   value={bulkValues.feeDue}
-                  onChange={(e) => setBulkValues((s) => ({ ...s, feeDue: e.target.value }))}
+                  onChange={(e) =>
+                    setBulkValues((s) => ({ ...s, feeDue: e.target.value }))
+                  }
                   placeholder="e.g. 1500"
                 />
               </div>
@@ -737,7 +883,9 @@ const FeeStructure = () => {
                 <select
                   className="form-select fs-inp2"
                   value={bulkValues.fineType}
-                  onChange={(e) => setBulkValues((s) => ({ ...s, fineType: e.target.value }))}
+                  onChange={(e) =>
+                    setBulkValues((s) => ({ ...s, fineType: e.target.value }))
+                  }
                 >
                   <option value="percentage">Percentage</option>
                   <option value="slab">Slab</option>
@@ -751,7 +899,9 @@ const FeeStructure = () => {
                     type="number"
                     className="form-control fs-inp2"
                     value={bulkValues.finePercentage}
-                    onChange={(e) => setBulkValues((s) => ({ ...s, finePercentage: e.target.value }))}
+                    onChange={(e) =>
+                      setBulkValues((s) => ({ ...s, finePercentage: e.target.value }))
+                    }
                     placeholder="%"
                   />
                 </div>
@@ -763,7 +913,12 @@ const FeeStructure = () => {
                       type="number"
                       className="form-control fs-inp2"
                       value={bulkValues.fineAmountPerSlab}
-                      onChange={(e) => setBulkValues((s) => ({ ...s, fineAmountPerSlab: e.target.value }))}
+                      onChange={(e) =>
+                        setBulkValues((s) => ({
+                          ...s,
+                          fineAmountPerSlab: e.target.value,
+                        }))
+                      }
                       placeholder="₹"
                     />
                   </div>
@@ -773,7 +928,12 @@ const FeeStructure = () => {
                       type="number"
                       className="form-control fs-inp2"
                       value={bulkValues.fineSlabDuration}
-                      onChange={(e) => setBulkValues((s) => ({ ...s, fineSlabDuration: e.target.value }))}
+                      onChange={(e) =>
+                        setBulkValues((s) => ({
+                          ...s,
+                          fineSlabDuration: e.target.value,
+                        }))
+                      }
                       placeholder="days"
                     />
                   </div>
@@ -786,7 +946,9 @@ const FeeStructure = () => {
                   type="date"
                   className="form-control fs-inp2"
                   value={bulkValues.fineStartDate}
-                  onChange={(e) => setBulkValues((s) => ({ ...s, fineStartDate: e.target.value }))}
+                  onChange={(e) =>
+                    setBulkValues((s) => ({ ...s, fineStartDate: e.target.value }))
+                  }
                 />
               </div>
 
@@ -795,7 +957,9 @@ const FeeStructure = () => {
                 <select
                   className="form-select fs-inp2"
                   value={bulkValues.admissionType}
-                  onChange={(e) => setBulkValues((s) => ({ ...s, admissionType: e.target.value }))}
+                  onChange={(e) =>
+                    setBulkValues((s) => ({ ...s, admissionType: e.target.value }))
+                  }
                 >
                   <option value="">(No change)</option>
                   <option value="New">New</option>
@@ -809,11 +973,16 @@ const FeeStructure = () => {
                 <select
                   className="form-select fs-inp2"
                   value={bulkValues.concessionApplicable}
-                  onChange={(e) => setBulkValues((s) => ({ ...s, concessionApplicable: e.target.value }))}
+                  onChange={(e) =>
+                    setBulkValues((s) => ({
+                      ...s,
+                      concessionApplicable: e.target.value,
+                    }))
+                  }
                 >
                   <option value="">(No change)</option>
-                  <option value="Yes">Yes</option>
-                  <option value="No">No</option>
+                  <option value="true">Yes</option>
+                  <option value="false">No</option>
                 </select>
               </div>
 
@@ -822,21 +991,27 @@ const FeeStructure = () => {
                 <select
                   className="form-select fs-inp2"
                   value={bulkValues.transportApplicable}
-                  onChange={(e) => setBulkValues((s) => ({ ...s, transportApplicable: e.target.value }))}
+                  onChange={(e) =>
+                    setBulkValues((s) => ({
+                      ...s,
+                      transportApplicable: e.target.value,
+                    }))
+                  }
                 >
                   <option value="">(No change)</option>
-                  <option value="Yes">Yes</option>
-                  <option value="No">No</option>
+                  <option value="true">Yes</option>
+                  <option value="false">No</option>
                 </select>
               </div>
             </div>
 
-            <div className="fs-hint mt-2">Tip: keep Bulk collapsed when not needed (biggest height saver).</div>
+            <div className="fs-hint mt-2">
+              Tip: keep Bulk collapsed when not needed (biggest height saver).
+            </div>
           </div>
         </div>
       )}
 
-      {/* Table */}
       <div className="table-responsive fs-tableWrap">
         <table className="table table-striped fs-table">
           <thead className="fs-thead">
@@ -866,8 +1041,16 @@ const FeeStructure = () => {
             {filteredFeeStructures.length > 0 ? (
               filteredFeeStructures.map((fee, index) => {
                 const flags = [
-                  fee.concessionApplicable === "Yes" ? "Concession" : null,
-                  fee.transportApplicable === "Yes" ? "Transport" : null,
+                  fee.concessionApplicable === true ||
+                  fee.concessionApplicable === "Yes" ||
+                  fee.concessionApplicable === 1
+                    ? "Concession"
+                    : null,
+                  fee.transportApplicable === true ||
+                  fee.transportApplicable === "Yes" ||
+                  fee.transportApplicable === 1
+                    ? "Transport"
+                    : null,
                 ].filter(Boolean);
 
                 return (
@@ -892,23 +1075,34 @@ const FeeStructure = () => {
                         <td className="fs-wrap">
                           {fee.fineType === "percentage"
                             ? `${fee.finePercentage ?? 0}%`
-                            : `₹${fee.fineAmountPerSlab ?? 0} / ${fee.fineSlabDuration ?? 0} days`}
+                            : `₹${fee.fineAmountPerSlab ?? 0} / ${
+                                fee.fineSlabDuration ?? 0
+                              } days`}
                         </td>
                       </>
                     )}
 
                     {canEdit && (
                       <td className="text-nowrap">
-                        <button className="btn btn-primary btn-sm me-1" onClick={() => handleEdit(fee)}>
+                        <button
+                          className="btn btn-primary btn-sm me-1"
+                          onClick={() => handleEdit(fee)}
+                        >
                           Edit
                         </button>
 
-                        <button className="btn btn-outline-secondary btn-sm me-1" onClick={() => handleCopy(fee)}>
+                        <button
+                          className="btn btn-outline-secondary btn-sm me-1"
+                          onClick={() => handleCopy(fee)}
+                        >
                           Copy
                         </button>
 
                         {isSuperadmin && (
-                          <button className="btn btn-danger btn-sm" onClick={() => handleDelete(fee)}>
+                          <button
+                            className="btn btn-danger btn-sm"
+                            onClick={() => handleDelete(fee)}
+                          >
                             Delete
                           </button>
                         )}

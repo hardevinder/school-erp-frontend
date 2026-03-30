@@ -6,9 +6,10 @@ import { Modal, Button, Form } from "react-bootstrap";
 
 const ExamScheduleManagement = () => {
   const [schedules, setSchedules] = useState([]);
-  const [draftRows, setDraftRows] = useState([]); // ✅ inline editable date/time
-  const [dirtyIds, setDirtyIds] = useState(new Set()); // ✅ track changed rows
+  const [draftRows, setDraftRows] = useState([]);
+  const [dirtyIds, setDirtyIds] = useState(new Set());
 
+  const [sessions, setSessions] = useState([]);
   const [exams, setExams] = useState([]);
   const [classes, setClasses] = useState([]);
   const [sections, setSections] = useState([]);
@@ -16,6 +17,7 @@ const ExamScheduleManagement = () => {
   const [terms, setTerms] = useState([]);
 
   const [filters, setFilters] = useState({
+    session_id: "",
     term_id: "",
     exam_id: "",
     class_id: "",
@@ -24,6 +26,7 @@ const ExamScheduleManagement = () => {
 
   const [formData, setFormData] = useState({
     id: null,
+    session_id: "",
     term_id: "",
     exam_id: "",
     class_id: "",
@@ -37,7 +40,6 @@ const ExamScheduleManagement = () => {
   const [showModal, setShowModal] = useState(false);
   const fileInputRef = useRef(null);
 
-  // 🔎 quick lookup maps
   const examById = useMemo(() => {
     const m = new Map();
     (exams || []).forEach((e) => m.set(String(e.id), e));
@@ -55,8 +57,9 @@ const ExamScheduleManagement = () => {
 
   const fetchDropdowns = async () => {
     try {
-      const [examRes, classRes, sectionRes, subjectRes, termRes] =
+      const [sessionRes, examRes, classRes, sectionRes, subjectRes, termRes] =
         await Promise.all([
+          api.get("/sessions"),
           api.get("/exams"),
           api.get("/classes"),
           api.get("/sections"),
@@ -64,6 +67,7 @@ const ExamScheduleManagement = () => {
           api.get("/terms"),
         ]);
 
+      setSessions(sessionRes.data || []);
       setExams(examRes.data || []);
       setClasses(classRes.data || []);
       setSections(sectionRes.data || []);
@@ -77,11 +81,14 @@ const ExamScheduleManagement = () => {
 
   const fetchSchedules = async () => {
     try {
-      const res = await api.get("/exam-schedules", { params: filters });
+      const cleanedFilters = Object.fromEntries(
+        Object.entries(filters).filter(([_, v]) => v !== "" && v !== null && v !== undefined)
+      );
+
+      const res = await api.get("/exam-schedules", { params: cleanedFilters });
       const rows = res.data || [];
       setSchedules(rows);
 
-      // ✅ reset inline editor whenever we refetch
       setDraftRows(
         rows.map((s) => ({
           id: s.id,
@@ -101,21 +108,17 @@ const ExamScheduleManagement = () => {
     setFilters((p) => ({ ...p, [e.target.name]: e.target.value }));
   };
 
-  // ==============================
-  // ✅ Generate from Scheme
-  // ==============================
   const handleGenerateFromScheme = async () => {
-    const { term_id, exam_id, class_id, section_id } = filters;
+    const { session_id, term_id, exam_id, class_id, section_id } = filters;
 
-    if (!term_id || !exam_id || !class_id || !section_id) {
+    if (!session_id || !term_id || !exam_id || !class_id || !section_id) {
       return Swal.fire(
         "Required",
-        "Please select Term, Exam, Class, Section first (in Filters).",
+        "Please select Session, Term, Exam, Class, Section first (in Filters).",
         "warning"
       );
     }
 
-    // optional: validate exam.term_id matches filter term_id
     const ex = examById.get(String(exam_id));
     if (ex?.term_id && String(ex.term_id) !== String(term_id)) {
       const c = await Swal.fire({
@@ -137,6 +140,7 @@ const ExamScheduleManagement = () => {
       });
 
       const res = await api.post("/exam-schedules/generate-from-scheme", {
+        session_id: Number(session_id),
         term_id: Number(term_id),
         exam_id: Number(exam_id),
         class_id: Number(class_id),
@@ -163,9 +167,6 @@ const ExamScheduleManagement = () => {
     }
   };
 
-  // ==============================
-  // ✅ Inline edit helpers
-  // ==============================
   const markDirty = (id) => {
     setDirtyIds((prev) => {
       const next = new Set(prev);
@@ -198,7 +199,6 @@ const ExamScheduleManagement = () => {
       return Swal.fire("No Changes", "Nothing to save.", "info");
     }
 
-    // basic validation for dirty rows
     const bad = updates.find((u) => !u.exam_date || !u.start_time || !u.end_time);
     if (bad) {
       return Swal.fire(
@@ -231,10 +231,6 @@ const ExamScheduleManagement = () => {
     }
   };
 
-  // ==============================
-  // ✅ Modal (Add / Edit / Duplicate)
-  // NOTE: For "auto-only" flow, you can hide Add button.
-  // ==============================
   const handleFormChange = (e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
@@ -245,10 +241,11 @@ const ExamScheduleManagement = () => {
   const openAddModal = () => {
     setFormData({
       id: null,
-      term_id: "",
-      exam_id: "",
-      class_id: "",
-      section_id: "",
+      session_id: filters.session_id || "",
+      term_id: filters.term_id || "",
+      exam_id: filters.exam_id || "",
+      class_id: filters.class_id || "",
+      section_id: filters.section_id || "",
       subject_id: "",
       exam_date: "",
       start_time: "",
@@ -260,6 +257,7 @@ const ExamScheduleManagement = () => {
   const handleEdit = (schedule) => {
     setFormData({
       id: schedule.id,
+      session_id: schedule.session_id || schedule.session?.id || "",
       term_id: schedule.term_id || schedule.term?.id || "",
       exam_id: schedule.exam_id || schedule.exam?.id || "",
       class_id: schedule.class_id || schedule.class?.id || "",
@@ -275,6 +273,7 @@ const ExamScheduleManagement = () => {
   const handleDuplicate = (schedule) => {
     setFormData({
       id: null,
+      session_id: schedule.session_id || schedule.session?.id || "",
       term_id: schedule.term_id || schedule.term?.id || "",
       exam_id: schedule.exam_id || schedule.exam?.id || "",
       class_id: schedule.class_id || schedule.class?.id || "",
@@ -290,6 +289,7 @@ const ExamScheduleManagement = () => {
   const handleSubmit = async () => {
     const {
       id,
+      session_id,
       term_id,
       exam_id,
       class_id,
@@ -301,6 +301,7 @@ const ExamScheduleManagement = () => {
     } = formData;
 
     if (
+      !session_id ||
       !term_id ||
       !exam_id ||
       !class_id ||
@@ -317,12 +318,22 @@ const ExamScheduleManagement = () => {
       );
     }
 
+    const payload = {
+      ...formData,
+      session_id: Number(session_id),
+      term_id: Number(term_id),
+      exam_id: Number(exam_id),
+      class_id: Number(class_id),
+      section_id: Number(section_id),
+      subject_id: Number(subject_id),
+    };
+
     try {
       if (id) {
-        await api.put(`/exam-schedules/${id}`, formData);
+        await api.put(`/exam-schedules/${id}`, payload);
         Swal.fire("Updated", "Schedule updated successfully", "success");
       } else {
-        await api.post("/exam-schedules", formData);
+        await api.post("/exam-schedules", payload);
         Swal.fire("Success", "Schedule created successfully", "success");
       }
       closeModal();
@@ -354,12 +365,10 @@ const ExamScheduleManagement = () => {
     }
   };
 
-  // ==============================
-  // Export / Import
-  // ==============================
   const handleExport = async () => {
     try {
       const response = await api.get("/exam-schedules/export", {
+        params: filters,
         responseType: "blob",
       });
 
@@ -385,24 +394,36 @@ const ExamScheduleManagement = () => {
     const form = new FormData();
     form.append("file", file);
 
+    if (filters.session_id) form.append("session_id", filters.session_id);
+    if (filters.term_id) form.append("term_id", filters.term_id);
+    if (filters.exam_id) form.append("exam_id", filters.exam_id);
+    if (filters.class_id) form.append("class_id", filters.class_id);
+    if (filters.section_id) form.append("section_id", filters.section_id);
+
     try {
-      await api.post("/exam-schedules/import", form);
+      await api.post("/exam-schedules/import", form, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
       Swal.fire("Success", "Import completed", "success");
       fetchSchedules();
     } catch (err) {
       console.error(err);
-      Swal.fire("Error", "Failed to import file", "error");
+      Swal.fire(
+        "Error",
+        err?.response?.data?.message || "Failed to import file",
+        "error"
+      );
     } finally {
-      // reset input so same file can be selected again
       e.target.value = "";
     }
   };
 
-  // ==============================
-  // UI
-  // ==============================
   const canGenerate =
-    !!filters.term_id && !!filters.exam_id && !!filters.class_id && !!filters.section_id;
+    !!filters.session_id &&
+    !!filters.term_id &&
+    !!filters.exam_id &&
+    !!filters.class_id &&
+    !!filters.section_id;
 
   return (
     <div className="container mt-4">
@@ -417,7 +438,7 @@ const ExamScheduleManagement = () => {
             title={
               canGenerate
                 ? "Create missing schedule rows from Exam Scheme"
-                : "Select Term, Exam, Class, Section first"
+                : "Select Session, Term, Exam, Class, Section first"
             }
           >
             ⚡ Generate from Scheme
@@ -434,11 +455,26 @@ const ExamScheduleManagement = () => {
         </div>
       </div>
 
-      {/* Filter Card */}
       <div className="card mt-4 mb-4">
         <div className="card-body">
           <h5 className="card-title">Filter</h5>
           <div className="row g-2">
+            <div className="col-md-3">
+              <label>Session</label>
+              <Form.Select
+                name="session_id"
+                value={filters.session_id}
+                onChange={handleFilterChange}
+              >
+                <option value="">All Sessions</option>
+                {sessions.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </Form.Select>
+            </div>
+
             <div className="col-md-3">
               <label>Term</label>
               <Form.Select
@@ -505,8 +541,8 @@ const ExamScheduleManagement = () => {
 
             <div className="col-12 d-flex justify-content-between align-items-center mt-2">
               <div className="text-muted">
-                Tip: Filter select karo → <b>Generate from Scheme</b> → table me dates/times fill karke{" "}
-                <b>Save All</b>.
+                Tip: Session + Filter select karo → <b>Generate from Scheme</b> → table me
+                dates/times fill karke <b>Save All</b>.
               </div>
 
               <div className="d-flex gap-2">
@@ -519,7 +555,6 @@ const ExamScheduleManagement = () => {
         </div>
       </div>
 
-      {/* Import Export Actions */}
       <div className="d-flex justify-content-between mb-3 flex-wrap gap-2">
         <div className="d-flex gap-2 flex-wrap">
           <Button variant="outline-success" onClick={handleExport}>
@@ -543,7 +578,6 @@ const ExamScheduleManagement = () => {
         </div>
       </div>
 
-      {/* Table */}
       <div className="card">
         <div className="card-body">
           <h5 className="card-title">Scheduled Exams</h5>
@@ -554,6 +588,7 @@ const ExamScheduleManagement = () => {
                 <thead className="table-light">
                   <tr>
                     <th style={{ width: 50 }}>#</th>
+                    <th>Session</th>
                     <th>Term</th>
                     <th>Exam</th>
                     <th>Class</th>
@@ -573,13 +608,13 @@ const ExamScheduleManagement = () => {
                     return (
                       <tr key={s.id} className={isDirty ? "table-warning" : ""}>
                         <td>{i + 1}</td>
+                        <td>{s.session?.name || s.session_name || s.session_id || "-"}</td>
                         <td>{s.term?.name || "-"}</td>
                         <td>{s.exam?.name || "-"}</td>
                         <td>{s.class?.class_name || "-"}</td>
                         <td>{s.section?.section_name || "-"}</td>
                         <td>{s.subject?.name || "-"}</td>
 
-                        {/* ✅ Inline editable Date/Start/End */}
                         <td>
                           <Form.Control
                             type="date"
@@ -603,7 +638,6 @@ const ExamScheduleManagement = () => {
                         </td>
 
                         <td>
-                          {/* 📄 Duplicate */}
                           <Button
                             variant="outline-info"
                             size="sm"
@@ -614,7 +648,6 @@ const ExamScheduleManagement = () => {
                             📄
                           </Button>
 
-                          {/* Edit (modal) */}
                           <Button
                             variant="warning"
                             size="sm"
@@ -624,7 +657,6 @@ const ExamScheduleManagement = () => {
                             Edit
                           </Button>
 
-                          {/* Delete */}
                           <Button
                             variant="danger"
                             size="sm"
@@ -645,14 +677,7 @@ const ExamScheduleManagement = () => {
         </div>
       </div>
 
-      {/* Modal (Manual Add/Edit/Duplicate) */}
-      <Modal
-        show={showModal}
-        onHide={closeModal}
-        size="lg"
-        centered
-        scrollable
-      >
+      <Modal show={showModal} onHide={closeModal} size="lg" centered scrollable>
         <Modal.Header closeButton>
           <Modal.Title>
             {formData.id ? "✏️ Edit Schedule" : "➕ Add / Duplicate Schedule"}
@@ -662,7 +687,25 @@ const ExamScheduleManagement = () => {
         <Modal.Body style={{ paddingBottom: "0.5rem" }}>
           <Form>
             <div className="row g-2">
-              {/* Term */}
+              <div className="col-12 col-md-6 col-lg-4">
+                <Form.Group className="mb-2">
+                  <Form.Label>Session</Form.Label>
+                  <Form.Select
+                    name="session_id"
+                    value={formData.session_id}
+                    onChange={handleFormChange}
+                    disabled={!!formData.id}
+                  >
+                    <option value="">Select Session</option>
+                    {sessions.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </Form.Select>
+                </Form.Group>
+              </div>
+
               <div className="col-12 col-md-6 col-lg-4">
                 <Form.Group className="mb-2">
                   <Form.Label>Term</Form.Label>
@@ -670,7 +713,7 @@ const ExamScheduleManagement = () => {
                     name="term_id"
                     value={formData.term_id}
                     onChange={handleFormChange}
-                    disabled={!!formData.id} // ✅ lock on edit
+                    disabled={!!formData.id}
                   >
                     <option value="">Select Term</option>
                     {terms.map((t) => (
@@ -682,7 +725,6 @@ const ExamScheduleManagement = () => {
                 </Form.Group>
               </div>
 
-              {/* Exam */}
               <div className="col-12 col-md-6 col-lg-4">
                 <Form.Group className="mb-2">
                   <Form.Label>Exam</Form.Label>
@@ -690,7 +732,7 @@ const ExamScheduleManagement = () => {
                     name="exam_id"
                     value={formData.exam_id}
                     onChange={handleFormChange}
-                    disabled={!!formData.id} // ✅ lock on edit
+                    disabled={!!formData.id}
                   >
                     <option value="">Select Exam</option>
                     {exams.map((ex) => (
@@ -702,7 +744,6 @@ const ExamScheduleManagement = () => {
                 </Form.Group>
               </div>
 
-              {/* Class */}
               <div className="col-12 col-md-6 col-lg-4">
                 <Form.Group className="mb-2">
                   <Form.Label>Class</Form.Label>
@@ -710,7 +751,7 @@ const ExamScheduleManagement = () => {
                     name="class_id"
                     value={formData.class_id}
                     onChange={handleFormChange}
-                    disabled={!!formData.id} // ✅ lock on edit
+                    disabled={!!formData.id}
                   >
                     <option value="">Select Class</option>
                     {classes.map((c) => (
@@ -722,7 +763,6 @@ const ExamScheduleManagement = () => {
                 </Form.Group>
               </div>
 
-              {/* Section */}
               <div className="col-12 col-md-6 col-lg-4">
                 <Form.Group className="mb-2">
                   <Form.Label>Section</Form.Label>
@@ -730,7 +770,7 @@ const ExamScheduleManagement = () => {
                     name="section_id"
                     value={formData.section_id}
                     onChange={handleFormChange}
-                    disabled={!!formData.id} // ✅ lock on edit
+                    disabled={!!formData.id}
                   >
                     <option value="">Select Section</option>
                     {sections.map((s) => (
@@ -742,7 +782,6 @@ const ExamScheduleManagement = () => {
                 </Form.Group>
               </div>
 
-              {/* Subject */}
               <div className="col-12 col-md-6 col-lg-4">
                 <Form.Group className="mb-2">
                   <Form.Label>Subject</Form.Label>
@@ -750,7 +789,7 @@ const ExamScheduleManagement = () => {
                     name="subject_id"
                     value={formData.subject_id}
                     onChange={handleFormChange}
-                    disabled={!!formData.id} // ✅ lock on edit
+                    disabled={!!formData.id}
                   >
                     <option value="">Select Subject</option>
                     {subjects.map((s) => (
@@ -762,7 +801,6 @@ const ExamScheduleManagement = () => {
                 </Form.Group>
               </div>
 
-              {/* Exam Date */}
               <div className="col-12 col-md-6 col-lg-4">
                 <Form.Group className="mb-2">
                   <Form.Label>Exam Date</Form.Label>
@@ -775,7 +813,6 @@ const ExamScheduleManagement = () => {
                 </Form.Group>
               </div>
 
-              {/* Start Time */}
               <div className="col-12 col-md-6 col-lg-4">
                 <Form.Group className="mb-2">
                   <Form.Label>Start Time</Form.Label>
@@ -788,7 +825,6 @@ const ExamScheduleManagement = () => {
                 </Form.Group>
               </div>
 
-              {/* End Time */}
               <div className="col-12 col-md-6 col-lg-4">
                 <Form.Group className="mb-2">
                   <Form.Label>End Time</Form.Label>

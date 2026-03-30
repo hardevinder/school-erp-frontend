@@ -22,6 +22,8 @@ import Classes from "./pages/Classes";
 import Sessions from "./pages/Sessions";
 import Subjects from "./pages/Subjects";
 import Student from "./pages/Students";
+import BulkPromotion from "./pages/Students/BulkPromotion";
+import PromotionHistory from "./pages/Students/PromotionHistory";
 import FeeStructure from "./pages/FeeStructure";
 import StudentFeeStructure from "./pages/StudentFeeStructure";
 import FeeHeadings from "./pages/FeeHeadings";
@@ -107,6 +109,7 @@ import ReportCardFormats from "./pages/ReportCardFormats";
 import AssignReportCardFormat from "./pages/AssignReportCardFormat";
 import ReportCardGenerator from "./pages/ReportCardGenerator";
 import StudentRemarksEntry from "./pages/StudentRemarksEntry";
+import StudentPromotionDecisionEntry from "./pages/StudentPromotionDecisionEntry";
 import StudentTransport from "./pages/StudentTransport";
 import OpeningBalances from "./pages/OpeningBalances";
 import CasteGenderReport from "./pages/CasteGenderReport";
@@ -366,6 +369,23 @@ function App() {
           <Route path="/sessions" element={<Sessions />} />
           <Route path="/subjects" element={<Subjects />} />
           <Route path="/students" element={<Student />} />
+          <Route
+              path="/students/bulk-promotion"
+              element={
+                <RequireRole roles={["admin", "superadmin", "accounts"]}>
+                  <BulkPromotion />
+                </RequireRole>
+              }
+            />
+
+            <Route
+              path="/students/promotion-history"
+              element={
+                <RequireRole roles={["admin", "superadmin", "accounts"]}>
+                  <PromotionHistory />
+                </RequireRole>
+              }
+            />
           <Route path="/sections" element={<Sections />} />
           <Route path="/schools" element={<Schools />} />
 
@@ -561,6 +581,7 @@ function App() {
 
           <Route path="/report-builder" element={<ReportBuilder />} />
           <Route path="/student-remarks-entry" element={<StudentRemarksEntry />} />
+          <Route path="/student-promotion-decision-entry" element={<StudentPromotionDecisionEntry />} />
           <Route path="/reports/classwise-result-summary" element={<ClasswiseResultSummary />} />
           <Route path="/reports/result-report-designer" element={<ResultReportDesigner />} />
           <Route path="/grade-schemes" element={<GradeSchemeManagement />} />

@@ -53,6 +53,7 @@ function SortableRow({
       >
         ☰
       </td>
+      <td>{scheme.session?.name || "-"}</td>
       <td>{scheme.class?.class_name}</td>
       <td>{scheme.subject?.name}</td>
       <td>{scheme.term?.name}</td>
@@ -62,7 +63,7 @@ function SortableRow({
           : scheme.component?.name}
       </td>
 
-      {/* ✅ Eval Mode (clickable ONLY here) */}
+      {/* Eval Mode */}
       <td style={{ width: 140 }}>
         <button
           type="button"
@@ -88,7 +89,6 @@ function SortableRow({
       </td>
 
       <td>
-        {/* Duplicate */}
         <button
           className="btn btn-sm btn-outline-info me-2"
           onClick={() => onDuplicate(scheme)}
@@ -97,7 +97,6 @@ function SortableRow({
           📄
         </button>
 
-        {/* Edit */}
         <button
           className="btn btn-sm btn-warning me-2"
           onClick={() => onEdit(scheme)}
@@ -106,7 +105,6 @@ function SortableRow({
           Edit
         </button>
 
-        {/* Delete */}
         <button
           className="btn btn-sm btn-danger me-2"
           onClick={() => onDelete(scheme.id)}
@@ -115,7 +113,6 @@ function SortableRow({
           Delete
         </button>
 
-        {/* Lock / Unlock */}
         <button
           className={`btn btn-sm ${
             scheme.is_locked ? "btn-secondary" : "btn-outline-secondary"
@@ -132,15 +129,21 @@ function SortableRow({
 
 const ExamSchemeManagement = () => {
   const [schemes, setSchemes] = useState([]);
+  const [sessions, setSessions] = useState([]);
   const [classes, setClasses] = useState([]);
   const [subjects, setSubjects] = useState([]);
   const [terms, setTerms] = useState([]);
   const [components, setComponents] = useState([]);
 
-  const [filters, setFilters] = useState({ class_id: "", subject_id: "" });
+  const [filters, setFilters] = useState({
+    session_id: "",
+    class_id: "",
+    subject_id: "",
+  });
 
   const [formData, setFormData] = useState({
     id: null,
+    session_id: "",
     class_id: "",
     subject_id: "",
     term_id: "",
@@ -151,37 +154,42 @@ const ExamSchemeManagement = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [showModal, setShowModal] = useState(false);
 
-  // ✅ Bulk Copy Subject Modal
+  // Bulk Copy Subject Modal
   const [showCopyModal, setShowCopyModal] = useState(false);
   const [copyData, setCopyData] = useState({
+    session_id: "",
     class_id: "",
     from_subject_id: "",
     to_subject_ids: [],
     overwrite: false,
   });
 
-  // ✅ Copy Full Class Schema Modal
+  // Copy Full Class Schema Modal
   const [showClassCopyModal, setShowClassCopyModal] = useState(false);
   const [classCopyData, setClassCopyData] = useState({
+    from_session_id: "",
     from_class_id: "",
+    to_session_id: "",
     to_class_ids: [],
     overwrite: false,
   });
 
-  // ✅ Copy Full Term Schema Modal
+  // Copy Full Term Schema Modal
   const [showTermCopyModal, setShowTermCopyModal] = useState(false);
   const [termCopyData, setTermCopyData] = useState({
+    session_id: "",
     class_id: "",
     from_term_id: "",
     to_term_id: "",
     overwrite: false,
   });
 
-  // ✅ Eval Mode Modal (UPDATED: no grade selection)
+  // Eval Mode Modal
   const [showEvalModal, setShowEvalModal] = useState(false);
   const [evalLoading, setEvalLoading] = useState(false);
   const [evalSaving, setEvalSaving] = useState(false);
   const [evalState, setEvalState] = useState({
+    session_id: "",
     class_id: "",
     subject_id: "",
     use_term: false,
@@ -189,7 +197,12 @@ const ExamSchemeManagement = () => {
     evaluation_mode: "MARKS",
   });
 
-  // maps for quick label lookup
+  const sessionById = useMemo(() => {
+    const map = new Map();
+    (sessions || []).forEach((s) => map.set(String(s.id), s));
+    return map;
+  }, [sessions]);
+
   const subjectById = useMemo(() => {
     const map = new Map();
     (subjects || []).forEach((s) => map.set(String(s.id), s));
@@ -210,19 +223,25 @@ const ExamSchemeManagement = () => {
 
   useEffect(() => {
     fetchDropdowns();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
     fetchSchemes();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const fetchDropdowns = async () => {
     try {
-      const [cRes, sRes, tRes, compRes] = await Promise.all([
+      const [sessRes, cRes, sRes, tRes, compRes] = await Promise.all([
+        api.get("/sessions"),
         api.get("/classes"),
         api.get("/subjects"),
         api.get("/terms"),
         api.get("/assessment-components"),
       ]);
 
+      setSessions(sessRes.data || []);
       setClasses(cRes.data || []);
       setSubjects(sRes.data?.subjects || sRes.data || []);
       setTerms(tRes.data || []);
@@ -235,6 +254,7 @@ const ExamSchemeManagement = () => {
   const fetchSchemes = async () => {
     try {
       const params = {};
+      if (filters.session_id) params.session_id = filters.session_id;
       if (filters.class_id) params.class_id = filters.class_id;
       if (filters.subject_id) params.subject_id = filters.subject_id;
 
@@ -250,20 +270,32 @@ const ExamSchemeManagement = () => {
 
   const applyFilters = () => fetchSchemes();
 
-  // ==============================
-  // ✅ Bulk Delete (All / Filtered)
-  // ==============================
   const handleDeleteAllSchemes = async () => {
+    const sessionId = filters.session_id ? String(filters.session_id) : "";
     const classId = filters.class_id ? String(filters.class_id) : "";
     const subjectId = filters.subject_id ? String(filters.subject_id) : "";
-    const isFilteredLocal = !!(classId || subjectId);
+    const isFilteredLocal = !!(sessionId || classId || subjectId);
+
+    const sessionName =
+      sessionId && sessionById.get(sessionId)
+        ? sessionById.get(sessionId).name
+        : "All Sessions";
+    const className =
+      classId && classById.get(classId)
+        ? classById.get(classId).class_name
+        : "All Classes";
+    const subjectName =
+      subjectId && subjectById.get(subjectId)
+        ? subjectById.get(subjectId).name
+        : "All Subjects";
 
     const scopeHtml = isFilteredLocal
       ? `
         <div style="text-align:left">
           <div><b>This will delete schemes matching current filters:</b></div>
-          <div><b>Class:</b> ${classId || "All Classes"}</div>
-          <div><b>Subject:</b> ${subjectId || "All Subjects"}</div>
+          <div><b>Session:</b> ${sessionName}</div>
+          <div><b>Class:</b> ${className}</div>
+          <div><b>Subject:</b> ${subjectName}</div>
         </div>
       `
       : `
@@ -312,6 +344,7 @@ const ExamSchemeManagement = () => {
 
       const res = await api.delete("/exam-schemes", {
         params: {
+          session_id: sessionId || undefined,
           class_id: classId || undefined,
           subject_id: subjectId || undefined,
         },
@@ -336,6 +369,7 @@ const ExamSchemeManagement = () => {
     if (scheme) {
       setFormData({
         id: scheme.id,
+        session_id: strId(scheme.session_id),
         class_id: strId(scheme.class_id),
         subject_id: strId(scheme.subject_id),
         term_id: strId(scheme.term_id),
@@ -346,8 +380,9 @@ const ExamSchemeManagement = () => {
     } else {
       setFormData({
         id: null,
-        class_id: "",
-        subject_id: "",
+        session_id: filters.session_id ? String(filters.session_id) : "",
+        class_id: filters.class_id ? String(filters.class_id) : "",
+        subject_id: filters.subject_id ? String(filters.subject_id) : "",
         term_id: "",
         component_id: "",
         weightage_percent: "",
@@ -357,10 +392,10 @@ const ExamSchemeManagement = () => {
     setShowModal(true);
   };
 
-  // ✅ Single-row Duplicate modal
   const openDuplicateModal = (scheme) => {
     setFormData({
       id: null,
+      session_id: strId(scheme.session_id),
       class_id: strId(scheme.class_id),
       subject_id: strId(scheme.subject_id),
       term_id: strId(scheme.term_id),
@@ -379,6 +414,7 @@ const ExamSchemeManagement = () => {
   const handleSubmit = async () => {
     const payload = {
       ...formData,
+      session_id: String(formData.session_id || ""),
       class_id: String(formData.class_id || ""),
       subject_id: String(formData.subject_id || ""),
       term_id: String(formData.term_id || ""),
@@ -386,10 +422,16 @@ const ExamSchemeManagement = () => {
       weightage_percent: String(formData.weightage_percent || ""),
     };
 
-    const { class_id, subject_id, term_id, component_id, weightage_percent } =
-      payload;
+    const {
+      session_id,
+      class_id,
+      subject_id,
+      term_id,
+      component_id,
+      weightage_percent,
+    } = payload;
 
-    if (!class_id || !subject_id || !term_id || !component_id) {
+    if (!session_id || !class_id || !subject_id || !term_id || !component_id) {
       return Swal.fire("Warning", "Please fill all fields.", "warning");
     }
 
@@ -481,21 +523,15 @@ const ExamSchemeManagement = () => {
     }
   };
 
-  // ==============================
-  // ✅ Eval Mode handlers (FIXED)
-  //  - Opens term-specific automatically based on clicked row term_id
-  //  - Better term_id param handling
-  //  - When enabling "use term", fetches term-specific if term already selected
-  // ==============================
   const fetchEvalMode = async ({
+    session_id,
     class_id,
     subject_id,
     term_id = null,
     silent = false,
   } = {}) => {
-    if (!class_id || !subject_id) return;
+    if (!session_id || !class_id || !subject_id) return;
 
-    // ✅ robust check
     const hasTerm =
       term_id !== null &&
       term_id !== undefined &&
@@ -506,6 +542,7 @@ const ExamSchemeManagement = () => {
 
       const res = await api.get("/exam-schemes/eval-mode", {
         params: {
+          session_id: Number(session_id),
           class_id: Number(class_id),
           subject_id: Number(subject_id),
           term_id: hasTerm ? Number(term_id) : undefined,
@@ -516,6 +553,7 @@ const ExamSchemeManagement = () => {
 
       setEvalState((prev) => ({
         ...prev,
+        session_id: String(session_id),
         class_id: String(class_id),
         subject_id: String(subject_id),
         evaluation_mode: mode,
@@ -532,14 +570,16 @@ const ExamSchemeManagement = () => {
   };
 
   const openEvalModalForRow = async (scheme) => {
+    const sessId = strId(scheme.session_id);
     const cId = strId(scheme.class_id);
     const sId = strId(scheme.subject_id);
     const rowTermId = strId(scheme.term_id);
 
-    const useTerm = !!rowTermId; // ✅ open term-specific for that row if term exists
+    const useTerm = !!rowTermId;
 
     setEvalState((prev) => ({
       ...prev,
+      session_id: sessId,
       class_id: cId,
       subject_id: sId,
       use_term: useTerm,
@@ -551,6 +591,7 @@ const ExamSchemeManagement = () => {
     await sleep(80);
 
     fetchEvalMode({
+      session_id: sessId,
       class_id: cId,
       subject_id: sId,
       term_id: useTerm ? rowTermId : null,
@@ -561,14 +602,15 @@ const ExamSchemeManagement = () => {
   const closeEvalModal = () => setShowEvalModal(false);
 
   const saveEvalMode = async () => {
+    const sessId = strId(evalState.session_id);
     const cId = strId(evalState.class_id);
     const sId = strId(evalState.subject_id);
     const useTerm = !!evalState.use_term;
     const tId = useTerm ? strId(evalState.term_id) : "";
     const mode = safeMode(evalState.evaluation_mode);
 
-    if (!cId || !sId) {
-      return Swal.fire("Missing", "Class/Subject missing.", "warning");
+    if (!sessId || !cId || !sId) {
+      return Swal.fire("Missing", "Session/Class/Subject missing.", "warning");
     }
     if (useTerm && !tId) {
       return Swal.fire(
@@ -578,13 +620,13 @@ const ExamSchemeManagement = () => {
       );
     }
 
+    const sessionName = sessionById.get(String(sessId))?.name || sessId;
     const className = classById.get(String(cId))?.class_name || cId;
     const subjectName = subjectById.get(String(sId))?.name || sId;
     const termName = useTerm
       ? termById.get(String(tId))?.name || tId
       : "Default (All Terms)";
 
-    // ✅ IMPORTANT: close modal BEFORE Swal confirm so it doesn't appear behind
     setShowEvalModal(false);
     await sleep(120);
 
@@ -592,6 +634,7 @@ const ExamSchemeManagement = () => {
       title: "Confirm Evaluation Mode",
       html: `
         <div style="text-align:left">
+          <div><b>Session:</b> ${sessionName}</div>
           <div><b>Class:</b> ${className}</div>
           <div><b>Subject:</b> ${subjectName}</div>
           <div><b>Term Scope:</b> ${termName}</div>
@@ -604,7 +647,6 @@ const ExamSchemeManagement = () => {
     });
 
     if (!confirm.isConfirmed) {
-      // user cancelled: bring modal back on top
       setShowEvalModal(true);
       return;
     }
@@ -613,11 +655,11 @@ const ExamSchemeManagement = () => {
       setEvalSaving(true);
 
       await api.post("/exam-schemes/eval-mode", {
+        session_id: Number(sessId),
         class_id: Number(cId),
         subject_id: Number(sId),
         term_id: useTerm ? Number(tId) : null,
         evaluation_mode: mode,
-        // ✅ No grade_id (not required)
         grade_id: null,
       });
 
@@ -628,23 +670,19 @@ const ExamSchemeManagement = () => {
       );
 
       fetchSchemes();
-      // keep closed after save
       setShowEvalModal(false);
     } catch (e) {
       const msg = e?.response?.data?.message || "Failed to save eval mode.";
       Swal.fire("Error", msg, "error");
-      // reopen modal so user can retry
       setShowEvalModal(true);
     } finally {
       setEvalSaving(false);
     }
   };
 
-  // ==============================
-  // ✅ Copy Subject Scheme handlers
-  // ==============================
   const openCopyModal = () => {
     setCopyData({
+      session_id: filters.session_id ? String(filters.session_id) : "",
       class_id: filters.class_id ? String(filters.class_id) : "",
       from_subject_id: filters.subject_id ? String(filters.subject_id) : "",
       to_subject_ids: [],
@@ -656,8 +694,12 @@ const ExamSchemeManagement = () => {
   const closeCopyModal = () => setShowCopyModal(false);
 
   const handleCopySubmit = async () => {
-    const { class_id, from_subject_id, to_subject_ids, overwrite } = copyData;
+    const { session_id, class_id, from_subject_id, to_subject_ids, overwrite } =
+      copyData;
 
+    if (!session_id) {
+      return Swal.fire("Warning", "Please select Session.", "warning");
+    }
     if (!from_subject_id) {
       return Swal.fire("Warning", "Please select From Subject.", "warning");
     }
@@ -681,6 +723,7 @@ const ExamSchemeManagement = () => {
       );
     }
 
+    const sessionName = sessionById.get(String(session_id))?.name || session_id;
     const fromName = subjectById.get(String(from_subject_id))?.name || "Selected";
     const toNames = cleanedTargets
       .map((id) => subjectById.get(String(id))?.name || id)
@@ -693,6 +736,7 @@ const ExamSchemeManagement = () => {
       title: "Confirm Subject Bulk Copy",
       html: `
         <div style="text-align:left">
+          <div><b>Session:</b> ${sessionName}</div>
           <div><b>From:</b> ${fromName}</div>
           <div><b>To:</b> ${toNames}</div>
           <div><b>Class:</b> ${
@@ -722,6 +766,7 @@ const ExamSchemeManagement = () => {
       });
 
       const res = await api.post("/exam-schemes/bulk-duplicate", {
+        session_id: Number(session_id),
         from_subject_id: Number(from_subject_id),
         to_subject_ids: cleanedTargets.map(Number),
         class_id: class_id ? Number(class_id) : null,
@@ -759,12 +804,11 @@ const ExamSchemeManagement = () => {
     }
   };
 
-  // ==============================
-  // ✅ Copy FULL Class Schema handlers
-  // ==============================
   const openClassCopyModal = () => {
     setClassCopyData({
+      from_session_id: filters.session_id ? String(filters.session_id) : "",
       from_class_id: filters.class_id ? String(filters.class_id) : "",
+      to_session_id: filters.session_id ? String(filters.session_id) : "",
       to_class_ids: [],
       overwrite: false,
     });
@@ -774,10 +818,17 @@ const ExamSchemeManagement = () => {
   const closeClassCopyModal = () => setShowClassCopyModal(false);
 
   const handleClassCopySubmit = async () => {
-    const { from_class_id, to_class_ids, overwrite } = classCopyData;
+    const { from_session_id, from_class_id, to_session_id, to_class_ids, overwrite } =
+      classCopyData;
 
+    if (!from_session_id) {
+      return Swal.fire("Warning", "Please select From Session.", "warning");
+    }
     if (!from_class_id) {
       return Swal.fire("Warning", "Please select From Class.", "warning");
+    }
+    if (!to_session_id) {
+      return Swal.fire("Warning", "Please select To Session.", "warning");
     }
     if (!to_class_ids || !to_class_ids.length) {
       return Swal.fire(
@@ -789,16 +840,25 @@ const ExamSchemeManagement = () => {
 
     const cleanedTargets = to_class_ids
       .map(String)
-      .filter((id) => id !== String(from_class_id));
+      .filter((id) => {
+        if (String(from_session_id) === String(to_session_id)) {
+          return id !== String(from_class_id);
+        }
+        return true;
+      });
 
     if (!cleanedTargets.length) {
       return Swal.fire(
         "Warning",
-        "To Class(es) cannot include From Class.",
+        "To Class(es) cannot include the same From Class when session is same.",
         "warning"
       );
     }
 
+    const fromSessionName =
+      sessionById.get(String(from_session_id))?.name || from_session_id;
+    const toSessionName =
+      sessionById.get(String(to_session_id))?.name || to_session_id;
     const fromName =
       classById.get(String(from_class_id))?.class_name || "Selected";
     const toNames = cleanedTargets
@@ -812,7 +872,9 @@ const ExamSchemeManagement = () => {
       title: "Confirm FULL Class Schema Copy",
       html: `
         <div style="text-align:left">
+          <div><b>From Session:</b> ${fromSessionName}</div>
           <div><b>From Class:</b> ${fromName}</div>
+          <div><b>To Session:</b> ${toSessionName}</div>
           <div><b>To Class(es):</b> ${toNames}</div>
           <div style="margin-top:6px"><b>Overwrite:</b> ${
             overwrite ? "Yes (delete target first)" : "No (skip duplicates)"
@@ -842,7 +904,9 @@ const ExamSchemeManagement = () => {
       });
 
       const res = await api.post("/exam-schemes/copy-class", {
+        from_session_id: Number(from_session_id),
         from_class_id: Number(from_class_id),
+        to_session_id: Number(to_session_id),
         to_class_ids: cleanedTargets.map(Number),
         overwrite: !!overwrite,
       });
@@ -878,11 +942,9 @@ const ExamSchemeManagement = () => {
     }
   };
 
-  // ==============================
-  // ✅ Copy FULL Term Schema handlers
-  // ==============================
   const openTermCopyModal = () => {
     setTermCopyData({
+      session_id: filters.session_id ? String(filters.session_id) : "",
       class_id: filters.class_id ? String(filters.class_id) : "",
       from_term_id: "",
       to_term_id: "",
@@ -894,8 +956,12 @@ const ExamSchemeManagement = () => {
   const closeTermCopyModal = () => setShowTermCopyModal(false);
 
   const handleTermCopySubmit = async () => {
-    const { class_id, from_term_id, to_term_id, overwrite } = termCopyData;
+    const { session_id, class_id, from_term_id, to_term_id, overwrite } =
+      termCopyData;
 
+    if (!session_id) {
+      return Swal.fire("Warning", "Please select Session.", "warning");
+    }
     if (!from_term_id) {
       return Swal.fire("Warning", "Please select From Term.", "warning");
     }
@@ -910,6 +976,7 @@ const ExamSchemeManagement = () => {
       );
     }
 
+    const sessionName = sessionById.get(String(session_id))?.name || session_id;
     const fromName = termById.get(String(from_term_id))?.name || "Selected";
     const toName = termById.get(String(to_term_id))?.name || "Selected";
 
@@ -920,6 +987,7 @@ const ExamSchemeManagement = () => {
       title: "Confirm Term Schema Copy",
       html: `
         <div style="text-align:left">
+          <div><b>Session:</b> ${sessionName}</div>
           <div><b>From Term:</b> ${fromName}</div>
           <div><b>To Term:</b> ${toName}</div>
           <div><b>Class:</b> ${
@@ -955,6 +1023,7 @@ const ExamSchemeManagement = () => {
       });
 
       const res = await api.post("/exam-schemes/copy-term", {
+        session_id: Number(session_id),
         from_term_id: Number(from_term_id),
         to_term_id: Number(to_term_id),
         class_id: class_id ? Number(class_id) : null,
@@ -992,7 +1061,11 @@ const ExamSchemeManagement = () => {
     }
   };
 
-  const isFiltered = !!(filters.class_id || filters.subject_id);
+  const isFiltered = !!(
+    filters.session_id ||
+    filters.class_id ||
+    filters.subject_id
+  );
 
   const currentEvalBadge = useMemo(() => {
     const mode = safeMode(evalState.evaluation_mode);
@@ -1041,8 +1114,22 @@ const ExamSchemeManagement = () => {
       </div>
 
       {/* Filters */}
-      <div className="d-flex justify-content-between align-items-end mb-3">
+      <div className="d-flex justify-content-between align-items-end mb-3 flex-wrap gap-2">
         <div className="d-flex gap-2 flex-wrap">
+          <select
+            name="session_id"
+            value={filters.session_id}
+            onChange={handleFilterChange}
+            className="form-control"
+          >
+            <option value="">All Sessions</option>
+            {sessions.map((s) => (
+              <option key={s.id} value={String(s.id)}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+
           <select
             name="class_id"
             value={filters.class_id}
@@ -1051,7 +1138,7 @@ const ExamSchemeManagement = () => {
           >
             <option value="">All Classes</option>
             {classes.map((c) => (
-              <option key={c.id} value={c.id}>
+              <option key={c.id} value={String(c.id)}>
                 {c.class_name}
               </option>
             ))}
@@ -1065,7 +1152,7 @@ const ExamSchemeManagement = () => {
           >
             <option value="">All Subjects</option>
             {subjects.map((s) => (
-              <option key={s.id} value={s.id}>
+              <option key={s.id} value={String(s.id)}>
                 {s.name}
               </option>
             ))}
@@ -1078,7 +1165,7 @@ const ExamSchemeManagement = () => {
 
         <div className="text-muted" style={{ fontSize: 13 }}>
           Tip: Click <b>MARKS</b>/<b>GRADE</b> button in any row to change the
-          evaluation mode for that Class + Subject.
+          evaluation mode for that Session + Class + Subject.
         </div>
       </div>
 
@@ -1097,6 +1184,7 @@ const ExamSchemeManagement = () => {
                 <thead className="table-light">
                   <tr>
                     <th style={{ width: 40 }}>#</th>
+                    <th>Session</th>
                     <th>Class</th>
                     <th>Subject</th>
                     <th>Term</th>
@@ -1123,7 +1211,7 @@ const ExamSchemeManagement = () => {
 
                   {!schemes.length && (
                     <tr>
-                      <td colSpan={9} className="text-center text-muted py-4">
+                      <td colSpan={10} className="text-center text-muted py-4">
                         No schemes found for selected filters.
                       </td>
                     </tr>
@@ -1135,7 +1223,7 @@ const ExamSchemeManagement = () => {
         </div>
       </div>
 
-      {/* Add/Edit/Duplicate (single row) Modal */}
+      {/* Add/Edit/Duplicate Modal */}
       <Modal show={showModal} onHide={closeModal} centered size="lg">
         <Modal.Header closeButton>
           <Modal.Title>
@@ -1145,6 +1233,23 @@ const ExamSchemeManagement = () => {
 
         <Modal.Body>
           <div className="row g-2">
+            <div className="col-12 col-md-6">
+              <label>Session</label>
+              <select
+                name="session_id"
+                value={formData.session_id}
+                onChange={handleChange}
+                className="form-control"
+              >
+                <option value="">Select Session</option>
+                {sessions.map((s) => (
+                  <option key={s.id} value={String(s.id)}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             <div className="col-12 col-md-6">
               <label>Class</label>
               <select
@@ -1224,8 +1329,7 @@ const ExamSchemeManagement = () => {
                 placeholder="%"
               />
               <small className="text-muted">
-                Weightage is allowed even for grade-mode subjects (for report
-                calculations).
+                Weightage is allowed even for grade-mode subjects.
               </small>
             </div>
 
@@ -1248,7 +1352,7 @@ const ExamSchemeManagement = () => {
         </Modal.Footer>
       </Modal>
 
-      {/* ✅ Eval Mode Modal (UPDATED) */}
+      {/* Eval Mode Modal */}
       <Modal show={showEvalModal} onHide={closeEvalModal} centered size="lg">
         <Modal.Header closeButton>
           <Modal.Title>⚙️ Subject Evaluation Mode</Modal.Title>
@@ -1256,6 +1360,12 @@ const ExamSchemeManagement = () => {
 
         <Modal.Body>
           <div className="d-flex flex-wrap gap-2 align-items-center mb-2">
+            <Badge bg="secondary">
+              Session:{" "}
+              {sessionById.get(String(evalState.session_id))?.name ||
+                evalState.session_id ||
+                "-"}
+            </Badge>
             <Badge bg="secondary">
               Class:{" "}
               {classById.get(String(evalState.class_id))?.class_name ||
@@ -1302,8 +1412,8 @@ const ExamSchemeManagement = () => {
                       }));
 
                       if (!useTerm) {
-                        // switched to default
                         fetchEvalMode({
+                          session_id: evalState.session_id,
                           class_id: evalState.class_id,
                           subject_id: evalState.subject_id,
                           term_id: null,
@@ -1312,9 +1422,9 @@ const ExamSchemeManagement = () => {
                         return;
                       }
 
-                      // ✅ if enabling term-specific and term already selected, load it
                       if (useTerm && evalState.term_id) {
                         fetchEvalMode({
+                          session_id: evalState.session_id,
                           class_id: evalState.class_id,
                           subject_id: evalState.subject_id,
                           term_id: evalState.term_id,
@@ -1331,8 +1441,7 @@ const ExamSchemeManagement = () => {
                   </label>
                 </div>
                 <small className="text-muted">
-                  If unchecked, mode applies as default for all terms (term =
-                  null).
+                  If unchecked, mode applies as default for all terms.
                 </small>
               </div>
 
@@ -1347,6 +1456,7 @@ const ExamSchemeManagement = () => {
                       setEvalState((p) => ({ ...p, term_id: termId }));
                       if (termId) {
                         await fetchEvalMode({
+                          session_id: evalState.session_id,
                           class_id: evalState.class_id,
                           subject_id: evalState.subject_id,
                           term_id: termId,
@@ -1388,8 +1498,8 @@ const ExamSchemeManagement = () => {
 
               <div className="col-12">
                 <div className="alert alert-info mb-0">
-                  <b>Note:</b> Scheme rows (components/weightage) remain the
-                  same. Mode only changes marks entry and report behavior.
+                  <b>Note:</b> Scheme rows remain the same. Mode only changes
+                  marks entry and report behavior.
                 </div>
               </div>
             </div>
@@ -1410,13 +1520,31 @@ const ExamSchemeManagement = () => {
         </Modal.Footer>
       </Modal>
 
-      {/* ✅ Copy Subject Scheme Modal */}
+      {/* Copy Subject Scheme Modal */}
       <Modal show={showCopyModal} onHide={closeCopyModal} centered size="lg">
         <Modal.Header closeButton>
           <Modal.Title>📚 Copy Subject Scheme (Bulk)</Modal.Title>
         </Modal.Header>
         <Modal.Body>
           <div className="row g-2">
+            <div className="col-12 col-md-6">
+              <label>Session</label>
+              <select
+                className="form-control"
+                value={copyData.session_id}
+                onChange={(e) =>
+                  setCopyData({ ...copyData, session_id: e.target.value })
+                }
+              >
+                <option value="">Select Session</option>
+                {sessions.map((s) => (
+                  <option key={s.id} value={String(s.id)}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             <div className="col-12 col-md-6">
               <label>Class (optional)</label>
               <select
@@ -1433,9 +1561,6 @@ const ExamSchemeManagement = () => {
                   </option>
                 ))}
               </select>
-              <small className="text-muted">
-                If selected, only that class schemes will be copied.
-              </small>
             </div>
 
             <div className="col-12 col-md-6">
@@ -1457,9 +1582,6 @@ const ExamSchemeManagement = () => {
                   </option>
                 ))}
               </select>
-              <small className="text-muted">
-                Example: Copy one subject’s full scheme to other subjects.
-              </small>
             </div>
 
             <div className="col-12">
@@ -1482,9 +1604,6 @@ const ExamSchemeManagement = () => {
                   </option>
                 ))}
               </select>
-              <small className="text-muted">
-                Hold Ctrl/Command to select multiple subjects.
-              </small>
             </div>
 
             <div className="col-12">
@@ -1502,9 +1621,6 @@ const ExamSchemeManagement = () => {
                   Overwrite target schemes (delete first)
                 </label>
               </div>
-              <small className="text-muted">
-                If unchecked, duplicates will be skipped safely.
-              </small>
             </div>
           </div>
         </Modal.Body>
@@ -1518,7 +1634,7 @@ const ExamSchemeManagement = () => {
         </Modal.Footer>
       </Modal>
 
-      {/* ✅ Copy Full Class Schema Modal */}
+      {/* Copy Full Class Schema Modal */}
       <Modal
         show={showClassCopyModal}
         onHide={closeClassCopyModal}
@@ -1531,6 +1647,27 @@ const ExamSchemeManagement = () => {
         <Modal.Body>
           <div className="row g-2">
             <div className="col-12 col-md-6">
+              <label>From Session</label>
+              <select
+                className="form-control"
+                value={classCopyData.from_session_id}
+                onChange={(e) =>
+                  setClassCopyData({
+                    ...classCopyData,
+                    from_session_id: e.target.value,
+                  })
+                }
+              >
+                <option value="">Select Session</option>
+                {sessions.map((s) => (
+                  <option key={s.id} value={String(s.id)}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="col-12 col-md-6">
               <label>From Class</label>
               <select
                 className="form-control"
@@ -1542,10 +1679,31 @@ const ExamSchemeManagement = () => {
                   })
                 }
               >
-                <option value="">Select</option>
+                <option value="">Select Class</option>
                 {classes.map((c) => (
                   <option key={c.id} value={String(c.id)}>
                     {c.class_name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="col-12 col-md-6">
+              <label>To Session</label>
+              <select
+                className="form-control"
+                value={classCopyData.to_session_id}
+                onChange={(e) =>
+                  setClassCopyData({
+                    ...classCopyData,
+                    to_session_id: e.target.value,
+                  })
+                }
+              >
+                <option value="">Select Session</option>
+                {sessions.map((s) => (
+                  <option key={s.id} value={String(s.id)}>
+                    {s.name}
                   </option>
                 ))}
               </select>
@@ -1561,9 +1719,15 @@ const ExamSchemeManagement = () => {
                   const vals = Array.from(e.target.selectedOptions).map(
                     (o) => o.value
                   );
-                  const cleaned = vals.filter(
-                    (x) => x !== String(classCopyData.from_class_id)
-                  );
+                  const cleaned = vals.filter((x) => {
+                    if (
+                      String(classCopyData.from_session_id) ===
+                      String(classCopyData.to_session_id)
+                    ) {
+                      return x !== String(classCopyData.from_class_id);
+                    }
+                    return true;
+                  });
                   setClassCopyData({ ...classCopyData, to_class_ids: cleaned });
                 }}
                 style={{ minHeight: 160 }}
@@ -1599,7 +1763,7 @@ const ExamSchemeManagement = () => {
             <div className="col-12">
               <div className="alert alert-info mb-0 mt-2">
                 <b>What will be copied?</b> All subjects (term + component rows)
-                of the selected class.
+                of the selected class from one session to another session/class.
               </div>
             </div>
           </div>
@@ -1614,7 +1778,7 @@ const ExamSchemeManagement = () => {
         </Modal.Footer>
       </Modal>
 
-      {/* ✅ Copy Full Term Schema Modal */}
+      {/* Copy Full Term Schema Modal */}
       <Modal
         show={showTermCopyModal}
         onHide={closeTermCopyModal}
@@ -1626,6 +1790,27 @@ const ExamSchemeManagement = () => {
         </Modal.Header>
         <Modal.Body>
           <div className="row g-2">
+            <div className="col-12 col-md-6">
+              <label>Session</label>
+              <select
+                className="form-control"
+                value={termCopyData.session_id}
+                onChange={(e) =>
+                  setTermCopyData({
+                    ...termCopyData,
+                    session_id: e.target.value,
+                  })
+                }
+              >
+                <option value="">Select Session</option>
+                {sessions.map((s) => (
+                  <option key={s.id} value={String(s.id)}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             <div className="col-12 col-md-6">
               <label>Class (optional)</label>
               <select
@@ -1709,7 +1894,7 @@ const ExamSchemeManagement = () => {
             <div className="col-12">
               <div className="alert alert-warning mb-0 mt-2">
                 <b>What will be copied?</b> ALL subjects (components + weightage)
-                from one term to another term. (Class optional)
+                from one term to another term in the selected session.
               </div>
             </div>
           </div>

@@ -103,6 +103,54 @@ const SIBLING_COLORS = [
   { bg: "#f97316", text: "#fff" },
 ];
 
+
+const EXPORT_COLUMN_OPTIONS = [
+  { key: "admission_number", label: "Admission Number" },
+  { key: "name", label: "Student Name" },
+  { key: "father_name", label: "Father Name" },
+  { key: "mother_name", label: "Mother Name" },
+  { key: "father_phone", label: "Father Phone" },
+  { key: "mother_phone", label: "Mother Phone" },
+  { key: "class_name", label: "Class" },
+  { key: "section_name", label: "Section" },
+  { key: "session_name", label: "Session" },
+  { key: "house_name", label: "House" },
+  { key: "address", label: "Address" },
+  { key: "Date_Of_Birth", label: "Date of Birth" },
+  { key: "gender", label: "Gender" },
+  { key: "bus_gender", label: "Bus Gender" },
+  { key: "b_group", label: "Blood Group" },
+  { key: "state", label: "State" },
+  { key: "category", label: "Category" },
+  { key: "religion", label: "Religion" },
+  { key: "aadhaar_number", label: "Aadhaar Number" },
+  { key: "date_of_admission", label: "Date of Admission" },
+  { key: "date_of_withdraw", label: "Date of Withdrawal" },
+  { key: "bus_service", label: "Bus Service" },
+  { key: "route_name", label: "Route Name" },
+  { key: "route_cost", label: "Route Cost" },
+  { key: "status", label: "Status" },
+  { key: "admission_type", label: "Admission Type" },
+  { key: "roll_number", label: "Roll Number" },
+  { key: "pen_number", label: "PEN Number" },
+  { key: "prev_school_name", label: "Previous School Name" },
+  { key: "prev_school_address", label: "Previous School Address" },
+  { key: "prev_class", label: "Previous Class" },
+  { key: "prev_admission_no", label: "Previous Admission No" },
+];
+
+const DEFAULT_EXPORT_COLUMNS = [
+  "admission_number",
+  "name",
+  "father_name",
+  "mother_name",
+  "father_phone",
+  "class_name",
+  "section_name",
+  "session_name",
+  "status",
+];
+
 const Students = () => {
   const { isAdmin, isSuperadmin } = getRoleFlags();
   const isAdminOrSuperAdmin = isAdmin || isSuperadmin;
@@ -1334,27 +1382,237 @@ const Students = () => {
     if (!isAdminOrSuperAdmin) return; // optional: only allow admin/superadmin to edit on click
     showStudentForm("edit", stu);
   };
+// Replace your current handleExport function in src/pages/Students.js with this one.
+const handleExport = async () => {
+  const html = `
+    <style>
+      .export-columns-wrap {
+        text-align: left;
+        max-height: 380px;
+        overflow-y: auto;
+        border: 1px solid #e5e7eb;
+        border-radius: 10px;
+        padding: 12px;
+        background: #fff;
+      }
+      .export-col-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px 16px;
+      }
+      .export-col-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 14px;
+      }
+      .export-top-actions {
+        display: flex;
+        gap: 8px;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 10px;
+        flex-wrap: wrap;
+      }
+      .export-top-actions-left,
+      .export-top-actions-right {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .export-mini-btn {
+        border: 1px solid #d1d5db;
+        background: #fff;
+        border-radius: 8px;
+        padding: 5px 10px;
+        font-size: 12px;
+        cursor: pointer;
+      }
+      .export-mini-btn:hover {
+        background: #f9fafb;
+      }
+      .export-note {
+        text-align: left;
+        font-size: 12px;
+        color: #6b7280;
+        margin: 8px 0 0;
+      }
+      @media (max-width: 640px) {
+        .export-col-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
 
-  const handleExport = async () => {
-    try {
-      const resp = await api.get("/students/export-students", { responseType: "blob" });
-      const blob = new Blob([resp.data], {
-        type: resp.headers["content-type"] || "application/octet-stream",
-      });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `Students_Export_${new Date().toISOString().split("T")[0]}.xlsx`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-      Swal.fire("Exported", "Student data downloaded successfully", "success");
-    } catch (err) {
-      console.error("handleExport:", err);
-      Swal.fire("Error", "Failed to export student data", "error");
-    }
+    <div class="export-top-actions">
+      <div class="export-top-actions-left">
+        <button type="button" class="export-mini-btn" id="selectAllExportCols">Select All</button>
+        <button type="button" class="export-mini-btn" id="defaultExportCols">Default</button>
+        <button type="button" class="export-mini-btn" id="clearExportCols">Clear</button>
+      </div>
+      <div class="export-top-actions-right">
+        <button type="button" class="export-mini-btn" id="downloadPdfExportCols">Download PDF</button>
+      </div>
+    </div>
+
+    <div class="export-columns-wrap">
+      <div class="export-col-grid">
+        ${EXPORT_COLUMN_OPTIONS.map(
+          (col) => `
+            <label class="export-col-item">
+              <input
+                type="checkbox"
+                class="export-col-checkbox"
+                value="${col.key}"
+                ${DEFAULT_EXPORT_COLUMNS.includes(col.key) ? "checked" : ""}
+              />
+              <span>${col.label}</span>
+            </label>
+          `
+        ).join("")}
+      </div>
+    </div>
+
+    <div class="export-note">
+      Excel is best for editing/filtering. PDF is best for printing/sharing.
+    </div>
+  `;
+
+  const collectSelectedColumns = () =>
+    Array.from(document.querySelectorAll(".export-col-checkbox:checked")).map((el) => el.value);
+
+  const downloadExportFile = async (format, selectedColumns) => {
+    const endpoint = format === "pdf" ? "/students/export-pdf" : "/students/export-excel";
+    const extension = format === "pdf" ? "pdf" : "xlsx";
+    const mimeFallback =
+      format === "pdf"
+        ? "application/pdf"
+        : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+
+    const resp = await api.post(
+      endpoint,
+      {
+        columns: selectedColumns,
+        class_id: selectedClass || null,
+        session_id: selectedSessionFilter || null,
+        status: selectedStatus || null,
+        search: search || "",
+      },
+      { responseType: "blob" }
+    );
+
+    const blob = new Blob([resp.data], {
+      type: resp.headers["content-type"] || mimeFallback,
+    });
+
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `Students_Export_${new Date().toISOString().split("T")[0]}.${extension}`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
   };
+
+  const result = await Swal.fire({
+    title: "Select Columns to Export",
+    html,
+    width: 760,
+    showCancelButton: true,
+    showDenyButton: true,
+    confirmButtonText: "Download Excel",
+    denyButtonText: "Download PDF",
+    cancelButtonText: "Cancel",
+    focusConfirm: false,
+    didOpen: () => {
+      const getChecks = () => Array.from(document.querySelectorAll(".export-col-checkbox"));
+
+      document.getElementById("selectAllExportCols")?.addEventListener("click", () => {
+        getChecks().forEach((el) => {
+          el.checked = true;
+        });
+      });
+
+      document.getElementById("defaultExportCols")?.addEventListener("click", () => {
+        getChecks().forEach((el) => {
+          el.checked = DEFAULT_EXPORT_COLUMNS.includes(el.value);
+        });
+      });
+
+      document.getElementById("clearExportCols")?.addEventListener("click", () => {
+        getChecks().forEach((el) => {
+          el.checked = false;
+        });
+      });
+
+      document.getElementById("downloadPdfExportCols")?.addEventListener("click", async () => {
+        const selectedColumns = collectSelectedColumns();
+        if (!selectedColumns.length) {
+          Swal.showValidationMessage("Please select at least one column");
+          return;
+        }
+
+        try {
+          Swal.showLoading();
+          await downloadExportFile("pdf", selectedColumns);
+          Swal.close();
+          await Swal.fire("Exported", "Student PDF downloaded successfully", "success");
+        } catch (err) {
+          console.error("handleExport PDF quick action:", err);
+          Swal.showValidationMessage(
+            err.response?.data?.message || "Failed to export student PDF"
+          );
+        }
+      });
+    },
+    preConfirm: () => {
+      const selectedColumns = collectSelectedColumns();
+
+      if (!selectedColumns.length) {
+        Swal.showValidationMessage("Please select at least one column");
+        return false;
+      }
+
+      return selectedColumns;
+    },
+    preDeny: () => {
+      const selectedColumns = collectSelectedColumns();
+
+      if (!selectedColumns.length) {
+        Swal.showValidationMessage("Please select at least one column");
+        return false;
+      }
+
+      return selectedColumns;
+    },
+  });
+
+  if (!result.isConfirmed && !result.isDenied) return;
+
+  try {
+    const selectedColumns = result.value;
+    const format = result.isDenied ? "pdf" : "excel";
+
+    await downloadExportFile(format, selectedColumns);
+
+    Swal.fire(
+      "Exported",
+      format === "pdf"
+        ? "Student PDF downloaded successfully"
+        : "Student Excel downloaded successfully",
+      "success"
+    );
+  } catch (err) {
+    console.error("handleExport:", err);
+    Swal.fire(
+      "Error",
+      err.response?.data?.message ||
+        (result.isDenied ? "Failed to export student PDF" : "Failed to export student data"),
+      "error"
+    );
+  }
+};
 
   const handleImport = async (file) => {
     if (!file) return;
