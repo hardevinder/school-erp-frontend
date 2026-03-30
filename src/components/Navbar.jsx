@@ -9,8 +9,8 @@ import { useRoles } from "../hooks/useRoles";
 
 /* ================= BRANDING ================= */
 
-const BRAND_NAME = "SIRHIND PUBLIC SCHOOL";
-const BRAND_LOGO = `${process.env.PUBLIC_URL}/images/SPS.jpeg`;
+const BRAND_NAME = "NEW MILTON PUBLIC SCHOOL";
+const BRAND_LOGO = `${process.env.PUBLIC_URL}/images/milton_logo.png`;
 
 /* ========================================== */
 
