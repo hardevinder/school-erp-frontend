@@ -59,20 +59,21 @@ const GROUP_ORDER = {
   Admissions: 8,
   "Fee Collection": 9,
   "Fee Setup": 10,
-  Transport: 11,
-  Library: 12,
-  "Front Office": 13,
-  "HR Management": 14,
-  Certificates: 15,
-  Reports: 16,
-  "Fee Reports": 17,
-  "School Info": 18,
-  Leave: 19,
-  "Leave Management": 20,
-  Disciplinary: 21,
-  Quick: 22,
-  Utilities: 23,
-  Student: 24,
+  Inventory: 11,
+  Transport: 12,
+  Library: 13,
+  "Front Office": 14,
+  "HR Management": 15,
+  Certificates: 16,
+  Reports: 17,
+  "Fee Reports": 18,
+  "School Info": 19,
+  Leave: 20,
+  "Leave Management": 21,
+  Disciplinary: 22,
+  Quick: 23,
+  Utilities: 24,
+  Student: 25,
 };
 
 function cleanGroups(groups = []) {
@@ -122,6 +123,7 @@ export default function Sidebar({ headerHeight = 56 }) {
   const roleLower = (activeRole || "").toLowerCase();
   const isSuperAdmin = roleLower === "superadmin" || roleLower === "super_admin";
   const isAdmin = isSuperAdmin || roleLower === "admin";
+  const isPrincipal = roleLower === "principal";
   const isAcademic = roleLower === "academic_coordinator";
   const isTeacher = roleLower === "teacher";
   const isStudent = roleLower === "student";
@@ -133,6 +135,31 @@ export default function Sidebar({ headerHeight = 56 }) {
     roleLower === "librarian" || roleLower === "library" || roleLower === "libraryadmin";
   const isTransport = roleLower === "transport" || roleLower === "transporter";
   const isExamination = roleLower === "examination";
+
+  const isInventoryAdmin = roleLower === "inventoryadmin";
+  const isStoreIncharge = roleLower === "storeincharge";
+  const isLabIncharge = roleLower === "labincharge";
+
+  const isInventoryRole =
+    isInventoryAdmin || isStoreIncharge || isLabIncharge || isPrincipal;
+
+  const inventoryViewRoles = [
+    "superadmin",
+    "admin",
+    "principal",
+    "accounts",
+    "account",
+    "inventoryadmin",
+    "storeincharge",
+    "labincharge",
+  ];
+
+  const inventoryManageRoles = [
+    "superadmin",
+    "admin",
+    "inventoryadmin",
+    "storeincharge",
+  ];
 
   const hasAccess = (item) => {
     if (!item?.roles || item.roles.length === 0) return true;
@@ -169,6 +196,105 @@ export default function Sidebar({ headerHeight = 56 }) {
 
   const menuGroups = useMemo(() => {
     const groups = [];
+
+    // ====== INVENTORY ONLY ROLES ======
+    if (isInventoryRole && !isAdmin && !isAccounts) {
+      groups.push({
+        heading: "Main",
+        items: [
+          {
+            key: "inventory-dashboard-main",
+            label: "Inventory Dashboard",
+            icon: "bi-box-seam",
+            path: "/inventory",
+            roles: ["principal", "inventoryadmin", "storeincharge", "labincharge"],
+          },
+        ],
+      });
+
+      groups.push({
+        heading: "Inventory",
+        items: [
+          {
+            key: "inventory-dashboard",
+            label: "Dashboard",
+            icon: "bi-speedometer2",
+            path: "/inventory",
+            roles: ["principal", "inventoryadmin", "storeincharge", "labincharge"],
+          },
+          {
+            key: "inventory-categories",
+            label: "Categories",
+            icon: "bi-tags",
+            path: "/inventory/categories",
+            roles: ["principal", "inventoryadmin", "storeincharge", "labincharge"],
+          },
+          {
+            key: "inventory-items",
+            label: "Items",
+            icon: "bi-box2",
+            path: "/inventory/items",
+            roles: ["principal", "inventoryadmin", "storeincharge", "labincharge"],
+          },
+          {
+            key: "inventory-locations",
+            label: "Locations",
+            icon: "bi-geo-alt",
+            path: "/inventory/locations",
+            roles: ["principal", "inventoryadmin", "storeincharge", "labincharge"],
+          },
+          {
+            key: "inventory-opening-stock",
+            label: "Opening Stock",
+            icon: "bi-archive",
+            path: "/inventory/opening-stock",
+            roles: ["inventoryadmin", "storeincharge"],
+          },
+          {
+            key: "inventory-receive-stock",
+            label: "Receive Stock",
+            icon: "bi-box-arrow-in-down",
+            path: "/inventory/receive-stock",
+            roles: ["inventoryadmin", "storeincharge"],
+          },
+          {
+            key: "inventory-issue-stock",
+            label: "Issue Stock",
+            icon: "bi-box-arrow-up",
+            path: "/inventory/issue-stock",
+            roles: ["inventoryadmin", "storeincharge"],
+          },
+          {
+            key: "inventory-transfer-stock",
+            label: "Transfer Stock",
+            icon: "bi-arrow-left-right",
+            path: "/inventory/transfer-stock",
+            roles: ["inventoryadmin", "storeincharge"],
+          },
+          {
+            key: "inventory-adjust-stock",
+            label: "Adjust Stock",
+            icon: "bi-sliders",
+            path: "/inventory/adjust-stock",
+            roles: ["inventoryadmin", "storeincharge"],
+          },
+          {
+            key: "inventory-transactions",
+            label: "Transactions",
+            icon: "bi-journal-text",
+            path: "/inventory/transactions",
+            roles: ["principal", "inventoryadmin", "storeincharge", "labincharge"],
+          },
+          {
+            key: "inventory-stock-report",
+            label: "Stock Report",
+            icon: "bi-bar-chart-line",
+            path: "/inventory/stock-report",
+            roles: ["principal", "inventoryadmin", "storeincharge", "labincharge"],
+          },
+        ],
+      });
+    }
 
     // ====== EXAMINATION ======
     if (isExamination) {
@@ -614,6 +740,54 @@ export default function Sidebar({ headerHeight = 56 }) {
       });
 
       groups.push({
+        heading: "Inventory",
+        items: [
+          {
+            key: "inventory-dashboard-accounts",
+            label: "Inventory Dashboard",
+            icon: "bi-box-seam",
+            path: "/inventory",
+            roles: inventoryViewRoles,
+          },
+          {
+            key: "inventory-categories-accounts",
+            label: "Categories",
+            icon: "bi-tags",
+            path: "/inventory/categories",
+            roles: inventoryViewRoles,
+          },
+          {
+            key: "inventory-items-accounts",
+            label: "Items",
+            icon: "bi-box2",
+            path: "/inventory/items",
+            roles: inventoryViewRoles,
+          },
+          {
+            key: "inventory-locations-accounts",
+            label: "Locations",
+            icon: "bi-geo-alt",
+            path: "/inventory/locations",
+            roles: inventoryViewRoles,
+          },
+          {
+            key: "inventory-transactions-accounts",
+            label: "Inventory Transactions",
+            icon: "bi-journal-text",
+            path: "/inventory/transactions",
+            roles: inventoryViewRoles,
+          },
+          {
+            key: "inventory-stock-report-accounts",
+            label: "Stock Report",
+            icon: "bi-bar-chart-line",
+            path: "/inventory/stock-report",
+            roles: inventoryViewRoles,
+          },
+        ],
+      });
+
+      groups.push({
         heading: "Reports",
         items: [
           {
@@ -746,6 +920,23 @@ export default function Sidebar({ headerHeight = 56 }) {
           { key: "feeHeadings", label: "Fee Headings", icon: "bi-bookmark", path: "/fee-headings" },
           { key: "feeCategory", label: "Fee Category", icon: "bi-tags", path: "/fee-category" },
           { key: "concessions", label: "Concessions", icon: "bi-percent", path: "/concessions" },
+        ],
+      });
+
+      groups.push({
+        heading: "Inventory",
+        items: [
+          { key: "inventory-dashboard-admin", label: "Inventory Dashboard", icon: "bi-box-seam", path: "/inventory", roles: inventoryViewRoles },
+          { key: "inventory-categories-admin", label: "Categories", icon: "bi-tags", path: "/inventory/categories", roles: inventoryViewRoles },
+          { key: "inventory-items-admin", label: "Items", icon: "bi-box2", path: "/inventory/items", roles: inventoryViewRoles },
+          { key: "inventory-locations-admin", label: "Locations", icon: "bi-geo-alt", path: "/inventory/locations", roles: inventoryViewRoles },
+          { key: "inventory-opening-stock-admin", label: "Opening Stock", icon: "bi-archive", path: "/inventory/opening-stock", roles: inventoryManageRoles },
+          { key: "inventory-receive-stock-admin", label: "Receive Stock", icon: "bi-box-arrow-in-down", path: "/inventory/receive-stock", roles: inventoryManageRoles },
+          { key: "inventory-issue-stock-admin", label: "Issue Stock", icon: "bi-box-arrow-up", path: "/inventory/issue-stock", roles: inventoryManageRoles },
+          { key: "inventory-transfer-stock-admin", label: "Transfer Stock", icon: "bi-arrow-left-right", path: "/inventory/transfer-stock", roles: inventoryManageRoles },
+          { key: "inventory-adjust-stock-admin", label: "Adjust Stock", icon: "bi-sliders", path: "/inventory/adjust-stock", roles: inventoryManageRoles },
+          { key: "inventory-transactions-admin", label: "Inventory Transactions", icon: "bi-journal-text", path: "/inventory/transactions", roles: inventoryViewRoles },
+          { key: "inventory-stock-report-admin", label: "Stock Report", icon: "bi-bar-chart-line", path: "/inventory/stock-report", roles: inventoryViewRoles },
         ],
       });
 
@@ -999,6 +1190,8 @@ export default function Sidebar({ headerHeight = 56 }) {
     isLibrarian,
     isTransport,
     isExamination,
+    isPrincipal,
+    isInventoryRole,
     roleLower,
   ]);
 
@@ -1040,14 +1233,14 @@ export default function Sidebar({ headerHeight = 56 }) {
   const allItems = useMemo(() => flattenMenu(menuGroups), [menuGroups]);
 
   const PRIMARY_BY_ROLE = {
-    admin: ["dashboard", "transactions", "studentDue", "opening-balances"],
+    admin: ["dashboard", "transactions", "studentDue", "inventory-dashboard-admin", "opening-balances"],
     academic_coordinator: ["dashboard", "combined-timetable", "students", "exam-schemes"],
     teacher: ["dashboard", "mark-attendance", "teacher-timetable-display", "marks-entry"],
     student: ["student-home", "student-diary", "student-attendance", "student-timetable-display"],
     hr: ["dashboard", "employees", "employee-attendance", "hr-leave-requests"],
-    superadmin: ["dashboard", "users", "transactions", "opening-balances"],
-    accounts: ["accounts-dashboard", "transactions", "studentDue", "dayWiseReport"],
-    account: ["accounts-dashboard", "transactions", "studentDue", "dayWiseReport"],
+    superadmin: ["dashboard", "users", "transactions", "inventory-dashboard-admin", "opening-balances"],
+    accounts: ["accounts-dashboard", "transactions", "inventory-dashboard-accounts", "studentDue", "dayWiseReport"],
+    account: ["accounts-dashboard", "transactions", "inventory-dashboard-accounts", "studentDue", "dayWiseReport"],
     frontoffice: ["frontoffice-dashboard", "gate-pass", "visitors", "enquiries", "students"],
     admission: ["admission-dashboard", "enquiries", "student-strength-projection", "students"],
     examination: ["exam-dashboard", "exams", "exam-schemes", "marks-entry", "report-card-generator"],
@@ -1056,6 +1249,10 @@ export default function Sidebar({ headerHeight = 56 }) {
     librarian: ["library-dashboard", "library-books", "library-issue-return", "library-members"],
     library: ["library-dashboard", "library-books", "library-issue-return", "library-members"],
     libraryadmin: ["library-dashboard", "library-books", "library-issue-return", "library-members"],
+    principal: ["inventory-dashboard-main", "inventory-items", "inventory-transactions", "inventory-stock-report"],
+    inventoryadmin: ["inventory-dashboard-main", "inventory-items", "inventory-receive-stock", "inventory-transactions"],
+    storeincharge: ["inventory-dashboard-main", "inventory-items", "inventory-receive-stock", "inventory-issue-stock"],
+    labincharge: ["inventory-dashboard-main", "inventory-items", "inventory-transactions", "inventory-stock-report"],
   };
 
   const primaryKeys = PRIMARY_BY_ROLE[roleLower] || allItems.slice(0, 4).map((i) => i.key);

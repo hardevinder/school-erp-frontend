@@ -174,6 +174,20 @@ import SyllabusApprovalCoordinator from "./pages/SyllabusApprovalCoordinator";
 import LessonPlanEvaluations from "./pages/LessonPlanEvaluations";
 import AdmissionAssessments from "./pages/AdmissionAssessments";
 import EntranceExamPortal from "./pages/EntranceExamPortal";
+import InventoryDashboard from "./components/InventoryDashboard";
+import {
+
+  InventoryCategories,
+  InventoryItems,
+  InventoryLocations,
+  InventoryOpeningStock,
+  InventoryReceiveStock,
+  InventoryIssueStock,
+  InventoryTransferStock,
+  InventoryAdjustStock,
+  InventoryTransactions as InventoryTransactionsPage,
+  InventoryStockReport,
+} from "./pages/inventory";
 
 // ---------- auth guard ----------
 const RequireRole = ({ roles = [], children }) => {
@@ -388,6 +402,167 @@ function App() {
             />
           <Route path="/sections" element={<Sections />} />
           <Route path="/schools" element={<Schools />} />
+                    {/* ✅ Inventory */}
+          <Route
+            path="/inventory"
+            element={
+              <RequireRole
+                roles={[
+                  "superadmin",
+                  "admin",
+                  "principal",
+                  "accounts",
+                  "inventoryadmin",
+                  "storeincharge",
+                  "labincharge",
+                ]}
+              >
+                <InventoryDashboard />
+              </RequireRole>
+            }
+          />
+          <Route path="/inventory/dashboard" element={<Navigate to="/inventory" replace />} />
+
+          <Route
+            path="/inventory/categories"
+            element={
+              <RequireRole
+                roles={[
+                  "superadmin",
+                  "admin",
+                  "principal",
+                  "accounts",
+                  "inventoryadmin",
+                  "storeincharge",
+                  "labincharge",
+                ]}
+              >
+                <InventoryCategories />
+              </RequireRole>
+            }
+          />
+
+          <Route
+            path="/inventory/items"
+            element={
+              <RequireRole
+                roles={[
+                  "superadmin",
+                  "admin",
+                  "principal",
+                  "accounts",
+                  "inventoryadmin",
+                  "storeincharge",
+                  "labincharge",
+                ]}
+              >
+                <InventoryItems />
+              </RequireRole>
+            }
+          />
+
+          <Route
+            path="/inventory/locations"
+            element={
+              <RequireRole
+                roles={[
+                  "superadmin",
+                  "admin",
+                  "principal",
+                  "accounts",
+                  "inventoryadmin",
+                  "storeincharge",
+                  "labincharge",
+                ]}
+              >
+                <InventoryLocations />
+              </RequireRole>
+            }
+          />
+
+          <Route
+            path="/inventory/opening-stock"
+            element={
+              <RequireRole roles={["superadmin", "admin", "inventoryadmin", "storeincharge"]}>
+                <InventoryOpeningStock />
+              </RequireRole>
+            }
+          />
+
+          <Route
+            path="/inventory/receive-stock"
+            element={
+              <RequireRole roles={["superadmin", "admin", "inventoryadmin", "storeincharge"]}>
+                <InventoryReceiveStock />
+              </RequireRole>
+            }
+          />
+
+          <Route
+            path="/inventory/issue-stock"
+            element={
+              <RequireRole roles={["superadmin", "admin", "inventoryadmin", "storeincharge"]}>
+                <InventoryIssueStock />
+              </RequireRole>
+            }
+          />
+
+          <Route
+            path="/inventory/transfer-stock"
+            element={
+              <RequireRole roles={["superadmin", "admin", "inventoryadmin", "storeincharge"]}>
+                <InventoryTransferStock />
+              </RequireRole>
+            }
+          />
+
+          <Route
+            path="/inventory/adjust-stock"
+            element={
+              <RequireRole roles={["superadmin", "admin", "inventoryadmin", "storeincharge"]}>
+                <InventoryAdjustStock />
+              </RequireRole>
+            }
+          />
+
+          <Route
+            path="/inventory/transactions"
+            element={
+              <RequireRole
+                roles={[
+                  "superadmin",
+                  "admin",
+                  "principal",
+                  "accounts",
+                  "inventoryadmin",
+                  "storeincharge",
+                  "labincharge",
+                ]}
+              >
+                <InventoryTransactionsPage />
+              </RequireRole>
+            }
+          />
+
+          <Route
+            path="/inventory/stock-report"
+            element={
+              <RequireRole
+                roles={[
+                  "superadmin",
+                  "admin",
+                  "principal",
+                  "accounts",
+                  "inventoryadmin",
+                  "storeincharge",
+                  "labincharge",
+                ]}
+              >
+                <InventoryStockReport />
+              </RequireRole>
+            }
+          />
+
 
           {/* ✅ Transport: Drivers / Conductors (guarded) */}
           <Route

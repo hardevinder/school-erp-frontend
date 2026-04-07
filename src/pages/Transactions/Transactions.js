@@ -1364,19 +1364,20 @@ const Transactions = () => {
             ? Number(transportItem.due ?? transportItem.FinalDue ?? 0)
             : Math.max(0, remainingBeforeFineFromServer + vanFineFromServer);
 
-        let showVan;
-        if (hasExistingTxnForStudent) {
-          showVan = Boolean(transportApplicable);
-        } else {
-          const rid = inferredRouteIdForHead(headId);
-          showVan = Boolean(
-            transportApplicable &&
-              (transportItem ||
-                selectedRouteFee > 0 ||
-                rid ||
-                studentAssignedRouteId)
-          );
-        }
+        // let showVan;
+        // if (hasExistingTxnForStudent) {
+        //   showVan = Boolean(transportApplicable);
+        // } else {
+        //   const rid = inferredRouteIdForHead(headId);
+        //   showVan = Boolean(
+        //     transportApplicable &&
+        //       (transportItem ||
+        //         selectedRouteFee > 0 ||
+        //         rid ||
+        //         studentAssignedRouteId)
+        //   );
+        // }
+        let showVan = Boolean(transportApplicable);
 
         const vanFields = showVan
           ? {
@@ -2831,17 +2832,16 @@ const Transactions = () => {
                                     const fine = Number(row.Van_Fine_Amount || 0);
 
                                     const baseWithoutFine = Math.max(0, routeFee - prevRec - cons);
-                                    const maxNowPayable = baseWithoutFine + fine;
 
-                                    if ((row.VanFee || 0) > maxNowPayable) row.VanFee = maxNowPayable;
-
+                                    row.VanFee = Math.max(0, Number(row.VanFee || 0));
                                     row.Van_Fee_Remaining = Math.max(0, baseWithoutFine - (row.VanFee || 0));
                                     row.Van_Fee_Due = Math.max(0, baseWithoutFine + fine);
 
                                     updated[index] = row;
                                     setNewTransactionDetails(updated);
                                   }}
-                                  disabled={(feeDetail.Van_Fee_Due || 0) <= 0}
+                                  // disabled={(feeDetail.Van_Fee_Due || 0) <= 0}
+                                  disabled={!feeDetail.ShowVanFeeInput}
                                 />
                               ) : (
                                 "—"
@@ -2856,7 +2856,8 @@ const Transactions = () => {
                                   onChange={(e) => {
                                     const updated = [...newTransactionDetails];
                                     const row = { ...updated[index] };
-                                    const raw = parseInt(e.target.value, 10) || 0;
+                                    const parsed = parseInt(e.target.value, 10);
+                                    const enteredValue = Number.isNaN(parsed) ? 0 : Math.max(0, parsed);
 
                                     const routeFee = Number(row._routeFee || 0);
                                     const prevRec = Number(row._receivedVanFee || 0);
@@ -2864,16 +2865,16 @@ const Transactions = () => {
                                     const fine = Number(row.Van_Fine_Amount || 0);
 
                                     const baseWithoutFine = Math.max(0, routeFee - prevRec - cons);
-                                    const maxNowPayable = baseWithoutFine + fine;
 
-                                    row.VanFee = Math.max(0, Math.min(raw, maxNowPayable));
+                                    row.VanFee = enteredValue;
                                     row.Van_Fee_Remaining = Math.max(0, baseWithoutFine - (row.VanFee || 0));
                                     row.Van_Fee_Due = Math.max(0, baseWithoutFine + fine);
 
                                     updated[index] = row;
                                     setNewTransactionDetails(updated);
                                   }}
-                                  disabled={(feeDetail.Van_Fee_Due || 0) <= 0}
+                                  // disabled={(feeDetail.Van_Fee_Due || 0) <= 0}
+                                  disabled={!feeDetail.ShowVanFeeInput}
                                 />
                               ) : (
                                 "—"

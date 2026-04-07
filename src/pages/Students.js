@@ -8,11 +8,24 @@ import "./Students.css";
 const getRoleFlags = () => {
   const singleRole = localStorage.getItem("userRole");
   const multiRoles = JSON.parse(localStorage.getItem("roles") || "[]");
-  const roles = multiRoles.length ? multiRoles : [singleRole].filter(Boolean);
+
+  const roles = (multiRoles.length ? multiRoles : [singleRole].filter(Boolean))
+    .map((role) => String(role || "").trim().toLowerCase())
+    .filter(Boolean);
+
+  const isAdmin = roles.includes("admin");
+  const isSuperadmin = roles.includes("superadmin");
+  const isAccounts = roles.includes("accounts");
+  const isFrontoffice = roles.includes("frontoffice");
+
   return {
     roles,
-    isAdmin: roles.includes("admin"),
-    isSuperadmin: roles.includes("superadmin"),
+    isAdmin,
+    isSuperadmin,
+    isAccounts,
+    isFrontoffice,
+    canManageStudents: isAdmin || isSuperadmin || isAccounts || isFrontoffice,
+    canDeleteStudents: isSuperadmin,
   };
 };
 
@@ -152,8 +165,7 @@ const DEFAULT_EXPORT_COLUMNS = [
 ];
 
 const Students = () => {
-  const { isAdmin, isSuperadmin } = getRoleFlags();
-  const isAdminOrSuperAdmin = isAdmin || isSuperadmin;
+  const { canManageStudents, canDeleteStudents } = getRoleFlags();
 
   // data lists
   const [students, setStudents] = useState([]);
@@ -295,9 +307,9 @@ const Students = () => {
     fetchSessions();
     fetchTransportations();
     fetchHouses();
-    if (isAdminOrSuperAdmin) fetchConcessions();
+    if (canManageStudents) fetchConcessions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAdminOrSuperAdmin]);
+  }, [canManageStudents]);
 
   /* ============================================================
    * ✅ House auto-suggest (lowest strength) helpers
@@ -344,7 +356,7 @@ const Students = () => {
 
   // toggle status
   const toggleStudentStatus = async (student) => {
-    if (!isAdminOrSuperAdmin) return;
+    if (!canManageStudents) return;
     const newStatus = student.status === "enabled" ? "disabled" : "enabled";
 
     const result = await Swal.fire({
@@ -369,7 +381,7 @@ const Students = () => {
 
   // delete
   const handleDelete = async (id, name) => {
-    if (!isSuperadmin) return;
+    if (!canDeleteStudents) return;
     const result = await Swal.fire({
       title: "Confirm Deletion",
       text: `Permanently delete ${name}? This action cannot be undone.`,
@@ -463,7 +475,7 @@ const Students = () => {
     await fetchTransportations();
     await fetchHouses();
     await fetchStudents();
-    if (isAdminOrSuperAdmin) await fetchConcessions();
+    if (canManageStudents) await fetchConcessions();
 
     const isEdit = mode === "edit";
     const s = student || {};
@@ -786,7 +798,7 @@ const Students = () => {
             </div>
 
             ${
-              isAdminOrSuperAdmin
+              canManageStudents
                 ? `<div class="full-row">
                     <label class="form-label">Concession Type</label>
                     <select id="f_concession_id" class="form-field">
@@ -1379,11 +1391,11 @@ const Students = () => {
 
   // ✅ NEW: click student row to open EDIT popup
   const handleRowClickOpenEdit = (stu) => {
-    if (!isAdminOrSuperAdmin) return; // optional: only allow admin/superadmin to edit on click
+    if (!canManageStudents) return; // allow only authorized management roles to edit on click
     showStudentForm("edit", stu);
   };
-// Replace your current handleExport function in src/pages/Students.js with this one.
-const handleExport = async () => {
+
+  const handleExport = async () => {
   const html = `
     <style>
       .export-columns-wrap {
@@ -1431,6 +1443,26 @@ const handleExport = async () => {
       .export-mini-btn:hover {
         background: #f9fafb;
       }
+      .export-extra-options {
+        text-align: left;
+        border: 1px solid #e5e7eb;
+        border-radius: 10px;
+        padding: 10px 12px;
+        background: #f9fafb;
+        margin-bottom: 10px;
+      }
+      .export-extra-option {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 13px;
+        color: #111827;
+      }
+      .export-extra-hint {
+        margin-top: 6px;
+        font-size: 11px;
+        color: #6b7280;
+      }
       .export-note {
         text-align: left;
         font-size: 12px;
@@ -1452,6 +1484,16 @@ const handleExport = async () => {
       </div>
       <div class="export-top-actions-right">
         <button type="button" class="export-mini-btn" id="downloadPdfExportCols">Download PDF</button>
+      </div>
+    </div>
+
+    <div class="export-extra-options">
+      <label class="export-extra-option">
+        <input type="checkbox" id="includeSiblingDetailsExport" />
+        <span>Include sibling details</span>
+      </label>
+      <div class="export-extra-hint">
+        This will automatically add sibling columns in both Excel and PDF export.
       </div>
     </div>
 
@@ -1481,7 +1523,10 @@ const handleExport = async () => {
   const collectSelectedColumns = () =>
     Array.from(document.querySelectorAll(".export-col-checkbox:checked")).map((el) => el.value);
 
-  const downloadExportFile = async (format, selectedColumns) => {
+  const getIncludeSiblings = () =>
+    Boolean(document.getElementById("includeSiblingDetailsExport")?.checked);
+
+  const downloadExportFile = async (format, selectedColumns, includeSiblings) => {
     const endpoint = format === "pdf" ? "/students/export-pdf" : "/students/export-excel";
     const extension = format === "pdf" ? "pdf" : "xlsx";
     const mimeFallback =
@@ -1497,6 +1542,7 @@ const handleExport = async () => {
         session_id: selectedSessionFilter || null,
         status: selectedStatus || null,
         search: search || "",
+        include_siblings_details: includeSiblings,
       },
       { responseType: "blob" }
     );
@@ -1548,6 +1594,8 @@ const handleExport = async () => {
 
       document.getElementById("downloadPdfExportCols")?.addEventListener("click", async () => {
         const selectedColumns = collectSelectedColumns();
+        const includeSiblings = getIncludeSiblings();
+
         if (!selectedColumns.length) {
           Swal.showValidationMessage("Please select at least one column");
           return;
@@ -1555,7 +1603,7 @@ const handleExport = async () => {
 
         try {
           Swal.showLoading();
-          await downloadExportFile("pdf", selectedColumns);
+          await downloadExportFile("pdf", selectedColumns, includeSiblings);
           Swal.close();
           await Swal.fire("Exported", "Student PDF downloaded successfully", "success");
         } catch (err) {
@@ -1568,33 +1616,35 @@ const handleExport = async () => {
     },
     preConfirm: () => {
       const selectedColumns = collectSelectedColumns();
+      const includeSiblings = getIncludeSiblings();
 
       if (!selectedColumns.length) {
         Swal.showValidationMessage("Please select at least one column");
         return false;
       }
 
-      return selectedColumns;
+      return { selectedColumns, includeSiblings };
     },
     preDeny: () => {
       const selectedColumns = collectSelectedColumns();
+      const includeSiblings = getIncludeSiblings();
 
       if (!selectedColumns.length) {
         Swal.showValidationMessage("Please select at least one column");
         return false;
       }
 
-      return selectedColumns;
+      return { selectedColumns, includeSiblings };
     },
   });
 
   if (!result.isConfirmed && !result.isDenied) return;
 
   try {
-    const selectedColumns = result.value;
+    const { selectedColumns, includeSiblings } = result.value || {};
     const format = result.isDenied ? "pdf" : "excel";
 
-    await downloadExportFile(format, selectedColumns);
+    await downloadExportFile(format, selectedColumns, includeSiblings);
 
     Swal.fire(
       "Exported",
@@ -1750,7 +1800,7 @@ const handleExport = async () => {
             }}
           />
         </div>
-        {isAdminOrSuperAdmin && (
+        {canManageStudents && (
           <button
             className="btn btn-outline-secondary btn-sm"
             onClick={(ev) => {
@@ -1832,7 +1882,7 @@ const handleExport = async () => {
       { label: "Admission Type", value: student.admission_type || "-" },
     ];
 
-    if (isAdminOrSuperAdmin) {
+    if (canManageStudents) {
       fields.push({
         label: "Concession",
         value: student.concession_name || "-",
@@ -1892,7 +1942,7 @@ const handleExport = async () => {
           class="rounded-circle border shadow-sm"
           style="width: 90px; height: 90px; object-fit: cover;" />
         ${
-          isAdminOrSuperAdmin
+          canManageStudents
             ? `<button id="btnChangePhoto" class="btn btn-outline-primary btn-sm">${
                 hasPhoto ? "Change Photo" : "Upload Photo"
               }</button>`
@@ -1977,7 +2027,7 @@ const handleExport = async () => {
           });
         }
         const btn = document.getElementById("btnChangePhoto");
-        if (btn && isAdminOrSuperAdmin) {
+        if (btn && canManageStudents) {
           btn.addEventListener("click", (e) => {
             e.stopPropagation();
             Swal.close();
@@ -2002,7 +2052,7 @@ const handleExport = async () => {
         <div>
           <h2 className="h6 mb-0 fw-bold text-dark">Student Management</h2>
           <p className="mb-0 text-muted" style={{ fontSize: "0.78rem" }}>
-            Manage student records, admissions, transport and concessions.
+            Manage student records, admissions, transport, and related details.
           </p>
         </div>
 
@@ -2018,11 +2068,11 @@ const handleExport = async () => {
             {showAllColumns ? "Full" : "Compact"}
           </button>
 
-          {isAdminOrSuperAdmin && (
+          {canManageStudents && (
             <>
               <button className="btn btn-sm btn-primary" onClick={handleAdd}>
                 <i className="bi bi-plus-circle me-1"></i>
-                Add
+                Add Student
               </button>
 
               <button
@@ -2031,14 +2081,14 @@ const handleExport = async () => {
                 disabled={importing}
               >
                 <i className="bi bi-upload me-1"></i>
-                {importing ? "Importing..." : "Import"}
+                {importing ? "Importing..." : "Import Excel"}
               </button>
             </>
           )}
 
           <button className="btn btn-sm btn-outline-primary" onClick={handleExport}>
             <i className="bi bi-download me-1"></i>
-            Export
+            Export Records
           </button>
         </div>
       </div>
@@ -2169,7 +2219,7 @@ const handleExport = async () => {
                       <th className="border-0 py-2 d-none d-lg-table-cell">Session</th>
                       <th className="border-0 py-2 d-none d-xl-table-cell">Aadhaar</th>
                       <th className="border-0 py-2 d-none d-lg-table-cell">Type</th>
-                      {isAdminOrSuperAdmin && (
+                      {canManageStudents && (
                         <th className="border-0 py-2 d-none d-xl-table-cell">Concession</th>
                       )}
                       <th className="border-0 py-2 d-none d-xl-table-cell">Transport</th>
@@ -2249,8 +2299,8 @@ const handleExport = async () => {
                           key={stu.id}
                           className="table-hover-row"
                           onClick={() => handleRowClickOpenEdit(stu)} // ✅ CLICK STUDENT -> EDIT POPUP
-                          style={{ cursor: isAdminOrSuperAdmin ? "pointer" : "default" }}
-                          title={isAdminOrSuperAdmin ? "Click to edit" : ""}
+                          style={{ cursor: canManageStudents ? "pointer" : "default" }}
+                          title={canManageStudents ? "Click to edit student" : ""}
                         >
                           <td className="py-2 d-none d-md-table-cell">{idx + 1}</td>
 
@@ -2385,7 +2435,7 @@ const handleExport = async () => {
                                 </span>
                               </td>
 
-                              {isAdminOrSuperAdmin && (
+                              {canManageStudents && (
                                 <td className="py-2 d-none d-xl-table-cell">
                                   <span className="badge bg-info text-dark students-badge">
                                     {stu.concession_name || "-"}
@@ -2401,7 +2451,7 @@ const handleExport = async () => {
 
                           <td className="py-1">
                             <div className="d-flex gap-1 align-items-center flex-wrap">
-                              {isAdminOrSuperAdmin && (
+                              {canManageStudents && (
                                 <>
                                   <div className="form-check form-switch form-switch-sm m-0">
                                     <input
@@ -2452,7 +2502,7 @@ const handleExport = async () => {
                                 <i className="bi bi-printer"></i>
                               </button>
 
-                              {isSuperadmin && (
+                              {canDeleteStudents && (
                                 <button
                                   className="btn btn-outline-danger btn-sm"
                                   onClick={(e) => {
@@ -2471,7 +2521,7 @@ const handleExport = async () => {
                     })
                 ) : (
                   <tr>
-                    <td colSpan={isCompact ? 5 : isAdminOrSuperAdmin ? 13 : 12} className="text-center py-4">
+                    <td colSpan={isCompact ? 5 : canManageStudents ? 13 : 12} className="text-center py-4">
                       <div className="text-muted">
                         <i className="bi bi-inbox display-6 mb-2"></i>
                         <p className="mb-0">No students match the current filters.</p>
