@@ -25,6 +25,7 @@ const BulkPromotion = () => {
 
   const [previewRows, setPreviewRows] = useState([]);
   const [previewMeta, setPreviewMeta] = useState(null);
+  const [selectedStudentIds, setSelectedStudentIds] = useState([]);
 
   useEffect(() => {
     fetchMasters();
@@ -48,7 +49,6 @@ const BulkPromotion = () => {
       setSections(sectionsData);
       setSessions(sessionsData);
 
-      // Try to prefill active session if available
       const activeSession =
         sessionsData.find((s) => s.is_active || s.isActive || s.active) || null;
 
@@ -81,7 +81,6 @@ const BulkPromotion = () => {
     return found?.name || found?.session_name || "-";
   };
 
-  // Sections API is returning global sections, not class-wise mapped sections
   const fromSections = useMemo(() => {
     return Array.isArray(sections) ? sections : [];
   }, [sections]);
@@ -90,22 +89,30 @@ const BulkPromotion = () => {
     return Array.isArray(sections) ? sections : [];
   }, [sections]);
 
+  const selectedCount = selectedStudentIds.length;
+  const allSelectableIds = previewRows
+    .map((stu) => stu.id)
+    .filter((id) => id !== undefined && id !== null);
+
+  const isAllSelected =
+    allSelectableIds.length > 0 &&
+    allSelectableIds.every((id) => selectedStudentIds.includes(id));
+
   const handleChange = (e) => {
     const { name, value } = e.target;
 
     setForm((prev) => {
       const updated = { ...prev, [name]: value };
 
-      // reset dependent sections when class changes
       if (name === "from_class_id") updated.from_section_id = "";
       if (name === "to_class_id") updated.to_section_id = "";
 
       return updated;
     });
 
-    // clear previous preview when user changes filters
     setPreviewRows([]);
     setPreviewMeta(null);
+    setSelectedStudentIds([]);
   };
 
   const validateForm = () => {
@@ -147,6 +154,7 @@ const BulkPromotion = () => {
       setPreviewLoading(true);
       setPreviewRows([]);
       setPreviewMeta(null);
+      setSelectedStudentIds([]);
 
       const payload = buildPayload();
       const res = await api.post("/students/bulk-promotion/preview", payload);
@@ -171,18 +179,45 @@ const BulkPromotion = () => {
       setPreviewRows(rows);
       setPreviewMeta(data);
 
-      Swal.fire("Preview Ready", `${rows.length} student(s) found for promotion.`, "success");
+      const ids = rows
+        .map((stu) => stu.id)
+        .filter((id) => id !== undefined && id !== null);
+
+      setSelectedStudentIds(ids);
+
+      Swal.fire(
+        "Preview Ready",
+        `${rows.length} student(s) found. All are selected by default.`,
+        "success"
+      );
     } catch (error) {
       console.error("Preview bulk promotion failed:", error);
       Swal.fire(
         "Error",
         error?.response?.data?.message ||
           error?.response?.data?.error ||
-          "Failed to preview students for promotion.",
+          "Failed to preview students.",
         "error"
       );
     } finally {
       setPreviewLoading(false);
+    }
+  };
+
+  const toggleStudentSelection = (studentId) => {
+    setSelectedStudentIds((prev) => {
+      if (prev.includes(studentId)) {
+        return prev.filter((id) => id !== studentId);
+      }
+      return [...prev, studentId];
+    });
+  };
+
+  const handleSelectAll = () => {
+    if (isAllSelected) {
+      setSelectedStudentIds([]);
+    } else {
+      setSelectedStudentIds(allSelectableIds);
     }
   };
 
@@ -194,12 +229,23 @@ const BulkPromotion = () => {
     }
 
     if (!previewRows.length) {
-      Swal.fire("Preview Required", "Please preview students before executing promotion.", "warning");
+      Swal.fire("Preview Required", "Please preview students before proceeding.", "warning");
       return;
     }
 
+    if (!selectedStudentIds.length) {
+      Swal.fire("No Students Selected", "Please select at least one student.", "warning");
+      return;
+    }
+
+    const actionLabel =
+      Number(form.to_class_id) < Number(form.from_class_id) ||
+      Number(form.to_session_id) < Number(form.from_session_id)
+        ? "Demotion"
+        : "Promotion";
+
     const confirm = await Swal.fire({
-      title: "Confirm Bulk Promotion",
+      title: `Confirm Bulk ${actionLabel}`,
       html: `
         <div style="text-align:left">
           <p><strong>From:</strong> ${getSessionName(form.from_session_id)} / ${getClassName(
@@ -208,15 +254,16 @@ const BulkPromotion = () => {
           <p><strong>To:</strong> ${getSessionName(form.to_session_id)} / ${getClassName(
         form.to_class_id
       )} / ${getSectionName(form.to_section_id)}</p>
-          <p><strong>Total Students:</strong> ${previewRows.length}</p>
+          <p><strong>Total Previewed:</strong> ${previewRows.length}</p>
+          <p><strong>Selected Students:</strong> ${selectedStudentIds.length}</p>
           <p style="color:#b91c1c;font-weight:600;margin-top:10px;">
-            This action will promote all previewed students.
+            Only selected students will be updated.
           </p>
         </div>
       `,
       icon: "warning",
       showCancelButton: true,
-      confirmButtonText: "Yes, Promote",
+      confirmButtonText: `Yes, Execute ${actionLabel}`,
       cancelButtonText: "Cancel",
       confirmButtonColor: "#198754",
     });
@@ -226,19 +273,24 @@ const BulkPromotion = () => {
     try {
       setExecuteLoading(true);
 
-      const payload = buildPayload();
+      const payload = {
+        ...buildPayload(),
+        student_ids: selectedStudentIds,
+      };
+
       const res = await api.post("/students/bulk-promotion/execute", payload);
 
       Swal.fire(
         "Success",
-        res?.data?.message || "Students promoted successfully.",
+        res?.data?.message ||
+          `${selectedStudentIds.length} student(s) updated successfully.`,
         "success"
       );
 
       setPreviewRows([]);
       setPreviewMeta(null);
+      setSelectedStudentIds([]);
 
-      // keep destination as next "from" if user wants another promotion batch
       setForm((prev) => ({
         ...prev,
         from_session_id: prev.to_session_id,
@@ -251,7 +303,7 @@ const BulkPromotion = () => {
         "Error",
         error?.response?.data?.message ||
           error?.response?.data?.error ||
-          "Failed to execute bulk promotion.",
+          "Failed to execute bulk update.",
         "error"
       );
     } finally {
@@ -263,9 +315,9 @@ const BulkPromotion = () => {
     <div className="container-fluid py-3">
       <div className="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
         <div>
-          <h3 className="mb-1">Bulk Student Promotion</h3>
+          <h3 className="mb-1">Bulk Student Promotion / Demotion</h3>
           <div className="text-muted" style={{ fontSize: "14px" }}>
-            Preview students first, then promote them to a new session/class/section.
+            Preview students first, then select only those students you want to update.
           </div>
         </div>
 
@@ -295,10 +347,11 @@ const BulkPromotion = () => {
               executeLoading ||
               previewLoading ||
               loadingMasters ||
-              previewRows.length === 0
+              previewRows.length === 0 ||
+              selectedStudentIds.length === 0
             }
           >
-            {executeLoading ? "Promoting..." : "Execute Promotion"}
+            {executeLoading ? "Processing..." : "Execute Selected"}
           </button>
         </div>
       </div>
@@ -368,10 +421,10 @@ const BulkPromotion = () => {
 
               <div className="col-md-6">
                 <div className="border rounded p-3 h-100">
-                  <h5 className="mb-3">Promotion Target</h5>
+                  <h5 className="mb-3">Target Details</h5>
 
                   <div className="mb-3">
-                    <label className="form-label">New Session</label>
+                    <label className="form-label">Target Session</label>
                     <select
                       name="to_session_id"
                       className="form-select"
@@ -388,7 +441,7 @@ const BulkPromotion = () => {
                   </div>
 
                   <div className="mb-3">
-                    <label className="form-label">New Class</label>
+                    <label className="form-label">Target Class</label>
                     <select
                       name="to_class_id"
                       className="form-select"
@@ -405,7 +458,7 @@ const BulkPromotion = () => {
                   </div>
 
                   <div>
-                    <label className="form-label">New Section</label>
+                    <label className="form-label">Target Section</label>
                     <select
                       name="to_section_id"
                       className="form-select"
@@ -433,14 +486,26 @@ const BulkPromotion = () => {
             <div>
               <h5 className="mb-1">Preview Students</h5>
               <div className="text-muted" style={{ fontSize: "13px" }}>
-                Students matching selected current session, class and section.
+                Tick only those students whom you want to promote or demote.
               </div>
             </div>
 
             {previewRows.length > 0 && (
-              <span className="badge bg-primary" style={{ fontSize: "13px" }}>
-                Total: {previewRows.length}
-              </span>
+              <div className="d-flex gap-2 flex-wrap">
+                <span className="badge bg-primary" style={{ fontSize: "13px" }}>
+                  Total: {previewRows.length}
+                </span>
+                <span className="badge bg-success" style={{ fontSize: "13px" }}>
+                  Selected: {selectedCount}
+                </span>
+                <button
+                  type="button"
+                  className="btn btn-sm btn-outline-primary"
+                  onClick={handleSelectAll}
+                >
+                  {isAllSelected ? "Unselect All" : "Select All"}
+                </button>
+              </div>
             )}
           </div>
 
@@ -466,6 +531,13 @@ const BulkPromotion = () => {
               <table className="table table-bordered table-hover align-middle">
                 <thead className="table-light">
                   <tr>
+                    <th style={{ width: "60px" }}>
+                      <input
+                        type="checkbox"
+                        checked={isAllSelected}
+                        onChange={handleSelectAll}
+                      />
+                    </th>
                     <th style={{ width: "70px" }}>#</th>
                     <th>Admission No.</th>
                     <th>Name</th>
@@ -475,24 +547,37 @@ const BulkPromotion = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {previewRows.map((stu, idx) => (
-                    <tr key={stu.id || idx}>
-                      <td>{idx + 1}</td>
-                      <td>{stu.admission_number || "-"}</td>
-                      <td>{stu.name || "-"}</td>
-                      <td>{stu.father_name || "-"}</td>
-                      <td>
-                        {stu.class_name ||
-                          stu.Class?.class_name ||
-                          getClassName(form.from_class_id)}
-                      </td>
-                      <td>
-                        {stu.section_name ||
-                          stu.Section?.section_name ||
-                          getSectionName(form.from_section_id)}
-                      </td>
-                    </tr>
-                  ))}
+                  {previewRows.map((stu, idx) => {
+                    const studentId = stu.id;
+                    const isChecked = selectedStudentIds.includes(studentId);
+
+                    return (
+                      <tr key={studentId || idx}>
+                        <td className="text-center">
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => toggleStudentSelection(studentId)}
+                            disabled={studentId === undefined || studentId === null}
+                          />
+                        </td>
+                        <td>{idx + 1}</td>
+                        <td>{stu.admission_number || "-"}</td>
+                        <td>{stu.name || "-"}</td>
+                        <td>{stu.father_name || "-"}</td>
+                        <td>
+                          {stu.class_name ||
+                            stu.Class?.class_name ||
+                            getClassName(form.from_class_id)}
+                        </td>
+                        <td>
+                          {stu.section_name ||
+                            stu.Section?.section_name ||
+                            getSectionName(form.from_section_id)}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
