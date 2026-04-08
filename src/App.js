@@ -824,7 +824,7 @@ function App() {
           <Route
             path="/transfer-certificates"
             element={
-              <RequireRole roles={["admin", "superadmin"]}>
+              <RequireRole roles={["admin", "superadmin", "frontoffice"]}>
                 <TransferCertificates />
               </RequireRole>
             }

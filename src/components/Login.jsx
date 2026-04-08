@@ -7,7 +7,7 @@ import { auth, provider, signInWithPopup } from "../firebase/firebaseConfig";
 import socket from "../socket";
 import "./login.css";
 
-/* ---------------- Roles priority ---------------- */
+// 👇 Role preference ordering
 const ROLE_ORDER = [
   "superadmin",
   "admin",
@@ -18,16 +18,38 @@ const ROLE_ORDER = [
   "student",
 ];
 
-/* ---------------- BRANDING (NEW MILTON) ---------------- */
+// Background candidates (keeps prior choices)
+const BG_CANDIDATES = [
+  `${process.env.PUBLIC_URL}/images/Smarto.png`,
+  `${process.env.PUBLIC_URL}/images/Smarto.png`,
+  `${process.env.PUBLIC_URL}/image/Smarto.png`,
+  `${process.env.PUBLIC_URL}/image/Smarto.png`,
+];
 
-const SCHOOL_NAME = "NEW MILTON PUBLIC SCHOOL";
+function resolveFirstExistingImage(candidates) {
+  return new Promise((resolve) => {
+    let resolved = false;
+    let remaining = candidates.length;
+    if (!remaining) return resolve(null);
 
-// images must exist in: public/images/
-const BG_IMAGE = `${process.env.PUBLIC_URL}/images/new_milton_backgournd.jpeg`;
-const LOGO_IMAGE = `${process.env.PUBLIC_URL}/images/milton_logo.png`;
+    candidates.forEach((src) => {
+      const img = new Image();
+      img.onload = () => {
+        if (!resolved) {
+          resolved = true;
+          resolve(src);
+        }
+      };
+      img.onerror = () => {
+        remaining -= 1;
+        if (remaining === 0 && !resolved) resolve(null);
+      };
+      img.src = src;
+    });
+  });
+}
 
-/* ---------------- Helpers ---------------- */
-
+// Join socket rooms depending on roles
 const joinRooms = (user, roles = []) => {
   const rl = roles.map((r) => (r || "").toLowerCase());
 
@@ -59,6 +81,8 @@ const GoogleIcon = () => (
 const Login = () => {
   const [login, setLogin] = useState("");
   const [password, setPassword] = useState("");
+  const [school, setSchool] = useState(null);
+  const [bgUrl, setBgUrl] = useState(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [showPass, setShowPass] = useState(false);
@@ -66,59 +90,157 @@ const Login = () => {
 
   const navigate = useNavigate();
   const userInputRef = useRef(null);
+  const apiBase = useMemo(() => process.env.REACT_APP_API_URL?.replace(/\/+$/, ""), []);
 
-  const apiBase = useMemo(
-    () => process.env.REACT_APP_API_URL?.replace(/\/+$/, ""),
-    []
-  );
-
+  // Focus first input
   useEffect(() => {
     userInputRef.current?.focus();
   }, []);
 
+  // fetch school info
   useEffect(() => {
-    const token =
-      localStorage.getItem("token") || sessionStorage.getItem("token");
+    if (!apiBase) return;
+    axios
+      .get(`${apiBase}/schools`)
+      .then((res) => res.data?.length && setSchool(res.data[0]))
+      .catch(() => {});
+  }, [apiBase]);
+
+  // Apply stored token from either storage on mount
+  useEffect(() => {
+    const token = localStorage.getItem("token") || sessionStorage.getItem("token");
     if (token) axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
   }, []);
+
+  // Resolve background image
+  useEffect(() => {
+    (async () => {
+      const found = await resolveFirstExistingImage(BG_CANDIDATES);
+      setBgUrl(found);
+    })();
+  }, []);
+
+  // Global axios interceptor to handle 401 => navigate to login & cleanup
+  useEffect(() => {
+    const interceptor = axios.interceptors.response.use(
+      (res) => res,
+      (err) => {
+        const status = err?.response?.status;
+        if (status === 401) {
+          // cleanup and redirect to login
+          delete axios.defaults.headers.common["Authorization"];
+          localStorage.removeItem("token");
+          localStorage.removeItem("roles");
+          localStorage.removeItem("username");
+          localStorage.removeItem("userId");
+          localStorage.removeItem("name");
+          localStorage.removeItem("activeRole");
+          localStorage.removeItem("family");                 // NEW
+          localStorage.removeItem("activeStudentAdmission"); // NEW
+          sessionStorage.removeItem("token");
+          sessionStorage.removeItem("roles");
+          window.dispatchEvent(new Event("user-logged-out"));
+          navigate("/login", { replace: true });
+        }
+        return Promise.reject(err);
+      }
+    );
+    return () => axios.interceptors.response.eject(interceptor);
+  }, [navigate]);
 
   const afterAuth = async (data) => {
     const { token, user, roles } = data;
     const roleArr = Array.isArray(roles) ? roles : roles ? [roles] : [];
     const roleArrLower = roleArr.map((r) => (r || "").toLowerCase());
 
-    if (remember) {
-      localStorage.setItem("token", token);
-      localStorage.setItem("roles", JSON.stringify(roleArr));
-      localStorage.setItem("username", user.username);
-      localStorage.setItem("userId", user.id);
-      localStorage.setItem("name", user.name);
-    } else {
-      sessionStorage.setItem("token", token);
-      sessionStorage.setItem("roles", JSON.stringify(roleArr));
-      sessionStorage.setItem("username", user.username);
-      sessionStorage.setItem("userId", user.id);
-      sessionStorage.setItem("name", user.name);
+    // store token & user info based on remember flag
+    try {
+      if (remember) {
+        localStorage.setItem("token", token);
+        localStorage.setItem("roles", JSON.stringify(roleArr));
+        localStorage.setItem("username", user.username);
+        localStorage.setItem("userId", user.id);
+        localStorage.setItem("name", user.name);
+      } else {
+        sessionStorage.setItem("token", token);
+        sessionStorage.setItem("roles", JSON.stringify(roleArr));
+        sessionStorage.setItem("username", user.username);
+        sessionStorage.setItem("userId", user.id);
+        sessionStorage.setItem("name", user.name);
+      }
+      // set a canonical place so other parts can read (used in your app)
+      // also set axios auth header
+      axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
+    } catch (e) {
+      console.warn("Storage failed", e);
     }
 
-    axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
+    // --- NEW: persist family for navbar/student switcher ---
+    try {
+      if (data.family) {
+        localStorage.setItem("family", JSON.stringify(data.family));
+        // default active student is the logged in student; fallback to username
+        localStorage.setItem(
+          "activeStudentAdmission",
+          data.family?.student?.admission_number || user.username
+        );
+      } else {
+        localStorage.removeItem("family");
+        localStorage.removeItem("activeStudentAdmission");
+      }
+      window.dispatchEvent(new Event("family-updated"));
+    } catch (e) {
+      console.warn("Failed to store family", e);
+    }
+    // --- END NEW ---
 
+    localStorage.removeItem("userRole"); // existing cleanup intent
     const defaultActive =
-      ROLE_ORDER.find((r) => roleArrLower.includes(r)) ||
-      roleArrLower[0] ||
-      "";
-
+      ROLE_ORDER.find((r) => roleArrLower.includes(r)) || (roleArrLower[0] || "");
+    // persist activeRole to localStorage (persist UI choice)
     localStorage.setItem("activeRole", defaultActive);
 
-    socket.auth = { token };
-    if (socket.connected) socket.disconnect();
-    socket.connect();
+    // If you have FCM token available on window, save it on server
+    try {
+      const fcm = window.FCMTOKEN;
+      if (fcm) {
+        // prefer axios default header for token auth which is set above
+        axios.post(`${apiBase}/users/save-token`, {
+          username: user.username,
+          token: fcm,
+        }).catch((e) => {
+          console.warn("save-token failed", e?.response?.data || e.message);
+        });
+      }
+    } catch (e) {
+      console.warn("save-token call error", e);
+    }
 
-    joinRooms(user, roleArrLower);
+    // Setup socket auth: attach token to socket and (re)connect
+    try {
+      if (token) {
+        socket.auth = { token };
+        if (socket.connected) {
+          socket.disconnect();
+        }
+        socket.connect();
+      }
+    } catch (e) {
+      console.warn("socket auth setup failed", e);
+    }
 
-    const redirectPath =
-      defaultActive === "accounts" ? "/accounts-dashboard" : "/dashboard";
+    // Join relevant rooms for notifications
+    try {
+      joinRooms(user, roleArrLower);
+    } catch (e) {
+      console.warn("joinRooms failed", e);
+    }
 
+    // dispatch event for other parts of app to read updated user state
+    window.dispatchEvent(new Event("role-changed"));
+
+    // redirect depending on role (accounts -> accounts dashboard)
+    const redirectPath = defaultActive === "accounts" ? "/accounts-dashboard" : "/dashboard";
     navigate(redirectPath, { replace: true });
   };
 
@@ -128,43 +250,88 @@ const Login = () => {
     setLoading(true);
     try {
       const device = navigator.userAgent || "web";
-      const { data } = await axios.post(`${apiBase}/users/login`, {
-        login,
-        password,
-        device,
-      });
+      const { data } = await axios.post(`${apiBase}/users/login`, { login, password, device });
       await afterAuth(data);
     } catch (err) {
-      setError(
+      const msg =
         err.response?.data?.message ||
-          err.response?.data?.error ||
-          "Invalid credentials"
-      );
+        err.response?.data?.error ||
+        err.message ||
+        "Invalid credentials";
+      setError(msg);
+      console.error("login error", err);
     } finally {
       setLoading(false);
     }
   };
 
   const handleGoogleLogin = async () => {
+    setError("");
     setLoading(true);
     try {
       const result = await signInWithPopup(auth, provider);
-      const g = result.user;
-
+      const googleUser = result.user;
+      const device = navigator.userAgent || "web";
       const { data } = await axios.post(`${apiBase}/users/login`, {
-        google_id: g.uid,
-        google_email: g.email,
-        google_name: g.displayName,
-        google_username: g.email,
+        google_id: googleUser.uid,
+        google_email: googleUser.email,
+        google_name: googleUser.displayName,
+        google_username: googleUser.email,
+        device,
       });
-
       await afterAuth(data);
-    } catch {
-      setError("Google login failed");
+    } catch (err) {
+      const msg =
+        err.response?.data?.message ||
+        err.response?.data?.error ||
+        err.message ||
+        "Google login failed";
+      setError(msg);
+      console.error("Google login error", err);
     } finally {
       setLoading(false);
     }
   };
+
+  // Optional logout helper (can be moved to Auth context)
+  const logout = async () => {
+    try {
+      const token = localStorage.getItem("token") || sessionStorage.getItem("token");
+      if (token) {
+        try {
+          await axios.post(
+            `${apiBase}/users/logout`,
+            {},
+            { headers: { Authorization: `Bearer ${token}` } }
+          );
+        } catch (e) {
+          // ignore server errors here, proceed to cleanup
+        }
+      }
+    } finally {
+      delete axios.defaults.headers.common["Authorization"];
+      localStorage.removeItem("token");
+      localStorage.removeItem("roles");
+      localStorage.removeItem("username");
+      localStorage.removeItem("userId");
+      localStorage.removeItem("name");
+      localStorage.removeItem("activeRole");
+      localStorage.removeItem("family");                 // NEW
+      localStorage.removeItem("activeStudentAdmission"); // NEW
+      sessionStorage.removeItem("token");
+      sessionStorage.removeItem("roles");
+      try {
+        socket.disconnect();
+      } catch (e) {}
+      window.dispatchEvent(new Event("user-logged-out"));
+      navigate("/login", { replace: true });
+    }
+  };
+
+  // School logo + fallback logic
+  const schoolLogoSrc = school?.logo ? `${apiBase}${school.logo}` : `${process.env.PUBLIC_URL}/images/SmartoLogo.png`;
+  const schoolName = school?.name || "Smarto Experiential School";
+  const fallbackLogo = `${process.env.PUBLIC_URL}/images/SmartoLogo.png`;
 
   return (
     <div
@@ -174,78 +341,155 @@ const Login = () => {
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        backgroundImage: `linear-gradient(rgba(8,8,18,0.55), rgba(8,8,18,0.8)), url(${BG_IMAGE})`,
+        backgroundImage: `linear-gradient(rgba(8,8,18,0.55), rgba(8,8,18,0.8))${bgUrl ? `, url(${bgUrl})` : ""}`,
         backgroundSize: "cover",
         backgroundPosition: "center",
+        backgroundRepeat: "no-repeat",
       }}
     >
-      <div className="container">
-        <div className="row justify-content-center">
-          <div className="col-12 col-md-8 col-lg-5">
-            <div className="card glass-card border-0 shadow-lg">
-              <div className="card-body p-4 p-sm-5 text-center">
-
-                <img
-                  src={LOGO_IMAGE}
-                  alt="Logo"
-                  style={{ maxWidth: 120 }}
-                  className="mb-2"
-                />
-
-                <h4 className="text-white fw-semibold">{SCHOOL_NAME}</h4>
-                <p className="text-white-50 mb-4">Login to continue</p>
-
-                {error && <div className="alert alert-danger">{error}</div>}
-
-                <form onSubmit={handleLogin}>
-                  <input
-                    ref={userInputRef}
-                    className="form-control form-control-lg mb-3"
-                    placeholder="Username / Email"
-                    value={login}
-                    onChange={(e) => setLogin(e.target.value)}
-                    required
-                  />
-
-                  <div className="input-group input-group-lg mb-3">
-                    <input
-                      type={showPass ? "text" : "password"}
-                      className="form-control"
-                      placeholder="Password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      required
+      <div className="login-hero__scroller">
+        <div className="login-hero__content container">
+          <div className="row justify-content-center">
+            <div className="col-12 col-md-10 col-lg-7 col-xl-5">
+              <div className="card glass-card shadow-xl border-0 overflow-hidden">
+                <div className="card-body p-4 p-sm-5">
+                  <div className="text-center mb-4">
+                    <img
+                      src={schoolLogoSrc || fallbackLogo}
+                      alt="School Logo"
+                      className="brand-logo"
+                      style={{ maxWidth: "120px", height: "auto" }}
+                      onError={(e) => {
+                        e.currentTarget.onerror = null;
+                        e.currentTarget.src = fallbackLogo;
+                      }}
                     />
-                    <button
-                      type="button"
-                      className="btn btn-outline-light"
-                      onClick={() => setShowPass(!showPass)}
-                    >
-                      {showPass ? "Hide" : "Show"}
-                    </button>
+
+                    <h4 className="mt-2 mb-0 fw-semibold text-white">{schoolName}</h4>
+                    <p className="text-white-50 small mb-0">
+                      Manage academics, fees, attendance, HR & more.
+                    </p>
                   </div>
 
-                  <button
-                    className="btn btn-primary btn-lg w-100 mb-3"
-                    disabled={loading}
-                  >
-                    {loading ? "Signing in..." : "Login"}
-                  </button>
+                  {error && <div className="alert alert-danger py-2">{error}</div>}
 
-                  <div className="text-white-50 my-2">or</div>
+                  <h5 className="fw-semibold mb-2 text-white">Sign in</h5>
+                  <p className="text-white-50 mb-4">
+                    Use your username/email and password to continue.
+                  </p>
 
-                  <button
-                    type="button"
-                    onClick={handleGoogleLogin}
-                    className="btn btn-outline-light btn-lg w-100 d-flex justify-content-center gap-2"
-                  >
-                    <GoogleIcon /> Login with Google
-                  </button>
-                </form>
+                  <form onSubmit={handleLogin} noValidate>
+                    <div className="mb-3">
+                      <label className="form-label text-white-75">
+                        User (Email or Username)
+                      </label>
+                      <input
+                        ref={userInputRef}
+                        type="text"
+                        className="form-control form-control-lg"
+                        value={login}
+                        onChange={(e) => setLogin(e.target.value)}
+                        placeholder="e.g., principal@school.edu or admin01"
+                        autoComplete="username"
+                        required
+                      />
+                    </div>
 
-                <div className="small text-white-50 mt-4">
-                  © {new Date().getFullYear()} {SCHOOL_NAME}
+                    <div className="mb-2">
+                      <label className="form-label text-white-75">Password</label>
+                      <div className="input-group input-group-lg">
+                        <input
+                          type={showPass ? "text" : "password"}
+                          className="form-control"
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          placeholder="Enter your password"
+                          autoComplete="current-password"
+                          required
+                        />
+                        <button
+                          type="button"
+                          className="btn btn-outline-light"
+                          onClick={() => setShowPass((s) => !s)}
+                          aria-label={showPass ? "Hide password" : "Show password"}
+                        >
+                          {showPass ? "Hide" : "Show"}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="d-flex justify-content-between align-items-center mb-4">
+                      <div className="form-check">
+                        <input
+                          className="form-check-input"
+                          type="checkbox"
+                          id="rememberMe"
+                          checked={remember}
+                          onChange={(e) => setRemember(e.target.checked)}
+                        />
+                        <label
+                          className="form-check-label text-white-75"
+                          htmlFor="rememberMe"
+                        >
+                          Remember me
+                        </label>
+                      </div>
+                      <button
+                        type="button"
+                        className="btn btn-link p-0 small text-white-75"
+                        onClick={() => navigate("/forgot-password")}
+                      >
+                        Forgot password?
+                      </button>
+                    </div>
+
+                    <button
+                      type="submit"
+                      className="btn btn-primary btn-lg w-100 mb-3"
+                      disabled={loading}
+                    >
+                      {loading ? "Signing in…" : "Login"}
+                    </button>
+
+                    <div className="text-center text-white-50 my-2">or</div>
+
+                    <button
+                      type="button"
+                      className="btn btn-outline-light btn-lg w-100 d-flex align-items-center justify-content-center gap-2"
+                      onClick={handleGoogleLogin}
+                      disabled={loading}
+                    >
+                      <GoogleIcon />
+                      <span>{loading ? "Please wait…" : "Login with Google"}</span>
+                    </button>
+                  </form>
+
+                  <div className="mt-4 small text-white-50">
+                    By continuing you agree to our{" "}
+                    <button
+                      className="btn btn-link p-0 align-baseline text-white"
+                      onClick={() => navigate("/terms")}
+                    >
+                      Terms
+                    </button>{" "}
+                    and{" "}
+                    <button
+                      className="btn btn-link p-0 align-baseline text-white"
+                      onClick={() => navigate("/privacy")}
+                    >
+                      Privacy Policy
+                    </button>
+                    .
+                  </div>
                 </div>
+
+                <div className="card-footer glass-card__footer text-center small text-white-50">
+                  © {new Date().getFullYear()} {schoolName}
+                </div>
+              </div>
+
+              <div className="text-center mt-3 text-white-50 small d-sm-none">
+                If parts are cut off, you can scroll vertically or swipe sideways.
               </div>
             </div>
           </div>
