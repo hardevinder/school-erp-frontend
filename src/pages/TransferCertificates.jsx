@@ -7,12 +7,16 @@ import "./TransferCertificates.css";
 const getRoleFlags = () => {
   const singleRole = localStorage.getItem("userRole");
   const multiRoles = JSON.parse(localStorage.getItem("roles") || "[]");
-  const roles = multiRoles.length ? multiRoles : [singleRole].filter(Boolean);
+
+  const roles = (multiRoles.length ? multiRoles : [singleRole].filter(Boolean))
+    .map((r) => String(r || "").trim().toLowerCase())
+    .filter(Boolean);
 
   return {
     roles,
     isAdmin: roles.includes("admin"),
     isSuperadmin: roles.includes("superadmin"),
+    isFrontoffice: roles.includes("frontoffice"),
   };
 };
 
@@ -663,8 +667,9 @@ const modalHtmlTabbed = (tc = {}) => {
 };
 
 export default function TransferCertificates() {
-  const { isAdmin, isSuperadmin } = useMemo(getRoleFlags, []);
-  const canManage = isAdmin || isSuperadmin;
+  const { isAdmin, isSuperadmin, isFrontoffice } = useMemo(getRoleFlags, []);
+  const canManage = isAdmin || isSuperadmin || isFrontoffice;
+  const canDelete = isSuperadmin;
 
   const [items, setItems] = useState([]);
   const [q, setQ] = useState("");
@@ -1535,7 +1540,7 @@ export default function TransferCertificates() {
                         </button>
                       )}
 
-                      {canManage && (
+                      {canDelete && (
                         <button
                           className="btn btn-outline-danger btn-sm"
                           onClick={() => handleDelete(tc)}

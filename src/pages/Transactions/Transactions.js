@@ -244,6 +244,31 @@ const normalizeDateInput = (value) => {
   return "";
 };
 
+const getTodayDateInput = () => {
+  const now = new Date();
+  const local = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
+  return local.toISOString().slice(0, 10);
+};
+
+const toTransactionDatePayload = (value) => {
+  const normalized = normalizeDateInput(value);
+  return normalized ? `${normalized}T00:00:00` : new Date().toISOString();
+};
+
+const formatTransactionDateTime = (value) => {
+  if (!value) return "—";
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? String(value) : parsed.toLocaleString();
+};
+
+const formatTransactionDateOnly = (value) => {
+  if (!value) return "—";
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime())
+    ? normalizeDateInput(value) || String(value)
+    : parsed.toLocaleDateString();
+};
+
 const validateChequeInfo = (details) => {
   if (!String(details?.ChequeNumber || "").trim()) {
     return "Cheque number is required.";
@@ -326,6 +351,7 @@ const Transactions = () => {
   const [chequeDetails, setChequeDetails] = useState(EMPTY_CHEQUE_DETAILS);
   const [showChequePopup, setShowChequePopup] = useState(false);
   const [remarks, setRemarks] = useState("");
+  const [transactionDate, setTransactionDate] = useState(getTodayDateInput());
   const [daySummary, setDaySummary] = useState({ data: [], grandTotal: 0 });
   const [searchAdmissionNumber, setSearchAdmissionNumber] = useState("");
   const [selectedAdmissionStudent, setSelectedAdmissionStudent] = useState(null);
@@ -339,6 +365,9 @@ const Transactions = () => {
   const [selectedHeads, setSelectedHeads] = useState(new Set());
   const [prevBalanceHeadId, setPrevBalanceHeadId] = useState(null);
   const [openingBalanceDue, setOpeningBalanceDue] = useState(0);
+  const [showSearchPanel, setShowSearchPanel] = useState(true);
+  const [showStudentExtra, setShowStudentExtra] = useState(false);
+  const [showCollectionDetails, setShowCollectionDetails] = useState(true);
 
 
   const handlePrintReceipt = async (slipId) => {
@@ -749,6 +778,14 @@ const Transactions = () => {
   useEffect(() => {
     setSelectedHeads(new Set());
   }, [showModal, feeHeads]);
+
+  useEffect(() => {
+    if (selectedStudentInfo?.id && feeHeads.length > 0 && !editingTransaction) {
+      setShowSearchPanel(false);
+      setShowStudentExtra(false);
+      setShowCollectionDetails(true);
+    }
+  }, [selectedStudentInfo, feeHeads, editingTransaction]);
 
   const POLLING_INTERVAL = 5000;
 
@@ -1651,6 +1688,7 @@ const Transactions = () => {
             editingTransaction.PaymentMode === "Cheque"
               ? String(editingTransaction.BankName || "").trim()
               : null,
+          DateOfTransaction: toTransactionDatePayload(editingTransaction.DateOfTransaction),
           session_id: editingTransaction.session_id ?? null,
           Remarks: editingTransaction.Remarks || null,
         };
@@ -1701,7 +1739,7 @@ const Transactions = () => {
           Student_ID: selectedStudentInfo.id,
           Class_ID: selectedStudentInfo.class_id,
           Section_ID: selectedStudentInfo.section_id,
-          DateOfTransaction: new Date().toISOString(),
+          DateOfTransaction: toTransactionDatePayload(transactionDate),
           Fee_Head: details.Fee_Head,
           Fee_Recieved: details.Fee_Recieved,
           Concession: details.isOpeningBalance ? 0 : details.Concession,
@@ -1787,6 +1825,10 @@ const Transactions = () => {
     setQuickAmount("");
     setModalError(null);
     setRemarks("");
+    setTransactionDate(getTodayDateInput());
+    setShowSearchPanel(true);
+    setShowStudentExtra(false);
+    setShowCollectionDetails(true);
   };
 
   const cancelTransaction = async (id) => {
@@ -1833,6 +1875,11 @@ const Transactions = () => {
       setShowChequePopup(false);
       setQuickAmount("");
       setModalError(null);
+      setRemarks("");
+      setTransactionDate(getTodayDateInput());
+      setShowSearchPanel(true);
+      setShowStudentExtra(false);
+      setShowCollectionDetails(true);
     } else {
       setShowChequePopup(false);
     }
@@ -1841,7 +1888,7 @@ const Transactions = () => {
   useEffect(() => {
     fetchSections(selectedClass);
     fetchStudentsByClassAndSection();
-  }, [selectedClass, selectedSection]);
+  }, [selectedClass, selectedSection, selectedSession]);
 
   useEffect(() => {
     fetchTransactions();
@@ -1851,7 +1898,7 @@ const Transactions = () => {
       fetchDaySummary();
     }, POLLING_INTERVAL);
     return () => clearInterval(intervalId);
-  }, []);
+  }, [selectedSession]);
 
   useEffect(() => {
   if (!showModal) return;
@@ -2036,6 +2083,7 @@ const Transactions = () => {
               setChequeDetails(EMPTY_CHEQUE_DETAILS);
               setShowChequePopup(false);
               resetForm();
+              setTransactionDate(getTodayDateInput());
               fetchClasses();
               fetchSections();
               fetchStudentsByClassAndSection();
@@ -2090,7 +2138,7 @@ const Transactions = () => {
                       <td>{t.Slip_ID}</td>
                       <td>{t.AdmissionNumber}</td>
                       <td>{t.Class?.class_name || "—"}</td>
-                      <td>{new Date(t.DateOfTransaction).toLocaleString()}</td>
+                      <td>{formatTransactionDateTime(t.DateOfTransaction)}</td>
                       <td>{t.FeeHeading?.fee_heading || "—"}</td>
                       <td>{formatINR(t.Concession)}</td>
                       <td>{formatINR(t.Fee_Recieved)}</td>
@@ -2127,11 +2175,10 @@ const Transactions = () => {
                               StudentName: t.Student?.name || "—",
                               AdmissionNumber: t.AdmissionNumber,
                               ClassName: t.Class?.class_name || "—",
-                              DateOfTransaction: t.DateOfTransaction,
+                              DateOfTransaction: normalizeDateInput(t.DateOfTransaction),
                               session_id: t.session_id ?? null,
                               Remarks: t.Remarks || "",
                             });
-                            setSelectedSession(t.session_id ?? selectedSession ?? null);
                             setShowModal(true);
                           }}
                         >
@@ -2231,18 +2278,137 @@ const Transactions = () => {
         show={showModal}
         onHide={() => {
           setShowChequePopup(false);
+          setEditingTransaction(null);
           setShowModal(false);
         }}
-        centered={false}
-        size="lg"
+        centered
+        size="xl"
         fullscreen="md-down"
+        scrollable
         dialogClassName="collection-modal"
       >
         <Modal.Header closeButton>
-          <Modal.Title>{editingTransaction ? "Edit Transaction" : "Add Transaction"}</Modal.Title>
+          <Modal.Title>{editingTransaction ? "Edit Transaction" : "Collect Fee"}</Modal.Title>
         </Modal.Header>
 
         <Modal.Body>
+          <style>{`
+            .collection-modal .modal-dialog {
+              max-width: min(99vw, 1680px);
+              margin: 0.5rem auto;
+            }
+            .collection-modal .modal-content {
+              border: 0;
+              border-radius: 18px;
+              overflow: hidden;
+            }
+            .collection-modal .modal-header {
+              background: linear-gradient(135deg, #0d6efd 0%, #0b5ed7 100%);
+              color: #fff;
+              border-bottom: 0;
+            }
+            .collection-modal .modal-header .btn-close {
+              filter: invert(1);
+            }
+            .collection-modal .modal-body {
+              background: #f8fbff;
+              padding: 0.75rem;
+            }
+            .collection-panel {
+              background: #fff;
+              border: 1px solid #e9ecef;
+              border-radius: 16px;
+              box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+            }
+            .collection-table-wrap {
+              width: 100%;
+              overflow: auto;
+              max-height: 72vh;
+              border: 1px solid #dee2e6;
+              border-radius: 12px;
+              background: #fff;
+            }
+            .collection-table-wrap table {
+              min-width: 980px;
+            }
+            .edit-grid .form-label,
+            .collection-details-grid .form-label {
+              font-weight: 600;
+              color: #495057;
+              margin-bottom: 0.2rem;
+              font-size: 0.82rem;
+            }
+            .collection-details-grid .form-control,
+            .collection-details-grid .form-select {
+              min-height: 36px;
+              padding: 0.35rem 0.6rem;
+              font-size: 0.9rem;
+            }
+            .transaction-meta-chip {
+              display: inline-flex;
+              align-items: center;
+              gap: 0.35rem;
+              padding: 0.35rem 0.65rem;
+              border-radius: 999px;
+              background: #f1f5f9;
+              color: #334155;
+              font-size: 0.8rem;
+              font-weight: 600;
+            }
+            .student-brief-inline {
+              display: flex;
+              flex-wrap: wrap;
+              gap: 0.5rem;
+              font-size: 0.88rem;
+              line-height: 1.35;
+            }
+            .selected-student-strip {
+              background: #ffffff;
+              border: 1px solid #dbe7ff;
+              border-radius: 14px;
+              box-shadow: 0 8px 18px rgba(13, 110, 253, 0.08);
+              padding: 0.55rem 0.8rem;
+              margin-bottom: 0.5rem;
+            }
+            .selected-student-name {
+              font-size: 0.95rem;
+              font-weight: 700;
+              color: #0b3d91;
+              line-height: 1.2;
+            }
+            .selected-student-meta {
+              display: flex;
+              flex-wrap: wrap;
+              gap: 0.35rem 0.75rem;
+              font-size: 0.82rem;
+              color: #495057;
+              line-height: 1.35;
+              margin-top: 0.15rem;
+            }
+            .compact-card .card-body {
+              padding: 0.7rem 0.9rem;
+            }
+            .fee-toolbar-card .card-body {
+              padding: 0.6rem 0.9rem;
+            }
+            @media (max-width: 768px) {
+              .collection-modal .modal-body {
+                padding: 0.65rem;
+              }
+              .collection-table-wrap {
+                max-height: 65vh;
+              }
+              .collection-modal .modal-footer {
+                padding: 0.75rem;
+              }
+              .collection-modal .modal-footer .footer-actions {
+                width: 100%;
+              }
+              .collection-modal .modal-footer .footer-actions .btn {
+                flex: 1 1 auto;
+              }
+            }
+          `}</style>
           {modalError && (
             <Alert variant="danger" onClose={() => setModalError(null)} dismissible>
               {modalError}
@@ -2251,240 +2417,469 @@ const Transactions = () => {
 
           {!editingTransaction ? (
             <>
-              <Tabs
-                activeKey={activeTab}
-                onSelect={(tab) => {
-                  setActiveTab(tab);
-                  setModalError(null);
-                  if (tab === "admissionNumber") {
-                    setSearchAdmissionNumber("");
-                    setSelectedAdmissionStudent(null);
-                    setFeeHeads([]);
-                    setNewTransactionDetails([]);
-                  } else if (tab === "searchByName") {
-                    setSelectedStudentInfo(null);
-                    setSelectedAdmissionStudent(null);
-                    setFeeHeads([]);
-                    setNewTransactionDetails([]);
-                  }
-                }}
-                className="mb-3"
-              >
-                <Tab eventKey="admissionNumber" title="Search Student">
-                  <style>{`
-                    .sb-autocomplete { position: relative; }
-                    .sb-menu {
-                      position: absolute; top: 100%; left: 0; right: 0;
-                      max-height: 280px; overflow: auto; z-index: 1056;
-                      background: #fff; border: 1px solid rgba(0,0,0,.125);
-                      border-radius: .375rem; margin-top: 4px;
-                      box-shadow: 0 4px 16px rgba(0,0,0,.12);
-                    }
-                    .sb-item { padding: .5rem .75rem; cursor: pointer; display: flex; flex-direction: column; gap: 2px; }
-                    .sb-item:hover, .sb-item.active { background: #f6f7f9; }
-                    .primary-line { font-weight: 600; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-                    .secondary-line { font-size: 12px; color: #6c757d; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-                    .pill { font-weight: 500; font-size: 12px; color: #495057; background: #eef1f5; border-radius: 999px; padding: 1px 8px; margin-left: 6px; }
-                  `}</style>
+              {selectedStudentInfo && !showSearchPanel ? (
+                <div className="selected-student-strip">
+                  <div className="d-flex justify-content-between align-items-start flex-wrap gap-2">
+                    <div style={{ minWidth: 0, flex: "1 1 520px" }}>
+                      <div className="selected-student-name">
+                        {selectedStudentInfo?.name || "—"}
+                      </div>
+                      <div className="selected-student-meta">
+                        <span><strong>Adm:</strong> {selectedStudentInfo?.admission_number || "—"}</span>
+                        <span><strong>Class:</strong> {selectedStudentInfo?.Class?.class_name || selectedStudentInfo?.class_name || "—"}</span>
+                        <span><strong>Section:</strong> {selectedStudentInfo?.Section?.section_name || selectedStudentInfo?.section_name || "—"}</span>
+                        {selectedStudentInfo?.father_name ? (
+                          <span><strong>Father:</strong> {selectedStudentInfo?.father_name}</span>
+                        ) : null}
+                      </div>
+                    </div>
 
-                  <Form.Group className="mb-3">
-                    <Form.Label>Search (name / admission no.)</Form.Label>
-                    <div className="sb-autocomplete" ref={sbWrapRef}>
-                      <Form.Control
-                        type="text"
-                        value={sbQuery}
-                        placeholder="Type name or admission no."
-                        onChange={(e) => {
-                          setSbQuery(e.target.value);
-                          setModalError(null);
-                          debounce(() => fetchStudentsInline(e.target.value), 300);
-                        }}
-                        onFocus={() => {
-                          if (sbResults.length) setSbOpen(true);
-                        }}
-                        onKeyDown={(e) => {
-                          if (!sbOpen || !sbResults.length) return;
-                          if (e.key === "ArrowDown") {
-                            e.preventDefault();
-                            setSbActive((idx) => (idx + 1) % sbResults.length);
-                          } else if (e.key === "ArrowUp") {
-                            e.preventDefault();
-                            setSbActive((idx) => (idx - 1 + sbResults.length) % sbResults.length);
-                          } else if (e.key === "Enter") {
-                            e.preventDefault();
-                            const s = sbResults[sbActive] || sbResults[0];
-                            if (s) handlePickStudent(s);
-                          } else if (e.key === "Escape") {
-                            setSbOpen(false);
-                          }
-                        }}
-                        autoComplete="off"
-                      />
+                    <div className="d-flex align-items-center gap-2 flex-wrap">
+                      <Button
+                        variant="outline-secondary"
+                        size="sm"
+                        onClick={() => setShowStudentExtra((v) => !v)}
+                      >
+                        {showStudentExtra ? "Hide More" : "More"}
+                      </Button>
+                      <Button
+                        variant="outline-primary"
+                        size="sm"
+                        onClick={() => setShowSearchPanel(true)}
+                      >
+                        Change Student
+                      </Button>
+                    </div>
+                  </div>
 
-                      {sbOpen && (
-                        <div className="sb-menu">
-                          {sbResults.length === 0 ? (
-                            <div className="sb-item text-muted">No students found</div>
-                          ) : (
-                            sbResults.map((s, idx) => {
-                              const className =
-                                s?.Class?.class_name ||
-                                s?.class_name ||
-                                s?.class?.class_name ||
-                                s?.className ||
-                                "—";
-                              const adm = s.admission_number || "—";
-                              return (
-                                <div
-                                  key={s.id}
-                                  className={`sb-item ${idx === sbActive ? "active" : ""}`}
-                                  onMouseEnter={() => setSbActive(idx)}
-                                  onClick={() => handlePickStudent(s)}
-                                >
-                                  <div className="primary-line">
-                                    {escapeHtml(s.name)}
-                                    <span className="pill">{escapeHtml(adm)}</span>
-                                  </div>
-                                  <div className="secondary-line">Class: {escapeHtml(className)}</div>
-                                </div>
-                              );
-                            })
-                          )}
+                  {showStudentExtra && (
+                    <div className="mt-2">
+                      {renderCustomFieldsBlock(selectedStudentInfo)}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <Card className="mb-2 shadow-sm border-0 compact-card">
+                  <Card.Body>
+                    <div className="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                      <div>
+                        <div className="fw-semibold">Student Selection</div>
+                        <div className="text-muted small">
+                          Search and choose student
                         </div>
+                      </div>
+
+                      {selectedStudentInfo && (
+                        <Button
+                          variant="outline-secondary"
+                          size="sm"
+                          onClick={() => setShowStudentExtra((v) => !v)}
+                        >
+                          {showStudentExtra ? "Hide More" : "More"}
+                        </Button>
                       )}
                     </div>
 
-                    <div className="form-text mt-1">
-                      Uses current session for better matches
-                      {selectedSession
-                        ? ` (${sessions.find((x) => x.id === selectedSession)?.name || ""})`
-                        : ""}{" "}
-                      .
-                    </div>
-                  </Form.Group>
+                    {selectedStudentInfo && (
+                      <div className="selected-student-strip mt-2 mb-0">
+                        <div className="d-flex justify-content-between align-items-start flex-wrap gap-2">
+                          <div style={{ minWidth: 0, flex: "1 1 520px" }}>
+                            <div className="selected-student-name">
+                              {selectedStudentInfo?.name || "—"}
+                            </div>
+                            <div className="selected-student-meta">
+                              <span><strong>Adm:</strong> {selectedStudentInfo?.admission_number || "—"}</span>
+                              <span><strong>Class:</strong> {selectedStudentInfo?.Class?.class_name || selectedStudentInfo?.class_name || "—"}</span>
+                              <span><strong>Section:</strong> {selectedStudentInfo?.Section?.section_name || selectedStudentInfo?.section_name || "—"}</span>
+                              {selectedStudentInfo?.father_name ? (
+                                <span><strong>Father:</strong> {selectedStudentInfo?.father_name}</span>
+                              ) : null}
+                            </div>
+                          </div>
 
-                  {selectedAdmissionStudent && (
-                    <div className="mb-3">
-                      <div className="student-brief-inline">
-                        <span>
-                          <strong>Name:</strong> {selectedAdmissionStudent?.name || "—"}
-                        </span>
-                        <span>
-                          | <strong>Class:</strong>{" "}
-                          {selectedAdmissionStudent?.Class?.class_name ||
-                            selectedAdmissionStudent?.class_name ||
-                            "—"}
-                        </span>
-                        <span>
-                          | <strong>Section:</strong>{" "}
-                          {selectedAdmissionStudent?.Section?.section_name ||
-                            selectedAdmissionStudent?.section_name ||
-                            "—"}
-                        </span>
-                        <span>
-                          | <strong>Father:</strong> {selectedAdmissionStudent?.father_name || "—"}
-                        </span>
-                        <span>
-                          | <strong>Adm No:</strong> {selectedAdmissionStudent?.admission_number || "—"}
-                        </span>
+                          {feeHeads.length > 0 && (
+                            <Button
+                              variant="outline-primary"
+                              size="sm"
+                              onClick={() => setShowSearchPanel(false)}
+                            >
+                              Hide Search
+                            </Button>
+                          )}
+                        </div>
+
+                        {showStudentExtra && (
+                          <div className="mt-2">
+                            {renderCustomFieldsBlock(selectedStudentInfo)}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {showSearchPanel && (
+                      <div className="mt-3">
+                        <Tabs
+                          activeKey={activeTab}
+                          onSelect={(tab) => {
+                            setActiveTab(tab);
+                            setModalError(null);
+                            if (tab === "admissionNumber") {
+                              setSearchAdmissionNumber("");
+                              setSelectedAdmissionStudent(null);
+                              setFeeHeads([]);
+                              setNewTransactionDetails([]);
+                            } else if (tab === "searchByName") {
+                              setSelectedStudentInfo(null);
+                              setSelectedAdmissionStudent(null);
+                              setFeeHeads([]);
+                              setNewTransactionDetails([]);
+                            }
+                          }}
+                          className="mb-0"
+                        >
+                          <Tab eventKey="admissionNumber" title="Search Student">
+                            <style>{`
+                              .sb-autocomplete { position: relative; }
+                              .sb-menu {
+                                position: absolute; top: 100%; left: 0; right: 0;
+                                max-height: 280px; overflow: auto; z-index: 1056;
+                                background: #fff; border: 1px solid rgba(0,0,0,.125);
+                                border-radius: .375rem; margin-top: 4px;
+                                box-shadow: 0 4px 16px rgba(0,0,0,.12);
+                              }
+                              .sb-item { padding: .5rem .75rem; cursor: pointer; display: flex; flex-direction: column; gap: 2px; }
+                              .sb-item:hover, .sb-item.active { background: #f6f7f9; }
+                              .primary-line { font-weight: 600; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+                              .secondary-line { font-size: 12px; color: #6c757d; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+                              .pill { font-weight: 500; font-size: 12px; color: #495057; background: #eef1f5; border-radius: 999px; padding: 1px 8px; margin-left: 6px; }
+                            `}</style>
+
+                            <Form.Group className="mb-3">
+                              <Form.Label>Search (name / admission no.)</Form.Label>
+                              <div className="sb-autocomplete" ref={sbWrapRef}>
+                                <Form.Control
+                                  type="text"
+                                  value={sbQuery}
+                                  placeholder="Type name or admission no."
+                                  onChange={(e) => {
+                                    setSbQuery(e.target.value);
+                                    setModalError(null);
+                                    debounce(() => fetchStudentsInline(e.target.value), 300);
+                                  }}
+                                  onFocus={() => {
+                                    if (sbResults.length) setSbOpen(true);
+                                  }}
+                                  onKeyDown={(e) => {
+                                    if (!sbOpen || !sbResults.length) return;
+                                    if (e.key === "ArrowDown") {
+                                      e.preventDefault();
+                                      setSbActive((idx) => (idx + 1) % sbResults.length);
+                                    } else if (e.key === "ArrowUp") {
+                                      e.preventDefault();
+                                      setSbActive((idx) => (idx - 1 + sbResults.length) % sbResults.length);
+                                    } else if (e.key === "Enter") {
+                                      e.preventDefault();
+                                      const s = sbResults[sbActive] || sbResults[0];
+                                      if (s) handlePickStudent(s);
+                                    } else if (e.key === "Escape") {
+                                      setSbOpen(false);
+                                    }
+                                  }}
+                                  autoComplete="off"
+                                />
+
+                                {sbOpen && (
+                                  <div className="sb-menu">
+                                    {sbResults.length === 0 ? (
+                                      <div className="sb-item text-muted">No students found</div>
+                                    ) : (
+                                      sbResults.map((s, idx) => {
+                                        const className =
+                                          s?.Class?.class_name ||
+                                          s?.class_name ||
+                                          s?.class?.class_name ||
+                                          s?.className ||
+                                          "—";
+                                        const adm = s.admission_number || "—";
+                                        return (
+                                          <div
+                                            key={s.id}
+                                            className={`sb-item ${idx === sbActive ? "active" : ""}`}
+                                            onMouseEnter={() => setSbActive(idx)}
+                                            onClick={() => handlePickStudent(s)}
+                                          >
+                                            <div className="primary-line">
+                                              {escapeHtml(s.name)}
+                                              <span className="pill">{escapeHtml(adm)}</span>
+                                            </div>
+                                            <div className="secondary-line">Class: {escapeHtml(className)}</div>
+                                          </div>
+                                        );
+                                      })
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+
+                              <div className="form-text mt-1">
+                                Uses current session for better matches
+                                {selectedSession
+                                  ? ` (${sessions.find((x) => x.id === selectedSession)?.name || ""})`
+                                  : ""}{" "}
+                                .
+                              </div>
+                            </Form.Group>
+
+                            {selectedAdmissionStudent && (
+                              <div className="mb-1">
+                                <div className="student-brief-inline">
+                                  <span>
+                                    <strong>Name:</strong> {selectedAdmissionStudent?.name || "—"}
+                                  </span>
+                                  <span>
+                                    | <strong>Class:</strong>{" "}
+                                    {selectedAdmissionStudent?.Class?.class_name ||
+                                      selectedAdmissionStudent?.class_name ||
+                                      "—"}
+                                  </span>
+                                  <span>
+                                    | <strong>Section:</strong>{" "}
+                                    {selectedAdmissionStudent?.Section?.section_name ||
+                                      selectedAdmissionStudent?.section_name ||
+                                      "—"}
+                                  </span>
+                                  <span>
+                                    | <strong>Father:</strong> {selectedAdmissionStudent?.father_name || "—"}
+                                  </span>
+                                  <span>
+                                    | <strong>Adm No:</strong> {selectedAdmissionStudent?.admission_number || "—"}
+                                  </span>
+                                </div>
+                              </div>
+                            )}
+                          </Tab>
+
+                          <Tab eventKey="searchByName" title="Search by Class">
+                            <div className="d-flex flex-wrap gap-3 mb-3">
+                              <Form.Group style={{ minWidth: 200 }}>
+                                <Form.Label>Class</Form.Label>
+                                <Form.Select
+                                  value={selectedClass}
+                                  onChange={(e) => setSelectedClass(e.target.value)}
+                                >
+                                  <option value="">Select Class</option>
+                                  {(Array.isArray(classes) ? classes : []).map((cls) => (
+                                    <option key={cls.id} value={cls.id}>
+                                      {cls.class_name}
+                                    </option>
+                                  ))}
+                                </Form.Select>
+                              </Form.Group>
+
+                              <Form.Group style={{ minWidth: 200 }}>
+                                <Form.Label>Section</Form.Label>
+                                <Form.Select
+                                  value={selectedSection}
+                                  onChange={(e) => setSelectedSection(e.target.value)}
+                                >
+                                  <option value="">Select Section</option>
+                                  {(Array.isArray(sections) ? sections : []).map((sec) => (
+                                    <option key={sec.id} value={sec.id}>
+                                      {sec.section_name}
+                                    </option>
+                                  ))}
+                                </Form.Select>
+                              </Form.Group>
+                            </div>
+
+                            <Form.Group className="mb-3">
+                              <Form.Label>Student</Form.Label>
+                              <Form.Select
+                                onChange={(e) => {
+                                  const student = students.find(
+                                    (s) => s.id === parseInt(e.target.value, 10)
+                                  );
+                                  setSelectedStudentInfo(student);
+                                  if (student) {
+                                    if (!selectedSession) {
+                                      setModalError(
+                                        "Please select an academic session before loading fee details."
+                                      );
+                                      return;
+                                    }
+                                    fetchFeeHeadsForStudent(student.class_id, student.id);
+                                  }
+                                }}
+                                disabled={!students.length}
+                              >
+                                <option value="">Select Student</option>
+                                {students.map((s) => (
+                                  <option key={s.id} value={s.id}>
+                                    {s.name} - {s.admission_number}
+                                  </option>
+                                ))}
+                              </Form.Select>
+                            </Form.Group>
+
+                            {selectedStudentInfo && (
+                              <div className="mb-1">
+                                <div className="student-brief-inline">
+                                  <div>
+                                    <strong>Name:</strong> {selectedStudentInfo?.name || "—"}
+                                  </div>
+                                  <div>
+                                    | <strong>Class:</strong>{" "}
+                                    {selectedStudentInfo?.Class?.class_name ||
+                                      selectedStudentInfo?.class_name ||
+                                      "—"}
+                                  </div>
+                                  <div>
+                                    | <strong>Section:</strong>{" "}
+                                    {selectedStudentInfo?.Section?.section_name ||
+                                      selectedStudentInfo?.section_name ||
+                                      "—"}
+                                  </div>
+                                  <div>
+                                    | <strong>Father:</strong> {selectedStudentInfo?.father_name || "—"}
+                                  </div>
+                                  <div>
+                                    | <strong>Adm No:</strong> {selectedStudentInfo?.admission_number || "—"}
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                          </Tab>
+                        </Tabs>
+                      </div>
+                    )}
+                  </Card.Body>
+                </Card>
+              )}
+
+              <Card className="mb-2 shadow-sm border-0 collection-panel compact-card">
+                <Card.Body>
+                  <div className="d-flex flex-wrap align-items-center justify-content-between gap-2">
+                    <div>
+                      <h6 className="mb-1">Collection Details</h6>
+                      <div className="text-muted small">
+                        Date, session, payment mode and remarks
                       </div>
                     </div>
-                  )}
-                </Tab>
 
-                <Tab eventKey="searchByName" title="Search by Class">
-                  <div className="d-flex flex-wrap gap-3 mb-3">
-                    <Form.Group style={{ minWidth: 200 }}>
-                      <Form.Label>Class</Form.Label>
-                      <Form.Select
-                        value={selectedClass}
-                        onChange={(e) => setSelectedClass(e.target.value)}
-                      >
-                        <option value="">Select Class</option>
-                        {(Array.isArray(classes) ? classes : []).map((cls) => (
-                          <option key={cls.id} value={cls.id}>
-                            {cls.class_name}
-                          </option>
-                        ))}
-                      </Form.Select>
-                    </Form.Group>
-
-                    <Form.Group style={{ minWidth: 200 }}>
-                      <Form.Label>Section</Form.Label>
-                      <Form.Select
-                        value={selectedSection}
-                        onChange={(e) => setSelectedSection(e.target.value)}
-                      >
-                        <option value="">Select Section</option>
-                        {(Array.isArray(sections) ? sections : []).map((sec) => (
-                          <option key={sec.id} value={sec.id}>
-                            {sec.section_name}
-                          </option>
-                        ))}
-                      </Form.Select>
-                    </Form.Group>
+                    <div className="d-flex align-items-center gap-2 flex-wrap">
+                      <div className="transaction-meta-chip">
+                        Slip will be created for the selected heads
+                      </div>
+                      {selectedStudentInfo && (
+                        <div className="transaction-meta-chip">
+                          Student: {selectedStudentInfo?.name || "—"}
+                        </div>
+                      )}
+                    </div>
                   </div>
 
-                  <Form.Group className="mb-3">
-                    <Form.Label>Student</Form.Label>
-                    <Form.Select
-                      onChange={(e) => {
-                        const student = students.find(
-                          (s) => s.id === parseInt(e.target.value, 10)
-                        );
-                        setSelectedStudentInfo(student);
-                        if (student) {
-                          if (!selectedSession) {
-                            setModalError(
-                              "Please select an academic session before loading fee details."
-                            );
-                            return;
-                          }
-                          fetchFeeHeadsForStudent(student.class_id, student.id);
-                        }
-                      }}
-                      disabled={!students.length}
-                    >
-                      <option value="">Select Student</option>
-                      {students.map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {s.name} - {s.admission_number}
-                        </option>
-                      ))}
-                    </Form.Select>
-                  </Form.Group>
+                  {showCollectionDetails && (
+                    <Row className="g-2 collection-details-grid mt-2">
+                      <Col lg={3} md={6}>
+                        <Form.Group>
+                          <Form.Label>Academic Session</Form.Label>
+                          <Form.Select
+                            value={selectedSession ?? ""}
+                            onChange={(e) =>
+                              setSelectedSession(e.target.value ? Number(e.target.value) : null)
+                            }
+                          >
+                            <option value="">Select Session</option>
+                            {sessions.map((s) => (
+                              <option key={s.id} value={s.id}>
+                                {s.name || s.label || `${s.start_date || ""} - ${s.end_date || ""}`}
+                              </option>
+                            ))}
+                          </Form.Select>
+                        </Form.Group>
+                      </Col>
 
-                  {selectedStudentInfo && (
-                    <div className="mb-2">
-                      <div className="student-brief-inline">
-                        <div>
-                          <strong>Name:</strong> {selectedStudentInfo?.name || "—"}
-                        </div>
-                        <div>
-                          | <strong>Class:</strong>{" "}
-                          {selectedStudentInfo?.Class?.class_name ||
-                            selectedStudentInfo?.class_name ||
-                            "—"}
-                        </div>
-                        <div>
-                          | <strong>Section:</strong>{" "}
-                          {selectedStudentInfo?.Section?.section_name ||
-                            selectedStudentInfo?.section_name ||
-                            "—"}
-                        </div>
-                        <div>
-                          | <strong>Father:</strong> {selectedStudentInfo?.father_name || "—"}
-                        </div>
-                        <div>
-                          | <strong>Adm No:</strong> {selectedStudentInfo?.admission_number || "—"}
-                        </div>
-                      </div>
-                    </div>
+                      <Col lg={3} md={6}>
+                        <Form.Group>
+                          <Form.Label>Transaction Date</Form.Label>
+                          <Form.Control
+                            type="date"
+                            value={transactionDate}
+                            onChange={(e) => setTransactionDate(e.target.value)}
+                          />
+                        </Form.Group>
+                      </Col>
+
+                      <Col lg={3} md={6}>
+                        <Form.Group>
+                          <Form.Label>Payment Mode</Form.Label>
+                          <Form.Select
+                            value={paymentMode}
+                            onChange={(e) => {
+                              const nextMode = e.target.value;
+                              setPaymentMode(nextMode);
+                              if (nextMode !== "Online") setTransactionID("");
+                              if (nextMode !== "Cheque") {
+                                setChequeDetails(EMPTY_CHEQUE_DETAILS);
+                              } else {
+                                setShowChequePopup(true);
+                              }
+                            }}
+                          >
+                            <option value="Cash">Cash</option>
+                            <option value="Online">Online</option>
+                            <option value="Cheque">Cheque</option>
+                          </Form.Select>
+                        </Form.Group>
+                      </Col>
+
+                      <Col lg={3} md={6}>
+                        <Form.Group>
+                          <Form.Label>Remarks</Form.Label>
+                          <Form.Control
+                            type="text"
+                            placeholder="Enter remarks (optional)"
+                            value={remarks}
+                            onChange={(e) => setRemarks(e.target.value)}
+                          />
+                        </Form.Group>
+                      </Col>
+
+                      {paymentMode === "Online" && (
+                        <Col lg={4} md={6}>
+                          <Form.Group>
+                            <Form.Label>Transaction ID</Form.Label>
+                            <Form.Control
+                              type="text"
+                              placeholder="Enter Transaction ID"
+                              value={transactionID}
+                              onChange={(e) => setTransactionID(e.target.value)}
+                            />
+                          </Form.Group>
+                        </Col>
+                      )}
+
+                      {paymentMode === "Cheque" && (
+                        <Col lg={5} md={6}>
+                          <Form.Group>
+                            <Form.Label>Cheque Details</Form.Label>
+                            <div className="d-flex flex-wrap align-items-center gap-2">
+                              <Button variant="outline-primary" size="sm" onClick={openChequePopup}>
+                                {hasChequeInfo(chequeDetails) ? "Edit Details" : "Add Details"}
+                              </Button>
+                              {hasChequeInfo(chequeDetails) && (
+                                <small className="text-muted">
+                                  {chequeDetails.BankName || "Bank"} • {chequeDetails.ChequeNumber || "No."}
+                                </small>
+                              )}
+                            </div>
+                          </Form.Group>
+                        </Col>
+                      )}
+                    </Row>
                   )}
-                </Tab>
-              </Tabs>
-
-              {selectedStudentInfo && renderCustomFieldsBlock(selectedStudentInfo)}
+                </Card.Body>
+              </Card>
 
               {openingBalanceDue > 0 && (
                 <div className="d-flex justify-content-end mb-2">
@@ -2500,7 +2895,7 @@ const Transactions = () => {
               )}
 
               {feeHeads.length > 0 && (
-                <Card className="mb-3 shadow-sm">
+                <Card className="mb-2 shadow-sm fee-toolbar-card">
                   <Card.Body
                     className="d-flex flex-wrap align-items-center justify-content-between gap-3"
                     style={{ padding: "0.75rem 1rem" }}
@@ -2545,7 +2940,10 @@ const Transactions = () => {
 
               {feeHeads.length > 0 && (
                 <>
-                  <h5 className="mb-2">Fee Details</h5>
+                  <div className="d-flex justify-content-between align-items-center mb-2">
+                    <h5 className="mb-0">Fee Details</h5>
+                    <small className="text-muted">Scroll for more heads</small>
+                  </div>
                   <div className="collection-table-wrap">
                     <table className="table table-bordered mb-0">
                       <thead className="table-light sticky-top">
@@ -2913,359 +3311,345 @@ const Transactions = () => {
             </>
           ) : (
             <>
-              <h5 className="mb-3">Edit Transaction</h5>
-              <table className="table table-bordered align-middle">
-                <thead className="table-light">
-                  <tr>
-                    <th>Student</th>
-                    <th>Admission No.</th>
-                    <th>Class</th>
-                    <th>Date</th>
-                    <th>Fee Head</th>
-                    <th>Fee Received</th>
-                    <th>Concession</th>
-                    <th>Van Fee</th>
-                    <th>Van Fee Cons.</th>
-                    <th>Fine</th>
-                    <th>Payment Mode</th>
-                    <th>Session</th>
-                    <th>Remarks</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td>{editingTransaction?.StudentName}</td>
-                    <td>{editingTransaction?.AdmissionNumber}</td>
-                    <td>{editingTransaction?.ClassName}</td>
-                    <td>
-                      {editingTransaction?.DateOfTransaction
-                        ? new Date(editingTransaction.DateOfTransaction).toLocaleDateString()
-                        : "—"}
-                    </td>
-                    <td>{editingTransaction?.FeeHeadingName}</td>
-
-                    <td style={{ maxWidth: 140 }}>
-                      <Form.Control
-                        type="number"
-                        value={editingTransaction?.Fee_Recieved ?? 0}
-                        onChange={(e) =>
-                          setEditingTransaction((prev) => ({
-                            ...prev,
-                            Fee_Recieved: parseFloat(e.target.value) || 0,
-                          }))
-                        }
-                      />
-                    </td>
-
-                    <td style={{ maxWidth: 140 }}>
-                      <Form.Control
-                        type="number"
-                        value={editingTransaction?.Concession ?? 0}
-                        onChange={(e) =>
-                          setEditingTransaction((prev) => ({
-                            ...prev,
-                            Concession: parseFloat(e.target.value) || 0,
-                          }))
-                        }
-                      />
-                    </td>
-
-                    <td style={{ maxWidth: 140 }}>
-                      <Form.Control
-                        type="number"
-                        value={editingTransaction?.VanFee ?? 0}
-                        onChange={(e) =>
-                          setEditingTransaction((prev) => ({
-                            ...prev,
-                            VanFee: parseFloat(e.target.value) || 0,
-                          }))
-                        }
-                      />
-                    </td>
-
-                    <td style={{ maxWidth: 140 }}>
-                      <Form.Control
-                        type="number"
-                        value={editingTransaction?.Van_Fee_Concession ?? 0}
-                        onChange={(e) =>
-                          setEditingTransaction((prev) => ({
-                            ...prev,
-                            Van_Fee_Concession: parseFloat(e.target.value) || 0,
-                          }))
-                        }
-                      />
-                    </td>
-
-                    <td style={{ maxWidth: 140 }}>
-                      <Form.Control
-                        type="number"
-                        value={editingTransaction?.Fine_Amount || ""}
-                        onChange={(e) =>
-                          setEditingTransaction((prev) => ({
-                            ...prev,
-                            Fine_Amount: parseFloat(e.target.value) || 0,
-                          }))
-                        }
-                      />
-                    </td>
-
-                    <td style={{ maxWidth: 160 }}>
-                      <Form.Select
-                        value={editingTransaction?.PaymentMode || "Cash"}
-                        onChange={(e) => {
-                          const nextMode = e.target.value;
-                          setEditingTransaction((prev) => ({
-                            ...prev,
-                            PaymentMode: nextMode,
-                            Transaction_ID: nextMode === "Online" ? prev.Transaction_ID : "",
-                            ChequeNumber: nextMode === "Cheque" ? prev.ChequeNumber || "" : "",
-                            ChequeDate: nextMode === "Cheque" ? normalizeDateInput(prev.ChequeDate) : "",
-                            BankName: nextMode === "Cheque" ? prev.BankName || "" : "",
-                          }));
-                          if (nextMode === "Cheque") setShowChequePopup(true);
-                        }}
-                      >
-                        <option value="Cash">Cash</option>
-                        <option value="Online">Online</option>
-                        <option value="Cheque">Cheque</option>
-                      </Form.Select>
-                    </td>
-
-                    <td style={{ minWidth: 160 }}>
-                      <Form.Select
-                        value={editingTransaction?.session_id ?? ""}
-                        onChange={(e) =>
-                          setEditingTransaction((prev) => ({
-                            ...prev,
-                            session_id: e.target.value ? Number(e.target.value) : null,
-                          }))
-                        }
-                      >
-                        <option value="">Select Session</option>
-                        {sessions.map((s) => (
-                          <option key={s.id} value={s.id}>
-                            {s.name || s.label || `${s.start_date || ""} - ${s.end_date || ""}`}
-                          </option>
-                        ))}
-                      </Form.Select>
-                    </td>
-
-                    <td style={{ minWidth: 200 }}>
-                      <Form.Control
-                        type="text"
-                        placeholder="Enter remarks"
-                        value={editingTransaction?.Remarks || ""}
-                        onChange={(e) =>
-                          setEditingTransaction((prev) => ({
-                            ...prev,
-                            Remarks: e.target.value,
-                          }))
-                        }
-                      />
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-
-              {editingTransaction?.PaymentMode === "Online" && (
-                <Form.Group className="mt-3" style={{ maxWidth: 360 }}>
-                  <Form.Label>Transaction ID</Form.Label>
-                  <Form.Control
-                    type="text"
-                    name="Transaction_ID"
-                    placeholder="Enter Transaction ID"
-                    value={editingTransaction?.Transaction_ID || ""}
-                    onChange={(e) =>
-                      setEditingTransaction((prev) => ({
-                        ...prev,
-                        Transaction_ID: e.target.value,
-                      }))
-                    }
-                  />
-                </Form.Group>
-              )}
-
-              {editingTransaction?.PaymentMode === "Cheque" && (
-                <div className="mt-3 d-flex flex-wrap align-items-center gap-2">
-                  <Button variant="outline-primary" size="sm" onClick={openChequePopup}>
-                    {hasChequeInfo(editingTransaction) ? "Edit Cheque Details" : "Add Cheque Details"}
-                  </Button>
-                  {hasChequeInfo(editingTransaction) && (
-                    <div className="small text-muted">
-                      <strong>No:</strong> {editingTransaction?.ChequeNumber || "—"} &nbsp;|&nbsp;
-                      <strong>Date:</strong> {normalizeDateInput(editingTransaction?.ChequeDate) || "—"} &nbsp;|&nbsp;
-                      <strong>Bank:</strong> {editingTransaction?.BankName || "—"}
+              <Card className="mb-3 shadow-sm border-0 collection-panel">
+                <Card.Body>
+                  <div className="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-3">
+                    <div>
+                      <h5 className="mb-1">Edit Transaction</h5>
+                      <div className="text-muted small">
+                        Update the transaction details neatly from this popup.
+                      </div>
                     </div>
-                  )}
-                </div>
-              )}
+                    <div className="transaction-meta-chip">
+                      Head: {editingTransaction?.FeeHeadingName || "—"}
+                    </div>
+                  </div>
+
+                  <Row className="g-3 mb-3">
+                    <Col lg={3} md={6}>
+                      <div className="p-3 rounded-3 border bg-light h-100">
+                        <div className="small text-muted mb-1">Student</div>
+                        <div className="fw-semibold">{editingTransaction?.StudentName || "—"}</div>
+                      </div>
+                    </Col>
+                    <Col lg={3} md={6}>
+                      <div className="p-3 rounded-3 border bg-light h-100">
+                        <div className="small text-muted mb-1">Admission No.</div>
+                        <div className="fw-semibold">{editingTransaction?.AdmissionNumber || "—"}</div>
+                      </div>
+                    </Col>
+                    <Col lg={3} md={6}>
+                      <div className="p-3 rounded-3 border bg-light h-100">
+                        <div className="small text-muted mb-1">Class</div>
+                        <div className="fw-semibold">{editingTransaction?.ClassName || "—"}</div>
+                      </div>
+                    </Col>
+                    <Col lg={3} md={6}>
+                      <div className="p-3 rounded-3 border bg-light h-100">
+                        <div className="small text-muted mb-1">Fee Head</div>
+                        <div className="fw-semibold">{editingTransaction?.FeeHeadingName || "—"}</div>
+                      </div>
+                    </Col>
+                  </Row>
+
+                  <Row className="g-3 edit-grid">
+                    <Col lg={3} md={6}>
+                      <Form.Group>
+                        <Form.Label>Transaction Date</Form.Label>
+                        <Form.Control
+                          type="date"
+                          value={normalizeDateInput(editingTransaction?.DateOfTransaction)}
+                          onChange={(e) =>
+                            setEditingTransaction((prev) => ({
+                              ...prev,
+                              DateOfTransaction: e.target.value,
+                            }))
+                          }
+                        />
+                      </Form.Group>
+                    </Col>
+
+                    <Col lg={3} md={6}>
+                      <Form.Group>
+                        <Form.Label>Payment Mode</Form.Label>
+                        <Form.Select
+                          value={editingTransaction?.PaymentMode || "Cash"}
+                          onChange={(e) => {
+                            const nextMode = e.target.value;
+                            setEditingTransaction((prev) => ({
+                              ...prev,
+                              PaymentMode: nextMode,
+                              Transaction_ID: nextMode === "Online" ? prev.Transaction_ID : "",
+                              ChequeNumber: nextMode === "Cheque" ? prev.ChequeNumber || "" : "",
+                              ChequeDate: nextMode === "Cheque" ? normalizeDateInput(prev.ChequeDate) : "",
+                              BankName: nextMode === "Cheque" ? prev.BankName || "" : "",
+                            }));
+                            if (nextMode === "Cheque") setShowChequePopup(true);
+                          }}
+                        >
+                          <option value="Cash">Cash</option>
+                          <option value="Online">Online</option>
+                          <option value="Cheque">Cheque</option>
+                        </Form.Select>
+                      </Form.Group>
+                    </Col>
+
+                    <Col lg={3} md={6}>
+                      <Form.Group>
+                        <Form.Label>Academic Session</Form.Label>
+                        <Form.Select
+                          value={editingTransaction?.session_id ?? ""}
+                          onChange={(e) =>
+                            setEditingTransaction((prev) => ({
+                              ...prev,
+                              session_id: e.target.value ? Number(e.target.value) : null,
+                            }))
+                          }
+                        >
+                          <option value="">Select Session</option>
+                          {sessions.map((s) => (
+                            <option key={s.id} value={s.id}>
+                              {s.name || s.label || `${s.start_date || ""} - ${s.end_date || ""}`}
+                            </option>
+                          ))}
+                        </Form.Select>
+                      </Form.Group>
+                    </Col>
+
+                    <Col lg={3} md={6}>
+                      <Form.Group>
+                        <Form.Label>Remarks</Form.Label>
+                        <Form.Control
+                          type="text"
+                          placeholder="Enter remarks"
+                          value={editingTransaction?.Remarks || ""}
+                          onChange={(e) =>
+                            setEditingTransaction((prev) => ({
+                              ...prev,
+                              Remarks: e.target.value,
+                            }))
+                          }
+                        />
+                      </Form.Group>
+                    </Col>
+
+                    <Col lg={3} md={6}>
+                      <Form.Group>
+                        <Form.Label>Fee Received</Form.Label>
+                        <Form.Control
+                          type="number"
+                          value={editingTransaction?.Fee_Recieved ?? 0}
+                          onChange={(e) =>
+                            setEditingTransaction((prev) => ({
+                              ...prev,
+                              Fee_Recieved: parseFloat(e.target.value) || 0,
+                            }))
+                          }
+                        />
+                      </Form.Group>
+                    </Col>
+
+                    <Col lg={3} md={6}>
+                      <Form.Group>
+                        <Form.Label>Concession</Form.Label>
+                        <Form.Control
+                          type="number"
+                          value={editingTransaction?.Concession ?? 0}
+                          onChange={(e) =>
+                            setEditingTransaction((prev) => ({
+                              ...prev,
+                              Concession: parseFloat(e.target.value) || 0,
+                            }))
+                          }
+                        />
+                      </Form.Group>
+                    </Col>
+
+                    <Col lg={3} md={6}>
+                      <Form.Group>
+                        <Form.Label>Van Fee</Form.Label>
+                        <Form.Control
+                          type="number"
+                          value={editingTransaction?.VanFee ?? 0}
+                          onChange={(e) =>
+                            setEditingTransaction((prev) => ({
+                              ...prev,
+                              VanFee: parseFloat(e.target.value) || 0,
+                            }))
+                          }
+                        />
+                      </Form.Group>
+                    </Col>
+
+                    <Col lg={3} md={6}>
+                      <Form.Group>
+                        <Form.Label>Van Fee Concession</Form.Label>
+                        <Form.Control
+                          type="number"
+                          value={editingTransaction?.Van_Fee_Concession ?? 0}
+                          onChange={(e) =>
+                            setEditingTransaction((prev) => ({
+                              ...prev,
+                              Van_Fee_Concession: parseFloat(e.target.value) || 0,
+                            }))
+                          }
+                        />
+                      </Form.Group>
+                    </Col>
+
+                    <Col lg={3} md={6}>
+                      <Form.Group>
+                        <Form.Label>Fine</Form.Label>
+                        <Form.Control
+                          type="number"
+                          value={editingTransaction?.Fine_Amount ?? 0}
+                          onChange={(e) =>
+                            setEditingTransaction((prev) => ({
+                              ...prev,
+                              Fine_Amount: parseFloat(e.target.value) || 0,
+                            }))
+                          }
+                        />
+                      </Form.Group>
+                    </Col>
+
+                    {editingTransaction?.PaymentMode === "Online" && (
+                      <Col lg={4} md={6}>
+                        <Form.Group>
+                          <Form.Label>Transaction ID</Form.Label>
+                          <Form.Control
+                            type="text"
+                            placeholder="Enter Transaction ID"
+                            value={editingTransaction?.Transaction_ID || ""}
+                            onChange={(e) =>
+                              setEditingTransaction((prev) => ({
+                                ...prev,
+                                Transaction_ID: e.target.value,
+                              }))
+                            }
+                          />
+                        </Form.Group>
+                      </Col>
+                    )}
+
+                    {editingTransaction?.PaymentMode === "Cheque" && (
+                      <Col lg={5} md={6}>
+                        <Form.Group>
+                          <Form.Label>Cheque Details</Form.Label>
+                          <div className="d-flex flex-wrap align-items-center gap-2">
+                            <Button variant="outline-primary" size="sm" onClick={openChequePopup}>
+                              {hasChequeInfo(editingTransaction) ? "Edit Cheque Details" : "Add Cheque Details"}
+                            </Button>
+                            {hasChequeInfo(editingTransaction) && (
+                              <small className="text-muted">
+                                {editingTransaction?.BankName || "Bank"} • {editingTransaction?.ChequeNumber || "No."}
+                                {editingTransaction?.ChequeDate
+                                  ? ` • ${normalizeDateInput(editingTransaction?.ChequeDate)}`
+                                  : ""}
+                              </small>
+                            )}
+                          </div>
+                        </Form.Group>
+                      </Col>
+                    )}
+                  </Row>
+                </Card.Body>
+              </Card>
             </>
           )}
         </Modal.Body>
 
         <Modal.Footer
-          className="py-2 px-3"
+          className="py-3 px-3"
           style={{
-            background: "#f8f9fa",
-            borderTop: "1px solid #dee2e6",
-            overflow: "hidden",
+            background: "#fff",
+            borderTop: "1px solid #e9ecef",
           }}
         >
-          <div
-            className="w-100 d-flex flex-wrap align-items-center justify-content-between gap-2"
-            style={{ rowGap: "0.5rem" }}
-          >
-            <div
-              className="d-flex flex-wrap align-items-center gap-2 flex-grow-1"
-              style={{ minWidth: 0 }}
-            >
-              <Form.Group className="m-0" style={{ width: 180, flexShrink: 0 }}>
-                <Form.Label className="m-0 small text-muted fw-semibold" style={{ fontSize: "0.75rem" }}>
-                  Academic Year
-                </Form.Label>
-                <Form.Select
-                  value={selectedSession ?? ""}
-                  onChange={(e) =>
-                    setSelectedSession(e.target.value ? Number(e.target.value) : null)
-                  }
-                  size="sm"
-                >
-                  <option value="">Select</option>
-                  {sessions.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name || s.label || `${s.start_date || ""} - ${s.end_date || ""}`}
-                    </option>
-                  ))}
-                </Form.Select>
-              </Form.Group>
-
-              <Form.Group className="m-0" style={{ width: 150, flexShrink: 0 }}>
-                <Form.Label className="m-0 small text-muted fw-semibold" style={{ fontSize: "0.75rem" }}>
-                  Payment Mode
-                </Form.Label>
-                <Form.Select
-                  value={paymentMode}
-                  onChange={(e) => {
-                    const nextMode = e.target.value;
-                    setPaymentMode(nextMode);
-                    if (nextMode !== "Online") setTransactionID("");
-                    if (nextMode !== "Cheque") {
-                      setChequeDetails(EMPTY_CHEQUE_DETAILS);
-                    } else {
-                      setShowChequePopup(true);
-                    }
-                  }}
-                  size="sm"
-                >
-                  <option value="Cash">Cash</option>
-                  <option value="Online">Online</option>
-                  <option value="Cheque">Cheque</option>
-                </Form.Select>
-              </Form.Group>
-
-              <Form.Group className="m-0 flex-grow-1" style={{ minWidth: 220 }}>
-                <Form.Label className="m-0 small text-muted fw-semibold" style={{ fontSize: "0.75rem" }}>
-                  Remarks
-                </Form.Label>
-                <Form.Control
-                  type="text"
-                  size="sm"
-                  placeholder="Enter remarks (optional)"
-                  value={remarks}
-                  onChange={(e) => setRemarks(e.target.value)}
-                />
-              </Form.Group>
-
-              {paymentMode === "Online" && (
-                <Form.Group className="m-0" style={{ width: 180 }}>
-                  <Form.Label className="m-0 small text-muted fw-semibold" style={{ fontSize: "0.75rem" }}>
-                    Transaction ID
-                  </Form.Label>
-                  <Form.Control
-                    type="text"
-                    size="sm"
-                    placeholder="Enter ID"
-                    value={transactionID}
-                    onChange={(e) => setTransactionID(e.target.value)}
-                  />
-                </Form.Group>
-              )}
-
-              {paymentMode === "Cheque" && (
-                <Form.Group className="m-0" style={{ minWidth: 220 }}>
-                  <Form.Label className="m-0 small text-muted fw-semibold" style={{ fontSize: "0.75rem" }}>
-                    Cheque Details
-                  </Form.Label>
-                  <div className="d-flex align-items-center gap-2">
-                    <Button variant="outline-primary" size="sm" onClick={openChequePopup}>
-                      {hasChequeInfo(chequeDetails) ? "Edit Details" : "Add Details"}
-                    </Button>
-                    {hasChequeInfo(chequeDetails) && (
-                      <small className="text-muted text-truncate" style={{ maxWidth: 220 }}>
-                        {chequeDetails.BankName || "Bank"} • {chequeDetails.ChequeNumber || "No."}
-                      </small>
-                    )}
-                  </div>
-                </Form.Group>
-              )}
-            </div>
-
-            <div
-              className="d-flex flex-wrap align-items-center justify-content-center text-center gap-2 px-2"
-              style={{
-                background: "#fff",
-                borderRadius: "6px",
-                border: "1px solid #dee2e6",
-                padding: "4px 8px",
-                minWidth: 320,
-                flexShrink: 0,
-              }}
-            >
-              <div className="small text-success fw-bold">
-                <strong>Total:</strong> {formatINR(grandTotal)}
+          {editingTransaction ? (
+            <div className="w-100 d-flex flex-wrap align-items-center justify-content-between gap-2">
+              <div className="small text-muted">
+                Date: {formatTransactionDateOnly(editingTransaction?.DateOfTransaction)}
               </div>
-              <div className="small">
-                <strong>Acad:</strong> {formatINR(totalFeeReceived)}
-              </div>
-              <div className="small">
-                <strong>Van:</strong> {formatINR(totalVanFee)}
-              </div>
-              <div className="small text-danger">
-                <strong>Fine:</strong> {formatINR(totalFine)}
-              </div>
-              <div className="small text-secondary">
-                <strong>Acad Cons:</strong> {formatINR(totalAcademicConcession)}
-              </div>
-              <div className="small text-secondary">
-                <strong>Van Cons:</strong> {formatINR(totalVanConcession)}
-              </div>
-            </div>
-
-            <div className="d-flex align-items-center gap-2 flex-shrink-0">
-              <Button variant="secondary" size="sm" onClick={() => { setShowChequePopup(false); setShowModal(false); }}>
-                Close
-              </Button>
-
-              {selectedStudentInfo?.admission_number && (
+              <div className="d-flex align-items-center gap-2 footer-actions">
                 <Button
-                  variant="info"
-                  size="sm"
-                  onClick={() =>
-                    window.open(
-                      `/reports/student/${selectedStudentInfo.admission_number}`,
-                      "_blank"
-                    )
-                  }
+                  variant="secondary"
+                  onClick={() => {
+                    setShowChequePopup(false);
+                    setEditingTransaction(null);
+                    setShowModal(false);
+                  }}
                 >
-                  View Full Report
+                  Close
                 </Button>
-              )}
-
-              <Button variant="primary" size="sm" onClick={saveTransaction}>
-                Save
-              </Button>
+                <Button variant="primary" onClick={saveTransaction}>
+                  Update Transaction
+                </Button>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="w-100 d-flex flex-wrap align-items-center justify-content-between gap-3">
+              <div
+                className="d-flex flex-wrap align-items-center gap-2 px-2 py-2"
+                style={{
+                  background: "#f8f9fa",
+                  borderRadius: "12px",
+                  border: "1px solid #dee2e6",
+                  minWidth: 0,
+                  flex: "1 1 420px",
+                }}
+              >
+                <div className="small text-success fw-bold">
+                  <strong>Total:</strong> {formatINR(grandTotal)}
+                </div>
+                <div className="small">
+                  <strong>Acad:</strong> {formatINR(totalFeeReceived)}
+                </div>
+                <div className="small">
+                  <strong>Van:</strong> {formatINR(totalVanFee)}
+                </div>
+                <div className="small text-danger">
+                  <strong>Fine:</strong> {formatINR(totalFine)}
+                </div>
+                <div className="small text-secondary">
+                  <strong>Acad Cons:</strong> {formatINR(totalAcademicConcession)}
+                </div>
+                <div className="small text-secondary">
+                  <strong>Van Cons:</strong> {formatINR(totalVanConcession)}
+                </div>
+              </div>
+
+              <div className="d-flex flex-wrap align-items-center gap-2 footer-actions">
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    setShowChequePopup(false);
+                    setShowModal(false);
+                  }}
+                >
+                  Close
+                </Button>
+
+                {selectedStudentInfo?.admission_number && (
+                  <Button
+                    variant="info"
+                    onClick={() =>
+                      window.open(
+                        `/reports/student/${selectedStudentInfo.admission_number}`,
+                        "_blank"
+                      )
+                    }
+                  >
+                    View Full Report
+                  </Button>
+                )}
+
+                <Button variant="primary" onClick={saveTransaction}>
+                  Save Collection
+                </Button>
+              </div>
+            </div>
+          )}
         </Modal.Footer>
       </Modal>
 
