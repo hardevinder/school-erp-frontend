@@ -35,14 +35,25 @@ const formatDate = (date) => {
   return d.toISOString().slice(0, 10);
 };
 
-// UI: dd/MM/yyyy
-const formatToDDMMYYYY = (date) => {
-  if (!date) return "";
+// UI: dd/MM/yyyy hh:mm AM/PM
+const formatToDisplayDateTime = (date) => {
+  if (!date) return "—";
+
   const d = new Date(date);
+  if (Number.isNaN(d.getTime())) return "—";
+
   const day = String(d.getDate()).padStart(2, "0");
   const month = String(d.getMonth() + 1).padStart(2, "0");
   const year = d.getFullYear();
-  return `${day}/${month}/${year}`;
+
+  let hours = d.getHours();
+  const minutes = String(d.getMinutes()).padStart(2, "0");
+  const ampm = hours >= 12 ? "PM" : "AM";
+
+  hours = hours % 12;
+  hours = hours || 12;
+
+  return `${day}/${month}/${year} ${String(hours).padStart(2, "0")}:${minutes} ${ampm}`;
 };
 
 // ₹ formatter
@@ -51,7 +62,7 @@ const formatTotalValue = (value) => {
   return n === 0 ? "0" : `₹${n.toLocaleString("en-IN")}`;
 };
 
-// Normalize payment mode (✅ HDFC treated as Online)
+// Normalize payment mode (HDFC treated as Online)
 const normMode = (m) => String(m ?? "").trim().toLowerCase();
 const isCash = (m) => normMode(m) === "cash";
 const isOnline = (m) => ["online", "hdfc"].includes(normMode(m));
@@ -66,7 +77,7 @@ const groupByFeeHeading = (data) => {
   }, {});
 };
 
-// Calculate fee heading summary with payment mode breakdown (✅ HDFC counted as Online)
+// Calculate fee heading summary with payment mode breakdown
 const calculateFeeHeadingSummary = (data) => {
   const groups = groupByFeeHeading(data);
 
@@ -192,12 +203,15 @@ const DayWiseReport = () => {
       const slip = (item.Slip_ID?.toString() || "").toLowerCase();
       const feeHeading = (item.feeHeadingName || "").toLowerCase();
       const pm = (item.PaymentMode || "").toLowerCase();
+      const txnDate = String(item.DateOfTransaction || "").toLowerCase();
+
       return (
         studentName.includes(q) ||
         adm.includes(q) ||
         slip.includes(q) ||
         feeHeading.includes(q) ||
-        pm.includes(q)
+        pm.includes(q) ||
+        txnDate.includes(q)
       );
     });
 
@@ -239,7 +253,6 @@ const DayWiseReport = () => {
     }
   };
 
-  // ✅ Robust receipt print (kept as you had)
   const handlePrintReceipt = async (slipId) => {
     try {
       Swal.fire({
@@ -254,7 +267,6 @@ const DayWiseReport = () => {
         api.get(`/transactions/slip/${slipId}`),
       ]);
 
-      // Normalize receipt
       let receipt = null;
       if (receiptResp.status === "fulfilled") {
         const r = receiptResp.value?.data;
@@ -277,7 +289,6 @@ const DayWiseReport = () => {
         return;
       }
 
-      // Normalize school
       let schoolData = null;
       if (schoolResp.status === "fulfilled") {
         const d = schoolResp.value?.data;
@@ -304,7 +315,6 @@ const DayWiseReport = () => {
         schoolData = { name: "Your School", address: "", logo: null, phone: "", email: "" };
       }
 
-      // Prefer server-side PDF generation if you have an endpoint
       try {
         const payload = { receipt, school: schoolData, fileName: `Receipt-${slipId}` };
         const res = await api.post("/receipt-pdf/receipt/generate-pdf", payload, {
@@ -320,7 +330,6 @@ const DayWiseReport = () => {
         console.warn("Server-side PDF generation failed, falling back to client-side PDF.", err?.message || err);
       }
 
-      // Fallback: client-side @react-pdf/renderer
       try {
         const student = receipt[0].Student || receipt[0].student || null;
         const blob = await pdf(
@@ -353,7 +362,6 @@ const DayWiseReport = () => {
 
   const handlePageChange = (pageNumber) => setCurrentPage(pageNumber);
 
-  // ✅ Better pagination display (avoid rendering 1000 buttons)
   const pageItems = useMemo(() => {
     const items = [];
     if (totalPages <= 1) return items;
@@ -429,10 +437,13 @@ const DayWiseReport = () => {
     );
   }, [filteredData]);
 
-  // Payment mode summary (Cash/Online)
   const paymentModeSummary = useMemo(() => {
     return filteredData.reduce((acc, item) => {
-      const key = isOnline(item.PaymentMode) ? "Online" : isCash(item.PaymentMode) ? "Cash" : (item.PaymentMode || "Other");
+      const key = isOnline(item.PaymentMode)
+        ? "Online"
+        : isCash(item.PaymentMode)
+        ? "Cash"
+        : (item.PaymentMode || "Other");
 
       if (!acc[key]) {
         acc[key] = {
@@ -517,12 +528,17 @@ const DayWiseReport = () => {
       return;
     }
 
+    const pdfRows = filteredData.map((item) => ({
+      ...item,
+      createdAt: item.DateOfTransaction || item.createdAt || null,
+    }));
+
     const doc = (
       <PdfReports
         school={school}
         startDate={formatDate(startDate)}
         endDate={formatDate(endDate)}
-        aggregatedData={filteredData}
+        aggregatedData={pdfRows}
         feeCategories={[]}
         categorySummary={calculateFeeHeadingSummary(filteredData)}
         totalSummary={{
@@ -547,7 +563,6 @@ const DayWiseReport = () => {
 
   return (
     <Container className="mt-4">
-      {/* Header */}
       <Row className="align-items-center mb-3">
         <Col>
           <h2 className="mb-0">Day Wise Report</h2>
@@ -568,7 +583,6 @@ const DayWiseReport = () => {
         </Col>
       </Row>
 
-      {/* Filters Card */}
       <Card className="shadow-sm border-0 mb-3">
         <Card.Body>
           <Row className="g-3">
@@ -657,7 +671,6 @@ const DayWiseReport = () => {
         </Alert>
       )}
 
-      {/* Summary Cards */}
       {hasData && (
         <Row className="g-3 mb-3">
           <Col md={3}>
@@ -708,7 +721,6 @@ const DayWiseReport = () => {
         </Row>
       )}
 
-      {/* Payment Mode Mini Summary */}
       {hasData && Object.keys(paymentModeSummary).length > 0 && (
         <Card className="shadow-sm border-0 mb-3">
           <Card.Body>
@@ -742,7 +754,6 @@ const DayWiseReport = () => {
         </Card>
       )}
 
-      {/* Collection Report */}
       <Row className="mt-2">
         <Col>
           {!hasData && !loading ? (
@@ -773,7 +784,7 @@ const DayWiseReport = () => {
                         "Class",
                         "Payment Mode",
                         "Fee Heading",
-                        "Created At",
+                        "Transaction Date & Time",
                         "Fee Received",
                         "Concession",
                         "Van Fee",
@@ -800,7 +811,11 @@ const DayWiseReport = () => {
                       const fineAmt = Number(item.totalFine ?? item.Fine_Amount ?? 0) || 0;
                       const total = fee + van + fineAmt;
 
-                      const pmKey = isOnline(item.PaymentMode) ? "Online" : isCash(item.PaymentMode) ? "Cash" : "Other";
+                      const pmKey = isOnline(item.PaymentMode)
+                        ? "Online"
+                        : isCash(item.PaymentMode)
+                        ? "Cash"
+                        : "Other";
 
                       return (
                         <tr key={`${item.Slip_ID}-${idx}`}>
@@ -817,16 +832,15 @@ const DayWiseReport = () => {
                             </Badge>
                           </td>
                           <td style={{ minWidth: 180 }}>{item.feeHeadingName || "—"}</td>
-                          <td style={{ whiteSpace: "nowrap" }}>{formatToDDMMYYYY(item.createdAt)}</td>
+                          <td style={{ whiteSpace: "nowrap" }}>
+                            {formatToDisplayDateTime(item.DateOfTransaction)}
+                          </td>
                           <td style={{ whiteSpace: "nowrap" }}>{formatTotalValue(fee)}</td>
                           <td style={{ whiteSpace: "nowrap" }}>{formatTotalValue(item.totalConcession)}</td>
                           <td style={{ whiteSpace: "nowrap" }}>{formatTotalValue(van)}</td>
-
-                          {/* ✅ FIXED: Fine rendering */}
                           <td style={{ whiteSpace: "nowrap" }}>
                             {fineAmt > 0 ? formatTotalValue(fineAmt) : "—"}
                           </td>
-
                           <td style={{ whiteSpace: "nowrap" }} className="fw-semibold">
                             {formatTotalValue(total)}
                           </td>
@@ -875,7 +889,6 @@ const DayWiseReport = () => {
         </Col>
       </Row>
 
-      {/* Fee Heading Summary */}
       <Row className="mt-4">
         <Col>
           {feeHeadingSummary.length > 0 && (
@@ -1087,7 +1100,6 @@ const DayWiseReport = () => {
         </Col>
       </Row>
 
-      {/* Receipt Modal */}
       {showReceiptModal && (
         <ReceiptModal
           show={showReceiptModal}

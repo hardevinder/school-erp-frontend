@@ -368,6 +368,26 @@ const Transactions = () => {
   const [showSearchPanel, setShowSearchPanel] = useState(true);
   const [showStudentExtra, setShowStudentExtra] = useState(false);
   const [showCollectionDetails, setShowCollectionDetails] = useState(true);
+  const [loadingSibling, setLoadingSibling] = useState(false);
+
+  const selectedStudentSiblings = useMemo(() => {
+    const stu = selectedStudentInfo || selectedAdmissionStudent || null;
+    if (!stu) return [];
+
+    const rows = [];
+    for (let i = 1; i <= 4; i++) {
+      const id = stu[`sibling_id_${i}`];
+      const name = stu[`sibling_name_${i}`];
+      if (id || name) {
+        rows.push({
+          slot: i,
+          id: id || "",
+          name: name || (id ? `ID:${id}` : `Sibling ${i}`),
+        });
+      }
+    }
+    return rows;
+  }, [selectedStudentInfo, selectedAdmissionStudent]);
 
 
   const handlePrintReceipt = async (slipId) => {
@@ -717,6 +737,117 @@ const Transactions = () => {
       return;
     }
     fetchFeeHeadsForStudent(s.class_id, s.id, s);
+  };
+
+  const resolveStudentByToken = async (token) => {
+    if (!token) return null;
+
+    const raw = String(token).trim().replace(/^ID:\s*/i, "").trim();
+    if (!raw) return null;
+
+    const normalizeResolvedStudent = (payload) => {
+      if (!payload) return null;
+      const row = Array.isArray(payload) ? payload[0] || null : payload;
+      return row ? normalizeStudentRow(row) : null;
+    };
+
+    try {
+      const resp = await api.get(`/students/admission/${encodeURIComponent(raw)}`);
+      const resolved = normalizeResolvedStudent(resp.data);
+      if (resolved?.id) return resolved;
+    } catch (_) {}
+
+    try {
+      const resp = await api.get(`/students`, {
+        params: { admission_number: raw },
+      });
+      const arr = asStudentsArray(resp.data).map(normalizeStudentRow);
+      const exact = arr.find(
+        (stu) => String(stu.admission_number || "").trim() === raw
+      );
+      if (exact?.id) return exact;
+    } catch (_) {}
+
+    if (/^\d+$/.test(raw)) {
+      try {
+        const resp = await api.get(`/students/${parseInt(raw, 10)}`);
+        const resolved = normalizeResolvedStudent(resp.data);
+        if (resolved?.id) return resolved;
+      } catch (_) {}
+    }
+
+    return null;
+  };
+
+  const handlePickSibling = async (token) => {
+    if (!token) return;
+
+    setLoadingSibling(true);
+    setModalError(null);
+
+    try {
+      const sibling = await resolveStudentByToken(token);
+
+      if (!sibling) {
+        Swal.fire("Not Found", "Sibling record not available.", "warning");
+        return;
+      }
+
+      setSelectedClass((prev) => prev || sibling.class_id || sibling.Class?.id || "");
+      setSelectedSection((prev) => prev || sibling.section_id || sibling.Section?.id || "");
+      setSelectedAdmissionStudent(sibling);
+      setSelectedStudentInfo(sibling);
+      setSbQuery(`${sibling.name} (${sibling.admission_number || "—"})`);
+      setSbOpen(false);
+
+      if (!selectedSession) {
+        setModalError("Please select an academic session before loading fee details.");
+        return;
+      }
+
+      fetchFeeHeadsForStudent(sibling.class_id, sibling.id, sibling);
+    } catch (err) {
+      console.error("handlePickSibling failed", err);
+      Swal.fire("Error", "Failed to load sibling details.", "error");
+    } finally {
+      setLoadingSibling(false);
+    }
+  };
+
+
+  const openStudentFeePage = () => {
+    const stu = selectedStudentInfo || selectedAdmissionStudent;
+    if (!stu) {
+      Swal.fire("Select student", "Please select a student first.", "warning");
+      return;
+    }
+
+    const admission = String(
+      stu?.admission_number || stu?.AdmissionNumber || ""
+    ).trim();
+
+    if (!admission) {
+      Swal.fire(
+        "Missing admission number",
+        "Student admission number not found.",
+        "warning"
+      );
+      return;
+    }
+
+    localStorage.setItem("activeStudentAdmission", admission);
+    window.dispatchEvent(new Event("student-switched"));
+
+    const feePageUrl = `${window.location.origin}/student-fee`;
+    const opened = window.open(feePageUrl, "_blank", "noopener,noreferrer");
+
+    if (!opened) {
+      Swal.fire(
+        "Popup blocked",
+        "Please allow popups for this site to open the parent fee page in a new tab.",
+        "warning"
+      );
+    }
   };
 
   useEffect(() => {
@@ -1540,7 +1671,29 @@ const Transactions = () => {
       setNewTransactionDetails(feeDetails);
 
       if (feeResponse.data.student) {
-        setSelectedStudentInfo(normalizeStudentRow(feeResponse.data.student));
+        const normalizedFeeStudent = normalizeStudentRow(feeResponse.data.student || {});
+        const previousSiblingData = selectedAdmissionStudent || selectedStudentInfo || {};
+
+        setSelectedStudentInfo({
+          ...previousSiblingData,
+          ...normalizedFeeStudent,
+          sibling_id_1:
+            normalizedFeeStudent.sibling_id_1 ?? previousSiblingData.sibling_id_1 ?? null,
+          sibling_name_1:
+            normalizedFeeStudent.sibling_name_1 ?? previousSiblingData.sibling_name_1 ?? null,
+          sibling_id_2:
+            normalizedFeeStudent.sibling_id_2 ?? previousSiblingData.sibling_id_2 ?? null,
+          sibling_name_2:
+            normalizedFeeStudent.sibling_name_2 ?? previousSiblingData.sibling_name_2 ?? null,
+          sibling_id_3:
+            normalizedFeeStudent.sibling_id_3 ?? previousSiblingData.sibling_id_3 ?? null,
+          sibling_name_3:
+            normalizedFeeStudent.sibling_name_3 ?? previousSiblingData.sibling_name_3 ?? null,
+          sibling_id_4:
+            normalizedFeeStudent.sibling_id_4 ?? previousSiblingData.sibling_id_4 ?? null,
+          sibling_name_4:
+            normalizedFeeStudent.sibling_name_4 ?? previousSiblingData.sibling_name_4 ?? null,
+        });
       }
     } catch (error) {
       console.error("Error fetching fee details:", error);
@@ -2436,6 +2589,13 @@ const Transactions = () => {
 
                     <div className="d-flex align-items-center gap-2 flex-wrap">
                       <Button
+                        variant="success"
+                        size="sm"
+                        onClick={openStudentFeePage}
+                      >
+                        Parent Payment Page
+                      </Button>
+                      <Button
                         variant="outline-secondary"
                         size="sm"
                         onClick={() => setShowStudentExtra((v) => !v)}
@@ -2632,7 +2792,7 @@ const Transactions = () => {
 
                             {selectedAdmissionStudent && (
                               <div className="mb-1">
-                                <div className="student-brief-inline">
+                                <div className="student-brief-inline d-flex align-items-center flex-wrap gap-2">
                                   <span>
                                     <strong>Name:</strong> {selectedAdmissionStudent?.name || "—"}
                                   </span>
@@ -2654,9 +2814,64 @@ const Transactions = () => {
                                   <span>
                                     | <strong>Adm No:</strong> {selectedAdmissionStudent?.admission_number || "—"}
                                   </span>
+                                  <Button
+                                    variant="success"
+                                    size="sm"
+                                    className="ms-0 ms-md-2"
+                                    onClick={openStudentFeePage}
+                                  >
+                                    Parent Payment Page
+                                  </Button>
                                 </div>
                               </div>
                             )}
+                          </Tab>
+
+                          <Tab
+                            eventKey="siblings"
+                            title={`Siblings${selectedStudentSiblings.length ? ` (${selectedStudentSiblings.length})` : ""}`}
+                            disabled={!selectedStudentInfo || selectedStudentSiblings.length === 0}
+                          >
+                            <div className="pt-3">
+                              {!selectedStudentInfo ? (
+                                <Alert variant="info" className="mb-0">
+                                  Search and select a student first.
+                                </Alert>
+                              ) : selectedStudentSiblings.length === 0 ? (
+                                <Alert variant="secondary" className="mb-0">
+                                  No siblings linked with this student.
+                                </Alert>
+                              ) : (
+                                <>
+                                  <div className="text-muted small mb-3">
+                                    Open a linked sibling directly and load the same collection screen.
+                                  </div>
+                                  <Row className="g-2">
+                                    {selectedStudentSiblings.map((sib) => (
+                                      <Col md={6} key={`${sib.slot}-${sib.id || sib.name}`}>
+                                        <Card className="shadow-sm border-0 h-100 compact-card">
+                                          <Card.Body className="d-flex justify-content-between align-items-center gap-2 flex-wrap">
+                                            <div>
+                                              <div className="fw-semibold">{sib.name}</div>
+                                              <div className="text-muted small">Sibling {sib.slot}</div>
+                                            </div>
+
+                                            <Button
+                                              size="sm"
+                                              variant="outline-primary"
+                                              onClick={() => handlePickSibling(sib.id || sib.name)}
+                                              disabled={loadingSibling}
+                                            >
+                                              {loadingSibling ? "Loading..." : "Open"}
+                                            </Button>
+                                          </Card.Body>
+                                        </Card>
+                                      </Col>
+                                    ))}
+                                  </Row>
+                                </>
+                              )}
+                            </div>
                           </Tab>
 
                           <Tab eventKey="searchByName" title="Search by Class">
@@ -2723,7 +2938,7 @@ const Transactions = () => {
 
                             {selectedStudentInfo && (
                               <div className="mb-1">
-                                <div className="student-brief-inline">
+                                <div className="student-brief-inline d-flex align-items-center flex-wrap gap-2">
                                   <div>
                                     <strong>Name:</strong> {selectedStudentInfo?.name || "—"}
                                   </div>
@@ -2745,6 +2960,14 @@ const Transactions = () => {
                                   <div>
                                     | <strong>Adm No:</strong> {selectedStudentInfo?.admission_number || "—"}
                                   </div>
+                                  <Button
+                                    variant="success"
+                                    size="sm"
+                                    className="ms-0 ms-md-2"
+                                    onClick={openStudentFeePage}
+                                  >
+                                    Parent Payment Page
+                                  </Button>
                                 </div>
                               </div>
                             )}

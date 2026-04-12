@@ -2,12 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { Container, Row, Col, Form, Button, Table, Alert, Pagination, Spinner } from 'react-bootstrap';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
-import api from '../api'; // Custom Axios instance (with token interceptor)
+import api from '../api';
 import Swal from 'sweetalert2';
 import { pdf } from '@react-pdf/renderer';
-import PdfReports from './PdfCategoryReport'; // Update path if your PDF component filename is different
+import PdfReports from './PdfCategoryReport';
 
-// Excel libs
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
 
@@ -22,22 +21,32 @@ const formatDate = (date) => {
   return d.toISOString().slice(0, 10);
 };
 
-// UI-only formatter → dd/MM/yyyy
-const formatToDDMMYYYY = (date) => {
+// UI formatter → dd/MM/yyyy hh:mm AM/PM
+const formatToDisplayDateTime = (date) => {
   if (!date) return '';
   const d = new Date(date);
+  if (Number.isNaN(d.getTime())) return '';
+
   const day = String(d.getDate()).padStart(2, '0');
   const month = String(d.getMonth() + 1).padStart(2, '0');
   const year = d.getFullYear();
-  return `${day}/${month}/${year}`;
+
+  let hours = d.getHours();
+  const minutes = String(d.getMinutes()).padStart(2, '0');
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+
+  hours = hours % 12;
+  hours = hours || 12;
+
+  return `${day}/${month}/${year} ${String(hours).padStart(2, '0')}:${minutes} ${ampm}`;
 };
 
-// Helper function for totals: if the value is nonzero, format it with commas and prefix with the Rupee symbol; otherwise, return "0"
+// Helper function for totals
 const formatTotalValue = (value) => {
   return Number(value) === 0 ? "0" : `₹${Number(value).toLocaleString('en-IN')}`;
 };
 
-// ✅ Normalize /schools API into a single school object
+// Normalize /schools API into a single school object
 const normalizeSchool = (raw) => {
   if (!raw) return null;
   if (Array.isArray(raw?.schools) && raw.schools.length) return raw.schools[0];
@@ -48,26 +57,27 @@ const normalizeSchool = (raw) => {
   return null;
 };
 
-// Function to pivot the data by Slip_ID so that each slip becomes one row.
-// Modified to separate Van Fee for Tuition Fee records.
+// Pivot data by Slip_ID
 const pivotReportData = (data) => {
   const grouped = data.reduce((acc, curr) => {
     const slipId = curr.Slip_ID;
+
     if (!acc[slipId]) {
-      // Initialize row with basic fields, an empty feeCategories object, and a new vanFeeTotal field.
       acc[slipId] = {
         Slip_ID: curr.Slip_ID,
-        createdAt: curr.createdAt,
+        DateOfTransaction: curr.DateOfTransaction || curr.createdAt || null,
         Student_ID: curr.Student_ID,
         PaymentMode: curr.PaymentMode,
         Student: curr.Student,
         feeCategories: {},
         vanFeeTotal: 0,
         fineAmount: 0,
-         Remarks: curr.Remarks || null, // ✅ NEW
+        Remarks: curr.Remarks || null,
       };
     }
-    const category = curr.feeCategoryName;
+
+    const category = curr.feeCategoryName || "Unknown";
+
     if (!acc[slipId].feeCategories[category]) {
       acc[slipId].feeCategories[category] = {
         totalFeeReceived: 0,
@@ -77,30 +87,32 @@ const pivotReportData = (data) => {
         totalReceived: 0,
       };
     }
+
     if (category === "Tuition Fee") {
-      // For Tuition Fee, add only the tuition fee amount to totalReceived (exclude Van Fee)
       acc[slipId].feeCategories[category].totalFeeReceived += Number(curr.totalFeeReceived) || 0;
       acc[slipId].feeCategories[category].totalConcession += Number(curr.totalConcession) || 0;
       acc[slipId].feeCategories[category].totalVanFee += Number(curr.totalVanFee) || 0;
       acc[slipId].feeCategories[category].totalVanFeeConcession += Number(curr.totalVanFeeConcession) || 0;
-      acc[slipId].feeCategories[category].totalReceived += Number(curr.totalFeeReceived) || 0; // exclude van fee here
-      // Accumulate Van Fee separately on the slip level
+      acc[slipId].feeCategories[category].totalReceived += Number(curr.totalFeeReceived) || 0;
+
       acc[slipId].vanFeeTotal += Number(curr.totalVanFee) || 0;
       acc[slipId].fineAmount += Number(curr.totalFine || curr.Fine_Amount || 0);
     } else {
-      // For other fee categories, process as before.
       acc[slipId].feeCategories[category].totalFeeReceived += Number(curr.totalFeeReceived) || 0;
       acc[slipId].feeCategories[category].totalConcession += Number(curr.totalConcession) || 0;
       acc[slipId].feeCategories[category].totalVanFee += Number(curr.totalVanFee) || 0;
       acc[slipId].feeCategories[category].totalVanFeeConcession += Number(curr.totalVanFeeConcession) || 0;
-      acc[slipId].feeCategories[category].totalReceived += (Number(curr.totalFeeReceived) || 0) + (Number(curr.totalVanFee) || 0);
+      acc[slipId].feeCategories[category].totalReceived +=
+        (Number(curr.totalFeeReceived) || 0) + (Number(curr.totalVanFee) || 0);
     }
+
     return acc;
   }, {});
+
   return Object.values(grouped);
 };
 
-// Get unique fee categories across all pivoted rows to generate table headers
+// Get unique fee categories across all pivoted rows
 const getUniqueCategories = (pivotedData) => {
   const categories = new Set();
   pivotedData.forEach((row) => {
@@ -109,9 +121,7 @@ const getUniqueCategories = (pivotedData) => {
   return Array.from(categories);
 };
 
-// Calculate Category Summary (grouped by feeCategoryName with breakdown by PaymentMode)
-// Calculate Category Summary (grouped by feeCategoryName with breakdown by PaymentMode)
-// ✅ Now counts HDFC as Online
+// Category summary
 const calculateCategorySummary = (data) => {
   const norm = (v) => String(v ?? "").trim().toLowerCase();
   const isCash = (m) => norm(m) === "cash";
@@ -119,6 +129,7 @@ const calculateCategorySummary = (data) => {
 
   const groups = data.reduce((acc, curr) => {
     const category = curr.feeCategoryName || "Unknown";
+
     if (!acc[category]) {
       acc[category] = {
         cash: {
@@ -151,7 +162,6 @@ const calculateCategorySummary = (data) => {
       acc[category].cash.totalVanFeeConcession += vanConc;
       acc[category].cash.totalReceived += fee + van + fine;
     } else if (isOnline(curr.PaymentMode)) {
-      // ✅ Online includes HDFC now
       acc[category].online.totalFeeReceived += fee;
       acc[category].online.totalConcession += conc;
       acc[category].online.totalVanFee += van;
@@ -165,6 +175,7 @@ const calculateCategorySummary = (data) => {
   return Object.keys(groups).map((category) => {
     const cash = groups[category].cash;
     const online = groups[category].online;
+
     const overall = {
       totalFeeReceived: cash.totalFeeReceived + online.totalFeeReceived,
       totalConcession: cash.totalConcession + online.totalConcession,
@@ -172,10 +183,10 @@ const calculateCategorySummary = (data) => {
       totalVanFeeConcession: cash.totalVanFeeConcession + online.totalVanFeeConcession,
       totalReceived: cash.totalReceived + online.totalReceived,
     };
+
     return { category, cash, online, overall };
   });
 };
-  
 
 const DayWiseReport = () => {
   const [startDate, setStartDate] = useState(null);
@@ -183,17 +194,17 @@ const DayWiseReport = () => {
   const [reportData, setReportData] = useState([]);
   const [school, setSchool] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [pdfLoading, setPdfLoading] = useState(false); // NEW: PDF loader state
+  const [pdfLoading, setPdfLoading] = useState(false);
   const [error, setError] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const recordsPerPage = 500;
 
-  // ✅ Fetch school details from API (normalized)
   const fetchSchoolDetails = async () => {
     try {
       const response = await api.get('/schools');
       const schoolObj = normalizeSchool(response.data);
       setSchool(schoolObj || null);
+
       if (!schoolObj) {
         console.warn('No valid school object found in /schools response');
       }
@@ -212,15 +223,16 @@ const DayWiseReport = () => {
       alert('Please select both start and end dates.');
       return;
     }
+
     setLoading(true);
     setError('');
+
     try {
-      const start = formatDate(startDate);  // yyyy-MM-dd for backend
-      const end = formatDate(endDate);      // yyyy-MM-dd for backend
+      const start = formatDate(startDate);
+      const end = formatDate(endDate);
       const response = await api.get(`/reports/day-wise?startDate=${start}&endDate=${end}`);
       setReportData(response.data || []);
-      console.log('REPORT DATA LENGTH', (response.data || []).length);
-      setCurrentPage(1); // Reset pagination to first page
+      setCurrentPage(1);
     } catch (err) {
       if (err.response && err.response.status === 401) {
         Swal.fire({
@@ -238,14 +250,10 @@ const DayWiseReport = () => {
     }
   };
 
-  // Pivot the report data for the table with unique Slip_ID rows
   const pivotedData = pivotReportData(reportData);
-  // Unique fee categories for dynamic columns
   const uniqueCategories = getUniqueCategories(pivotedData);
-  // Calculate Category Summary (from original data)
   const categorySummary = calculateCategorySummary(reportData);
 
-  // Compute overall category totals (for the summary table footer)
   const overallCategoryTotals = categorySummary.reduce((acc, item) => {
     acc.cash.totalFeeReceived += item.cash.totalFeeReceived;
     acc.online.totalFeeReceived += item.online.totalFeeReceived;
@@ -258,23 +266,20 @@ const DayWiseReport = () => {
     acc.cash.totalReceived += item.cash.totalReceived;
     acc.online.totalReceived += item.online.totalReceived;
     return acc;
-  }, { 
+  }, {
     cash: { totalFeeReceived: 0, totalConcession: 0, totalVanFee: 0, totalVanFeeConcession: 0, totalReceived: 0 },
     online: { totalFeeReceived: 0, totalConcession: 0, totalVanFee: 0, totalVanFeeConcession: 0, totalReceived: 0 }
   });
 
-  // Calculate paginated data (based on pivoted data now)
   const indexOfLastRecord = currentPage * recordsPerPage;
   const indexOfFirstRecord = indexOfLastRecord - recordsPerPage;
   const currentRecords = pivotedData.slice(indexOfFirstRecord, indexOfLastRecord);
   const totalPages = Math.ceil(pivotedData.length / recordsPerPage);
 
-  // Pagination change handler
   const handlePageChange = (pageNumber) => {
     setCurrentPage(pageNumber);
   };
 
-  // Compute overall totals across all slips (for the pivoted table footer)
   const overallTotals = uniqueCategories.reduce((totals, category) => {
     totals[category] = pivotedData.reduce((sum, row) => {
       const feeData = row.feeCategories[category];
@@ -282,15 +287,11 @@ const DayWiseReport = () => {
     }, 0);
     return totals;
   }, {});
+
   const grandTotal = Object.values(overallTotals).reduce((sum, val) => sum + val, 0);
-
-  // Compute overall Van Fee total across all slips
   const overallVanFeeTotal = pivotedData.reduce((sum, row) => sum + (row.vanFeeTotal || 0), 0);
-
   const overallFineTotal = pivotedData.reduce((sum, row) => sum + (row.fineAmount || 0), 0);
 
-  // NEW: openPdfInNewTab now fetches school details on-demand if missing,
-  // and uses pivotedData/categorySummary/uniqueCategories to generate the same report PDF.
   const openPdfInNewTab = async () => {
     if (!reportData || reportData.length === 0) {
       alert('No report data to print. Please generate the report first.');
@@ -299,12 +300,13 @@ const DayWiseReport = () => {
 
     setPdfLoading(true);
     let schoolData = school;
+
     try {
       if (!schoolData) {
-        // Fetch school details if not already loaded (normalized)
         const resp = await api.get('/schools');
         schoolData = normalizeSchool(resp.data);
         setSchool(schoolData);
+
         if (!schoolData) {
           console.warn('No school data returned from /schools');
           Swal.fire({
@@ -317,13 +319,22 @@ const DayWiseReport = () => {
         }
       }
 
-      // Build document props consistent with the pivoted view
+      const reportDataForPdf = reportData.map((item) => ({
+        ...item,
+        createdAt: item.DateOfTransaction || item.createdAt || null,
+      }));
+
+      const pivotedDataForPdf = pivotedData.map((row) => ({
+        ...row,
+        createdAt: row.DateOfTransaction || row.createdAt || null,
+      }));
+
       const docProps = {
         school: schoolData,
         startDate: startDate ? formatDate(startDate) : null,
         endDate: endDate ? formatDate(endDate) : null,
-        aggregatedData: reportData, // raw data (PdfReports component can decide how to use it)
-        pivotedData,                // the pivoted rows — handy if your PDF component supports it
+        aggregatedData: reportDataForPdf,
+        pivotedData: pivotedDataForPdf,
         feeCategories: uniqueCategories,
         categorySummary,
         totals: {
@@ -350,12 +361,9 @@ const DayWiseReport = () => {
 
   /* ======================================================
      Excel export helpers
-     - Builds 2 sheets: Collection (pivoted) + Category Summary
-     - Uses XLSX to create workbook and file-saver to download
-     ====================================================== */
+  ====================================================== */
 
   const buildCollectionSheetRows = (pivoted, categories) => {
-    // Build header order
     const header = [
       'Sr No',
       'Slip_ID',
@@ -363,7 +371,7 @@ const DayWiseReport = () => {
       'Student Name',
       'Class',
       'PaymentMode',
-      'Created At',
+      'Transaction Date & Time',
       ...categories,
       'Van Fee',
       'Fine',
@@ -371,15 +379,12 @@ const DayWiseReport = () => {
       'Overall Total'
     ];
 
-    // Build rows
     const rows = pivoted.map((row, idx) => {
-      // Sum category totals
       const categoryTotal = Object.values(row.feeCategories).reduce(
         (sum, feeData) => sum + (feeData.totalReceived || 0), 0
       );
       const overallTotal = categoryTotal + (row.vanFeeTotal || 0) + (row.fineAmount || 0);
 
-      // Flatten categories into values following header order
       const categoryValues = categories.map(cat => {
         const fd = row.feeCategories[cat];
         return fd ? fd.totalReceived : 0;
@@ -392,11 +397,14 @@ const DayWiseReport = () => {
         'Student Name': row.Student?.name || '',
         Class: row.Student?.Class?.class_name || '',
         PaymentMode: row.PaymentMode || '',
-        'Created At': formatToDDMMYYYY(row.createdAt),
-        ...categories.reduce((acc, cat, i) => { acc[cat] = categoryValues[i]; return acc; }, {}),
+        'Transaction Date & Time': formatToDisplayDateTime(row.DateOfTransaction),
+        ...categories.reduce((acc, cat, i) => {
+          acc[cat] = categoryValues[i];
+          return acc;
+        }, {}),
         'Van Fee': row.vanFeeTotal || 0,
         'Fine': row.fineAmount || 0,
-        'Remarks': row.Remarks || '',  // ✅ new
+        'Remarks': row.Remarks || '',
         'Overall Total': overallTotal
       };
     });
@@ -405,7 +413,7 @@ const DayWiseReport = () => {
   };
 
   const buildCategorySummaryRows = (categorySummaryList) => {
-    const rows = categorySummaryList.map((item) => ({
+    return categorySummaryList.map((item) => ({
       Category: item.category,
       'Cash - FeeReceived': item.cash.totalFeeReceived || 0,
       'Online - FeeReceived': item.online.totalFeeReceived || 0,
@@ -420,8 +428,6 @@ const DayWiseReport = () => {
       'Online - TotalReceived': item.online.totalReceived || 0,
       'Overall - TotalReceived': (item.cash.totalReceived || 0) + (item.online.totalReceived || 0),
     }));
-
-    return rows;
   };
 
   const exportToExcel = () => {
@@ -430,34 +436,29 @@ const DayWiseReport = () => {
       return;
     }
 
-    // Build Collection sheet
     const { header, rows } = buildCollectionSheetRows(pivotedData, uniqueCategories);
-    const wsCollection = XLSX.utils.json_to_sheet(rows, { header: header });
-    // Auto width (basic)
+    const wsCollection = XLSX.utils.json_to_sheet(rows, { header });
     const colWidths = header.map(h => ({ wch: Math.max(10, String(h).length + 2) }));
     wsCollection['!cols'] = colWidths;
 
-    // Build Category Summary sheet
     const catRows = buildCategorySummaryRows(categorySummary);
     const wsCategory = XLSX.utils.json_to_sheet(catRows);
     wsCategory['!cols'] = Object.keys(catRows[0] || {}).map(k => ({ wch: Math.max(12, k.length + 2) }));
 
-    // Create workbook and append sheets
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, wsCollection, 'Collection');
     XLSX.utils.book_append_sheet(wb, wsCategory, 'Category Summary');
 
-    // Add a totals sheet optionally
     const totalsSheetData = [
       { Metric: 'Grand Total (Categories)', Value: grandTotal },
       { Metric: 'Overall Van Fee Total', Value: overallVanFeeTotal },
       { Metric: 'Overall Fine Total', Value: overallFineTotal },
       { Metric: 'Grand Combined Total', Value: grandTotal + overallVanFeeTotal + overallFineTotal }
     ];
+
     const wsTotals = XLSX.utils.json_to_sheet(totalsSheetData);
     XLSX.utils.book_append_sheet(wb, wsTotals, 'Totals');
 
-    // Generate binary and save
     const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
     const blob = new Blob([wbout], { type: 'application/octet-stream' });
     const fileName = `DayWiseReport_${formatDate(startDate)}_to_${formatDate(endDate)}.xlsx`;
@@ -467,10 +468,7 @@ const DayWiseReport = () => {
   return (
     <Container className="mt-4">
       <h1 className="text-center">Day Wise Report</h1>
-      
-      {/* -------------------------
-         Date pickers and action buttons
-         ------------------------- */}
+
       <Row className="justify-content-center mt-4">
         <Col md={3}>
           <Form.Group controlId="startDate">
@@ -478,7 +476,7 @@ const DayWiseReport = () => {
             <DatePicker
               selected={startDate}
               onChange={(date) => setStartDate(date)}
-              dateFormat="dd/MM/yyyy"        // 👈 UI in dd/MM/yyyy
+              dateFormat="dd/MM/yyyy"
               className="form-control"
               placeholderText="Select Start Date"
               showMonthDropdown
@@ -490,13 +488,14 @@ const DayWiseReport = () => {
             />
           </Form.Group>
         </Col>
+
         <Col md={3}>
           <Form.Group controlId="endDate">
             <Form.Label>End Date</Form.Label>
             <DatePicker
               selected={endDate}
               onChange={(date) => setEndDate(date)}
-              dateFormat="dd/MM/yyyy"        // 👈 UI in dd/MM/yyyy
+              dateFormat="dd/MM/yyyy"
               className="form-control"
               placeholderText="Select End Date"
               minDate={startDate}
@@ -509,6 +508,7 @@ const DayWiseReport = () => {
             />
           </Form.Group>
         </Col>
+
         <Col md={4} className="d-flex align-items-end">
           <div className="w-100 d-flex">
             <Button
@@ -525,7 +525,6 @@ const DayWiseReport = () => {
               ) : 'Generate Report'}
             </Button>
 
-            {/* Print as PDF - enabled when reportData exists; fetches school if needed */}
             <Button
               variant="secondary"
               onClick={openPdfInNewTab}
@@ -543,7 +542,6 @@ const DayWiseReport = () => {
               )}
             </Button>
 
-            {/* Export to Excel - always visible, disabled if no data or pdf is generating */}
             <Button
               variant="success"
               onClick={exportToExcel}
@@ -565,7 +563,6 @@ const DayWiseReport = () => {
         </Row>
       )}
 
-      {/* Pivoted Collection Report Section */}
       <Row className="mt-5">
         <Col>
           {pivotedData.length === 0 && !loading ? (
@@ -585,7 +582,7 @@ const DayWiseReport = () => {
                       <th className="sticky-top bg-white">Student Name</th>
                       <th className="sticky-top bg-white">Class</th>
                       <th className="sticky-top bg-white">Payment Mode</th>
-                      <th className="sticky-top bg-white">Created At</th>
+                      <th className="sticky-top bg-white">Transaction Date & Time</th>
                       {uniqueCategories.map((cat, idx) => (
                         <th key={idx} className="sticky-top bg-white">{cat}</th>
                       ))}
@@ -595,14 +592,14 @@ const DayWiseReport = () => {
                       <th className="sticky-top bg-white">Overall Total</th>
                     </tr>
                   </thead>
+
                   <tbody>
                     {currentRecords.map((row, idx) => {
-                      // Sum the fee category totals
                       const categoryTotal = Object.values(row.feeCategories).reduce(
                         (sum, feeData) => sum + feeData.totalReceived, 0
                       );
-                      // Now add the separate van fee total for Tuition Fee
                       const overallTotal = categoryTotal + (row.vanFeeTotal || 0);
+
                       return (
                         <tr key={row.Slip_ID}>
                           <td>{indexOfFirstRecord + idx + 1}</td>
@@ -611,8 +608,7 @@ const DayWiseReport = () => {
                           <td>{row.Student?.name}</td>
                           <td>{row.Student?.Class?.class_name}</td>
                           <td>{row.PaymentMode}</td>
-                          {/* Force dd/MM/yyyy on UI */}
-                          <td>{formatToDDMMYYYY(row.createdAt)}</td>
+                          <td>{formatToDisplayDateTime(row.DateOfTransaction)}</td>
                           {uniqueCategories.map((cat, i) => {
                             const feeData = row.feeCategories[cat];
                             return (
@@ -622,16 +618,14 @@ const DayWiseReport = () => {
                             );
                           })}
                           <td>{formatTotalValue(row.vanFeeTotal)}</td>
-                          <td>
-                            {row.fineAmount > 0 ? formatTotalValue(row.fineAmount) : "-"}
-                          </td>
-                          <td>{row.Remarks || "—"}</td> {/* ✅ new column */}
+                          <td>{row.fineAmount > 0 ? formatTotalValue(row.fineAmount) : "-"}</td>
+                          <td>{row.Remarks || "—"}</td>
                           <td>{formatTotalValue(overallTotal + (row.fineAmount || 0))}</td>
-
                         </tr>
                       );
                     })}
                   </tbody>
+
                   {pivotedData.length > 0 && (
                     <tfoot>
                       <tr>
@@ -648,6 +642,7 @@ const DayWiseReport = () => {
                   )}
                 </Table>
               </div>
+
               {totalPages > 1 && (
                 <Pagination className="justify-content-center mt-3">
                   {[...Array(totalPages)].map((_, idx) => (
@@ -666,7 +661,6 @@ const DayWiseReport = () => {
         </Col>
       </Row>
 
-      {/* Category Summary Section */}
       <Row className="mt-5">
         <Col>
           {categorySummary.length > 0 && (
@@ -701,6 +695,7 @@ const DayWiseReport = () => {
                       <th className="sticky-top bg-white">Overall</th>
                     </tr>
                   </thead>
+
                   <tbody>
                     {categorySummary.map((item, index) => (
                       <tr key={index}>
@@ -723,59 +718,43 @@ const DayWiseReport = () => {
                       </tr>
                     ))}
                   </tbody>
+
                   <tfoot>
                     <tr>
                       <td><strong>Overall Totals</strong></td>
-                      <td>
-                        <strong>{formatTotalValue(overallCategoryTotals.cash.totalFeeReceived)}</strong>
-                      </td>
-                      <td>
-                        <strong>{formatTotalValue(overallCategoryTotals.online.totalFeeReceived)}</strong>
-                      </td>
+                      <td><strong>{formatTotalValue(overallCategoryTotals.cash.totalFeeReceived)}</strong></td>
+                      <td><strong>{formatTotalValue(overallCategoryTotals.online.totalFeeReceived)}</strong></td>
                       <td>
                         <strong>
                           {formatTotalValue(overallCategoryTotals.cash.totalFeeReceived + overallCategoryTotals.online.totalFeeReceived)}
                         </strong>
                       </td>
-                      <td>
-                        <strong>{formatTotalValue(overallCategoryTotals.cash.totalConcession)}</strong>
-                      </td>
-                      <td>
-                        <strong>{formatTotalValue(overallCategoryTotals.online.totalConcession)}</strong>
-                      </td>
+                      <td><strong>{formatTotalValue(overallCategoryTotals.cash.totalConcession)}</strong></td>
+                      <td><strong>{formatTotalValue(overallCategoryTotals.online.totalConcession)}</strong></td>
                       <td>
                         <strong>
                           {formatTotalValue(overallCategoryTotals.cash.totalConcession + overallCategoryTotals.online.totalConcession)}
                         </strong>
                       </td>
-                      <td>
-                        <strong>{formatTotalValue(overallCategoryTotals.cash.totalVanFee)}</strong>
-                      </td>
-                      <td>
-                        <strong>{formatTotalValue(overallCategoryTotals.online.totalVanFee)}</strong>
-                      </td>
+                      <td><strong>{formatTotalValue(overallCategoryTotals.cash.totalVanFee)}</strong></td>
+                      <td><strong>{formatTotalValue(overallCategoryTotals.online.totalVanFee)}</strong></td>
                       <td>
                         <strong>
                           {formatTotalValue(overallCategoryTotals.cash.totalVanFee + overallCategoryTotals.online.totalVanFee)}
                         </strong>
                       </td>
-                      <td>
-                        <strong>{formatTotalValue(overallCategoryTotals.cash.totalVanFeeConcession)}</strong>
-                      </td>
-                      <td>
-                        <strong>{formatTotalValue(overallCategoryTotals.online.totalVanFeeConcession)}</strong>
-                      </td>
+                      <td><strong>{formatTotalValue(overallCategoryTotals.cash.totalVanFeeConcession)}</strong></td>
+                      <td><strong>{formatTotalValue(overallCategoryTotals.online.totalVanFeeConcession)}</strong></td>
                       <td>
                         <strong>
-                          {formatTotalValue(overallCategoryTotals.cash.totalVanFeeConcession + overallCategoryTotals.online.totalVanFeeConcession)}
+                          {formatTotalValue(
+                            overallCategoryTotals.cash.totalVanFeeConcession +
+                            overallCategoryTotals.online.totalVanFeeConcession
+                          )}
                         </strong>
                       </td>
-                      <td>
-                        <strong>{formatTotalValue(overallCategoryTotals.cash.totalReceived)}</strong>
-                      </td>
-                      <td>
-                        <strong>{formatTotalValue(overallCategoryTotals.online.totalReceived)}</strong>
-                      </td>
+                      <td><strong>{formatTotalValue(overallCategoryTotals.cash.totalReceived)}</strong></td>
+                      <td><strong>{formatTotalValue(overallCategoryTotals.online.totalReceived)}</strong></td>
                       <td>
                         <strong>
                           {formatTotalValue(overallCategoryTotals.cash.totalReceived + overallCategoryTotals.online.totalReceived)}

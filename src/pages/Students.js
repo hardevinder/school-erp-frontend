@@ -1279,21 +1279,23 @@ const Students = () => {
 
           const fetchAndPopulateStudents = async (classId, sectionId) => {
             stuSel.innerHTML = `<option value="">Loading...</option>`;
+
             if (!classId) {
               stuSel.innerHTML = `<option value="">Select class first</option>`;
               return;
             }
+
             try {
               const url = `/students/sibling-list?class_id=${classId}${
                 sectionId ? `&section_id=${sectionId}` : ""
               }`;
               const { data } = await api.get(url);
+
               if (!Array.isArray(data) || data.length === 0) {
                 stuSel.innerHTML = `<option value="">No students found</option>`;
-                hiddenId.value = "";
-                hiddenName.value = "";
                 return;
               }
+
               const opts = [`<option value="">Select Student</option>`].concat(
                 data.map((st) => {
                   const token = st.admission_number || String(st.id);
@@ -1340,29 +1342,67 @@ const Students = () => {
             }
           };
 
-          const preClass = clsSel.value;
-          const preSection = secSel.value;
-          const preStudentId = hiddenId.value;
+          const preStudentId = hiddenId.value || "";
+          const preStudentName = hiddenName.value || "";
+          let preClass = clsSel.value || "";
+          let preSection = secSel.value || "";
+
+          // derive missing class/section from already loaded students list
+          if (preStudentId && (!preClass || !preSection)) {
+            const linkedStudent = students.find(
+              (st) =>
+                String(st.id) === String(preStudentId) ||
+                String(st.admission_number || "").trim() === String(preStudentId).trim()
+            );
+
+            if (linkedStudent) {
+              preClass = preClass || String(linkedStudent.class_id || "");
+              preSection = preSection || String(linkedStudent.section_id || "");
+            }
+          }
 
           (async () => {
+            // case 1: we know class -> load properly
             if (preClass) {
+              clsSel.value = String(preClass);
               populateSectionsForClass(preClass);
+
+              if (preSection) {
+                secSel.value = String(preSection);
+              }
+
               await fetchAndPopulateStudents(preClass, preSection || "");
-            } else {
-              populateSectionsForClass("");
-              stuSel.innerHTML = `<option value="">Select class first</option>`;
+
+              if (preStudentId) {
+                const opt =
+                  Array.from(stuSel.options).find((o) => String(o.value) === String(preStudentId)) ||
+                  Array.from(stuSel.options).find((o) => String(o.dataset.pk) === String(preStudentId));
+
+                if (opt) {
+                  opt.selected = true;
+                  hiddenId.value = opt.value;
+                  hiddenName.value = opt.dataset.name || preStudentName || opt.textContent || "";
+                }
+              }
+              return;
             }
 
-            if (preClass && preStudentId) {
-              const opt =
-                Array.from(stuSel.options).find((o) => String(o.value) === String(preStudentId)) ||
-                Array.from(stuSel.options).find((o) => String(o.dataset.pk) === String(preStudentId));
-              if (opt) {
-                opt.selected = true;
-                hiddenName.value = opt.dataset.name || opt.textContent || "";
-                hiddenId.value = opt.value;
-              }
+            // case 2: class unknown but sibling already exists -> keep selected option visible
+            if (preStudentId) {
+              stuSel.innerHTML = `
+                <option value="">Select Student</option>
+                <option value="${String(preStudentId).replace(/"/g, "&quot;")}" selected>
+                  ${(preStudentName || `ID:${preStudentId}`).replace(/</g, "&lt;")}
+                </option>
+              `;
+              hiddenId.value = preStudentId;
+              hiddenName.value = preStudentName;
+              return;
             }
+
+            // case 3: no existing sibling
+            populateSectionsForClass("");
+            stuSel.innerHTML = `<option value="">Select class first</option>`;
           })();
         });
       },
@@ -1774,8 +1814,12 @@ const Students = () => {
       return;
     }
 
-    // ✅ sibling click still opens VIEW (keep your view screen for sibling navigation)
-    handleView(respData);
+    // ✅ sibling click opens same EDIT popup as main student row
+    if (canManageStudents) {
+      showStudentForm("edit", respData);
+    } else {
+      handleView(respData);
+    }
   };
 
   const PhotoCell = ({ student }) => {
