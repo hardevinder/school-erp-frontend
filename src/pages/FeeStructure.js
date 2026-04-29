@@ -1,4 +1,3 @@
-// src/pages/FeeStructure.jsx
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import api from "../api";
 import Swal from "sweetalert2";
@@ -224,8 +223,7 @@ const FeeStructure = () => {
       )
       .join("");
 
-    const isCopy = Boolean(existing?.__isCopy);
-    const isEdit = Boolean(existing) && !isCopy;
+    const isEdit = Boolean(existing);
 
     const dueDateFormatted =
       existing && existing.fineStartDate
@@ -360,7 +358,7 @@ const FeeStructure = () => {
       </div>
     `;
 
-    const modalTitle = isEdit ? "Edit Fee" : isCopy ? "Copy Fee" : "Add Fee";
+    const modalTitle = isEdit ? "Edit Fee" : "Add Fee";
 
     return Swal.fire({
       ...swalBaseOpts,
@@ -414,10 +412,6 @@ const FeeStructure = () => {
 
         fineTypeSelect.addEventListener("change", applyFineMode);
         applyFineMode();
-
-        if (isCopy) {
-          setTimeout(() => document.getElementById("classId")?.focus(), 50);
-        }
       },
       preConfirm: () => {
         const sessionId = document.getElementById("sessionId").value;
@@ -488,11 +482,7 @@ const FeeStructure = () => {
           Swal.fire("Updated!", "Fee structure updated.", "success");
         } else {
           await api.post(`/fee-structures`, res.value);
-          Swal.fire(
-            isCopy ? "Copied!" : "Added!",
-            isCopy ? "Fee structure copied." : "Fee structure added.",
-            "success"
-          );
+          Swal.fire("Added!", "Fee structure added.", "success");
         }
 
         setSelectedSessionId(Number(res.value.session_id));
@@ -503,7 +493,7 @@ const FeeStructure = () => {
           "Error",
           getApiErrorMessage(
             e,
-            `Failed to ${isEdit ? "update" : isCopy ? "copy" : "add"} the fee structure.`
+            `Failed to ${isEdit ? "update" : "add"} the fee structure.`
           ),
           "error"
         );
@@ -511,12 +501,537 @@ const FeeStructure = () => {
     });
   };
 
+  const openCopyClassStructureModal = async () => {
+    const classesData = classes.length ? classes : await fetchClasses();
+    const sessionData = sessions.length ? sessions : await fetchSessions();
+
+    if (!classesData.length) {
+      return Swal.fire("No Classes", "No classes are available.", "info");
+    }
+
+    if (!sessionData.length) {
+      return Swal.fire("No Sessions", "No sessions are available.", "info");
+    }
+
+    const classOptionsHtml = classesData
+      .map((cls) => `<option value="${cls.id}">${cls.class_name}</option>`)
+      .join("");
+
+    const sessionOptionsHtml = sessionData
+      .map(
+        (s) =>
+          `<option value="${s.id}">${s.name}${s.is_active ? " (Active)" : ""}</option>`
+      )
+      .join("");
+
+    const html = `
+      <div style="text-align:left;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div>
+            <label class="fs-lbl" for="copyFromSessionId">Source Session</label>
+            <select id="copyFromSessionId" class="fs-inp">${sessionOptionsHtml}</select>
+          </div>
+
+          <div>
+            <label class="fs-lbl" for="copyToSessionId">Target Session</label>
+            <select id="copyToSessionId" class="fs-inp">${sessionOptionsHtml}</select>
+          </div>
+
+          <div>
+            <label class="fs-lbl" for="copyFromClassId">Source Class</label>
+            <select id="copyFromClassId" class="fs-inp">${classOptionsHtml}</select>
+          </div>
+
+          <div>
+            <label class="fs-lbl" for="copyOverwriteExisting">If target already exists</label>
+            <select id="copyOverwriteExisting" class="fs-inp">
+              <option value="false">Skip existing target rows</option>
+              <option value="true">Overwrite existing target rows</option>
+            </select>
+          </div>
+        </div>
+
+        <div style="margin-top:14px;">
+          <label class="fs-lbl" for="copyTargetClassIds">Target Classes</label>
+          <select
+            id="copyTargetClassIds"
+            class="fs-inp"
+            multiple
+            size="10"
+            style="min-height:220px;"
+          >
+            ${classOptionsHtml}
+          </select>
+          <div style="font-size:12px;color:#666;margin-top:6px;">
+            Hold Ctrl / Cmd to select multiple target classes.
+          </div>
+        </div>
+      </div>
+    `;
+
+    const res = await Swal.fire({
+      title: "Copy Full Class Structure",
+      html,
+      width: "780px",
+      showCancelButton: true,
+      confirmButtonText: "Copy Now",
+      allowOutsideClick: false,
+      allowEscapeKey: false,
+      focusConfirm: false,
+      customClass: {
+        popup: "fs-swal-popup",
+        title: "fs-swal-title",
+        confirmButton: "fs-swal-btn",
+        cancelButton: "fs-swal-btn fs-swal-btn-cancel",
+      },
+      didOpen: () => {
+        const fromSessionEl = document.getElementById("copyFromSessionId");
+        const toSessionEl = document.getElementById("copyToSessionId");
+
+        if (selectedSessionId) {
+          fromSessionEl.value = String(selectedSessionId);
+          toSessionEl.value = String(selectedSessionId);
+        }
+      },
+      preConfirm: () => {
+        const fromClassValue = document.getElementById("copyFromClassId")?.value;
+        const fromSessionValue = document.getElementById("copyFromSessionId")?.value;
+        const toSessionValue = document.getElementById("copyToSessionId")?.value;
+
+        const fromClassId =
+          fromClassValue === "" ||
+          fromClassValue === undefined ||
+          fromClassValue === null
+            ? null
+            : Number(fromClassValue);
+
+        const fromSessionId =
+          fromSessionValue === "" ||
+          fromSessionValue === undefined ||
+          fromSessionValue === null
+            ? null
+            : Number(fromSessionValue);
+
+        const toSessionId =
+          toSessionValue === "" ||
+          toSessionValue === undefined ||
+          toSessionValue === null
+            ? null
+            : Number(toSessionValue);
+
+        const selectedOptions = Array.from(
+          document.getElementById("copyTargetClassIds")?.selectedOptions || []
+        );
+
+        const targetClassIds = [
+          ...new Set(
+            selectedOptions
+              .map((opt) => opt.value)
+              .filter((v) => v !== "" && v !== undefined && v !== null)
+              .map((v) => Number(v))
+              .filter((v) => Number.isInteger(v) && v !== fromClassId)
+          ),
+        ];
+
+        if (fromSessionId === null) {
+          Swal.showValidationMessage("Source session is required");
+          return false;
+        }
+
+        if (toSessionId === null) {
+          Swal.showValidationMessage("Target session is required");
+          return false;
+        }
+
+        if (fromClassId === null) {
+          Swal.showValidationMessage("Source class is required");
+          return false;
+        }
+
+        if (!targetClassIds.length) {
+          Swal.showValidationMessage(
+            "Please select at least one target class other than source class"
+          );
+          return false;
+        }
+
+        return {
+          from_class_id: fromClassId,
+          from_session_id: fromSessionId,
+          to_session_id: toSessionId,
+          to_class_ids: targetClassIds,
+          overwrite:
+            document.getElementById("copyOverwriteExisting")?.value === "true",
+        };
+      },
+    });
+
+    if (!res.isConfirmed) return;
+
+    try {
+      const { data } = await api.post("/fee-structures/copy-class", res.value);
+
+      const created = Number(data?.created || 0);
+      const updated = Number(data?.updated || 0);
+      const perTarget = data?.per_target || {};
+
+      const classNameMap = new Map(
+        classesData.map((cls) => [String(cls.id), cls.class_name])
+      );
+
+      const perTargetHtml = Object.entries(perTarget)
+        .map(([classId, stats]) => {
+          const className = classNameMap.get(String(classId)) || `Class ${classId}`;
+          return `
+            <tr>
+              <td style="padding:6px 8px;border-bottom:1px solid #eee;">${className}</td>
+              <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right;">${Number(
+                stats?.created || 0
+              )}</td>
+              <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right;">${Number(
+                stats?.updated || 0
+              )}</td>
+              <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right;">${Number(
+                stats?.skipped || 0
+              )}</td>
+            </tr>
+          `;
+        })
+        .join("");
+
+      await Swal.fire({
+        title: "Class Copy Complete",
+        icon: "success",
+        width: "760px",
+        html: `
+          <div style="text-align:left;">
+            <div style="margin-bottom:10px;"><b>Created:</b> ${created}</div>
+            <div style="margin-bottom:10px;"><b>Updated:</b> ${updated}</div>
+            <div style="margin-top:14px;margin-bottom:8px;"><b>Per Target Summary</b></div>
+            <div style="max-height:280px;overflow:auto;border:1px solid #eee;border-radius:8px;">
+              <table style="width:100%;border-collapse:collapse;font-size:13px;">
+                <thead style="background:#fafafa;position:sticky;top:0;">
+                  <tr>
+                    <th style="padding:8px;text-align:left;border-bottom:1px solid #eee;">Class</th>
+                    <th style="padding:8px;text-align:right;border-bottom:1px solid #eee;">Created</th>
+                    <th style="padding:8px;text-align:right;border-bottom:1px solid #eee;">Updated</th>
+                    <th style="padding:8px;text-align:right;border-bottom:1px solid #eee;">Skipped</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${perTargetHtml || '<tr><td colspan="4" style="padding:10px;text-align:center;">No summary available</td></tr>'}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        `,
+      });
+
+      if (res.value?.to_session_id) {
+        setSelectedSessionId(Number(res.value.to_session_id));
+        fetchFeeStructures({ sessionId: Number(res.value.to_session_id) });
+      } else {
+        fetchFeeStructures({ sessionId: selectedSessionId });
+      }
+    } catch (error) {
+      console.error(error);
+      Swal.fire(
+        "Error",
+        getApiErrorMessage(error, "Failed to copy full fee structure to target class(es)."),
+        "error"
+      );
+    }
+  };
+
+  const openCopySessionStructureModal = async () => {
+    const classesData = classes.length ? classes : await fetchClasses();
+    const sessionData = sessions.length ? sessions : await fetchSessions();
+
+    if (!sessionData.length) {
+      return Swal.fire("No Sessions", "No sessions are available.", "info");
+    }
+
+    const sessionOptionsHtml = sessionData
+      .map(
+        (s) =>
+          `<option value="${s.id}">${s.name}${s.is_active ? " (Active)" : ""}</option>`
+      )
+      .join("");
+
+    const classOptionsHtml = classesData.length
+      ? `
+        <option value="">All Classes</option>
+        ${classesData
+          .map((cls) => `<option value="${cls.id}">${cls.class_name}</option>`)
+          .join("")}
+      `
+      : `<option value="">All Classes</option>`;
+
+    const res = await Swal.fire({
+      title: "Copy Session Structure",
+      width: "700px",
+      showCancelButton: true,
+      confirmButtonText: "Copy Now",
+      allowOutsideClick: false,
+      allowEscapeKey: false,
+      focusConfirm: false,
+      customClass: {
+        popup: "fs-swal-popup",
+        title: "fs-swal-title",
+        confirmButton: "fs-swal-btn",
+        cancelButton: "fs-swal-btn fs-swal-btn-cancel",
+      },
+      html: `
+        <div style="text-align:left;display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div>
+            <label class="fs-lbl" for="copySessionFromId">Source Session</label>
+            <select id="copySessionFromId" class="fs-inp">${sessionOptionsHtml}</select>
+          </div>
+
+          <div>
+            <label class="fs-lbl" for="copySessionToId">Target Session</label>
+            <select id="copySessionToId" class="fs-inp">${sessionOptionsHtml}</select>
+          </div>
+
+          <div>
+            <label class="fs-lbl" for="copySessionClassId">Class Filter</label>
+            <select id="copySessionClassId" class="fs-inp">${classOptionsHtml}</select>
+            <div style="font-size:12px;color:#666;margin-top:6px;">
+              Leave as All Classes to copy the whole session.
+            </div>
+          </div>
+
+          <div>
+            <label class="fs-lbl" for="copySessionOverwriteExisting">If target already exists</label>
+            <select id="copySessionOverwriteExisting" class="fs-inp">
+              <option value="false">Skip existing target rows</option>
+              <option value="true">Overwrite existing target rows</option>
+            </select>
+          </div>
+        </div>
+      `,
+      didOpen: () => {
+        const fromSessionEl = document.getElementById("copySessionFromId");
+        const toSessionEl = document.getElementById("copySessionToId");
+
+        if (selectedSessionId) {
+          fromSessionEl.value = String(selectedSessionId);
+        }
+
+        const currentIndex = sessionData.findIndex(
+          (s) => Number(s.id) === Number(selectedSessionId)
+        );
+        const fallbackTarget =
+          currentIndex >= 0 && sessionData[currentIndex + 1]
+            ? sessionData[currentIndex + 1].id
+            : sessionData[0]?.id;
+
+        if (fallbackTarget) {
+          toSessionEl.value = String(fallbackTarget);
+        }
+      },
+      preConfirm: () => {
+        const fromSessionValue = document.getElementById("copySessionFromId")?.value;
+        const toSessionValue = document.getElementById("copySessionToId")?.value;
+        const classValue = document.getElementById("copySessionClassId")?.value;
+
+        const fromSessionId = fromSessionValue ? Number(fromSessionValue) : null;
+        const toSessionId = toSessionValue ? Number(toSessionValue) : null;
+        const classId = classValue ? Number(classValue) : null;
+
+        if (fromSessionId === null) {
+          Swal.showValidationMessage("Source session is required");
+          return false;
+        }
+
+        if (toSessionId === null) {
+          Swal.showValidationMessage("Target session is required");
+          return false;
+        }
+
+        if (fromSessionId === toSessionId) {
+          Swal.showValidationMessage("Source and target session cannot be same");
+          return false;
+        }
+
+        return {
+          from_session_id: fromSessionId,
+          to_session_id: toSessionId,
+          class_id: classId,
+          overwrite:
+            document.getElementById("copySessionOverwriteExisting")?.value === "true",
+        };
+      },
+    });
+
+    if (!res.isConfirmed) return;
+
+    try {
+      const { data } = await api.post("/fee-structures/copy-session", res.value);
+
+      const created = Number(data?.created || 0);
+      const updated = Number(data?.updated || 0);
+      const skipped = Number(data?.skipped || 0);
+
+      await Swal.fire({
+        title: "Session Copy Complete",
+        icon: "success",
+        html: `
+          <div style="text-align:left;">
+            <div><b>Created:</b> ${created}</div>
+            <div><b>Updated:</b> ${updated}</div>
+            <div><b>Skipped:</b> ${skipped}</div>
+            <div style="margin-top:10px;"><b>Copied To Session:</b> ${data?.source?.to_session_id ?? res.value?.to_session_id}</div>
+            <div style="margin-top:6px;"><b>Class Filter:</b> ${res.value?.class_id ? `Class ID ${res.value.class_id}` : "All Classes"}</div>
+          </div>
+        `,
+      });
+
+      setSelectedSessionId(Number(res.value.to_session_id));
+      fetchFeeStructures({ sessionId: Number(res.value.to_session_id) });
+    } catch (error) {
+      console.error(error);
+      Swal.fire(
+        "Error",
+        getApiErrorMessage(error, "Failed to copy session fee structure."),
+        "error"
+      );
+    }
+  };
+
+  const openCopyMultipleFeeHeadsModal = async (fee) => {
+    const feeHeadingsData = feeHeadings.length ? feeHeadings : await fetchFeeHeadings();
+
+    const sourceFeeHeadingId = Number(fee?.FeeHeading?.id ?? fee?.fee_heading_id ?? 0);
+
+    const availableTargets = feeHeadingsData.filter(
+      (fh) => Number(fh.id) !== sourceFeeHeadingId
+    );
+
+    if (!availableTargets.length) {
+      return Swal.fire(
+        "No Targets",
+        "No other fee heads are available to copy into.",
+        "info"
+      );
+    }
+
+    const feeHeadingOptionsHtml = availableTargets
+      .map((fh) => `<option value="${fh.id}">${fh.fee_heading}</option>`)
+      .join("");
+
+    const sourceClassName = fee.Class?.class_name || "Unknown";
+    const sourceSessionName = fee.Session?.name || "Unknown";
+    const sourceFeeHeadingName = fee.FeeHeading?.fee_heading || "Unknown";
+
+    const html = `
+      <div style="text-align:left;">
+        <div style="margin-bottom:12px;padding:10px 12px;border:1px solid #e5e7eb;border-radius:8px;background:#fafafa;">
+          <div><b>Source Class:</b> ${sourceClassName}</div>
+          <div><b>Source Session:</b> ${sourceSessionName}</div>
+          <div><b>Source Fee Head:</b> ${sourceFeeHeadingName}</div>
+          <div><b>Admission Type:</b> ${fee.admissionType || "-"}</div>
+        </div>
+
+        <label class="fs-lbl" for="targetFeeHeadingIds">Target Fee Heads</label>
+        <select
+          id="targetFeeHeadingIds"
+          class="fs-inp"
+          multiple
+          size="10"
+          style="min-height:220px;"
+        >
+          ${feeHeadingOptionsHtml}
+        </select>
+
+        <div style="font-size:12px;color:#666;margin-top:6px;">
+          Hold Ctrl / Cmd to select multiple fee heads.
+        </div>
+
+        <div style="margin-top:14px;">
+          <label class="fs-lbl" for="overwriteExisting">If target already exists</label>
+          <select id="overwriteExisting" class="fs-inp">
+            <option value="false">Skip existing target rows</option>
+            <option value="true">Overwrite existing target rows</option>
+          </select>
+        </div>
+      </div>
+    `;
+
+    const res = await Swal.fire({
+      title: "Copy to Multiple Fee Heads",
+      html,
+      width: "700px",
+      showCancelButton: true,
+      confirmButtonText: "Copy Now",
+      allowOutsideClick: false,
+      allowEscapeKey: false,
+      focusConfirm: false,
+      customClass: {
+        popup: "fs-swal-popup",
+        title: "fs-swal-title",
+        confirmButton: "fs-swal-btn",
+        cancelButton: "fs-swal-btn fs-swal-btn-cancel",
+      },
+      preConfirm: () => {
+        const selectedOptions = Array.from(
+          document.getElementById("targetFeeHeadingIds")?.selectedOptions || []
+        );
+
+        const targetFeeHeadingIds = selectedOptions
+          .map((opt) => Number(opt.value))
+          .filter((v) => Number.isFinite(v) && v > 0);
+
+        if (!targetFeeHeadingIds.length) {
+          Swal.showValidationMessage("Please select at least one target fee head");
+          return false;
+        }
+
+        return {
+          source_fee_structure_id: Number(fee.id),
+          target_fee_heading_ids: targetFeeHeadingIds,
+          overwrite: document.getElementById("overwriteExisting")?.value === "true",
+        };
+      },
+    });
+
+    if (!res.isConfirmed) return;
+
+    try {
+      const { data } = await api.post("/fee-structures/copy-fee-heads", res.value);
+
+      const created = Number(data?.created || 0);
+      const updated = Number(data?.updated || 0);
+      const skipped = Number(data?.skipped || 0);
+
+      await Swal.fire({
+        title: "Copy Complete",
+        icon: "success",
+        html: `
+          <div style="text-align:left;">
+            <div><b>Created:</b> ${created}</div>
+            <div><b>Updated:</b> ${updated}</div>
+            <div><b>Skipped:</b> ${skipped}</div>
+          </div>
+        `,
+      });
+
+      fetchFeeStructures({ sessionId: selectedSessionId });
+    } catch (error) {
+      console.error(error);
+      Swal.fire(
+        "Error",
+        getApiErrorMessage(error, "Failed to copy fee structure to multiple fee heads."),
+        "error"
+      );
+    }
+  };
+
   const handleAdd = () => openAddOrEditModal(null);
   const handleEdit = (fee) => openAddOrEditModal(fee);
-
-  const handleCopy = (fee) => {
-    openAddOrEditModal({ ...fee, __isCopy: true, id: null });
-  };
+  const handleCopyFeeHeads = (fee) => openCopyMultipleFeeHeadsModal(fee);
+  const handleCopyClassStructure = () => openCopyClassStructureModal();
+  const handleCopySessionStructure = () => openCopySessionStructureModal();
 
   // ---------------------- Options & Filters ----------------------
   const classOptions = useMemo(
@@ -794,6 +1309,24 @@ const FeeStructure = () => {
 
               {canEdit && (
                 <button
+                  className="btn btn-outline-dark btn-sm"
+                  onClick={handleCopyClassStructure}
+                >
+                  Copy Class Structure
+                </button>
+              )}
+
+              {canEdit && (
+                <button
+                  className="btn btn-outline-info btn-sm"
+                  onClick={handleCopySessionStructure}
+                >
+                  Copy Session Structure
+                </button>
+              )}
+
+              {canEdit && (
+                <button
                   className="btn btn-outline-primary btn-sm"
                   onClick={() => setShowBulk((s) => !s)}
                 >
@@ -1033,7 +1566,7 @@ const FeeStructure = () => {
                 </>
               )}
 
-              {canEdit && <th style={{ width: 190 }}>Actions</th>}
+              {canEdit && <th style={{ width: 230 }}>Actions</th>}
             </tr>
           </thead>
 
@@ -1093,9 +1626,10 @@ const FeeStructure = () => {
 
                         <button
                           className="btn btn-outline-secondary btn-sm me-1"
-                          onClick={() => handleCopy(fee)}
+                          onClick={() => handleCopyFeeHeads(fee)}
+                          title="Copy this row to multiple fee heads"
                         >
-                          Copy
+                          Copy Head
                         </button>
 
                         {isSuperadmin && (

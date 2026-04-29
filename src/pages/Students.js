@@ -4,13 +4,32 @@ import api from "../api";
 import Swal from "sweetalert2";
 import "./Students.css";
 
-// role helpers
-const getRoleFlags = () => {
-  const singleRole = localStorage.getItem("userRole");
-  const multiRoles = JSON.parse(localStorage.getItem("roles") || "[]");
+// permission helpers
+const readStoredArray = (key) => {
+  try {
+    const localValue = JSON.parse(localStorage.getItem(key) || "[]");
+    if (Array.isArray(localValue) && localValue.length) return localValue;
+  } catch {}
+
+  try {
+    const sessionValue = JSON.parse(sessionStorage.getItem(key) || "[]");
+    if (Array.isArray(sessionValue) && sessionValue.length) return sessionValue;
+  } catch {}
+
+  return [];
+};
+
+const getPermissionFlags = () => {
+  const singleRole = localStorage.getItem("userRole") || sessionStorage.getItem("userRole");
+  const multiRoles = readStoredArray("roles");
+  const storedPermissions = readStoredArray("permissions");
 
   const roles = (multiRoles.length ? multiRoles : [singleRole].filter(Boolean))
     .map((role) => String(role || "").trim().toLowerCase())
+    .filter(Boolean);
+
+  const permissions = storedPermissions
+    .map((permission) => String(permission || "").trim().toLowerCase())
     .filter(Boolean);
 
   const isAdmin = roles.includes("admin");
@@ -18,14 +37,43 @@ const getRoleFlags = () => {
   const isAccounts = roles.includes("accounts");
   const isFrontoffice = roles.includes("frontoffice");
 
+  // Safe fallback while old logins / old role-based flows still exist.
+  const fallbackManage = isAdmin || isSuperadmin || isAccounts || isFrontoffice;
+  const fallbackDelete = isSuperadmin;
+
+  const hasPermission = (slug, fallback = false) =>
+    isSuperadmin ||
+    (permissions.length
+      ? permissions.includes(String(slug || "").toLowerCase())
+      : fallback);
+
+  const canViewStudents = hasPermission("students_view", true);
+  const canAddStudents = hasPermission("students_add", fallbackManage);
+  const canEditStudents = hasPermission("students_edit", fallbackManage);
+  const canDeleteStudents = hasPermission("students_delete", fallbackDelete);
+  const canToggleStudentStatus = hasPermission("students_status_toggle", fallbackManage);
+  const canUploadStudentPhoto = hasPermission("students_photo_upload", fallbackManage);
+  const canExportStudents = hasPermission("students_export", fallbackManage);
+  const canImportStudents = hasPermission("students_import", fallbackManage);
+  const canPrintAdmissionForm = hasPermission("students_admission_form", canViewStudents);
+
   return {
     roles,
+    permissions,
     isAdmin,
     isSuperadmin,
     isAccounts,
     isFrontoffice,
-    canManageStudents: isAdmin || isSuperadmin || isAccounts || isFrontoffice,
-    canDeleteStudents: isSuperadmin,
+    canViewStudents,
+    canAddStudents,
+    canEditStudents,
+    canDeleteStudents,
+    canToggleStudentStatus,
+    canUploadStudentPhoto,
+    canExportStudents,
+    canImportStudents,
+    canPrintAdmissionForm,
+    canManageStudents: canAddStudents || canEditStudents,
   };
 };
 
@@ -117,6 +165,32 @@ const SIBLING_COLORS = [
 ];
 
 
+// ✅ Sibling token helpers
+// Important: sibling_id_1..4 often stores admission_number, even when numeric.
+// So every frontend lookup must prefer admission_number before DB id.
+const normalizeSiblingToken = (value) =>
+  String(value ?? "")
+    .replace(/^(ID|AN)\s*:\s*/i, "")
+    .trim();
+
+const findStudentBySiblingToken = (list, token) => {
+  const normalized = normalizeSiblingToken(token);
+  if (!normalized) return null;
+
+  const arr = Array.isArray(list) ? list : [];
+
+  return (
+    arr.find((st) => String(st.admission_number || "").trim() === normalized) ||
+    null
+  );
+};
+
+const siblingDisplayToken = (token) => {
+  const normalized = normalizeSiblingToken(token);
+  return normalized ? `AN:${normalized}` : "Sibling";
+};
+
+
 const EXPORT_COLUMN_OPTIONS = [
   { key: "admission_number", label: "Admission Number" },
   { key: "name", label: "Student Name" },
@@ -165,7 +239,17 @@ const DEFAULT_EXPORT_COLUMNS = [
 ];
 
 const Students = () => {
-  const { canManageStudents, canDeleteStudents } = getRoleFlags();
+  const {
+    canManageStudents,
+    canAddStudents,
+    canEditStudents,
+    canDeleteStudents,
+    canToggleStudentStatus,
+    canUploadStudentPhoto,
+    canExportStudents,
+    canImportStudents,
+    canPrintAdmissionForm,
+  } = getPermissionFlags();
 
   // data lists
   const [students, setStudents] = useState([]);
@@ -236,9 +320,23 @@ const Students = () => {
   const isCompact = !showAllColumns;
 
   // fetch lists
-  const fetchStudents = async () => {
+  const fetchStudents = async ({ sessionId, classId } = {}) => {
+    const effectiveSessionId =
+      typeof sessionId === "undefined" ? selectedSessionFilter : sessionId;
+    const effectiveClassId =
+      typeof classId === "undefined" ? selectedClass : classId;
+
     try {
-      const { data } = await api.get("/students");
+      let url = "/students";
+
+      if (effectiveSessionId) {
+        const params = new URLSearchParams();
+        params.append("session_id", effectiveSessionId);
+        if (effectiveClassId) params.append("class_id", effectiveClassId);
+        url = "/students/by-session?" + params.toString();
+      }
+
+      const { data } = await api.get(url);
       setStudents(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error("fetchStudents:", err);
@@ -301,7 +399,7 @@ const Students = () => {
   };
 
   useEffect(() => {
-    fetchStudents();
+    fetchStudents({ sessionId: selectedSessionFilter, classId: selectedClass });
     fetchClasses();
     fetchSections();
     fetchSessions();
@@ -310,6 +408,11 @@ const Students = () => {
     if (canManageStudents) fetchConcessions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canManageStudents]);
+
+  useEffect(() => {
+    fetchStudents({ sessionId: selectedSessionFilter, classId: selectedClass });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedSessionFilter]);
 
   /* ============================================================
    * ✅ House auto-suggest (lowest strength) helpers
@@ -356,7 +459,7 @@ const Students = () => {
 
   // toggle status
   const toggleStudentStatus = async (student) => {
-    if (!canManageStudents) return;
+    if (!canToggleStudentStatus) return;
     const newStatus = student.status === "enabled" ? "disabled" : "enabled";
 
     const result = await Swal.fire({
@@ -404,6 +507,7 @@ const Students = () => {
 
   // PHOTO: choose file + upload
   const promptAndUploadPhoto = (student) => {
+    if (!canUploadStudentPhoto) return;
     const input = document.createElement("input");
     input.type = "file";
     input.accept = "image/*";
@@ -434,7 +538,7 @@ const Students = () => {
 
   // Print Admission Form
   const handlePrintAdmissionForm = async (student) => {
-    if (!student?.id) return;
+    if (!canPrintAdmissionForm || !student?.id) return;
 
     try {
       const resp = await api.get(`/students/${student.id}/admission-form`, {
@@ -469,6 +573,8 @@ const Students = () => {
 
   // ---------------- ADD / EDIT FORM ----------------
   const showStudentForm = async (mode = "add", student = null) => {
+    if (mode === "add" && !canAddStudents) return;
+    if (mode === "edit" && !canEditStudents) return;
     await fetchClasses();
     await fetchSections();
     await fetchSessions();
@@ -594,8 +700,9 @@ const Students = () => {
           max-width: 1040px !important;
           width: 100% !important;
           padding: 0 !important;
-          border-radius: 14px !important;
+          border-radius: 18px !important;
           overflow: hidden;
+          box-shadow: 0 24px 80px rgba(15, 23, 42, 0.20) !important;
         }
         .student-topbar {
           position: sticky;
@@ -605,13 +712,13 @@ const Students = () => {
           align-items: center;
           justify-content: space-between;
           gap: 12px;
-          padding: 10px 14px;
-          background: linear-gradient(90deg, #eef2ff 0%, #ffffff 65%);
+          padding: 12px 16px;
+          background: linear-gradient(135deg, #eef2ff 0%, #ffffff 58%, #ecfeff 100%);
           border-bottom: 1px solid #e5e7eb;
         }
         .student-topbar .title {
           font-weight: 800;
-          font-size: 14px;
+          font-size: 15px;
           color: #111827;
           margin: 0;
         }
@@ -674,7 +781,7 @@ const Students = () => {
           width: 100%;
           padding: 7px 10px;
           border: 1px solid #d1d5db;
-          border-radius: 10px;
+          border-radius: 12px;
           font-size: 13px;
           background: #fff;
         }
@@ -705,7 +812,7 @@ const Students = () => {
           padding: 10px;
           border-radius: 12px;
           margin-bottom: 8px;
-          background: #fafafa;
+          background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
         }
         .sibling-row {
           display: flex;
@@ -968,6 +1075,9 @@ const Students = () => {
         <!-- Siblings -->
         <div class="tabpane" id="pane-siblings">
           <div class="form-container">
+            <div class="full-row" style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:12px;padding:10px 12px;color:#475569;font-size:12px;">
+              <strong>Sibling mapping:</strong> admission number is used first to prevent numeric admission numbers from matching wrong database IDs.
+            </div>
             ${[1, 2, 3, 4]
               .map(
                 (slot) => `
@@ -1004,7 +1114,7 @@ const Students = () => {
                       s["sibling_id_" + slot]
                         ? `<option value="${s["sibling_id_" + slot]}" selected>${
                             (s["sibling_name_" + slot] || "Selected").replace(/"/g, "&quot;")
-                          }${s["sibling_id_" + slot] ? ` (ID:${s["sibling_id_" + slot]})` : ""}</option>`
+                          }${s["sibling_id_" + slot] ? ` (AN:${normalizeSiblingToken(s["sibling_id_" + slot])})` : ""}</option>`
                         : ""
                     }
                   </select>
@@ -1126,7 +1236,7 @@ const Students = () => {
           const rawId = document.getElementById(`f_sibling_id_${slot}`)?.value ?? "";
           const rawName = document.getElementById(`f_sibling_name_${slot}`)?.value ?? "";
 
-          const cleanedId = rawId ? String(rawId).replace(/^ID:\s*/i, "").trim() : null;
+          const cleanedId = rawId ? normalizeSiblingToken(rawId) : null;
           const cleanedName = rawName ? String(rawName).trim() : null;
 
           payload[`sibling_id_${slot}`] = cleanedId || null;
@@ -1297,15 +1407,17 @@ const Students = () => {
               }
 
               const opts = [`<option value="">Select Student</option>`].concat(
-                data.map((st) => {
-                  const token = st.admission_number || String(st.id);
-                  return `<option value="${token}"
-                            data-name="${(st.name || "").replace(/"/g, "&quot;")}"
-                            data-pk="${st.id}"
-                            data-an="${st.admission_number || ""}">
-                            ${st.name}${st.admission_number ? ` (AN:${st.admission_number})` : ""}
-                          </option>`;
-                })
+                data
+                  .filter((st) => String(st.admission_number || "").trim() !== "")
+                  .map((st) => {
+                    const token = String(st.admission_number).trim();
+                    return `<option value="${token}"
+                              data-name="${(st.name || "").replace(/"/g, "&quot;")}"
+                              data-pk="${st.id}"
+                              data-an="${token}">
+                              ${st.name} (AN:${token})
+                            </option>`;
+                  })
               );
 
               stuSel.innerHTML = opts.join("");
@@ -1348,12 +1460,9 @@ const Students = () => {
           let preSection = secSel.value || "";
 
           // derive missing class/section from already loaded students list
+          // Admission-number-first prevents numeric admission numbers from matching wrong DB ids.
           if (preStudentId && (!preClass || !preSection)) {
-            const linkedStudent = students.find(
-              (st) =>
-                String(st.id) === String(preStudentId) ||
-                String(st.admission_number || "").trim() === String(preStudentId).trim()
-            );
+            const linkedStudent = findStudentBySiblingToken(students, preStudentId);
 
             if (linkedStudent) {
               preClass = preClass || String(linkedStudent.class_id || "");
@@ -1374,13 +1483,18 @@ const Students = () => {
               await fetchAndPopulateStudents(preClass, preSection || "");
 
               if (preStudentId) {
+                const normalizedPreStudentId = normalizeSiblingToken(preStudentId);
                 const opt =
-                  Array.from(stuSel.options).find((o) => String(o.value) === String(preStudentId)) ||
-                  Array.from(stuSel.options).find((o) => String(o.dataset.pk) === String(preStudentId));
+                  Array.from(stuSel.options).find(
+                    (o) => String(o.dataset.an || "").trim() === normalizedPreStudentId
+                  ) ||
+                  Array.from(stuSel.options).find(
+                    (o) => normalizeSiblingToken(o.value) === normalizedPreStudentId
+                  );
 
                 if (opt) {
                   opt.selected = true;
-                  hiddenId.value = opt.value;
+                  hiddenId.value = normalizeSiblingToken(opt.value);
                   hiddenName.value = opt.dataset.name || preStudentName || opt.textContent || "";
                 }
               }
@@ -1392,7 +1506,7 @@ const Students = () => {
               stuSel.innerHTML = `
                 <option value="">Select Student</option>
                 <option value="${String(preStudentId).replace(/"/g, "&quot;")}" selected>
-                  ${(preStudentName || `ID:${preStudentId}`).replace(/</g, "&lt;")}
+                  ${(preStudentName || siblingDisplayToken(preStudentId)).replace(/</g, "&lt;")}
                 </option>
               `;
               hiddenId.value = preStudentId;
@@ -1426,16 +1540,23 @@ const Students = () => {
     }
   };
 
-  const handleAdd = () => showStudentForm("add", null);
-  const handleEdit = (student) => showStudentForm("edit", student);
+  const handleAdd = () => {
+    if (!canAddStudents) return;
+    showStudentForm("add", null);
+  };
+  const handleEdit = (student) => {
+    if (!canEditStudents) return;
+    showStudentForm("edit", student);
+  };
 
   // ✅ NEW: click student row to open EDIT popup
   const handleRowClickOpenEdit = (stu) => {
-    if (!canManageStudents) return; // allow only authorized management roles to edit on click
+    if (!canEditStudents) return;
     showStudentForm("edit", stu);
   };
 
   const handleExport = async () => {
+  if (!canExportStudents) return;
   const html = `
     <style>
       .export-columns-wrap {
@@ -1705,7 +1826,7 @@ const Students = () => {
 };
 
   const handleImport = async (file) => {
-    if (!file) return;
+    if (!canImportStudents || !file) return;
     setImporting(true);
     const fd = new FormData();
     fd.append("file", file);
@@ -1728,6 +1849,7 @@ const Students = () => {
   };
 
   const openImportDialog = () => {
+    if (!canImportStudents) return;
     const input = document.createElement("input");
     input.type = "file";
     input.accept = ".xlsx,.xls";
@@ -1756,15 +1878,14 @@ const Students = () => {
           );
         const classMatch = !selectedClass || String(stu.class_id) === String(selectedClass);
         const statusMatch = !selectedStatus || stu.status === selectedStatus;
-        const sessionMatch = !selectedSessionFilter || String(stu.session_id) === String(selectedSessionFilter);
         const hasSibling = studentHasSibling(stu);
         let siblingMatch = true;
         if (hasSiblingFilter === "has") siblingMatch = hasSibling;
         if (hasSiblingFilter === "no") siblingMatch = !hasSibling;
 
-        return textMatch && classMatch && statusMatch && sessionMatch && siblingMatch;
+        return textMatch && classMatch && statusMatch && siblingMatch;
       }),
-    [students, search, selectedClass, selectedStatus, selectedSessionFilter, hasSiblingFilter]
+    [students, search, selectedClass, selectedStatus, hasSiblingFilter]
   );
 
   const totalCount = filteredStudents.length;
@@ -1774,7 +1895,8 @@ const Students = () => {
   const handleSiblingClick = async (token) => {
     if (!token) return;
 
-    let raw = String(token).trim().replace(/^ID:\s*/i, "").trim();
+    const raw = normalizeSiblingToken(token);
+    if (!raw) return;
 
     const tryExactAN = async () => {
       try {
@@ -1795,27 +1917,15 @@ const Students = () => {
       }
     };
 
-    const tryById = async () => {
-      if (!/^\d+$/.test(raw)) return null;
-      try {
-        const resp = await api.get(`/students/${parseInt(raw, 10)}`);
-        return Array.isArray(resp.data) ? resp.data[0] || null : resp.data || null;
-      } catch {
-        return null;
-      }
-    };
-
     let respData = await tryExactAN();
     if (!respData) respData = await tryListANExact();
-    if (!respData) respData = await tryById();
 
     if (!respData) {
       Swal.fire("Not Found", "Sibling record not available.", "warning");
       return;
     }
 
-    // ✅ sibling click opens same EDIT popup as main student row
-    if (canManageStudents) {
+    if (canEditStudents) {
       showStudentForm("edit", respData);
     } else {
       handleView(respData);
@@ -1844,7 +1954,7 @@ const Students = () => {
             }}
           />
         </div>
-        {canManageStudents && (
+        {canUploadStudentPhoto && (
           <button
             className="btn btn-outline-secondary btn-sm"
             onClick={(ev) => {
@@ -1869,8 +1979,8 @@ const Students = () => {
       if (id || name) {
         siblingRows.push({
           label: `Sibling ${i}`,
-          value: name ? name : `ID:${id}`,
-          id,
+          value: name ? name : siblingDisplayToken(id),
+          token: id,
         });
       }
     }
@@ -1962,12 +2072,12 @@ const Students = () => {
       ? siblingRows
           .map(
             (s) => `
-      <div class="detail-item sibling-item" data-sibling-id="${s.id || ""}">
+      <div class="detail-item sibling-item" data-sibling-token="${s.token || ""}">
         <div class="detail-label">${s.label}</div>
         <div class="detail-value" style="cursor: ${
-          s.id ? "pointer" : "default"
-        }; color: ${s.id ? "#0d6efd" : "#6b7280"}; font-weight: 500;" ${
-              s.id ? `data-sibling-id="${s.id}"` : ""
+          s.token ? "pointer" : "default"
+        }; color: ${s.token ? "#0d6efd" : "#6b7280"}; font-weight: 500;" ${
+              s.token ? `data-sibling-token="${s.token}"` : ""
             }>${s.value}</div>
       </div>
     `
@@ -1986,10 +2096,15 @@ const Students = () => {
           class="rounded-circle border shadow-sm"
           style="width: 90px; height: 90px; object-fit: cover;" />
         ${
-          canManageStudents
+          canUploadStudentPhoto
             ? `<button id="btnChangePhoto" class="btn btn-outline-primary btn-sm">${
                 hasPhoto ? "Change Photo" : "Upload Photo"
               }</button>`
+            : ""
+        }
+        ${
+          canPrintAdmissionForm
+            ? `<button id="btnPrintAdmissionForm" class="btn btn-outline-success btn-sm">Print Form</button>`
             : ""
         }
       </div>
@@ -2058,24 +2173,33 @@ const Students = () => {
       didOpen: () => {
         const popup = Swal.getPopup();
         if (popup) {
-          const siblingEls = popup.querySelectorAll("[data-sibling-id]");
+          const siblingEls = popup.querySelectorAll("[data-sibling-token]");
           siblingEls.forEach((el) => {
-            const id = el.getAttribute("data-sibling-id");
-            if (id) {
+            const token = el.getAttribute("data-sibling-token");
+            if (token) {
               el.addEventListener("click", (e) => {
                 e.stopPropagation();
                 Swal.close();
-                setTimeout(() => handleSiblingClick(id), 100);
+                setTimeout(() => handleSiblingClick(token), 100);
               });
             }
           });
         }
         const btn = document.getElementById("btnChangePhoto");
-        if (btn && canManageStudents) {
+        if (btn && canUploadStudentPhoto) {
           btn.addEventListener("click", (e) => {
             e.stopPropagation();
             Swal.close();
             promptAndUploadPhoto(student);
+          });
+        }
+
+        const printBtn = document.getElementById("btnPrintAdmissionForm");
+        if (printBtn && canPrintAdmissionForm) {
+          printBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            Swal.close();
+            setTimeout(() => handlePrintAdmissionForm(student), 100);
           });
         }
       },
@@ -2085,26 +2209,50 @@ const Students = () => {
   // ✅ PART-2: UI
   return (
     <div
-      className="container-fluid mt-2 students-page"
+      className="container-fluid py-3 students-page"
       style={{
-        background: "linear-gradient(180deg, #f9fafb 0%, #ffffff 180px, #ffffff 100%)",
+        background:
+          "radial-gradient(circle at top left, rgba(99,102,241,.14), transparent 32%), linear-gradient(180deg, #f8fafc 0%, #ffffff 260px, #ffffff 100%)",
         minHeight: "100vh",
       }}
     >
-      {/* ✅ Compact top header (less height) */}
-      <div className="students-topbar d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+      {/* ✅ Professional compact header */}
+      <div
+        className="students-topbar d-flex justify-content-between align-items-center flex-wrap gap-3 mb-3 p-3"
+        style={{
+          background: "rgba(255,255,255,.92)",
+          border: "1px solid rgba(226,232,240,.95)",
+          borderRadius: 18,
+          boxShadow: "0 14px 32px rgba(15,23,42,.07)",
+          backdropFilter: "blur(10px)",
+        }}
+      >
         <div>
-          <h2 className="h6 mb-0 fw-bold text-dark">Student Management</h2>
-          <p className="mb-0 text-muted" style={{ fontSize: "0.78rem" }}>
-            Manage student records, admissions, transport, and related details.
+          <div className="d-flex align-items-center gap-2 mb-1">
+            <span
+              className="d-inline-flex align-items-center justify-content-center"
+              style={{
+                width: 34,
+                height: 34,
+                borderRadius: 12,
+                background: "linear-gradient(135deg,#4f46e5,#06b6d4)",
+                color: "#fff",
+              }}
+            >
+              <i className="bi bi-mortarboard-fill"></i>
+            </span>
+            <h2 className="h5 mb-0 fw-bold text-dark">Student Management</h2>
+          </div>
+          <p className="mb-0 text-muted" style={{ fontSize: "0.83rem" }}>
+            Manage admissions, siblings, transport, houses, exports, and student records in one place.
           </p>
         </div>
 
-        <div className="d-flex gap-2 flex-wrap align-items-center">
+        <div className="d-flex gap-2 flex-wrap align-items-center justify-content-end">
           {/* ✅ Columns Toggle (Compact / Full) */}
           <button
             type="button"
-            className={`btn btn-sm ${showAllColumns ? "btn-outline-primary" : "btn-primary"}`}
+            className={`btn btn-sm rounded-pill px-3 ${showAllColumns ? "btn-outline-primary" : "btn-primary"}`}
             onClick={toggleColumnsMode}
             title="Toggle Compact / Full columns"
           >
@@ -2112,28 +2260,30 @@ const Students = () => {
             {showAllColumns ? "Full" : "Compact"}
           </button>
 
-          {canManageStudents && (
-            <>
-              <button className="btn btn-sm btn-primary" onClick={handleAdd}>
+          {canAddStudents && (
+            <button className="btn btn-sm btn-primary rounded-pill px-3" onClick={handleAdd}>
                 <i className="bi bi-plus-circle me-1"></i>
                 Add Student
               </button>
-
-              <button
-                className="btn btn-sm btn-outline-secondary"
-                onClick={openImportDialog}
-                disabled={importing}
-              >
-                <i className="bi bi-upload me-1"></i>
-                {importing ? "Importing..." : "Import Excel"}
-              </button>
-            </>
           )}
 
-          <button className="btn btn-sm btn-outline-primary" onClick={handleExport}>
+          {canImportStudents && (
+            <button
+              className="btn btn-sm btn-outline-secondary rounded-pill px-3"
+              onClick={openImportDialog}
+              disabled={importing}
+            >
+              <i className="bi bi-upload me-1"></i>
+              {importing ? "Importing..." : "Import Excel"}
+            </button>
+          )}
+
+          {canExportStudents && (
+            <button className="btn btn-sm btn-outline-primary rounded-pill px-3" onClick={handleExport}>
             <i className="bi bi-download me-1"></i>
             Export Records
-          </button>
+            </button>
+          )}
         </div>
       </div>
 
@@ -2154,15 +2304,15 @@ const Students = () => {
       </div>
 
       {/* Filters + table */}
-      <div className="card border-0 shadow-sm">
+      <div className="card border-0 shadow-sm" style={{ borderRadius: 18, overflow: "hidden" }}>
         {/* ✅ compact filter bar + hides extra filters in compact mode */}
-        <div className="card-header bg-white border-0 py-2">
+        <div className="card-header bg-white border-0 py-3">
           <div className="d-flex flex-wrap gap-2 align-items-center students-filters-row">
             <div className="flex-grow-1">
               <input
                 type="text"
                 className="form-control form-control-sm"
-                style={{ maxWidth: 320, minWidth: 180 }}
+                style={{ maxWidth: 360, minWidth: 210, borderRadius: 12 }}
                 placeholder="Search name / admission / Aadhaar..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -2286,8 +2436,8 @@ const Students = () => {
                         const sname = stu[`sibling_name_${i}`];
                         if (sid || sname) {
                           combinedSiblings.push({
-                            id: sid ?? null,
-                            name: sname ? String(sname) : sid ? `ID:${sid}` : "Sibling",
+                            token: sid ?? null,
+                            name: sname ? String(sname) : sid ? siblingDisplayToken(sid) : "Sibling",
                           });
                         }
                       }
@@ -2343,8 +2493,8 @@ const Students = () => {
                           key={stu.id}
                           className="table-hover-row"
                           onClick={() => handleRowClickOpenEdit(stu)} // ✅ CLICK STUDENT -> EDIT POPUP
-                          style={{ cursor: canManageStudents ? "pointer" : "default" }}
-                          title={canManageStudents ? "Click to edit student" : ""}
+                          style={{ cursor: canEditStudents ? "pointer" : "default" }}
+                          title={canEditStudents ? "Click to edit student" : ""}
                         >
                           <td className="py-2 d-none d-md-table-cell">{idx + 1}</td>
 
@@ -2370,13 +2520,13 @@ const Students = () => {
                                         backgroundColor: SIBLING_COLORS[i % SIBLING_COLORS.length].bg,
                                         color: SIBLING_COLORS[i % SIBLING_COLORS.length].text,
                                         fontSize: "0.7rem",
-                                        cursor: sibling.id ? "pointer" : "default",
+                                        cursor: sibling.token ? "pointer" : "default",
                                         border: "none",
                                       }}
                                       title={sibling.name}
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        if (sibling.id) handleSiblingClick(sibling.id);
+                                        if (sibling.token) handleSiblingClick(sibling.token);
                                       }}
                                     >
                                       {sibling.name.length > 14
@@ -2414,13 +2564,13 @@ const Students = () => {
                                           backgroundColor: SIBLING_COLORS[i % SIBLING_COLORS.length].bg,
                                           color: SIBLING_COLORS[i % SIBLING_COLORS.length].text,
                                           fontSize: "0.7rem",
-                                          cursor: sibling.id ? "pointer" : "default",
+                                          cursor: sibling.token ? "pointer" : "default",
                                           border: "none",
                                         }}
                                         title={sibling.name}
                                         onClick={(e) => {
                                           e.stopPropagation();
-                                          if (sibling.id) handleSiblingClick(sibling.id);
+                                          if (sibling.token) handleSiblingClick(sibling.token);
                                         }}
                                       >
                                         {sibling.name.length > 15
@@ -2495,9 +2645,8 @@ const Students = () => {
 
                           <td className="py-1">
                             <div className="d-flex gap-1 align-items-center flex-wrap">
-                              {canManageStudents && (
-                                <>
-                                  <div className="form-check form-switch form-switch-sm m-0">
+                              {canToggleStudentStatus && (
+                                <div className="form-check form-switch form-switch-sm m-0">
                                     <input
                                       className="form-check-input"
                                       type="checkbox"
@@ -2510,9 +2659,11 @@ const Students = () => {
                                       }}
                                     />
                                   </div>
+                              )}
 
-                                  <button
-                                    className="btn btn-outline-primary btn-sm"
+                              {canEditStudents && (
+                                <button
+                                  className="btn btn-outline-primary btn-sm"
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       handleEdit(stu);
@@ -2520,10 +2671,12 @@ const Students = () => {
                                     title="Edit"
                                   >
                                     <i className="bi bi-pencil"></i>
-                                  </button>
+                                </button>
+                              )}
 
-                                  <button
-                                    className="btn btn-outline-secondary btn-sm"
+                              {canUploadStudentPhoto && (
+                                <button
+                                  className="btn btn-outline-secondary btn-sm"
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       promptAndUploadPhoto(stu);
@@ -2531,10 +2684,10 @@ const Students = () => {
                                     title={stu.photo ? "Replace Photo" : "Upload Photo"}
                                   >
                                     <i className="bi bi-camera"></i>
-                                  </button>
-                                </>
+                                </button>
                               )}
 
+                              {canPrintAdmissionForm && (
                               <button
                                 className="btn btn-outline-success btn-sm"
                                 onClick={(e) => {
@@ -2545,6 +2698,7 @@ const Students = () => {
                               >
                                 <i className="bi bi-printer"></i>
                               </button>
+                              )}
 
                               {canDeleteStudents && (
                                 <button

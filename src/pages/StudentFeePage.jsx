@@ -39,8 +39,11 @@ const StudentFeePage = () => {
   const isStudent = normalizedRoles.includes("student");
   const isParent = normalizedRoles.includes("parent");
   const isAdminish =
-    normalizedRoles.includes("admin") || normalizedRoles.includes("superadmin");
-  const canView = isStudent || isParent || isAdminish;
+    normalizedRoles.includes("admin") ||
+    normalizedRoles.includes("superadmin") ||
+    normalizedRoles.includes("accounts");
+
+    const canView = isStudent || isParent || isAdminish;
 
   // ------------- NEW: family + active student (sibling switcher parity) -------------
   const [family, setFamily] = useState(null);

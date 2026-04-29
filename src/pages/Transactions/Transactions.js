@@ -65,8 +65,15 @@ const asArray = (d) => {
 const firstNonEmpty = (...vals) => {
   for (const v of vals) {
     const s = (v ?? "").toString().trim();
-    if (s && s.toLowerCase() !== "null" && s.toLowerCase() !== "undefined")
+    if (
+      s &&
+      s !== "—" &&
+      s !== "-" &&
+      s.toLowerCase() !== "null" &&
+      s.toLowerCase() !== "undefined"
+    ) {
       return s;
+    }
   }
   return "";
 };
@@ -166,39 +173,154 @@ const normalizeCustomFields = (s) => {
 
 const normalizeStudentRow = (s) => {
   const id = Number(s?.id ?? s?.student_id ?? s?.Student_ID ?? 0);
-  const name =
-    String(s?.name ?? s?.student_name ?? s?.Student_Name ?? "") || "—";
-  const admission_number =
-    String(s?.admission_number ?? s?.AdmissionNumber ?? s?.adm_no ?? "") || "—";
 
-  const Class = s?.Class
-    ? {
-        id: Number(s.Class.id ?? s.class_id ?? 0),
-        class_name: s.Class.class_name ?? s.class_name ?? "—",
-      }
-    : { id: Number(s?.class_id ?? 0), class_name: s?.class_name ?? "—" };
+  const name = firstNonEmpty(
+    s?.name,
+    s?.student_name,
+    s?.Student_Name,
+    s?.full_name
+  ) || "—";
 
-  const section_name =
-    firstNonEmpty(
-      s?.Section?.section_name,
-      s?.Section?.Section_Name,
-      s?.section_name,
-      s?.Section_Name,
-      s?.section,
-      s?.Section?.name
-    ) || "—";
+  const admission_number = firstNonEmpty(
+    s?.admission_number,
+    s?.AdmissionNumber,
+    s?.adm_no,
+    s?.admissionNo
+  ) || "—";
 
-  const Section = s?.Section
-    ? { id: Number(s.Section.id ?? s.section_id ?? 0), section_name }
-    : { id: Number(s?.section_id ?? 0), section_name };
+  const classId = Number(
+    s?.Class?.id ??
+      s?.class?.id ??
+      s?.class_id ??
+      s?.Class_ID ??
+      s?.classId ??
+      0
+  );
+
+  const className = firstNonEmpty(
+    s?.Class?.class_name,
+    s?.Class?.Class_Name,
+    s?.Class?.name,
+    s?.class?.class_name,
+    s?.class?.Class_Name,
+    s?.class?.name,
+    s?.class_name,
+    s?.Class_Name,
+    s?.className,
+    s?.classname,
+    s?.class_title
+  );
+
+  const sectionId = Number(
+    s?.Section?.id ??
+      s?.sectionObj?.id ??
+      s?.section?.id ??
+      s?.section_id ??
+      s?.Section_ID ??
+      s?.sectionId ??
+      0
+  );
+
+  const sectionName = firstNonEmpty(
+    s?.Section?.section_name,
+    s?.Section?.Section_Name,
+    s?.Section?.name,
+    s?.sectionObj?.section_name,
+    s?.sectionObj?.Section_Name,
+    s?.sectionObj?.name,
+    s?.section?.section_name,
+    s?.section?.Section_Name,
+    s?.section?.name,
+    s?.section_name,
+    s?.Section_Name,
+    s?.sectionName,
+    s?.sectionname
+  );
 
   const custom_fields = normalizeCustomFields(s);
 
-  return { ...s, id, name, admission_number, Class, Section, custom_fields };
+  return {
+    ...s,
+    id,
+    name,
+    admission_number,
+    father_name: firstNonEmpty(
+      s?.father_name,
+      s?.Father_Name,
+      s?.fatherName
+    ),
+    Class: {
+      ...(s?.Class || s?.class || {}),
+      id: classId,
+      class_name: className,
+    },
+    Section: {
+      ...(s?.Section || s?.sectionObj || s?.section || {}),
+      id: sectionId,
+      section_name: sectionName,
+    },
+    class_id: classId,
+    section_id: sectionId,
+    class_name: className,
+    section_name: sectionName,
+    custom_fields,
+  };
+};
+
+const getClassLabelById = (classId, classes = []) => {
+  const id = Number(classId || 0);
+  if (!id) return "";
+  const row = (Array.isArray(classes) ? classes : []).find(
+    (cls) => Number(cls?.id || 0) === id
+  );
+  return firstNonEmpty(
+    row?.class_name,
+    row?.Class_Name,
+    row?.name,
+    row?.label,
+    row?.title
+  );
+};
+
+const getSectionLabelById = (sectionId, sections = []) => {
+  const id = Number(sectionId || 0);
+  if (!id) return "";
+  const row = (Array.isArray(sections) ? sections : []).find(
+    (sec) => Number(sec?.id || 0) === id
+  );
+  return firstNonEmpty(
+    row?.section_name,
+    row?.Section_Name,
+    row?.name,
+    row?.label,
+    row?.title
+  );
 };
 
 const formatINR = (n) =>
   `₹${Number(n || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
+
+const getAcademicDueWithConcession = (row = {}) =>
+  Math.max(
+    0,
+    Number(row?.Fee_Due || 0) -
+      Number(row?.Fee_Recieved || 0) -
+      Number(row?.Concession || 0)
+  );
+
+const getAcademicDueWithoutConcession = (row = {}) => {
+  const originalDue =
+    row?.Original_Fee_Due !== undefined && row?.Original_Fee_Due !== null
+      ? Number(row.Original_Fee_Due || 0)
+      : Number(row?.Fee_Due || 0) + Number(row?.defaultConcessionAmount || 0);
+
+  return Math.max(0, originalDue - Number(row?.Fee_Recieved || 0));
+};
+
+const getAcademicDisplayDue = (row = {}, showWithoutConcession = false) =>
+  showWithoutConcession
+    ? getAcademicDueWithoutConcession(row)
+    : getAcademicDueWithConcession(row);
 
 const pickNum = (...vals) => {
   for (const v of vals) {
@@ -208,24 +330,214 @@ const pickNum = (...vals) => {
   return 0;
 };
 
-const EMPTY_CHEQUE_DETAILS = {
+const normalizeBankAccountRow = (row, index = 0) => ({
+  id: Number(row?.id ?? row?.bank_account_id ?? row?.bankAccountId ?? 0) || 0,
+  bank_name: firstNonEmpty(row?.bank_name, row?.bankName, row?.name),
+  account_name: firstNonEmpty(
+    row?.account_name,
+    row?.accountName,
+    row?.title,
+    row?.label
+  ),
+  account_number: firstNonEmpty(row?.account_number, row?.accountNumber),
+  ifsc_code: firstNonEmpty(row?.ifsc_code, row?.ifscCode),
+  upi_id: firstNonEmpty(row?.upi_id, row?.upiId),
+  active: row?.active !== false,
+  sort_order: Number(row?.sort_order ?? index + 1) || 0,
+});
+
+const formatBankAccountLabel = (row) => {
+  if (!row) return "";
+  const left = firstNonEmpty(row.bank_name);
+  const right = firstNonEmpty(row.account_name);
+  return [left, right].filter(Boolean).join(" - ");
+};
+
+const sortBankAccounts = (rows = []) =>
+  [...rows].sort(
+    (a, b) =>
+      Number(a?.sort_order ?? 0) - Number(b?.sort_order ?? 0) ||
+      String(formatBankAccountLabel(a) || "").localeCompare(
+        String(formatBankAccountLabel(b) || "")
+      )
+  );
+
+const EMPTY_PAYMENT_DETAILS = {
+  reference_no: "",
+  bank_account_id: "",
+  bank_name: "",
+  cheque_no: "",
+  cheque_date: "",
+  Transaction_ID: "",
+  BankName: "",
   ChequeNumber: "",
   ChequeDate: "",
-  BankName: "",
 };
 
-const toUiPaymentMode = (mode) => {
-  const m = String(mode || "").trim().toLowerCase();
-  if (m === "cheque") return "Cheque";
-  if (["online", "hdfc", "smart_hdfc", "smartgateway"].includes(m)) return "Online";
-  return "Cash";
+const DEFAULT_TRANSACTION_MODES = [
+  {
+    id: "cash",
+    name: "Cash",
+    code: "CASH",
+    requires_bank: false,
+    requires_reference_no: false,
+    requires_cheque_no: false,
+    requires_cheque_date: false,
+    sort_order: 1,
+    active: true,
+  },
+  {
+    id: "upi",
+    name: "UPI",
+    code: "UPI",
+    requires_bank: true,
+    requires_reference_no: true,
+    requires_cheque_no: false,
+    requires_cheque_date: false,
+    sort_order: 2,
+    active: true,
+  },
+  {
+    id: "cheque",
+    name: "Cheque",
+    code: "CHEQUE",
+    requires_bank: true,
+    requires_reference_no: false,
+    requires_cheque_no: true,
+    requires_cheque_date: true,
+    sort_order: 3,
+    active: true,
+  },
+  {
+    id: "card",
+    name: "Card",
+    code: "CARD",
+    requires_bank: true,
+    requires_reference_no: true,
+    requires_cheque_no: false,
+    requires_cheque_date: false,
+    sort_order: 4,
+    active: true,
+  },
+  {
+    id: "netbanking",
+    name: "Net Banking",
+    code: "NETBANKING",
+    requires_bank: true,
+    requires_reference_no: true,
+    requires_cheque_no: false,
+    requires_cheque_date: false,
+    sort_order: 5,
+    active: true,
+  },
+  {
+    id: "online",
+    name: "Online",
+    code: "ONLINE",
+    requires_bank: false,
+    requires_reference_no: true,
+    requires_cheque_no: false,
+    requires_cheque_date: false,
+    sort_order: 6,
+    active: true,
+  },
+];
+
+const normalizeModeRow = (row, index = 0) => ({
+  id: row?.id ?? row?.code ?? row?.name ?? `mode-${index}`,
+  name:
+    firstNonEmpty(row?.name, row?.label, row?.title, row?.code) ||
+    `Mode ${index + 1}`,
+  code: firstNonEmpty(row?.code, row?.short_code, row?.slug),
+  description: firstNonEmpty(row?.description),
+  requires_bank: Boolean(row?.requires_bank),
+  requires_reference_no: Boolean(row?.requires_reference_no),
+  requires_cheque_no: Boolean(row?.requires_cheque_no),
+  requires_cheque_date: Boolean(row?.requires_cheque_date),
+  sort_order: Number(row?.sort_order ?? index + 1) || 0,
+  active: row?.active !== false,
+});
+
+const sortTransactionModes = (rows = []) =>
+  [...rows].sort(
+    (a, b) =>
+      Number(a?.sort_order ?? 0) - Number(b?.sort_order ?? 0) ||
+      String(a?.name || "").localeCompare(String(b?.name || ""))
+  );
+
+const getActiveTransactionModes = (rows = []) => {
+  const source = Array.isArray(rows) && rows.length ? rows : DEFAULT_TRANSACTION_MODES;
+  const active = source.filter((row) => row?.active !== false);
+  return sortTransactionModes(active.length ? active : source);
 };
 
-const hasChequeInfo = (details) =>
+const findModeByValue = (value, rows = []) => {
+  const source = Array.isArray(rows) && rows.length ? rows : DEFAULT_TRANSACTION_MODES;
+  const raw = String(value || "").trim();
+  const needle = raw.toLowerCase();
+  if (!needle) return null;
+
+  const exact = source.find(
+    (row) =>
+      String(row?.name || "").trim().toLowerCase() === needle ||
+      String(row?.code || "").trim().toLowerCase() === needle ||
+      String(row?.id || "").trim().toLowerCase() === needle
+  );
+  if (exact) return exact;
+
+  const aliases = {
+    cash: ["cash"],
+    cheque: ["cheque", "check"],
+    upi: ["upi"],
+    card: ["card"],
+    netbanking: ["netbanking", "net_banking", "net banking"],
+    online: ["online", "hdfc", "smart_hdfc", "smartgateway"],
+  };
+
+  for (const [canonical, values] of Object.entries(aliases)) {
+    if (!values.includes(needle)) continue;
+    const aliased = source.find(
+      (row) =>
+        String(row?.name || "").trim().toLowerCase() === canonical ||
+        String(row?.code || "").trim().toLowerCase() === canonical ||
+        String(row?.id || "").trim().toLowerCase() === canonical
+    );
+    if (aliased) return aliased;
+  }
+
+  return null;
+};
+
+const getDefaultPaymentModeName = (rows = []) => {
+  const source = getActiveTransactionModes(rows);
+  const cash = findModeByValue("cash", source);
+  return cash?.name || source[0]?.name || "Cash";
+};
+
+const normalizePaymentModeValue = (value, rows = []) => {
+  const hit = findModeByValue(value, rows);
+  if (hit?.name) return hit.name;
+  const raw = String(value || "").trim();
+  return raw || getDefaultPaymentModeName(rows);
+};
+
+const getPaymentModeLabel = (value, rows = []) => {
+  const hit = findModeByValue(value, rows);
+  return hit?.name || String(value || "").trim() || getDefaultPaymentModeName(rows);
+};
+
+const modeUsesChequeFields = (mode) =>
+  Boolean(mode?.requires_cheque_no || mode?.requires_cheque_date);
+
+const modeUsesPopupDetails = (mode) => Boolean(modeUsesChequeFields(mode));
+
+const hasModeExtraInfo = (details, mode) =>
   Boolean(
-    String(details?.ChequeNumber || "").trim() ||
-      String(details?.ChequeDate || "").trim() ||
-      String(details?.BankName || "").trim()
+    (mode?.requires_cheque_no &&
+      String(details?.cheque_no || details?.ChequeNumber || "").trim()) ||
+      (mode?.requires_cheque_date &&
+        String(details?.cheque_date || details?.ChequeDate || "").trim()) ||
+      String(details?.bank_name || details?.BankName || "").trim()
   );
 
 const normalizeDateInput = (value) => {
@@ -269,17 +581,80 @@ const formatTransactionDateOnly = (value) => {
     : parsed.toLocaleDateString();
 };
 
-const validateChequeInfo = (details) => {
-  if (!String(details?.ChequeNumber || "").trim()) {
+const validateModePopupInfo = (details, mode) => {
+  if (
+    mode?.requires_cheque_no &&
+    !String(details?.cheque_no || details?.ChequeNumber || "").trim()
+  ) {
     return "Cheque number is required.";
   }
-  if (!String(details?.ChequeDate || "").trim()) {
+  if (
+    mode?.requires_cheque_date &&
+    !String(details?.cheque_date || details?.ChequeDate || "").trim()
+  ) {
     return "Cheque date is required.";
   }
-  if (!String(details?.BankName || "").trim()) {
-    return "Bank name is required.";
-  }
   return null;
+};
+
+const validateModeInfo = (details, mode) => {
+  if (
+    mode?.requires_reference_no &&
+    !String(details?.reference_no || details?.Transaction_ID || "").trim()
+  ) {
+    return "Reference / Transaction ID is required.";
+  }
+  return validateModePopupInfo(details, mode);
+};
+
+const buildPaymentDetailsState = (details, mode) => ({
+  reference_no: mode?.requires_reference_no
+    ? String(details?.reference_no || details?.Transaction_ID || "").trim()
+    : "",
+  bank_account_id: mode?.requires_bank
+    ? String(details?.bank_account_id || "")
+    : "",
+  bank_name:
+    mode?.requires_bank || mode?.requires_cheque_no || mode?.requires_cheque_date
+      ? String(details?.bank_name || details?.BankName || "").trim()
+      : "",
+  cheque_no: mode?.requires_cheque_no
+    ? String(details?.cheque_no || details?.ChequeNumber || "").trim()
+    : "",
+  cheque_date: mode?.requires_cheque_date
+    ? normalizeDateInput(details?.cheque_date || details?.ChequeDate)
+    : "",
+  Transaction_ID: mode?.requires_reference_no
+    ? String(details?.Transaction_ID || details?.reference_no || "").trim()
+    : "",
+  BankName:
+    mode?.requires_bank || mode?.requires_cheque_no || mode?.requires_cheque_date
+      ? String(details?.BankName || details?.bank_name || "").trim()
+      : "",
+  ChequeNumber: mode?.requires_cheque_no
+    ? String(details?.ChequeNumber || details?.cheque_no || "").trim()
+    : "",
+  ChequeDate: mode?.requires_cheque_date
+    ? normalizeDateInput(details?.ChequeDate || details?.cheque_date)
+    : "",
+});
+
+const formatModeDetailsSummary = (details, mode, bankAccounts = []) => {
+  const parts = [];
+
+  if (mode?.requires_cheque_no && String(details?.cheque_no || details?.ChequeNumber || "").trim()) {
+    parts.push(String(details?.cheque_no || details?.ChequeNumber || "").trim());
+  }
+
+  if (mode?.requires_cheque_date && String(details?.cheque_date || details?.ChequeDate || "").trim()) {
+    parts.push(normalizeDateInput(details?.cheque_date || details?.ChequeDate));
+  }
+
+  if (String(details?.bank_name || details?.BankName || "").trim()) {
+    parts.push(String(details?.bank_name || details?.BankName || "").trim());
+  }
+
+  return parts.join(" • ");
 };
 
 /**
@@ -346,9 +721,12 @@ const Transactions = () => {
   const [editingTransaction, setEditingTransaction] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [activeTab, setActiveTab] = useState("admissionNumber");
-  const [paymentMode, setPaymentMode] = useState("Cash");
-  const [transactionID, setTransactionID] = useState("");
-  const [chequeDetails, setChequeDetails] = useState(EMPTY_CHEQUE_DETAILS);
+  const [transactionModes, setTransactionModes] = useState(DEFAULT_TRANSACTION_MODES);
+  const [bankAccounts, setBankAccounts] = useState([]);
+  const [paymentMode, setPaymentMode] = useState(
+    getDefaultPaymentModeName(DEFAULT_TRANSACTION_MODES)
+  );
+  const [paymentDetails, setPaymentDetails] = useState(EMPTY_PAYMENT_DETAILS);
   const [showChequePopup, setShowChequePopup] = useState(false);
   const [remarks, setRemarks] = useState("");
   const [transactionDate, setTransactionDate] = useState(getTodayDateInput());
@@ -363,12 +741,116 @@ const Transactions = () => {
   const [modalError, setModalError] = useState(null);
   const [quickAmount, setQuickAmount] = useState("");
   const [selectedHeads, setSelectedHeads] = useState(new Set());
+  const [selectedFineHeads, setSelectedFineHeads] = useState(new Set());
+  const [selectedTransportHeads, setSelectedTransportHeads] = useState(new Set());
   const [prevBalanceHeadId, setPrevBalanceHeadId] = useState(null);
   const [openingBalanceDue, setOpeningBalanceDue] = useState(0);
   const [showSearchPanel, setShowSearchPanel] = useState(true);
   const [showStudentExtra, setShowStudentExtra] = useState(false);
   const [showCollectionDetails, setShowCollectionDetails] = useState(true);
   const [loadingSibling, setLoadingSibling] = useState(false);
+  const [siblingDetailsMap, setSiblingDetailsMap] = useState({});
+  const [loadingSiblingSummary, setLoadingSiblingSummary] = useState(false);
+  const [showDueWithoutConcession, setShowDueWithoutConcession] = useState(false);
+
+  const selectedSessionMeta = useMemo(() => {
+    if (!Array.isArray(sessions) || !sessions.length || !selectedSession) return null;
+    return (
+      sessions.find((s) => Number(s?.id || 0) === Number(selectedSession || 0)) ||
+      null
+    );
+  }, [sessions, selectedSession]);
+
+  const isSelectedSessionActive = useMemo(() => {
+    if (!selectedSessionMeta) return false;
+
+    if (
+      selectedSessionMeta?.is_active === true ||
+      selectedSessionMeta?.isActive === true
+    ) {
+      return true;
+    }
+
+    const activeSession = Array.isArray(sessions)
+      ? sessions.find((s) => s?.is_active === true || s?.isActive === true)
+      : null;
+
+    return Number(activeSession?.id || 0) === Number(selectedSessionMeta?.id || 0);
+  }, [selectedSessionMeta, sessions]);
+
+  const activeTransactionModes = useMemo(
+    () => getActiveTransactionModes(transactionModes),
+    [transactionModes]
+  );
+
+  const defaultPaymentMode = useMemo(
+    () => getDefaultPaymentModeName(activeTransactionModes),
+    [activeTransactionModes]
+  );
+
+  const selectedPaymentModeMeta = useMemo(
+    () =>
+      findModeByValue(paymentMode, activeTransactionModes) ||
+      findModeByValue(defaultPaymentMode, activeTransactionModes) ||
+      null,
+    [paymentMode, activeTransactionModes, defaultPaymentMode]
+  );
+
+  const editingPaymentModeMeta = useMemo(
+    () =>
+      editingTransaction
+        ? findModeByValue(editingTransaction?.PaymentMode, transactionModes) ||
+          findModeByValue(editingTransaction?.PaymentMode, activeTransactionModes) ||
+          null
+        : null,
+    [editingTransaction, transactionModes, activeTransactionModes]
+  );
+
+  const popupModeMeta = editingTransaction ? editingPaymentModeMeta : selectedPaymentModeMeta;
+
+  const applyCreatePaymentMode = useCallback(
+    (rawMode) => {
+      const normalizedMode = normalizePaymentModeValue(
+        rawMode,
+        activeTransactionModes
+      );
+      const modeMeta = findModeByValue(normalizedMode, activeTransactionModes);
+
+      setPaymentMode(normalizedMode);
+      setPaymentDetails((prev) => buildPaymentDetailsState(prev, modeMeta));
+      setShowChequePopup(Boolean(modeUsesPopupDetails(modeMeta)));
+    },
+    [activeTransactionModes]
+  );
+
+  const applyEditPaymentMode = useCallback(
+    (rawMode) => {
+      const normalizedMode = normalizePaymentModeValue(rawMode, transactionModes);
+      const modeMeta =
+        findModeByValue(normalizedMode, transactionModes) ||
+        findModeByValue(normalizedMode, activeTransactionModes);
+
+      setEditingTransaction((prev) => {
+        if (!prev) return prev;
+        const nextPaymentDetails = buildPaymentDetailsState(prev, modeMeta);
+        return {
+          ...prev,
+          PaymentMode: normalizedMode,
+          reference_no: nextPaymentDetails.reference_no,
+          bank_account_id: nextPaymentDetails.bank_account_id,
+          bank_name: nextPaymentDetails.bank_name,
+          cheque_no: nextPaymentDetails.cheque_no,
+          cheque_date: nextPaymentDetails.cheque_date,
+          Transaction_ID: nextPaymentDetails.Transaction_ID,
+          BankName: nextPaymentDetails.BankName,
+          ChequeNumber: nextPaymentDetails.ChequeNumber,
+          ChequeDate: nextPaymentDetails.ChequeDate,
+        };
+      });
+      setShowChequePopup(Boolean(modeUsesPopupDetails(modeMeta)));
+    },
+    [transactionModes, activeTransactionModes]
+  );
 
   const selectedStudentSiblings = useMemo(() => {
     const stu = selectedStudentInfo || selectedAdmissionStudent || null;
@@ -388,6 +870,61 @@ const Transactions = () => {
     }
     return rows;
   }, [selectedStudentInfo, selectedAdmissionStudent]);
+
+  const selectedStudentClassLabel = useMemo(() => {
+    const activeStudent = selectedStudentInfo || selectedAdmissionStudent || null;
+
+    return (
+      firstNonEmpty(
+        activeStudent?.Class?.class_name,
+        activeStudent?.class_name,
+        getClassLabelById(
+          activeStudent?.Class?.id || activeStudent?.class_id || selectedClass,
+          classes
+        )
+      ) || "—"
+    );
+  }, [selectedStudentInfo, selectedAdmissionStudent, selectedClass, classes]);
+
+  const selectedStudentSectionLabel = useMemo(() => {
+    const activeStudent = selectedStudentInfo || selectedAdmissionStudent || null;
+
+    return (
+      firstNonEmpty(
+        activeStudent?.Section?.section_name,
+        activeStudent?.section_name,
+        getSectionLabelById(
+          activeStudent?.Section?.id || activeStudent?.section_id || selectedSection,
+          sections
+        )
+      ) || "—"
+    );
+  }, [selectedStudentInfo, selectedAdmissionStudent, selectedSection, sections]);
+
+  const siblingSummaryRows = useMemo(() => {
+    return selectedStudentSiblings.map((sib) => {
+      const key = String(sib.id || sib.name || sib.slot);
+      const resolved = siblingDetailsMap[key];
+
+      return {
+        ...sib,
+        display_name: resolved?.name || sib.name || "—",
+        class_name:
+          resolved?.Class?.class_name ||
+          resolved?.class_name ||
+          sib?.class_name ||
+          sib?.sibling_class_name ||
+          "—",
+        section_name:
+          resolved?.Section?.section_name ||
+          resolved?.section_name ||
+          sib?.section_name ||
+          sib?.sibling_section_name ||
+          "—",
+        admission_number: resolved?.admission_number || sib?.admission_number || "—",
+      };
+    });
+  }, [selectedStudentSiblings, siblingDetailsMap]);
 
 
   const handlePrintReceipt = async (slipId) => {
@@ -617,10 +1154,10 @@ const Transactions = () => {
   const closeChequePopup = () => setShowChequePopup(false);
 
   const saveChequePopup = () => {
-    const source = editingTransaction || chequeDetails;
-    const msg = validateChequeInfo(source);
+    const source = editingTransaction || paymentDetails;
+    const msg = validateModePopupInfo(source, popupModeMeta);
     if (msg) {
-      Swal.fire("Incomplete cheque details", msg, "warning");
+      Swal.fire("Incomplete payment details", msg, "warning");
       return;
     }
     setShowChequePopup(false);
@@ -726,8 +1263,9 @@ const Transactions = () => {
 
   const handlePickStudent = (s) => {
     if (!s) return;
-    setSelectedClass((prev) => prev || s.class_id || s.Class?.id || "");
-    setSelectedSection((prev) => prev || s.section_id || s.Section?.id || "");
+    setModalError(null);
+    setSelectedClass(s.class_id || s.Class?.id || "");
+    setSelectedSection(s.section_id || s.Section?.id || "");
     setSelectedAdmissionStudent(s);
     setSelectedStudentInfo(s);
     setSbQuery(`${s.name} (${s.admission_number || "—"})`);
@@ -736,7 +1274,7 @@ const Transactions = () => {
       setModalError("Please select an academic session before loading fee details.");
       return;
     }
-    fetchFeeHeadsForStudent(s.class_id, s.id, s);
+    fetchFeeHeadsForStudent(s.class_id || s.Class?.id, s.id, s);
   };
 
   const resolveStudentByToken = async (token) => {
@@ -793,8 +1331,8 @@ const Transactions = () => {
         return;
       }
 
-      setSelectedClass((prev) => prev || sibling.class_id || sibling.Class?.id || "");
-      setSelectedSection((prev) => prev || sibling.section_id || sibling.Section?.id || "");
+      setSelectedClass(sibling.class_id || sibling.Class?.id || "");
+      setSelectedSection(sibling.section_id || sibling.Section?.id || "");
       setSelectedAdmissionStudent(sibling);
       setSelectedStudentInfo(sibling);
       setSbQuery(`${sibling.name} (${sibling.admission_number || "—"})`);
@@ -814,6 +1352,45 @@ const Transactions = () => {
     }
   };
 
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadSiblingSummaries = async () => {
+      if (!selectedStudentSiblings.length) {
+        setSiblingDetailsMap({});
+        return;
+      }
+
+      setLoadingSiblingSummary(true);
+
+      try {
+        const entries = await Promise.all(
+          selectedStudentSiblings.map(async (sib) => {
+            const key = String(sib.id || sib.name || sib.slot);
+            try {
+              const resolved = await resolveStudentByToken(sib.id || sib.name);
+              return [key, resolved ? normalizeStudentRow(resolved) : null];
+            } catch {
+              return [key, null];
+            }
+          })
+        );
+
+        if (!cancelled) {
+          setSiblingDetailsMap(Object.fromEntries(entries));
+        }
+      } finally {
+        if (!cancelled) setLoadingSiblingSummary(false);
+      }
+    };
+
+    loadSiblingSummaries();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedStudentSiblings]);
 
   const openStudentFeePage = () => {
     const stu = selectedStudentInfo || selectedAdmissionStudent;
@@ -876,38 +1453,58 @@ const Transactions = () => {
     return academicNetDue + fineDue + vanOutstanding;
   };
 
-  const baseDueForRow = (row) => {
-    const academicPayable = Math.max(
-      0,
-      (row.Fee_Due || 0) - (row.Concession || 0)
-    );
-    const finePayable = row.isFineApplicable
-      ? Math.max(0, row.fineAmount || 0)
+  const academicDueForRow = (row, showWithoutConcession = false) =>
+    getAcademicDisplayDue(row, showWithoutConcession);
+
+  const fineDueForRow = (row) =>
+    row.isFineApplicable
+      ? Math.max(0, (row.fineAmount || 0) - (row.Fine_Amount || 0))
       : 0;
-    const vanPayable = row.ShowVanFeeInput
-      ? Math.max(0, row.Van_Fee_Due || 0)
+
+  const transportDueForRow = (row) =>
+    row.ShowVanFeeInput
+      ? Math.max(0, (row.Van_Fee_Due || 0) - (row.VanFee || 0))
       : 0;
-    return academicPayable + finePayable + vanPayable;
-  };
+
+  const baseDueForRow = (row, showWithoutConcession = false) =>
+    academicDueForRow(row, showWithoutConcession) +
+    fineDueForRow(row) +
+    transportDueForRow(row);
 
   const totalDueBase = useMemo(() => {
     return (newTransactionDetails || []).reduce(
-      (sum, row) => sum + baseDueForRow(row),
+      (sum, row) => sum + baseDueForRow(row, showDueWithoutConcession),
       0
     );
-  }, [newTransactionDetails]);
+  }, [newTransactionDetails, showDueWithoutConcession]);
 
   const selectedDueBase = useMemo(() => {
-    if (!newTransactionDetails?.length || selectedHeads.size === 0) return 0;
+    if (!newTransactionDetails?.length) return 0;
     return newTransactionDetails.reduce((sum, row) => {
-      return selectedHeads.has(String(row.Fee_Head))
-        ? sum + baseDueForRow(row)
-        : sum;
+      const key = String(row.Fee_Head);
+      const academicPart = selectedHeads.has(key)
+        ? academicDueForRow(row, showDueWithoutConcession)
+        : 0;
+      const finePart = selectedFineHeads.has(key)
+        ? fineDueForRow(row)
+        : 0;
+      const transportPart = selectedTransportHeads.has(key)
+        ? transportDueForRow(row)
+        : 0;
+      return sum + academicPart + finePart + transportPart;
     }, 0);
-  }, [newTransactionDetails, selectedHeads]);
+  }, [
+    newTransactionDetails,
+    selectedHeads,
+    selectedFineHeads,
+    selectedTransportHeads,
+    showDueWithoutConcession,
+  ]);
 
   useEffect(() => {
     setSelectedHeads(new Set());
+    setSelectedFineHeads(new Set());
+    setSelectedTransportHeads(new Set());
   }, [showModal, feeHeads]);
 
   useEffect(() => {
@@ -983,6 +1580,49 @@ const Transactions = () => {
     }
   };
 
+  const fetchTransactionModes = async () => {
+    try {
+      const response = await api.get("/mode-of-transactions");
+      const rows = asArray(response.data)
+        .map(normalizeModeRow)
+        .filter((row) => row?.name);
+      setTransactionModes(
+        rows.length ? sortTransactionModes(rows) : DEFAULT_TRANSACTION_MODES
+      );
+    } catch (error) {
+      console.error("Error fetching mode of transactions:", error);
+      setTransactionModes(DEFAULT_TRANSACTION_MODES);
+    }
+  };
+
+  const fetchSchoolBankAccounts = async () => {
+    try {
+      const response = await api.get("/school-bank-accounts?active_only=true");
+      const rows = asArray(response.data)
+        .map(normalizeBankAccountRow)
+        .filter((row) => row?.id);
+      setBankAccounts(sortBankAccounts(rows));
+    } catch (error) {
+      console.error("Error fetching school bank accounts:", error);
+      setBankAccounts([]);
+    }
+  };
+
+  const syncVanRemaining = (row) => {
+    if (!row?.ShowVanFeeInput) return row;
+
+    const routeFee = Number(row._routeFee || 0);
+    const prevRec = Number(row._receivedVanFee || 0);
+    const cons = Number(row.Van_Fee_Concession || 0);
+    const fine = Number(row.Van_Fine_Amount || 0);
+    const baseWithoutFine = Math.max(0, routeFee - prevRec - cons);
+
+    row.VanFee = Math.max(0, Number(row.VanFee || 0));
+    row.Van_Fee_Remaining = Math.max(0, baseWithoutFine - (row.VanFee || 0));
+    row.Van_Fee_Due = Math.max(0, baseWithoutFine + fine);
+    return row;
+  };
+
   const fillRowAuto = (index) => {
     setNewTransactionDetails((prev) => {
       if (!prev?.length) return prev;
@@ -990,54 +1630,29 @@ const Transactions = () => {
       const updated = [...prev];
       const row = { ...updated[index] };
 
-      if (row.isOpeningBalance) {
-        const acadNeed = Math.max(
-          0,
-          (row.Fee_Due || 0) - (row.Concession || 0) - (row.Fee_Recieved || 0)
-        );
-        const maxAllowed = Math.max(
-          0,
-          (row.Fee_Due || 0) - (row.Concession || 0)
-        );
-        row.Fee_Recieved = Math.min(acadNeed, maxAllowed);
-        row.Fine_Amount = 0;
-        row.VanFee = 0;
-        updated[index] = row;
-        return updated;
-      }
-
       const acadNeed = Math.max(
         0,
         (row.Fee_Due || 0) - (row.Concession || 0) - (row.Fee_Recieved || 0)
       );
+      const maxAllowed = Math.max(
+        0,
+        (row.Fee_Due || 0) - (row.Concession || 0)
+      );
 
-      const fineNeed = row.isFineApplicable
-        ? Math.max(0, (row.fineAmount || 0) - (row.Fine_Amount || 0))
-        : 0;
+      row.Fee_Recieved = Math.min(
+        (row.Fee_Recieved || 0) + acadNeed,
+        maxAllowed
+      );
 
-      const vanNeed = row.ShowVanFeeInput
-        ? Math.max(0, (row.Van_Fee_Due || 0) - (row.VanFee || 0))
-        : 0;
-
-      const maxAllowed = Math.max(0, (row.Fee_Due || 0) - (row.Concession || 0));
-      row.Fee_Recieved = Math.min((row.Fee_Recieved || 0) + acadNeed, maxAllowed);
-
-      if (row.isFineApplicable) {
+      if (row.isOpeningBalance) {
+        row.Fine_Amount = 0;
+      } else if (row.isFineApplicable) {
+        const fineNeed = Math.max(0, (row.fineAmount || 0) - (row.Fine_Amount || 0));
         row.Fine_Amount = Math.min(
           (row.Fine_Amount || 0) + fineNeed,
           row.fineAmount || 0
         );
         row.isFineEdited = true;
-      }
-
-      if (row.ShowVanFeeInput) {
-        row.VanFee = Math.max(0, (row.VanFee || 0) + vanNeed);
-
-        const baseDueNoFine = Math.max(
-          0,
-          (row.Van_Fee_Due || 0) - (row.Van_Fine_Amount || 0)
-        );
-        row.Van_Fee_Remaining = Math.max(0, baseDueNoFine - (row.VanFee || 0));
       }
 
       updated[index] = row;
@@ -1052,20 +1667,79 @@ const Transactions = () => {
       const row = { ...updated[index] };
 
       row.Fee_Recieved = 0;
-      row.VanFee = 0;
       row.Fine_Amount = 0;
       row.isFineEdited = false;
 
-      if (row.ShowVanFeeInput) {
-        const routeFee = Number(row._routeFee || 0);
-        const prevRec = Number(row._receivedVanFee || 0);
-        const cons = Number(row.Van_Fee_Concession || 0);
-        const fine = Number(row.Van_Fine_Amount || 0);
+      updated[index] = row;
+      return updated;
+    });
+  };
 
-        const baseWithoutFine = Math.max(0, routeFee - prevRec - cons);
-        row.Van_Fee_Remaining = Math.max(0, baseWithoutFine - 0);
-        row.Van_Fee_Due = Math.max(0, baseWithoutFine + fine);
-      }
+  const fillFineAuto = (index) => {
+    setNewTransactionDetails((prev) => {
+      if (!prev?.length) return prev;
+
+      const updated = [...prev];
+      const row = { ...updated[index] };
+
+      if (!row.isFineApplicable || row.isOpeningBalance) return prev;
+
+      const fineNeed = Math.max(0, (row.fineAmount || 0) - (row.Fine_Amount || 0));
+      row.Fine_Amount = Math.min(
+        (row.Fine_Amount || 0) + fineNeed,
+        row.fineAmount || 0
+      );
+      row.isFineEdited = true;
+
+      updated[index] = row;
+      return updated;
+    });
+  };
+
+  const clearFineAuto = (index) => {
+    setNewTransactionDetails((prev) => {
+      if (!prev?.length) return prev;
+
+      const updated = [...prev];
+      const row = { ...updated[index] };
+
+      row.Fine_Amount = 0;
+      row.isFineEdited = false;
+
+      updated[index] = row;
+      return updated;
+    });
+  };
+
+  const fillTransportAuto = (index) => {
+    setNewTransactionDetails((prev) => {
+      if (!prev?.length) return prev;
+
+      const updated = [...prev];
+      const row = { ...updated[index] };
+
+      if (!row.ShowVanFeeInput || row.isOpeningBalance) return prev;
+
+      const vanNeed = Math.max(0, (row.Van_Fee_Due || 0) - (row.VanFee || 0));
+      row.VanFee = Math.max(0, (row.VanFee || 0) + vanNeed);
+      syncVanRemaining(row);
+
+      updated[index] = row;
+      return updated;
+    });
+  };
+
+  const clearTransportAuto = (index) => {
+    setNewTransactionDetails((prev) => {
+      if (!prev?.length) return prev;
+
+      const updated = [...prev];
+      const row = { ...updated[index] };
+
+      if (!row.ShowVanFeeInput || row.isOpeningBalance) return prev;
+
+      row.VanFee = 0;
+      syncVanRemaining(row);
 
       updated[index] = row;
       return updated;
@@ -1242,6 +1916,7 @@ const Transactions = () => {
         feeResponse?.data?.student || baseStudentFromAdmission || {}
       );
       const studentRouteFromFeeDetails = baseStudent?.route || null;
+      const selectedSessionIsActive = Boolean(isSelectedSessionActive);
 
       const [
         receivedVanFeeResponse,
@@ -1395,10 +2070,14 @@ const Transactions = () => {
           return hit ? String(hit.id) : null;
         };
 
-        const inferredRouteIdForHead = (hid) =>
-          normalizeRouteId(lastRouteMap[hid]) ??
-          normalizeRouteId(rawStudentAssignedRouteId) ??
-          null;
+        const inferredRouteIdForHead = (hid) => {
+          const historicalRouteId = normalizeRouteId(lastRouteMap[hid]);
+          const currentRouteId = normalizeRouteId(rawStudentAssignedRouteId);
+
+          return selectedSessionIsActive
+            ? currentRouteId ?? historicalRouteId ?? null
+            : historicalRouteId ?? currentRouteId ?? null;
+        };
 
         const feeDetailCost = pickNum(
           detail.transportCost,
@@ -1469,14 +2148,23 @@ const Transactions = () => {
 
         const serverCostVal = pickNum(serverCostPerHead, serverTransportCostGlobal);
 
-        const selectedRouteFee = pickNum(
-          transportItemCost,
-          serverCostVal,
-          feeDetailCost,
-          routeObjCost,
-          studentTransportCost,
-          studentRouteFromFeeDetails?.route_cost
-        );
+        const selectedRouteFee = selectedSessionIsActive
+          ? pickNum(
+              studentTransportCost,
+              routeObjCost,
+              feeDetailCost,
+              transportItemCost,
+              serverCostVal,
+              studentRouteFromFeeDetails?.route_cost
+            )
+          : pickNum(
+              transportItemCost,
+              serverCostVal,
+              feeDetailCost,
+              routeObjCost,
+              studentTransportCost,
+              studentRouteFromFeeDetails?.route_cost
+            );
 
         const receivedVanFeeFromMap = receivedVanFeeMap[headId] || 0;
         const vanFeeConcessionFromMap = vanFeeConcessionMap[headId] || 0;
@@ -1503,7 +2191,13 @@ const Transactions = () => {
               )
             : vanFeeConcessionFromMap;
 
+        const fallbackRemainingBeforeFine = Math.max(
+          0,
+          selectedRouteFee - (receivedFromServer || 0) - (concessionFromServer || 0)
+        );
+
         const remainingBeforeFineFromServer =
+          !selectedSessionIsActive &&
           transportItem &&
           (transportItem.remainingBeforeFine !== undefined ||
             transportItem.RemainingBeforeFine !== undefined)
@@ -1512,12 +2206,7 @@ const Transactions = () => {
                   ? transportItem.remainingBeforeFine
                   : transportItem.RemainingBeforeFine || 0
               )
-            : Math.max(
-                0,
-                selectedRouteFee -
-                  (receivedFromServer || 0) -
-                  (concessionFromServer || 0)
-              );
+            : fallbackRemainingBeforeFine;
 
         const vanFineFromServer = Number(
           transportItem?.vanFine ??
@@ -1527,6 +2216,7 @@ const Transactions = () => {
         );
 
         const finalDue =
+          !selectedSessionIsActive &&
           transportItem &&
           (transportItem.due !== undefined || transportItem.FinalDue !== undefined)
             ? Number(transportItem.due ?? transportItem.FinalDue ?? 0)
@@ -1671,29 +2361,119 @@ const Transactions = () => {
       setNewTransactionDetails(feeDetails);
 
       if (feeResponse.data.student) {
-        const normalizedFeeStudent = normalizeStudentRow(feeResponse.data.student || {});
-        const previousSiblingData = selectedAdmissionStudent || selectedStudentInfo || {};
+        const normalizedFeeStudent = normalizeStudentRow(
+          feeResponse.data.student || {}
+        );
+        const previousStudentData = selectedStudentInfo || selectedAdmissionStudent || {};
+        const previousStudentMatchesCurrent =
+          Number(previousStudentData?.id || previousStudentData?.student_id || previousStudentData?.Student_ID || 0) ===
+            Number(normalizedFeeStudent?.id || studentId || 0) ||
+          (
+            String(previousStudentData?.admission_number || "").trim() !== "" &&
+            String(previousStudentData?.admission_number || "").trim() ===
+              String(normalizedFeeStudent?.admission_number || "").trim()
+          );
+        const safePreviousStudentData = previousStudentMatchesCurrent
+          ? previousStudentData
+          : {};
 
-        setSelectedStudentInfo({
-          ...previousSiblingData,
+        const mergedClassId =
+          Number(normalizedFeeStudent?.Class?.id || normalizedFeeStudent?.class_id || 0) ||
+          Number(baseStudentFromAdmission?.Class?.id || baseStudentFromAdmission?.class_id || 0) ||
+          Number(safePreviousStudentData?.Class?.id || safePreviousStudentData?.class_id || 0) ||
+          Number(_classId || 0) ||
+          0;
+
+        const mergedSectionId =
+          Number(
+            normalizedFeeStudent?.Section?.id || normalizedFeeStudent?.section_id || 0
+          ) ||
+          Number(
+            baseStudentFromAdmission?.Section?.id || baseStudentFromAdmission?.section_id || 0
+          ) ||
+          Number(
+            safePreviousStudentData?.Section?.id || safePreviousStudentData?.section_id || 0
+          ) ||
+          0;
+
+        const mergedClassName =
+          firstNonEmpty(
+            normalizedFeeStudent?.Class?.class_name,
+            normalizedFeeStudent?.class_name,
+            baseStudentFromAdmission?.Class?.class_name,
+            baseStudentFromAdmission?.class_name,
+            safePreviousStudentData?.Class?.class_name,
+            safePreviousStudentData?.class_name,
+            getClassLabelById(
+              mergedClassId || _classId || selectedClass,
+              classes
+            )
+          ) || "—";
+
+        const mergedSectionName =
+          firstNonEmpty(
+            normalizedFeeStudent?.Section?.section_name,
+            normalizedFeeStudent?.section_name,
+            baseStudentFromAdmission?.Section?.section_name,
+            baseStudentFromAdmission?.section_name,
+            safePreviousStudentData?.Section?.section_name,
+            safePreviousStudentData?.section_name,
+            getSectionLabelById(
+              mergedSectionId || selectedSection,
+              sections
+            )
+          ) || "—";
+
+        const mergedStudent = {
+          ...safePreviousStudentData,
+          ...baseStudentFromAdmission,
           ...normalizedFeeStudent,
+          father_name:
+            firstNonEmpty(
+              normalizedFeeStudent?.father_name,
+              baseStudentFromAdmission?.father_name,
+              safePreviousStudentData?.father_name
+            ) || "",
+          Class: {
+            ...(safePreviousStudentData?.Class || {}),
+            ...(baseStudentFromAdmission?.Class || {}),
+            ...(normalizedFeeStudent?.Class || {}),
+            id: mergedClassId,
+            class_name: mergedClassName,
+          },
+          Section: {
+            ...(safePreviousStudentData?.Section || {}),
+            ...(baseStudentFromAdmission?.Section || {}),
+            ...(normalizedFeeStudent?.Section || {}),
+            id: mergedSectionId,
+            section_name: mergedSectionName,
+          },
+          class_id: mergedClassId,
+          section_id: mergedSectionId,
+          class_name: mergedClassName,
+          section_name: mergedSectionName,
           sibling_id_1:
-            normalizedFeeStudent.sibling_id_1 ?? previousSiblingData.sibling_id_1 ?? null,
+            normalizedFeeStudent.sibling_id_1 ?? baseStudentFromAdmission?.sibling_id_1 ?? safePreviousStudentData.sibling_id_1 ?? null,
           sibling_name_1:
-            normalizedFeeStudent.sibling_name_1 ?? previousSiblingData.sibling_name_1 ?? null,
+            normalizedFeeStudent.sibling_name_1 ?? baseStudentFromAdmission?.sibling_name_1 ?? safePreviousStudentData.sibling_name_1 ?? null,
           sibling_id_2:
-            normalizedFeeStudent.sibling_id_2 ?? previousSiblingData.sibling_id_2 ?? null,
+            normalizedFeeStudent.sibling_id_2 ?? baseStudentFromAdmission?.sibling_id_2 ?? safePreviousStudentData.sibling_id_2 ?? null,
           sibling_name_2:
-            normalizedFeeStudent.sibling_name_2 ?? previousSiblingData.sibling_name_2 ?? null,
+            normalizedFeeStudent.sibling_name_2 ?? baseStudentFromAdmission?.sibling_name_2 ?? safePreviousStudentData.sibling_name_2 ?? null,
           sibling_id_3:
-            normalizedFeeStudent.sibling_id_3 ?? previousSiblingData.sibling_id_3 ?? null,
+            normalizedFeeStudent.sibling_id_3 ?? baseStudentFromAdmission?.sibling_id_3 ?? safePreviousStudentData.sibling_id_3 ?? null,
           sibling_name_3:
-            normalizedFeeStudent.sibling_name_3 ?? previousSiblingData.sibling_name_3 ?? null,
+            normalizedFeeStudent.sibling_name_3 ?? baseStudentFromAdmission?.sibling_name_3 ?? safePreviousStudentData.sibling_name_3 ?? null,
           sibling_id_4:
-            normalizedFeeStudent.sibling_id_4 ?? previousSiblingData.sibling_id_4 ?? null,
+            normalizedFeeStudent.sibling_id_4 ?? baseStudentFromAdmission?.sibling_id_4 ?? safePreviousStudentData.sibling_id_4 ?? null,
           sibling_name_4:
-            normalizedFeeStudent.sibling_name_4 ?? previousSiblingData.sibling_name_4 ?? null,
-        });
+            normalizedFeeStudent.sibling_name_4 ?? baseStudentFromAdmission?.sibling_name_4 ?? safePreviousStudentData.sibling_name_4 ?? null,
+        };
+
+        setSelectedClass(mergedClassId || _classId || "");
+        setSelectedSection(mergedSectionId || "");
+        setSelectedStudentInfo(mergedStudent);
+        setSelectedAdmissionStudent(mergedStudent);
       }
     } catch (error) {
       console.error("Error fetching fee details:", error);
@@ -1778,6 +2558,27 @@ const Transactions = () => {
     }
 
     setNewTransactionDetails(updated);
+    setSelectedHeads(
+      new Set(
+        updated
+          .filter((row) => Number(row.Fee_Recieved || 0) > 0)
+          .map((row) => String(row.Fee_Head))
+      )
+    );
+    setSelectedFineHeads(
+      new Set(
+        updated
+          .filter((row) => Number(row.Fine_Amount || 0) > 0)
+          .map((row) => String(row.Fee_Head))
+      )
+    );
+    setSelectedTransportHeads(
+      new Set(
+        updated
+          .filter((row) => row.ShowVanFeeInput && Number(row.VanFee || 0) > 0)
+          .map((row) => String(row.Fee_Head))
+      )
+    );
 
     if (remaining > 0) {
       Swal.fire(
@@ -1797,6 +2598,9 @@ const Transactions = () => {
       VanFee: 0,
     }));
     setNewTransactionDetails(cleared);
+    setSelectedHeads(new Set());
+    setSelectedFineHeads(new Set());
+    setSelectedTransportHeads(new Set());
   };
 
   const saveTransaction = async () => {
@@ -1804,44 +2608,79 @@ const Transactions = () => {
       setModalError(null);
 
       if (editingTransaction) {
-        if (editingTransaction.PaymentMode === "Online" && !String(editingTransaction.Transaction_ID || "").trim()) {
-          setModalError("Transaction ID is required for online payments.");
+        const activeEditMode =
+          findModeByValue(editingTransaction.PaymentMode, transactionModes) ||
+          findModeByValue(editingTransaction.PaymentMode, activeTransactionModes);
+        const modeValidationError = validateModeInfo(editingTransaction, activeEditMode);
+        if (modeValidationError) {
+          setModalError(modeValidationError);
+          if (modeUsesPopupDetails(activeEditMode)) setShowChequePopup(true);
           return;
         }
 
-        if (editingTransaction.PaymentMode === "Cheque") {
-          const chequeError = validateChequeInfo(editingTransaction);
-          if (chequeError) {
-            setModalError(chequeError);
-            setShowChequePopup(true);
-            return;
-          }
-        }
-
-        const updatedTransaction = {
+          const updatedTransaction = {
           Fee_Recieved: editingTransaction.Fee_Recieved,
           Concession: editingTransaction.Concession,
           VanFee: editingTransaction.VanFee,
           Fine_Amount: editingTransaction.Fine_Amount || 0,
           Van_Fee_Concession: editingTransaction.Van_Fee_Concession,
-          PaymentMode: editingTransaction.PaymentMode,
-          Transaction_ID:
-            editingTransaction.PaymentMode === "Online"
-              ? String(editingTransaction.Transaction_ID || "").trim()
+          PaymentMode:
+            activeEditMode?.name ||
+            normalizePaymentModeValue(editingTransaction.PaymentMode, transactionModes),
+          mode_of_transaction_id: activeEditMode?.id || null,
+          bank_account_id: activeEditMode?.requires_bank
+            ? Number(editingTransaction.bank_account_id || 0) || null
+            : null,
+          reference_no: activeEditMode?.requires_reference_no
+            ? String(
+                editingTransaction.reference_no ||
+                  editingTransaction.Transaction_ID ||
+                  ""
+              ).trim() || null
+            : null,
+          bank_name:
+            activeEditMode?.requires_cheque_no || activeEditMode?.requires_cheque_date
+              ? String(
+                  editingTransaction.bank_name || editingTransaction.BankName || ""
+                ).trim() || null
               : null,
-          ChequeNumber:
-            editingTransaction.PaymentMode === "Cheque"
-              ? String(editingTransaction.ChequeNumber || "").trim()
-              : null,
-          ChequeDate:
-            editingTransaction.PaymentMode === "Cheque"
-              ? normalizeDateInput(editingTransaction.ChequeDate)
-              : null,
+          cheque_no: activeEditMode?.requires_cheque_no
+            ? String(
+                editingTransaction.cheque_no || editingTransaction.ChequeNumber || ""
+              ).trim() || null
+            : null,
+          cheque_date: activeEditMode?.requires_cheque_date
+            ? normalizeDateInput(
+                editingTransaction.cheque_date || editingTransaction.ChequeDate
+              ) || null
+            : null,
+
+          Transaction_ID: activeEditMode?.requires_reference_no
+            ? String(
+                editingTransaction.reference_no ||
+                  editingTransaction.Transaction_ID ||
+                  ""
+              ).trim() || null
+            : null,
+          ChequeNumber: activeEditMode?.requires_cheque_no
+            ? String(
+                editingTransaction.cheque_no || editingTransaction.ChequeNumber || ""
+              ).trim() || null
+            : null,
+          ChequeDate: activeEditMode?.requires_cheque_date
+            ? normalizeDateInput(
+                editingTransaction.cheque_date || editingTransaction.ChequeDate
+              ) || null
+            : null,
           BankName:
-            editingTransaction.PaymentMode === "Cheque"
-              ? String(editingTransaction.BankName || "").trim()
+            activeEditMode?.requires_cheque_no || activeEditMode?.requires_cheque_date
+              ? String(
+                  editingTransaction.bank_name || editingTransaction.BankName || ""
+                ).trim() || null
               : null,
-          DateOfTransaction: toTransactionDatePayload(editingTransaction.DateOfTransaction),
+          DateOfTransaction: toTransactionDatePayload(
+            editingTransaction.DateOfTransaction
+          ),
           session_id: editingTransaction.session_id ?? null,
           Remarks: editingTransaction.Remarks || null,
         };
@@ -1874,18 +2713,71 @@ const Transactions = () => {
           setModalError("Please select an academic session before collecting.");
           return;
         }
-        if (paymentMode === "Online" && !String(transactionID || "").trim()) {
-          setModalError("Transaction ID is required for online payments.");
+
+        const activeCreateMode =
+          findModeByValue(paymentMode, activeTransactionModes) ||
+          findModeByValue(paymentMode, transactionModes);
+        const createModeValidationError = validateModeInfo(
+          paymentDetails,
+          activeCreateMode
+        );
+        if (createModeValidationError) {
+          setModalError(createModeValidationError);
+          if (modeUsesPopupDetails(activeCreateMode)) setShowChequePopup(true);
           return;
         }
-        if (paymentMode === "Cheque") {
-          const chequeError = validateChequeInfo(chequeDetails);
-          if (chequeError) {
-            setModalError(chequeError);
-            setShowChequePopup(true);
-            return;
-          }
-        }
+
+        const commonPaymentPayload = {
+          PaymentMode:
+            activeCreateMode?.name ||
+            normalizePaymentModeValue(paymentMode, activeTransactionModes),
+          mode_of_transaction_id: activeCreateMode?.id || null,
+          bank_account_id: activeCreateMode?.requires_bank
+            ? Number(paymentDetails.bank_account_id || 0) || null
+            : null,
+          reference_no: activeCreateMode?.requires_reference_no
+            ? String(
+                paymentDetails.reference_no || paymentDetails.Transaction_ID || ""
+              ).trim() || null
+            : null,
+          bank_name:
+            activeCreateMode?.requires_cheque_no || activeCreateMode?.requires_cheque_date
+              ? String(
+                  paymentDetails.bank_name || paymentDetails.BankName || ""
+                ).trim() || null
+              : null,
+          cheque_no: activeCreateMode?.requires_cheque_no
+            ? String(
+                paymentDetails.cheque_no || paymentDetails.ChequeNumber || ""
+              ).trim() || null
+            : null,
+          cheque_date: activeCreateMode?.requires_cheque_date
+            ? normalizeDateInput(
+                paymentDetails.cheque_date || paymentDetails.ChequeDate
+              ) || null
+            : null,
+          Transaction_ID: activeCreateMode?.requires_reference_no
+            ? String(
+                paymentDetails.reference_no || paymentDetails.Transaction_ID || ""
+              ).trim() || null
+            : null,
+          BankName:
+            activeCreateMode?.requires_cheque_no || activeCreateMode?.requires_cheque_date
+              ? String(
+                  paymentDetails.bank_name || paymentDetails.BankName || ""
+                ).trim() || null
+              : null,
+          ChequeNumber: activeCreateMode?.requires_cheque_no
+            ? String(
+                paymentDetails.cheque_no || paymentDetails.ChequeNumber || ""
+              ).trim() || null
+            : null,
+          ChequeDate: activeCreateMode?.requires_cheque_date
+            ? normalizeDateInput(
+                paymentDetails.cheque_date || paymentDetails.ChequeDate
+              ) || null
+            : null,
+        };
 
         const transactionsPayload = newTransactionDetails.map((details) => ({
           AdmissionNumber: selectedStudentInfo.admission_number,
@@ -1910,11 +2802,7 @@ const Transactions = () => {
             !details.isOpeningBalance
               ? Number(details.SelectedRoute)
               : null,
-          PaymentMode: paymentMode,
-          Transaction_ID: paymentMode === "Online" ? String(transactionID || "").trim() : null,
-          ChequeNumber: paymentMode === "Cheque" ? String(chequeDetails.ChequeNumber || "").trim() : null,
-          ChequeDate: paymentMode === "Cheque" ? normalizeDateInput(chequeDetails.ChequeDate) : null,
-          BankName: paymentMode === "Cheque" ? String(chequeDetails.BankName || "").trim() : null,
+          ...commonPaymentPayload,
           Fine_Amount:
             details.isFineApplicable && !details.isOpeningBalance
               ? details.Fine_Amount || 0
@@ -1967,21 +2855,24 @@ const Transactions = () => {
     setFeeHeads([]);
     setNewTransactionDetails([]);
     setSelectedStudentInfo(null);
+    setSelectedAdmissionStudent(null);
     setSelectedClass("");
     setSelectedSection("");
     setStudents([]);
     setShowModal(false);
     setShowChequePopup(false);
-    setPaymentMode("Cash");
-    setTransactionID("");
-    setChequeDetails(EMPTY_CHEQUE_DETAILS);
+    setPaymentMode(defaultPaymentMode);
+    setPaymentDetails(EMPTY_PAYMENT_DETAILS);
     setQuickAmount("");
+    setSelectedHeads(new Set());
+    setSelectedFineHeads(new Set());
+    setSelectedTransportHeads(new Set());
     setModalError(null);
     setRemarks("");
-    setTransactionDate(getTodayDateInput());
     setShowSearchPanel(true);
     setShowStudentExtra(false);
     setShowCollectionDetails(true);
+    setSiblingDetailsMap({});
   };
 
   const cancelTransaction = async (id) => {
@@ -2013,6 +2904,8 @@ const Transactions = () => {
     fetchClasses();
     fetchSections();
     fetchSessions();
+    fetchTransactionModes();
+    fetchSchoolBankAccounts();
   }, []);
 
   useEffect(() => {
@@ -2022,14 +2915,15 @@ const Transactions = () => {
       setSelectedStudentInfo(null);
       setFeeHeads([]);
       setNewTransactionDetails([]);
-      setPaymentMode("Cash");
-      setTransactionID("");
-      setChequeDetails(EMPTY_CHEQUE_DETAILS);
+      setPaymentMode(defaultPaymentMode);
+      setPaymentDetails(EMPTY_PAYMENT_DETAILS);
       setShowChequePopup(false);
       setQuickAmount("");
+      setSelectedHeads(new Set());
+      setSelectedFineHeads(new Set());
+      setSelectedTransportHeads(new Set());
       setModalError(null);
       setRemarks("");
-      setTransactionDate(getTodayDateInput());
       setShowSearchPanel(true);
       setShowStudentExtra(false);
       setShowCollectionDetails(true);
@@ -2037,6 +2931,61 @@ const Transactions = () => {
       setShowChequePopup(false);
     }
   }, [showModal]);
+
+  useEffect(() => {
+    if (!activeTransactionModes.length) return;
+    setPaymentMode((prev) => normalizePaymentModeValue(prev, activeTransactionModes));
+  }, [activeTransactionModes]);
+
+  useEffect(() => {
+    if (!editingTransaction) return;
+    const normalizedMode = normalizePaymentModeValue(
+      editingTransaction.PaymentMode,
+      transactionModes
+    );
+    if (normalizedMode !== editingTransaction.PaymentMode) {
+      setEditingTransaction((prev) =>
+        prev ? { ...prev, PaymentMode: normalizedMode } : prev
+      );
+      return;
+    }
+
+    const modeMeta =
+      findModeByValue(normalizedMode, transactionModes) ||
+      findModeByValue(normalizedMode, activeTransactionModes);
+    const normalizedPaymentState = buildPaymentDetailsState(editingTransaction, modeMeta);
+
+    const needsSync =
+      String(editingTransaction.reference_no || "") !==
+        String(normalizedPaymentState.reference_no || "") ||
+      String(editingTransaction.bank_account_id || "") !==
+        String(normalizedPaymentState.bank_account_id || "") ||
+      String(editingTransaction.bank_name || "") !==
+        String(normalizedPaymentState.bank_name || "") ||
+      String(editingTransaction.cheque_no || "") !==
+        String(normalizedPaymentState.cheque_no || "") ||
+      String(normalizeDateInput(editingTransaction.cheque_date) || "") !==
+        String(normalizedPaymentState.cheque_date || "");
+
+    if (needsSync) {
+      setEditingTransaction((prev) =>
+        prev
+          ? {
+              ...prev,
+              reference_no: normalizedPaymentState.reference_no,
+              bank_account_id: normalizedPaymentState.bank_account_id,
+              bank_name: normalizedPaymentState.bank_name,
+              cheque_no: normalizedPaymentState.cheque_no,
+              cheque_date: normalizedPaymentState.cheque_date,
+              Transaction_ID: normalizedPaymentState.Transaction_ID,
+              BankName: normalizedPaymentState.BankName,
+              ChequeNumber: normalizedPaymentState.ChequeNumber,
+              ChequeDate: normalizedPaymentState.ChequeDate,
+            }
+          : prev
+      );
+    }
+  }, [editingTransaction, transactionModes, activeTransactionModes]);
 
   useEffect(() => {
     fetchSections(selectedClass);
@@ -2183,7 +3132,7 @@ const Transactions = () => {
             <Card className="shadow-sm border-0 h-100">
               <Card.Body className="text-center">
                 <div className="small text-uppercase text-muted mb-1">
-                  {`${toUiPaymentMode(p.PaymentMode)} Collection`}
+                  {`${getPaymentModeLabel(p.PaymentMode, transactionModes)} Collection`}
                 </div>
                 <div className="fs-4 fw-bold">
                   {formatINR(parseFloat(p.TotalAmountCollected || 0))}
@@ -2233,10 +3182,9 @@ const Transactions = () => {
                 return;
               }
               setEditingTransaction(null);
-              setChequeDetails(EMPTY_CHEQUE_DETAILS);
+              setPaymentDetails(EMPTY_PAYMENT_DETAILS);
               setShowChequePopup(false);
               resetForm();
-              setTransactionDate(getTodayDateInput());
               fetchClasses();
               fetchSections();
               fetchStudentsByClassAndSection();
@@ -2300,7 +3248,7 @@ const Transactions = () => {
                       <td className={t.Fine_Amount > 0 ? "text-danger fw-bold" : ""}>
                         {formatINR(t.Fine_Amount || 0)}
                       </td>
-                      <td>{toUiPaymentMode(t.PaymentMode)}</td>
+                      <td>{getPaymentModeLabel(t.PaymentMode, transactionModes)}</td>
                       <td>
                         <Badge bg="success">Active</Badge>
                       </td>
@@ -2319,11 +3267,27 @@ const Transactions = () => {
                               VanFee: t.VanFee,
                               Fine_Amount: t.Fine_Amount || 0,
                               Van_Fee_Concession: t.Van_Fee_Concession || 0,
-                              PaymentMode: toUiPaymentMode(t.PaymentMode),
-                              Transaction_ID: t.Transaction_ID || "",
-                              ChequeNumber: t.ChequeNumber || "",
-                              ChequeDate: normalizeDateInput(t.ChequeDate),
-                              BankName: t.BankName || "",
+                              PaymentMode: normalizePaymentModeValue(
+                                t.modeOfTransaction?.name || t.PaymentMode,
+                                transactionModes
+                              ),
+                              mode_of_transaction_id:
+                                t.mode_of_transaction_id || t.modeOfTransaction?.id || "",
+                              bank_account_id: t.bank_account_id
+                                ? String(t.bank_account_id)
+                                : "",
+                              reference_no: t.reference_no || t.Transaction_ID || "",
+                              bank_name: t.bank_name || t.BankName || "",
+                              cheque_no: t.cheque_no || t.ChequeNumber || "",
+                              cheque_date: normalizeDateInput(
+                                t.cheque_date || t.ChequeDate
+                              ),
+                              Transaction_ID: t.reference_no || t.Transaction_ID || "",
+                              ChequeNumber: t.cheque_no || t.ChequeNumber || "",
+                              ChequeDate: normalizeDateInput(
+                                t.cheque_date || t.ChequeDate
+                              ),
+                              BankName: t.bank_name || t.BankName || "",
                               FeeHeadingName: t.FeeHeading?.fee_heading || "—",
                               StudentName: t.Student?.name || "—",
                               AdmissionNumber: t.AdmissionNumber,
@@ -2579,12 +3543,13 @@ const Transactions = () => {
                       </div>
                       <div className="selected-student-meta">
                         <span><strong>Adm:</strong> {selectedStudentInfo?.admission_number || "—"}</span>
-                        <span><strong>Class:</strong> {selectedStudentInfo?.Class?.class_name || selectedStudentInfo?.class_name || "—"}</span>
-                        <span><strong>Section:</strong> {selectedStudentInfo?.Section?.section_name || selectedStudentInfo?.section_name || "—"}</span>
+                        <span><strong>Class:</strong> {selectedStudentClassLabel}</span>
+                        <span><strong>Section:</strong> {selectedStudentSectionLabel}</span>
                         {selectedStudentInfo?.father_name ? (
                           <span><strong>Father:</strong> {selectedStudentInfo?.father_name}</span>
                         ) : null}
                       </div>
+
                     </div>
 
                     <div className="d-flex align-items-center gap-2 flex-wrap">
@@ -2649,12 +3614,13 @@ const Transactions = () => {
                             </div>
                             <div className="selected-student-meta">
                               <span><strong>Adm:</strong> {selectedStudentInfo?.admission_number || "—"}</span>
-                              <span><strong>Class:</strong> {selectedStudentInfo?.Class?.class_name || selectedStudentInfo?.class_name || "—"}</span>
-                              <span><strong>Section:</strong> {selectedStudentInfo?.Section?.section_name || selectedStudentInfo?.section_name || "—"}</span>
+                              <span><strong>Class:</strong> {selectedStudentClassLabel}</span>
+                              <span><strong>Section:</strong> {selectedStudentSectionLabel}</span>
                               {selectedStudentInfo?.father_name ? (
                                 <span><strong>Father:</strong> {selectedStudentInfo?.father_name}</span>
                               ) : null}
                             </div>
+
                           </div>
 
                           {feeHeads.length > 0 && (
@@ -2798,15 +3764,11 @@ const Transactions = () => {
                                   </span>
                                   <span>
                                     | <strong>Class:</strong>{" "}
-                                    {selectedAdmissionStudent?.Class?.class_name ||
-                                      selectedAdmissionStudent?.class_name ||
-                                      "—"}
+                                    {selectedStudentClassLabel}
                                   </span>
                                   <span>
                                     | <strong>Section:</strong>{" "}
-                                    {selectedAdmissionStudent?.Section?.section_name ||
-                                      selectedAdmissionStudent?.section_name ||
-                                      "—"}
+                                    {selectedStudentSectionLabel}
                                   </span>
                                   <span>
                                     | <strong>Father:</strong> {selectedAdmissionStudent?.father_name || "—"}
@@ -2814,6 +3776,17 @@ const Transactions = () => {
                                   <span>
                                     | <strong>Adm No:</strong> {selectedAdmissionStudent?.admission_number || "—"}
                                   </span>
+                                  {siblingSummaryRows.length > 0 && (
+                                    <span>
+                                      | <strong>Siblings:</strong>{" "}
+                                      {siblingSummaryRows
+                                        .map(
+                                          (sib) =>
+                                            `${sib.display_name || "—"} (${sib.class_name || "—"}/${sib.section_name || "—"})`
+                                        )
+                                        .join(", ")}
+                                    </span>
+                                  )}
                                   <Button
                                     variant="success"
                                     size="sm"
@@ -2847,19 +3820,22 @@ const Transactions = () => {
                                     Open a linked sibling directly and load the same collection screen.
                                   </div>
                                   <Row className="g-2">
-                                    {selectedStudentSiblings.map((sib) => (
-                                      <Col md={6} key={`${sib.slot}-${sib.id || sib.name}`}>
+                                    {siblingSummaryRows.map((sib) => (
+                                      <Col md={6} key={`${sib.slot}-${sib.id || sib.display_name}`}>
                                         <Card className="shadow-sm border-0 h-100 compact-card">
                                           <Card.Body className="d-flex justify-content-between align-items-center gap-2 flex-wrap">
                                             <div>
-                                              <div className="fw-semibold">{sib.name}</div>
+                                              <div className="fw-semibold">{sib.display_name || "—"}</div>
+                                              <div className="text-muted small">
+                                                {sib.class_name || "—"} / {sib.section_name || "—"}
+                                              </div>
                                               <div className="text-muted small">Sibling {sib.slot}</div>
                                             </div>
 
                                             <Button
                                               size="sm"
                                               variant="outline-primary"
-                                              onClick={() => handlePickSibling(sib.id || sib.name)}
+                                              onClick={() => handlePickSibling(sib.id || sib.display_name)}
                                               disabled={loadingSibling}
                                             >
                                               {loadingSibling ? "Loading..." : "Open"}
@@ -2910,20 +3886,37 @@ const Transactions = () => {
                             <Form.Group className="mb-3">
                               <Form.Label>Student</Form.Label>
                               <Form.Select
+                                value={selectedStudentInfo?.id || ""}
                                 onChange={(e) => {
                                   const student = students.find(
                                     (s) => s.id === parseInt(e.target.value, 10)
-                                  );
+                                  ) || null;
+
+                                  setModalError(null);
                                   setSelectedStudentInfo(student);
-                                  if (student) {
-                                    if (!selectedSession) {
-                                      setModalError(
-                                        "Please select an academic session before loading fee details."
-                                      );
-                                      return;
-                                    }
-                                    fetchFeeHeadsForStudent(student.class_id, student.id);
+                                  setSelectedAdmissionStudent(student);
+
+                                  if (!student) {
+                                    setFeeHeads([]);
+                                    setNewTransactionDetails([]);
+                                    return;
                                   }
+
+                                  setSelectedClass(student.class_id || student.Class?.id || "");
+                                  setSelectedSection(student.section_id || student.Section?.id || "");
+
+                                  if (!selectedSession) {
+                                    setModalError(
+                                      "Please select an academic session before loading fee details."
+                                    );
+                                    return;
+                                  }
+
+                                  fetchFeeHeadsForStudent(
+                                    student.class_id || student.Class?.id,
+                                    student.id,
+                                    student
+                                  );
                                 }}
                                 disabled={!students.length}
                               >
@@ -2944,15 +3937,11 @@ const Transactions = () => {
                                   </div>
                                   <div>
                                     | <strong>Class:</strong>{" "}
-                                    {selectedStudentInfo?.Class?.class_name ||
-                                      selectedStudentInfo?.class_name ||
-                                      "—"}
+                                    {selectedStudentClassLabel}
                                   </div>
                                   <div>
                                     | <strong>Section:</strong>{" "}
-                                    {selectedStudentInfo?.Section?.section_name ||
-                                      selectedStudentInfo?.section_name ||
-                                      "—"}
+                                    {selectedStudentSectionLabel}
                                   </div>
                                   <div>
                                     | <strong>Father:</strong> {selectedStudentInfo?.father_name || "—"}
@@ -2995,9 +3984,33 @@ const Transactions = () => {
                       </div>
                       {selectedStudentInfo && (
                         <div className="transaction-meta-chip">
-                          Student: {selectedStudentInfo?.name || "—"}
+                          Student: {selectedStudentInfo?.name || "—"} | {selectedStudentClassLabel} / {selectedStudentSectionLabel}
                         </div>
                       )}
+                      {loadingSiblingSummary ? (
+                        <div className="transaction-meta-chip">
+                          Loading siblings...
+                        </div>
+                      ) : siblingSummaryRows.length > 0 ? (
+                        <div
+                          className="transaction-meta-chip"
+                          style={{ maxWidth: "520px" }}
+                          title={siblingSummaryRows
+                            .map(
+                              (sib) =>
+                                `${sib.display_name || "—"} (${sib.class_name || "—"}/${sib.section_name || "—"})`
+                            )
+                            .join(", ")}
+                        >
+                          Siblings:{" "}
+                          {siblingSummaryRows
+                            .map(
+                              (sib) =>
+                                `${sib.display_name || "—"} (${sib.class_name || "—"}/${sib.section_name || "—"})`
+                            )
+                            .join(", ")}
+                        </div>
+                      ) : null}
                     </div>
                   </div>
 
@@ -3024,12 +4037,23 @@ const Transactions = () => {
 
                       <Col lg={3} md={6}>
                         <Form.Group>
-                          <Form.Label>Transaction Date</Form.Label>
+                          <div className="d-flex align-items-center justify-content-between gap-2">
+                            <Form.Label className="mb-1">Transaction Date</Form.Label>
+                            <Button
+                              variant="outline-secondary"
+                              size="sm"
+                              className="py-0 px-2"
+                              onClick={() => setTransactionDate(getTodayDateInput())}
+                            >
+                              Reset
+                            </Button>
+                          </div>
                           <Form.Control
                             type="date"
                             value={transactionDate}
                             onChange={(e) => setTransactionDate(e.target.value)}
                           />
+                          
                         </Form.Group>
                       </Col>
 
@@ -3038,20 +4062,13 @@ const Transactions = () => {
                           <Form.Label>Payment Mode</Form.Label>
                           <Form.Select
                             value={paymentMode}
-                            onChange={(e) => {
-                              const nextMode = e.target.value;
-                              setPaymentMode(nextMode);
-                              if (nextMode !== "Online") setTransactionID("");
-                              if (nextMode !== "Cheque") {
-                                setChequeDetails(EMPTY_CHEQUE_DETAILS);
-                              } else {
-                                setShowChequePopup(true);
-                              }
-                            }}
+                            onChange={(e) => applyCreatePaymentMode(e.target.value)}
                           >
-                            <option value="Cash">Cash</option>
-                            <option value="Online">Online</option>
-                            <option value="Cheque">Cheque</option>
+                            {activeTransactionModes.map((mode) => (
+                              <option key={mode.id || mode.name} value={mode.name}>
+                                {mode.name}
+                              </option>
+                            ))}
                           </Form.Select>
                         </Form.Group>
                       </Col>
@@ -3068,31 +4085,84 @@ const Transactions = () => {
                         </Form.Group>
                       </Col>
 
-                      {paymentMode === "Online" && (
+                      {selectedPaymentModeMeta?.requires_reference_no && (
                         <Col lg={4} md={6}>
                           <Form.Group>
-                            <Form.Label>Transaction ID</Form.Label>
+                            <Form.Label>Reference / Transaction ID</Form.Label>
                             <Form.Control
                               type="text"
-                              placeholder="Enter Transaction ID"
-                              value={transactionID}
-                              onChange={(e) => setTransactionID(e.target.value)}
+                              placeholder="Enter reference / transaction ID"
+                              value={
+                                paymentDetails.reference_no || paymentDetails.Transaction_ID || ""
+                              }
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                setPaymentDetails((prev) => ({
+                                  ...prev,
+                                  reference_no: value,
+                                  Transaction_ID: value,
+                                }));
+                              }}
                             />
                           </Form.Group>
                         </Col>
                       )}
 
-                      {paymentMode === "Cheque" && (
+                      {selectedPaymentModeMeta?.requires_bank && (
+                        <Col lg={4} md={6}>
+                          <Form.Group>
+                            <Form.Label>Receiving Bank Account</Form.Label>
+                            <Form.Select
+                              value={paymentDetails.bank_account_id || ""}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                setPaymentDetails((prev) => ({
+                                  ...prev,
+                                  bank_account_id: value,
+                                }));
+                              }}
+                            >
+                              <option value="">Select bank account</option>
+                              {bankAccounts.map((bank) => (
+                                <option key={bank.id} value={bank.id}>
+                                  {formatBankAccountLabel(bank)}
+                                </option>
+                              ))}
+                            </Form.Select>
+                            {!bankAccounts.length && (
+                              <small className="text-danger d-block mt-1">
+                                No active bank accounts found. Please add them in Bank Accounts master.
+                              </small>
+                            )}
+                          </Form.Group>
+                        </Col>
+                      )}
+
+                      {modeUsesPopupDetails(selectedPaymentModeMeta) && (
                         <Col lg={5} md={6}>
                           <Form.Group>
-                            <Form.Label>Cheque Details</Form.Label>
+                            <Form.Label>
+                              {modeUsesChequeFields(selectedPaymentModeMeta)
+                                ? "Cheque Details"
+                                : "Payment Details"}
+                            </Form.Label>
                             <div className="d-flex flex-wrap align-items-center gap-2">
                               <Button variant="outline-primary" size="sm" onClick={openChequePopup}>
-                                {hasChequeInfo(chequeDetails) ? "Edit Details" : "Add Details"}
+                                {hasModeExtraInfo(paymentDetails, selectedPaymentModeMeta)
+                                  ? "Edit Details"
+                                  : "Add Details"}
                               </Button>
-                              {hasChequeInfo(chequeDetails) && (
+                              {formatModeDetailsSummary(
+                                paymentDetails,
+                                selectedPaymentModeMeta,
+                                bankAccounts
+                              ) && (
                                 <small className="text-muted">
-                                  {chequeDetails.BankName || "Bank"} • {chequeDetails.ChequeNumber || "No."}
+                                  {formatModeDetailsSummary(
+                                    paymentDetails,
+                                    selectedPaymentModeMeta,
+                                    bankAccounts
+                                  )}
                                 </small>
                               )}
                             </div>
@@ -3163,18 +4233,27 @@ const Transactions = () => {
 
               {feeHeads.length > 0 && (
                 <>
-                  <div className="d-flex justify-content-between align-items-center mb-2">
+                  <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
                     <h5 className="mb-0">Fee Details</h5>
-                    <small className="text-muted">Scroll for more heads</small>
+                    <div className="d-flex align-items-center gap-3 flex-wrap">
+                      <Form.Check
+                        type="checkbox"
+                        id="show-due-without-concession"
+                        label="Show due without concession"
+                        checked={showDueWithoutConcession}
+                        onChange={(e) => setShowDueWithoutConcession(e.target.checked)}
+                      />
+                      <small className="text-muted">Scroll for more heads</small>
+                    </div>
                   </div>
                   <div className="collection-table-wrap">
                     <table className="table table-bordered mb-0">
                       <thead className="table-light sticky-top">
                         <tr style={{ fontSize: "0.85rem" }}>
-                          <th style={{ width: 45, textAlign: "center" }}>
+                          <th style={{ width: 42, textAlign: "center" }}>
                             <Form.Check
                               type="checkbox"
-                              aria-label="Select all fee heads"
+                              aria-label="Select all academic fee heads"
                               checked={
                                 newTransactionDetails.length > 0 &&
                                 newTransactionDetails.every((row) =>
@@ -3192,22 +4271,130 @@ const Transactions = () => {
                                     );
                                     return all;
                                   });
-                                  newTransactionDetails.forEach((_, idx) => fillRowAuto(idx));
+                                  setSelectedFineHeads(() => {
+                                    const all = new Set();
+                                    newTransactionDetails
+                                      .filter((row) => row.isFineApplicable && !row.isOpeningBalance)
+                                      .forEach((row) => all.add(String(row.Fee_Head)));
+                                    return all;
+                                  });
+                                  setSelectedTransportHeads(() => {
+                                    const all = new Set();
+                                    newTransactionDetails
+                                      .filter((row) => row.ShowVanFeeInput && !row.isOpeningBalance)
+                                      .forEach((row) => all.add(String(row.Fee_Head)));
+                                    return all;
+                                  });
+                                  newTransactionDetails.forEach((row, idx) => {
+                                    fillRowAuto(idx);
+                                    if (row.ShowVanFeeInput && !row.isOpeningBalance) fillTransportAuto(idx);
+                                  });
                                 } else {
                                   setSelectedHeads(new Set());
-                                  newTransactionDetails.forEach((_, idx) => clearRowAuto(idx));
+                                  setSelectedFineHeads(new Set());
+                                  setSelectedTransportHeads(new Set());
+                                  newTransactionDetails.forEach((row, idx) => {
+                                    clearRowAuto(idx);
+                                    if (row.ShowVanFeeInput && !row.isOpeningBalance) clearTransportAuto(idx);
+                                  });
                                 }
                               }}
                             />
                           </th>
-                          <th style={{ minWidth: 140 }}>Fee</th>
-                          <th style={{ minWidth: 100 }}>Due</th>
-                          <th style={{ minWidth: 100 }}>Cons</th>
-                          <th style={{ minWidth: 100 }}>Recv</th>
-                          <th style={{ minWidth: 110 }}>Van Recv</th>
-                          <th style={{ minWidth: 110 }}>Van Fee Cons.</th>
-                          <th style={{ minWidth: 100 }}>Van Fee</th>
-                          <th style={{ minWidth: 90 }}>Fine</th>
+                          <th style={{ minWidth: 135 }}>Fee</th>
+                          <th style={{ minWidth: 95 }}>Due</th>
+                          <th style={{ minWidth: 90 }}>Cons</th>
+                          <th style={{ minWidth: 92 }}>Recv</th>
+                          <th style={{ minWidth: 95 }}>Van Due</th>
+                          <th style={{ minWidth: 95 }}>Van Cons.</th>
+                          <th style={{ minWidth: 116 }}>
+                            <div className="d-flex align-items-center justify-content-center gap-1">
+                              <Form.Check
+                                type="checkbox"
+                                aria-label="Select all transport fees"
+                                checked={
+                                  newTransactionDetails.some(
+                                    (row) => row.ShowVanFeeInput && !row.isOpeningBalance
+                                  ) &&
+                                  newTransactionDetails
+                                    .filter((row) => row.ShowVanFeeInput && !row.isOpeningBalance)
+                                    .every((row) =>
+                                      selectedTransportHeads.has(String(row.Fee_Head))
+                                    )
+                                }
+                                disabled={
+                                  !newTransactionDetails.some(
+                                    (row) => row.ShowVanFeeInput && !row.isOpeningBalance
+                                  )
+                                }
+                                onChange={(e) => {
+                                  const checked = e.target.checked;
+                                  const transportRows = newTransactionDetails
+                                    .map((row, idx) => ({ row, idx }))
+                                    .filter(({ row }) => row.ShowVanFeeInput && !row.isOpeningBalance);
+
+                                  if (checked) {
+                                    setSelectedTransportHeads(() => {
+                                      const all = new Set();
+                                      transportRows.forEach(({ row }) =>
+                                        all.add(String(row.Fee_Head))
+                                      );
+                                      return all;
+                                    });
+                                    transportRows.forEach(({ idx }) => fillTransportAuto(idx));
+                                  } else {
+                                    setSelectedTransportHeads(new Set());
+                                    transportRows.forEach(({ idx }) => clearTransportAuto(idx));
+                                  }
+                                }}
+                              />
+                              <span>Van Pay</span>
+                            </div>
+                          </th>
+                          <th style={{ minWidth: 104 }}>
+                            <div className="d-flex align-items-center justify-content-center gap-1">
+                              <Form.Check
+                                type="checkbox"
+                                aria-label="Select all fines"
+                                checked={
+                                  newTransactionDetails.some(
+                                    (row) => row.isFineApplicable && !row.isOpeningBalance
+                                  ) &&
+                                  newTransactionDetails
+                                    .filter((row) => row.isFineApplicable && !row.isOpeningBalance)
+                                    .every((row) =>
+                                      selectedFineHeads.has(String(row.Fee_Head))
+                                    )
+                                }
+                                disabled={
+                                  !newTransactionDetails.some(
+                                    (row) => row.isFineApplicable && !row.isOpeningBalance
+                                  )
+                                }
+                                onChange={(e) => {
+                                  const checked = e.target.checked;
+                                  const fineRows = newTransactionDetails
+                                    .map((row, idx) => ({ row, idx }))
+                                    .filter(({ row }) => row.isFineApplicable && !row.isOpeningBalance);
+
+                                  if (checked) {
+                                    setSelectedFineHeads(() => {
+                                      const all = new Set();
+                                      fineRows.forEach(({ row }) =>
+                                        all.add(String(row.Fee_Head))
+                                      );
+                                      return all;
+                                    });
+                                    fineRows.forEach(({ idx }) => fillFineAuto(idx));
+                                  } else {
+                                    setSelectedFineHeads(new Set());
+                                    fineRows.forEach(({ idx }) => clearFineAuto(idx));
+                                  }
+                                }}
+                              />
+                              <span>Fine</span>
+                            </div>
+                          </th>
                         </tr>
                       </thead>
 
@@ -3233,8 +4420,37 @@ const Transactions = () => {
                                     return next;
                                   });
 
-                                  if (checked) fillRowAuto(index);
-                                  else clearRowAuto(index);
+                                  setSelectedFineHeads((prev) => {
+                                    const next = new Set(prev);
+                                    if (checked && feeDetail.isFineApplicable && !feeDetail.isOpeningBalance) {
+                                      next.add(key);
+                                    } else {
+                                      next.delete(key);
+                                    }
+                                    return next;
+                                  });
+
+                                  setSelectedTransportHeads((prev) => {
+                                    const next = new Set(prev);
+                                    if (checked && feeDetail.ShowVanFeeInput && !feeDetail.isOpeningBalance) {
+                                      next.add(key);
+                                    } else {
+                                      next.delete(key);
+                                    }
+                                    return next;
+                                  });
+
+                                  if (checked) {
+                                    fillRowAuto(index);
+                                    if (feeDetail.ShowVanFeeInput && !feeDetail.isOpeningBalance) {
+                                      fillTransportAuto(index);
+                                    }
+                                  } else {
+                                    clearRowAuto(index);
+                                    if (feeDetail.ShowVanFeeInput && !feeDetail.isOpeningBalance) {
+                                      clearTransportAuto(index);
+                                    }
+                                  }
                                 }}
                               />
                             </td>
@@ -3247,10 +4463,27 @@ const Transactions = () => {
                                   next.add(key);
                                   return next;
                                 });
+                                setSelectedFineHeads((prev) => {
+                                  const next = new Set(prev);
+                                  if (feeDetail.isFineApplicable && !feeDetail.isOpeningBalance) {
+                                    next.add(key);
+                                  }
+                                  return next;
+                                });
+                                setSelectedTransportHeads((prev) => {
+                                  const next = new Set(prev);
+                                  if (feeDetail.ShowVanFeeInput && !feeDetail.isOpeningBalance) {
+                                    next.add(key);
+                                  }
+                                  return next;
+                                });
                                 fillRowAuto(index);
+                                if (feeDetail.ShowVanFeeInput && !feeDetail.isOpeningBalance) {
+                                  fillTransportAuto(index);
+                                }
                               }}
                               style={{ cursor: "pointer", userSelect: "none" }}
-                              title="Click to auto-fill Due + Fine (and Van if applicable)"
+                              title="Click to auto-fill fee, fine and van. Fine or van can be unticked separately."
                               className="fw-semibold"
                             >
                               {feeDetail.Fee_Heading_Name}
@@ -3346,11 +4579,9 @@ const Transactions = () => {
                               >
                                 <div className="fw-bold text-dark">
                                   {(() => {
-                                    const netDue = Math.max(
-                                      0,
-                                      (feeDetail.Fee_Due || 0) -
-                                        (feeDetail.Fee_Recieved || 0) -
-                                        (feeDetail.Concession || 0)
+                                    const netDue = getAcademicDisplayDue(
+                                      feeDetail,
+                                      showDueWithoutConcession
                                     );
                                     const originalFine = feeDetail.fineAmount || 0;
                                     const fineReceived = feeDetail.Fine_Amount || 0;
@@ -3448,15 +4679,7 @@ const Transactions = () => {
                                     row.Van_Fee_Concession = cons;
                                     row._vanFeeConcession = cons;
 
-                                    const routeFee = Number(row._routeFee || 0);
-                                    const prevRec = Number(row._receivedVanFee || 0);
-                                    const fine = Number(row.Van_Fine_Amount || 0);
-
-                                    const baseWithoutFine = Math.max(0, routeFee - prevRec - cons);
-
-                                    row.VanFee = Math.max(0, Number(row.VanFee || 0));
-                                    row.Van_Fee_Remaining = Math.max(0, baseWithoutFine - (row.VanFee || 0));
-                                    row.Van_Fee_Due = Math.max(0, baseWithoutFine + fine);
+                                    syncVanRemaining(row);
 
                                     updated[index] = row;
                                     setNewTransactionDetails(updated);
@@ -3469,60 +4692,120 @@ const Transactions = () => {
                               )}
                             </td>
 
-                            <td>
-                              {feeDetail.ShowVanFeeInput ? (
-                                <Form.Control
-                                  type="number"
-                                  value={feeDetail.VanFee === 0 ? "" : feeDetail.VanFee}
-                                  onChange={(e) => {
-                                    const updated = [...newTransactionDetails];
-                                    const row = { ...updated[index] };
-                                    const parsed = parseInt(e.target.value, 10);
-                                    const enteredValue = Number.isNaN(parsed) ? 0 : Math.max(0, parsed);
+                            <td style={{ maxWidth: 126 }}>
+                              {feeDetail.ShowVanFeeInput && !feeDetail.isOpeningBalance ? (
+                                <div className="d-flex align-items-center gap-1">
+                                  <Form.Check
+                                    type="checkbox"
+                                    className="m-0 flex-shrink-0"
+                                    aria-label={`Select transport for ${feeDetail.Fee_Heading_Name}`}
+                                    checked={selectedTransportHeads.has(String(feeDetail.Fee_Head))}
+                                    onChange={(e) => {
+                                      const checked = e.target.checked;
+                                      const key = String(feeDetail.Fee_Head);
 
-                                    const routeFee = Number(row._routeFee || 0);
-                                    const prevRec = Number(row._receivedVanFee || 0);
-                                    const cons = Number(row.Van_Fee_Concession || 0);
-                                    const fine = Number(row.Van_Fine_Amount || 0);
+                                      setSelectedTransportHeads((prev) => {
+                                        const next = new Set(prev);
+                                        if (checked) next.add(key);
+                                        else next.delete(key);
+                                        return next;
+                                      });
 
-                                    const baseWithoutFine = Math.max(0, routeFee - prevRec - cons);
+                                      if (checked) fillTransportAuto(index);
+                                      else clearTransportAuto(index);
+                                    }}
+                                  />
+                                  <Form.Control
+                                    type="number"
+                                    size="sm"
+                                    value={feeDetail.VanFee === 0 ? "" : feeDetail.VanFee}
+                                    style={{ minWidth: 0, width: 78 }}
+                                    onChange={(e) => {
+                                      const updated = [...newTransactionDetails];
+                                      const row = { ...updated[index] };
+                                      const parsed = parseInt(e.target.value, 10);
+                                      const enteredValue = Number.isNaN(parsed) ? 0 : Math.max(0, parsed);
+                                      const key = String(row.Fee_Head);
 
-                                    row.VanFee = enteredValue;
-                                    row.Van_Fee_Remaining = Math.max(0, baseWithoutFine - (row.VanFee || 0));
-                                    row.Van_Fee_Due = Math.max(0, baseWithoutFine + fine);
+                                      row.VanFee = enteredValue;
+                                      syncVanRemaining(row);
 
-                                    updated[index] = row;
-                                    setNewTransactionDetails(updated);
-                                  }}
-                                  // disabled={(feeDetail.Van_Fee_Due || 0) <= 0}
-                                  disabled={!feeDetail.ShowVanFeeInput}
-                                />
+                                      updated[index] = row;
+                                      setNewTransactionDetails(updated);
+
+                                      setSelectedTransportHeads((prev) => {
+                                        const next = new Set(prev);
+                                        if (enteredValue > 0) next.add(key);
+                                        else next.delete(key);
+                                        return next;
+                                      });
+                                    }}
+                                    disabled={!feeDetail.ShowVanFeeInput}
+                                  />
+                                </div>
                               ) : (
                                 "—"
                               )}
                             </td>
 
-                            <td>
-                              <Form.Control
-                                type="number"
-                                value={
-                                  feeDetail.Fine_Amount === 0 && !feeDetail.isFineEdited
-                                    ? ""
-                                    : feeDetail.Fine_Amount
-                                }
-                                onChange={(e) => {
-                                  const updated = [...newTransactionDetails];
-                                  const row = { ...updated[index] };
-                                  const value = parseInt(e.target.value, 10);
-                                  row.Fine_Amount = isNaN(value)
-                                    ? 0
-                                    : Math.max(0, Math.min(value, row.fineAmount || 0));
-                                  row.isFineEdited = true;
-                                  updated[index] = row;
-                                  setNewTransactionDetails(updated);
-                                }}
-                                disabled={!feeDetail.isFineApplicable || feeDetail.isOpeningBalance}
-                              />
+                            <td style={{ maxWidth: 112 }}>
+                              {feeDetail.isFineApplicable && !feeDetail.isOpeningBalance ? (
+                                <div className="d-flex align-items-center gap-1">
+                                  <Form.Check
+                                    type="checkbox"
+                                    className="m-0 flex-shrink-0"
+                                    aria-label={`Select fine for ${feeDetail.Fee_Heading_Name}`}
+                                    checked={selectedFineHeads.has(String(feeDetail.Fee_Head))}
+                                    onChange={(e) => {
+                                      const checked = e.target.checked;
+                                      const key = String(feeDetail.Fee_Head);
+
+                                      setSelectedFineHeads((prev) => {
+                                        const next = new Set(prev);
+                                        if (checked) next.add(key);
+                                        else next.delete(key);
+                                        return next;
+                                      });
+
+                                      if (checked) fillFineAuto(index);
+                                      else clearFineAuto(index);
+                                    }}
+                                  />
+                                  <Form.Control
+                                    type="number"
+                                    size="sm"
+                                    value={
+                                      feeDetail.Fine_Amount === 0 && !feeDetail.isFineEdited
+                                        ? ""
+                                        : feeDetail.Fine_Amount
+                                    }
+                                    style={{ minWidth: 0, width: 72 }}
+                                    onChange={(e) => {
+                                      const updated = [...newTransactionDetails];
+                                      const row = { ...updated[index] };
+                                      const value = parseInt(e.target.value, 10);
+                                      const enteredValue = isNaN(value)
+                                        ? 0
+                                        : Math.max(0, Math.min(value, row.fineAmount || 0));
+                                      const key = String(row.Fee_Head);
+
+                                      row.Fine_Amount = enteredValue;
+                                      row.isFineEdited = true;
+                                      updated[index] = row;
+                                      setNewTransactionDetails(updated);
+
+                                      setSelectedFineHeads((prev) => {
+                                        const next = new Set(prev);
+                                        if (enteredValue > 0) next.add(key);
+                                        else next.delete(key);
+                                        return next;
+                                      });
+                                    }}
+                                  />
+                                </div>
+                              ) : (
+                                "—"
+                              )}
                             </td>
                           </tr>
                         ))}
@@ -3596,23 +4879,14 @@ const Transactions = () => {
                       <Form.Group>
                         <Form.Label>Payment Mode</Form.Label>
                         <Form.Select
-                          value={editingTransaction?.PaymentMode || "Cash"}
-                          onChange={(e) => {
-                            const nextMode = e.target.value;
-                            setEditingTransaction((prev) => ({
-                              ...prev,
-                              PaymentMode: nextMode,
-                              Transaction_ID: nextMode === "Online" ? prev.Transaction_ID : "",
-                              ChequeNumber: nextMode === "Cheque" ? prev.ChequeNumber || "" : "",
-                              ChequeDate: nextMode === "Cheque" ? normalizeDateInput(prev.ChequeDate) : "",
-                              BankName: nextMode === "Cheque" ? prev.BankName || "" : "",
-                            }));
-                            if (nextMode === "Cheque") setShowChequePopup(true);
-                          }}
+                          value={editingTransaction?.PaymentMode || defaultPaymentMode}
+                          onChange={(e) => applyEditPaymentMode(e.target.value)}
                         >
-                          <option value="Cash">Cash</option>
-                          <option value="Online">Online</option>
-                          <option value="Cheque">Cheque</option>
+                          {activeTransactionModes.map((mode) => (
+                            <option key={mode.id || mode.name} value={mode.name}>
+                              {mode.name}
+                            </option>
+                          ))}
                         </Form.Select>
                       </Form.Group>
                     </Col>
@@ -3736,39 +5010,86 @@ const Transactions = () => {
                       </Form.Group>
                     </Col>
 
-                    {editingTransaction?.PaymentMode === "Online" && (
+                    {editingPaymentModeMeta?.requires_reference_no && (
                       <Col lg={4} md={6}>
                         <Form.Group>
-                          <Form.Label>Transaction ID</Form.Label>
+                          <Form.Label>Reference / Transaction ID</Form.Label>
                           <Form.Control
                             type="text"
-                            placeholder="Enter Transaction ID"
-                            value={editingTransaction?.Transaction_ID || ""}
-                            onChange={(e) =>
+                            placeholder="Enter reference / transaction ID"
+                            value={
+                              editingTransaction?.reference_no ||
+                              editingTransaction?.Transaction_ID ||
+                              ""
+                            }
+                            onChange={(e) => {
+                              const value = e.target.value;
                               setEditingTransaction((prev) => ({
                                 ...prev,
-                                Transaction_ID: e.target.value,
-                              }))
-                            }
+                                reference_no: value,
+                                Transaction_ID: value,
+                              }));
+                            }}
                           />
                         </Form.Group>
                       </Col>
                     )}
 
-                    {editingTransaction?.PaymentMode === "Cheque" && (
+                    {editingPaymentModeMeta?.requires_bank && (
+                      <Col lg={4} md={6}>
+                        <Form.Group>
+                          <Form.Label>Receiving Bank Account</Form.Label>
+                          <Form.Select
+                            value={editingTransaction?.bank_account_id || ""}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              setEditingTransaction((prev) => ({
+                                ...prev,
+                                bank_account_id: value,
+                              }));
+                            }}
+                          >
+                            <option value="">Select bank account</option>
+                            {bankAccounts.map((bank) => (
+                              <option key={bank.id} value={bank.id}>
+                                {formatBankAccountLabel(bank)}
+                              </option>
+                            ))}
+                          </Form.Select>
+                          {!bankAccounts.length && (
+                            <small className="text-danger d-block mt-1">
+                              No active bank accounts found. Please add them in Bank Accounts master.
+                            </small>
+                          )}
+                        </Form.Group>
+                      </Col>
+                    )}
+
+                    {modeUsesPopupDetails(editingPaymentModeMeta) && (
                       <Col lg={5} md={6}>
                         <Form.Group>
-                          <Form.Label>Cheque Details</Form.Label>
+                          <Form.Label>
+                            {modeUsesChequeFields(editingPaymentModeMeta)
+                              ? "Cheque Details"
+                              : "Payment Details"}
+                          </Form.Label>
                           <div className="d-flex flex-wrap align-items-center gap-2">
                             <Button variant="outline-primary" size="sm" onClick={openChequePopup}>
-                              {hasChequeInfo(editingTransaction) ? "Edit Cheque Details" : "Add Cheque Details"}
+                              {hasModeExtraInfo(editingTransaction, editingPaymentModeMeta)
+                                ? "Edit Details"
+                                : "Add Details"}
                             </Button>
-                            {hasChequeInfo(editingTransaction) && (
+                            {formatModeDetailsSummary(
+                              editingTransaction,
+                              editingPaymentModeMeta,
+                              bankAccounts
+                            ) && (
                               <small className="text-muted">
-                                {editingTransaction?.BankName || "Bank"} • {editingTransaction?.ChequeNumber || "No."}
-                                {editingTransaction?.ChequeDate
-                                  ? ` • ${normalizeDateInput(editingTransaction?.ChequeDate)}`
-                                  : ""}
+                                {formatModeDetailsSummary(
+                                  editingTransaction,
+                                  editingPaymentModeMeta,
+                                  bankAccounts
+                                )}
                               </small>
                             )}
                           </div>
@@ -3878,65 +5199,143 @@ const Transactions = () => {
 
       <Modal show={showChequePopup} onHide={closeChequePopup} centered backdrop="static">
         <Modal.Header closeButton>
-          <Modal.Title>Cheque Details</Modal.Title>
+          <Modal.Title>
+            {modeUsesChequeFields(popupModeMeta) ? "Cheque Details" : "Payment Details"}
+          </Modal.Title>
         </Modal.Header>
         <Modal.Body>
           <Row className="g-3">
-            <Col md={12}>
-              <Form.Group>
-                <Form.Label>Cheque Number</Form.Label>
-                <Form.Control
-                  type="text"
-                  placeholder="Enter cheque number"
-                  value={editingTransaction ? editingTransaction?.ChequeNumber || "" : chequeDetails.ChequeNumber}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    if (editingTransaction) {
-                      setEditingTransaction((prev) => ({ ...prev, ChequeNumber: value }));
-                    } else {
-                      setChequeDetails((prev) => ({ ...prev, ChequeNumber: value }));
+            {popupModeMeta?.requires_reference_no && (
+              <Col md={12}>
+                <Form.Group>
+                  <Form.Label>Reference / Transaction ID</Form.Label>
+                  <Form.Control
+                    type="text"
+                    placeholder="Enter reference / UTR / transaction ID"
+                    value={
+                      editingTransaction
+                        ? editingTransaction?.reference_no || editingTransaction?.Transaction_ID || ""
+                        : paymentDetails.reference_no || paymentDetails.Transaction_ID || ""
                     }
-                  }}
-                />
-              </Form.Group>
-            </Col>
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      if (editingTransaction) {
+                        setEditingTransaction((prev) => ({
+                          ...prev,
+                          reference_no: value,
+                          Transaction_ID: value,
+                        }));
+                      } else {
+                        setPaymentDetails((prev) => ({
+                          ...prev,
+                          reference_no: value,
+                          Transaction_ID: value,
+                        }));
+                      }
+                    }}
+                  />
+                </Form.Group>
+              </Col>
+            )}
 
-            <Col md={12}>
-              <Form.Group>
-                <Form.Label>Cheque Date</Form.Label>
-                <Form.Control
-                  type="date"
-                  value={editingTransaction ? normalizeDateInput(editingTransaction?.ChequeDate) : normalizeDateInput(chequeDetails.ChequeDate)}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    if (editingTransaction) {
-                      setEditingTransaction((prev) => ({ ...prev, ChequeDate: value }));
-                    } else {
-                      setChequeDetails((prev) => ({ ...prev, ChequeDate: value }));
-                    }
-                  }}
-                />
-              </Form.Group>
-            </Col>
 
-            <Col md={12}>
-              <Form.Group>
-                <Form.Label>Bank Name</Form.Label>
-                <Form.Control
-                  type="text"
-                  placeholder="Enter bank name"
-                  value={editingTransaction ? editingTransaction?.BankName || "" : chequeDetails.BankName}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    if (editingTransaction) {
-                      setEditingTransaction((prev) => ({ ...prev, BankName: value }));
-                    } else {
-                      setChequeDetails((prev) => ({ ...prev, BankName: value }));
+            {popupModeMeta?.requires_cheque_no && (
+              <Col md={12}>
+                <Form.Group>
+                  <Form.Label>Cheque Number</Form.Label>
+                  <Form.Control
+                    type="text"
+                    placeholder="Enter cheque number"
+                    value={
+                      editingTransaction
+                        ? editingTransaction?.cheque_no || editingTransaction?.ChequeNumber || ""
+                        : paymentDetails.cheque_no || paymentDetails.ChequeNumber || ""
                     }
-                  }}
-                />
-              </Form.Group>
-            </Col>
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      if (editingTransaction) {
+                        setEditingTransaction((prev) => ({
+                          ...prev,
+                          cheque_no: value,
+                          ChequeNumber: value,
+                        }));
+                      } else {
+                        setPaymentDetails((prev) => ({
+                          ...prev,
+                          cheque_no: value,
+                          ChequeNumber: value,
+                        }));
+                      }
+                    }}
+                  />
+                </Form.Group>
+              </Col>
+            )}
+
+            {popupModeMeta?.requires_cheque_date && (
+              <Col md={12}>
+                <Form.Group>
+                  <Form.Label>Cheque Date</Form.Label>
+                  <Form.Control
+                    type="date"
+                    value={
+                      editingTransaction
+                        ? editingTransaction?.cheque_date || editingTransaction?.ChequeDate || ""
+                        : paymentDetails.cheque_date || paymentDetails.ChequeDate || ""
+                    }
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      if (editingTransaction) {
+                        setEditingTransaction((prev) => ({
+                          ...prev,
+                          cheque_date: value,
+                          ChequeDate: value,
+                        }));
+                      } else {
+                        setPaymentDetails((prev) => ({
+                          ...prev,
+                          cheque_date: value,
+                          ChequeDate: value,
+                        }));
+                      }
+                    }}
+                  />
+                </Form.Group>
+              </Col>
+            )}
+
+            {(popupModeMeta?.requires_cheque_no || popupModeMeta?.requires_cheque_date) && (
+              <Col md={12}>
+                <Form.Group>
+                  <Form.Label>Instrument Bank Name</Form.Label>
+                  <Form.Control
+                    type="text"
+                    placeholder="Enter instrument bank name"
+                    value={
+                      editingTransaction
+                        ? editingTransaction?.bank_name || editingTransaction?.BankName || ""
+                        : paymentDetails.bank_name || paymentDetails.BankName || ""
+                    }
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      if (editingTransaction) {
+                        setEditingTransaction((prev) => ({
+                          ...prev,
+                          bank_name: value,
+                          BankName: value,
+                        }));
+                      } else {
+                        setPaymentDetails((prev) => ({
+                          ...prev,
+                          bank_name: value,
+                          BankName: value,
+                        }));
+                      }
+                    }}
+                  />
+                </Form.Group>
+              </Col>
+            )}
           </Row>
         </Modal.Body>
         <Modal.Footer>

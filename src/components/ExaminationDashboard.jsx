@@ -262,12 +262,40 @@ export default function ExaminationDashboard() {
     },
   ];
 
+  const reportTiles = [
+    {
+      title: "Final Result Summary",
+      sub: "Class-wise totals, grades, Excel export and toppers ranking",
+      icon: "bi-trophy",
+      badge: "REPORT",
+      onClick: () => open("/reports/final-result-summary"),
+      color: "var(--qa-cyan)",
+    },
+    {
+      title: "Report Card Generator",
+      sub: "Generate student-wise report cards PDF",
+      icon: "bi-printer",
+      badge: "PDF",
+      onClick: () => open("/report-card-generator"),
+      color: "var(--qa-rose)",
+    },
+  ];
+
   const q = (actionSearch || "").trim().toLowerCase();
   const filterTiles = (arr) =>
-    !q ? arr : arr.filter((t) => (t.title || "").toLowerCase().includes(q));
+    !q
+      ? arr
+      : arr.filter((t) =>
+          [t.title, t.sub, t.badge]
+            .filter(Boolean)
+            .join(" ")
+            .toLowerCase()
+            .includes(q)
+        );
 
   const filteredManage = filterTiles(manageTiles);
   const filteredEntry = filterTiles(entryTiles);
+  const filteredReports = filterTiles(reportTiles);
 
   const SectionHeader = ({ title, sub, right }) => (
     <div className="d-flex align-items-start justify-content-between gap-2 mb-2">
@@ -299,6 +327,21 @@ export default function ExaminationDashboard() {
     </button>
   );
 
+  const MetricCard = ({ label, value, icon, tone = "blue", helper }) => (
+    <div className="col-sm-6 col-xl-3">
+      <div className={`metric-card metric-${tone}`}>
+        <div>
+          <div className="metric-label">{label}</div>
+          <div className="metric-value">{value ?? "—"}</div>
+          {helper ? <div className="metric-helper">{helper}</div> : null}
+        </div>
+        <div className="metric-icon">
+          <i className={`bi ${icon}`} />
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <div className="container-fluid px-3 py-2 exam-dash">
       {/* Header (TeacherDashboard feel) */}
@@ -320,7 +363,7 @@ export default function ExaminationDashboard() {
               </div>
 
               <div className="text-white-50 small mt-1">
-                Manage exams & setup first, then do daily entries.
+                Manage exams, marks entry, report cards and final result analytics from one clean dashboard.
               </div>
 
               {/* Search */}
@@ -329,7 +372,7 @@ export default function ExaminationDashboard() {
                 <input
                   value={actionSearch}
                   onChange={(e) => setActionSearch(e.target.value)}
-                  placeholder="Search actions… (exams, marks, formats, schemes)"
+                  placeholder="Search actions… (final result, marks, exams, schemes, formats)"
                   className="form-control form-control-sm"
                   aria-label="Search dashboard actions"
                 />
@@ -358,6 +401,14 @@ export default function ExaminationDashboard() {
                   <i className="bi bi-printer me-1" />
                   Report Cards
                 </button>
+                <button
+                  type="button"
+                  className="btn btn-warning btn-sm fw-semibold"
+                  onClick={() => open("/reports/final-result-summary")}
+                >
+                  <i className="bi bi-trophy me-1" />
+                  Final Result
+                </button>
               </div>
             </div>
           </div>
@@ -378,6 +429,13 @@ export default function ExaminationDashboard() {
             >
               <i className="bi bi-layout-text-window-reverse me-1" />
               Formats
+            </button>
+            <button
+              className="btn btn-warning btn-sm fw-semibold"
+              onClick={() => open("/reports/final-result-summary")}
+            >
+              <i className="bi bi-bar-chart-line me-1" />
+              Final Result Summary
             </button>
             <button
               className="btn btn-outline-light btn-sm"
@@ -425,6 +483,37 @@ export default function ExaminationDashboard() {
       {/* Main Content */}
       {!loading && !error && (
         <>
+          <div className="row g-3 mb-3">
+            <MetricCard
+              label="Total Exams"
+              value={stats.totalExams}
+              icon="bi-journal-check"
+              tone="blue"
+              helper="Created in exam master"
+            />
+            <MetricCard
+              label="Locked Exams"
+              value={stats.lockedExams}
+              icon="bi-lock-fill"
+              tone="dark"
+              helper="Frozen for editing"
+            />
+            <MetricCard
+              label="Exam Schemes"
+              value={stats.totalSchemes}
+              icon="bi-diagram-3"
+              tone="purple"
+              helper="Weightage setup"
+            />
+            <MetricCard
+              label="Formats"
+              value={stats.totalFormats}
+              icon="bi-layout-text-window-reverse"
+              tone="green"
+              helper="Report templates"
+            />
+          </div>
+
           {/* ✅ Manage FIRST */}
           <div className="card border-0 shadow-sm rounded-4 mb-3 overflow-hidden">
             <div className="card-body">
@@ -479,6 +568,50 @@ export default function ExaminationDashboard() {
             </div>
           </div>
 
+          {/* ✅ Reports / Analytics */}
+          <div className="card border-0 shadow-sm rounded-4 mb-3 overflow-hidden report-panel">
+            <div className="card-body">
+              <SectionHeader
+                title="Reports & Analytics"
+                sub="Download final result summaries, check grades and view toppers quickly"
+                right={
+                  <button
+                    className="btn btn-sm btn-primary"
+                    onClick={() => open("/reports/final-result-summary")}
+                  >
+                    <i className="bi bi-trophy me-1" />
+                    Open Final Result Summary
+                  </button>
+                }
+              />
+
+              <div className="featured-report mb-3">
+                <div className="featured-report-icon">
+                  <i className="bi bi-bar-chart-line-fill" />
+                </div>
+                <div className="flex-grow-1">
+                  <div className="fw-bold">Final Result Summary</div>
+                  <div className="text-muted small">
+                    Class-wise weighted totals, grades, Excel download and toppers ranking sheet.
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-dark btn-sm"
+                  onClick={() => open("/reports/final-result-summary")}
+                >
+                  Open Report
+                </button>
+              </div>
+
+              {filteredReports.length === 0 ? (
+                <div className="p-3 text-center text-muted">No report actions match your search.</div>
+              ) : (
+                <div className="qa-grid">{filteredReports.map(Tile)}</div>
+              )}
+            </div>
+          </div>
+
           {/* Upcoming Exams (kept) */}
           <div className="card border-0 shadow-sm rounded-4 overflow-hidden">
             <div className="card-header bg-white border-0 fw-semibold d-flex justify-content-between align-items-center">
@@ -489,6 +622,12 @@ export default function ExaminationDashboard() {
                 </button>
                 <button className="btn btn-sm btn-outline-dark" onClick={() => open("/marks-entry")}>
                   ✍️ Marks Entry
+                </button>
+                <button
+                  className="btn btn-sm btn-primary"
+                  onClick={() => open("/reports/final-result-summary")}
+                >
+                  Final Result
                 </button>
               </div>
             </div>
@@ -579,6 +718,95 @@ export default function ExaminationDashboard() {
           align-items:center;
         }
 
+        .metric-card{
+          background:#fff;
+          border:1px solid rgba(148,163,184,.18);
+          border-radius:18px;
+          box-shadow: 0 10px 28px rgba(15,23,42,.07);
+          padding:16px;
+          min-height:104px;
+          display:flex;
+          align-items:center;
+          justify-content:space-between;
+          gap:14px;
+          overflow:hidden;
+          position:relative;
+        }
+        .metric-card::after{
+          content:"";
+          position:absolute;
+          right:-26px;
+          top:-26px;
+          width:92px;
+          height:92px;
+          border-radius:30px;
+          opacity:.10;
+          background:#0d6efd;
+          transform:rotate(18deg);
+        }
+        .metric-label{
+          font-size:12px;
+          color:#64748b;
+          font-weight:700;
+          text-transform:uppercase;
+          letter-spacing:.04em;
+        }
+        .metric-value{
+          font-size:28px;
+          font-weight:900;
+          line-height:1;
+          color:#0f172a;
+          margin-top:8px;
+        }
+        .metric-helper{
+          color:#64748b;
+          font-size:12px;
+          margin-top:8px;
+        }
+        .metric-icon{
+          width:46px;
+          height:46px;
+          border-radius:16px;
+          display:flex;
+          align-items:center;
+          justify-content:center;
+          color:#fff;
+          font-size:20px;
+          z-index:1;
+          box-shadow:0 10px 22px rgba(15,23,42,.18);
+        }
+        .metric-blue .metric-icon{background:linear-gradient(135deg,#60a5fa,#2563eb);}
+        .metric-dark .metric-icon{background:linear-gradient(135deg,#64748b,#0f172a);}
+        .metric-purple .metric-icon{background:linear-gradient(135deg,#a78bfa,#7c3aed);}
+        .metric-green .metric-icon{background:linear-gradient(135deg,#34d399,#059669);}
+
+        .featured-report{
+          display:flex;
+          align-items:center;
+          gap:14px;
+          padding:16px;
+          border-radius:18px;
+          border:1px solid rgba(37,99,235,.16);
+          background:linear-gradient(135deg,#eff6ff,#ffffff);
+        }
+        .featured-report-icon{
+          width:52px;
+          height:52px;
+          border-radius:18px;
+          background:linear-gradient(135deg,#0891b2,#2563eb);
+          color:#fff;
+          display:flex;
+          align-items:center;
+          justify-content:center;
+          font-size:22px;
+          box-shadow:0 12px 28px rgba(37,99,235,.22);
+          flex:0 0 auto;
+        }
+        @media(max-width:576px){
+          .featured-report{align-items:flex-start; flex-direction:column;}
+          .featured-report .btn{width:100%;}
+        }
+
         :root{
           --qa-blue: linear-gradient(135deg,#6ea8fe,#1f6feb);
           --qa-purple: linear-gradient(135deg,#c0b6f2,#845ef7);
@@ -588,6 +816,8 @@ export default function ExaminationDashboard() {
           --qa-indigo: linear-gradient(135deg,#91a7ff,#5c7cfa);
           --qa-lime: linear-gradient(135deg,#a9e34b,#74b816);
           --qa-slate: linear-gradient(135deg,#ced4da,#495057);
+          --qa-cyan: linear-gradient(135deg,#67e8f9,#0891b2);
+          --qa-rose: linear-gradient(135deg,#fda4af,#e11d48);
         }
 
         .dash-search{
@@ -692,6 +922,19 @@ export default function ExaminationDashboard() {
           padding: 3px 8px;
           border-radius: 999px;
           z-index: 2;
+        }
+
+        @media(max-width:768px){
+          .dash-hero .d-flex.align-items-start.gap-3{
+            flex-direction:column;
+          }
+          .dash-hero .align-items-end{
+            align-items:flex-start !important;
+            width:100%;
+          }
+          .dash-hero .align-items-end > .d-flex{
+            flex-wrap:wrap;
+          }
         }
       `}</style>
     </div>

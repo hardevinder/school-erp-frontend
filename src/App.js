@@ -23,6 +23,7 @@ import Sessions from "./pages/Sessions";
 import Subjects from "./pages/Subjects";
 import Student from "./pages/Students";
 import BulkPromotion from "./pages/Students/BulkPromotion";
+import BulkConcession from "./pages/Students/BulkConcession";
 import PromotionHistory from "./pages/Students/PromotionHistory";
 import FeeStructure from "./pages/FeeStructure";
 import StudentFeeStructure from "./pages/StudentFeeStructure";
@@ -33,6 +34,8 @@ import Transportation from "./pages/Transportation";
 // ✅ NEW: Transport pages
 import Buses from "./pages/Buses";
 import StudentTransportAssignments from "./pages/StudentTransportAssignments";
+import ModeOfTransactions from "./pages/ModeOfTransactions";
+import SchoolBankAccounts from "./pages/SchoolBankAccounts";
 
 import Transactions from "./pages/Transactions/Transactions";
 import CancelledTransactions from "./pages/Transactions/CancelledTransactions";
@@ -122,6 +125,7 @@ import TransportSummary from "./pages/TransportSummary";
 import UserTracking from "./pages/UserTracking";
 import Houses from "./pages/Houses";
 import StudentFeeReport from "./pages/StudentFeeReport";
+import RolePermissions from "./pages/RolePermissions";
 
 // ✅ NEW pages
 import TransferCertificates from "./pages/TransferCertificates";
@@ -176,7 +180,6 @@ import AdmissionAssessments from "./pages/AdmissionAssessments";
 import EntranceExamPortal from "./pages/EntranceExamPortal";
 import InventoryDashboard from "./components/InventoryDashboard";
 import {
-
   InventoryCategories,
   InventoryItems,
   InventoryLocations,
@@ -190,15 +193,76 @@ import {
 } from "./pages/inventory";
 
 // ---------- auth guard ----------
-const RequireRole = ({ roles = [], children }) => {
-  const singleRole = localStorage.getItem("userRole");
-  const multiRoles = JSON.parse(localStorage.getItem("roles") || "[]");
-  const userRoles = (multiRoles.length ? multiRoles : [singleRole].filter(Boolean)).map((r) =>
-    (r || "").toLowerCase()
-  );
+const getStoredRoles = () => {
+  try {
+    const singleRole = localStorage.getItem("userRole");
+    const localRoles = JSON.parse(localStorage.getItem("roles") || "[]");
+    const sessionRoles = JSON.parse(sessionStorage.getItem("roles") || "[]");
 
-  const allowed = roles.length === 0 || roles.some((r) => userRoles.includes(r.toLowerCase()));
+    return Array.from(
+      new Set(
+        [...localRoles, ...sessionRoles, ...[singleRole].filter(Boolean)]
+          .map((r) => String(r || "").trim().toLowerCase())
+          .filter(Boolean)
+      )
+    );
+  } catch {
+    const singleRole = localStorage.getItem("userRole");
+    return [singleRole].filter(Boolean).map((r) => String(r || "").trim().toLowerCase());
+  }
+};
+
+const getStoredPermissions = () => {
+  try {
+    const localPermissions = JSON.parse(localStorage.getItem("permissions") || "[]");
+    const sessionPermissions = JSON.parse(sessionStorage.getItem("permissions") || "[]");
+
+    return Array.from(
+      new Set(
+        [...localPermissions, ...sessionPermissions]
+          .map((p) => String(p || "").trim().toLowerCase())
+          .filter(Boolean)
+      )
+    );
+  } catch {
+    return [];
+  }
+};
+
+// ---------- auth guards ----------
+const RequireRole = ({ roles = [], children }) => {
+  const userRoles = getStoredRoles();
+  const allowed = roles.length === 0 || roles.some((r) => userRoles.includes(String(r).toLowerCase()));
   return allowed ? children : <Navigate to="/dashboard" replace />;
+};
+
+const RequirePermission = ({
+  permissions = [],
+  children,
+  fallback = "/dashboard",
+  fallbackRoles = [],
+}) => {
+  const userPermissions = getStoredPermissions();
+  const userRoles = getStoredRoles();
+
+  const isSuperadmin =
+    userRoles.includes("superadmin") || userRoles.includes("super_admin");
+
+  if (isSuperadmin) return children;
+
+  let allowed = false;
+
+  if (permissions.length === 0 && fallbackRoles.length === 0) {
+    allowed = true;
+  } else if (userPermissions.length > 0) {
+    allowed =
+      permissions.some((p) => userPermissions.includes(String(p).toLowerCase())) ||
+      fallbackRoles.some((r) => userRoles.includes(String(r).toLowerCase()));
+  } else if (fallbackRoles.length > 0) {
+    allowed = fallbackRoles.some((r) => userRoles.includes(String(r).toLowerCase()));
+  }
+
+  return allowed ? children : <Navigate to={fallback} replace />;
 };
 
 // ---------- install global API shims (axios + fetch) ----------
@@ -382,27 +446,58 @@ function App() {
           <Route path="/houses" element={<Houses />} />
           <Route path="/sessions" element={<Sessions />} />
           <Route path="/subjects" element={<Subjects />} />
-          <Route path="/students" element={<Student />} />
           <Route
-              path="/students/bulk-promotion"
-              element={
-                <RequireRole roles={["admin", "superadmin", "accounts"]}>
-                  <BulkPromotion />
-                </RequireRole>
-              }
-            />
+            path="/students"
+            element={
+              <RequirePermission
+                permissions={["students_view"]}
+                fallbackRoles={["admin", "superadmin", "accounts", "frontoffice"]}
+              >
+                <Student />
+              </RequirePermission>
+            }
+          />
 
-            <Route
-              path="/students/promotion-history"
-              element={
-                <RequireRole roles={["admin", "superadmin", "accounts"]}>
-                  <PromotionHistory />
-                </RequireRole>
-              }
-            />
+          <Route
+            path="/students/bulk-promotion"
+            element={
+              <RequirePermission
+                permissions={["students_bulk_promotion"]}
+                fallbackRoles={["admin", "superadmin", "accounts"]}
+              >
+                <BulkPromotion />
+              </RequirePermission>
+            }
+          />
+
+          <Route
+            path="/students/bulk-concession"
+            element={
+              <RequirePermission
+                permissions={["students_bulk_concession"]}
+                fallbackRoles={["admin", "superadmin", "accounts", "frontoffice", "academic_coordinator"]}
+              >
+                <BulkConcession />
+              </RequirePermission>
+            }
+          />
+
+          <Route
+            path="/students/promotion-history"
+            element={
+              <RequirePermission
+                permissions={["students_promotion_history"]}
+                fallbackRoles={["admin", "superadmin", "accounts"]}
+              >
+                <PromotionHistory />
+              </RequirePermission>
+            }
+          />
+
           <Route path="/sections" element={<Sections />} />
           <Route path="/schools" element={<Schools />} />
-                    {/* ✅ Inventory */}
+
+          {/* ✅ Inventory */}
           <Route
             path="/inventory"
             element={
@@ -563,7 +658,6 @@ function App() {
             }
           />
 
-
           {/* ✅ Transport: Drivers / Conductors (guarded) */}
           <Route
             path="/transport-staff"
@@ -615,9 +709,29 @@ function App() {
               </RequireRole>
             }
           />
+
+
           <Route path="/fee-headings" element={<FeeHeadings />} />
           <Route path="/fee-category" element={<FeeCategory />} />
           <Route path="/concessions" element={<Concessions />} />
+          <Route
+              path="/mode-of-transactions"
+              element={
+                <RequireRole roles={["accounts", "admin", "superadmin"]}>
+                  <ModeOfTransactions />
+                </RequireRole>
+              }
+            />
+
+            <Route
+              path="/school-bank-accounts"
+              element={
+                <RequireRole roles={["accounts", "admin", "superadmin"]}>
+                  <SchoolBankAccounts />
+                </RequireRole>
+              }
+            />
+
           <Route path="/student-due" element={<StudentDueTable />} />
           <Route path="/opening-balances" element={<OpeningBalances />} />
           <Route path="/reports/day-wise" element={<DayWiseReport />} />
@@ -681,6 +795,17 @@ function App() {
 
           {/* Users */}
           <Route path="/users" element={<UserManagement />} />
+          <Route
+            path="/role-permissions"
+            element={
+              <RequirePermission
+                permissions={["permissions_manage", "role_permissions_manage"]}
+                fallbackRoles={["superadmin", "admin"]}
+              >
+                <RolePermissions />
+              </RequirePermission>
+            }
+          />
           <Route path="/student-user-accounts" element={<StudentUserAccounts />} />
 
           {/* Departments / Employees */}
@@ -1009,6 +1134,7 @@ function App() {
           <Route path="/ai-chat" element={<AIChatBox />} />
 
           <Route path="/discipline" element={<Navigate to="/disciplinary-actions" replace />} />
+          <Route path="/permissions" element={<Navigate to="/role-permissions" replace />} />
 
           {/* Catch-all (inside app) */}
           <Route path="*" element={<h1 className="container py-4">404: Page Not Found</h1>} />

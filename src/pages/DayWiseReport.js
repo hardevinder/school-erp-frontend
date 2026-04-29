@@ -1,4 +1,3 @@
-// File: DayWiseReport.jsx
 import React, { useState, useEffect, useMemo } from "react";
 import {
   Container,
@@ -13,6 +12,7 @@ import {
   Card,
   Badge,
   Spinner,
+  Modal,
 } from "react-bootstrap";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
@@ -56,16 +56,249 @@ const formatToDisplayDateTime = (date) => {
   return `${day}/${month}/${year} ${String(hours).padStart(2, "0")}:${minutes} ${ampm}`;
 };
 
+const toDateTimeLocalInput = (value) => {
+  if (!value) return "";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "";
+
+  const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
+  return local.toISOString().slice(0, 16);
+};
+
+const toTransactionDatePayload = (value) => {
+  if (!value) return new Date().toISOString();
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString();
+};
+
+const toNum = (value) => {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+};
+
+const getTxnSerial = (item) => {
+  const raw = item?.Serial ?? item?.serial ?? item?.serial_no ?? item?.serialNo ?? null;
+  const n = Number(raw);
+  if (Number.isInteger(n) && n > 0) return n;
+  return null;
+};
+
 // ₹ formatter
 const formatTotalValue = (value) => {
   const n = Number(value) || 0;
   return n === 0 ? "0" : `₹${n.toLocaleString("en-IN")}`;
 };
 
-// Normalize payment mode (HDFC treated as Online)
-const normMode = (m) => String(m ?? "").trim().toLowerCase();
+// Normalize payment mode (HDFC/UPI/Card/Net Banking treated as Online for summaries)
+const normMode = (m) =>
+  String(m ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+
 const isCash = (m) => normMode(m) === "cash";
-const isOnline = (m) => ["online", "hdfc"].includes(normMode(m));
+const isOnline = (m) => {
+  const key = normMode(m);
+  return (
+    key === "online" ||
+    key === "hdfc" ||
+    key === "smart_hdfc" ||
+    key === "smartgateway" ||
+    key === "upi" ||
+    key.includes("upi") ||
+    key === "card" ||
+    key.includes("card") ||
+    key === "netbanking" ||
+    key === "net_banking" ||
+    key.includes("net") ||
+    key.includes("bank_transfer")
+  );
+};
+const isCancelled = (item) => normMode(item?.status) === "cancelled";
+
+const firstNonEmpty = (...vals) => {
+  for (const v of vals) {
+    const s = String(v ?? "").trim();
+    if (
+      s &&
+      s !== "—" &&
+      s !== "-" &&
+      s.toLowerCase() !== "null" &&
+      s.toLowerCase() !== "undefined"
+    ) {
+      return s;
+    }
+  }
+  return "";
+};
+
+const asArray = (payload) => {
+  if (Array.isArray(payload)) return payload;
+  if (!payload) return [];
+
+  const keys = ["data", "rows", "results", "items", "list", "records", "modes", "bankAccounts"];
+  for (const key of keys) {
+    if (Array.isArray(payload?.[key])) return payload[key];
+    if (Array.isArray(payload?.data?.[key])) return payload.data[key];
+  }
+
+  return [];
+};
+
+const DEFAULT_TRANSACTION_MODES = [
+  { id: "cash", name: "Cash", code: "CASH", requires_bank: false, requires_reference_no: false, requires_cheque_no: false, requires_cheque_date: false, sort_order: 1, active: true },
+  { id: "upi", name: "UPI", code: "UPI", requires_bank: true, requires_reference_no: true, requires_cheque_no: false, requires_cheque_date: false, sort_order: 2, active: true },
+  { id: "cheque", name: "Cheque", code: "CHEQUE", requires_bank: true, requires_reference_no: false, requires_cheque_no: true, requires_cheque_date: true, sort_order: 3, active: true },
+  { id: "card", name: "Card", code: "CARD", requires_bank: true, requires_reference_no: true, requires_cheque_no: false, requires_cheque_date: false, sort_order: 4, active: true },
+  { id: "netbanking", name: "Net Banking", code: "NETBANKING", requires_bank: true, requires_reference_no: true, requires_cheque_no: false, requires_cheque_date: false, sort_order: 5, active: true },
+  { id: "online", name: "Online", code: "ONLINE", requires_bank: false, requires_reference_no: true, requires_cheque_no: false, requires_cheque_date: false, sort_order: 6, active: true },
+];
+
+const normalizeModeRow = (row, index = 0) => ({
+  id: row?.id ?? row?.code ?? row?.name ?? `mode-${index}`,
+  name: firstNonEmpty(row?.name, row?.label, row?.title, row?.code) || `Mode ${index + 1}`,
+  code: firstNonEmpty(row?.code, row?.short_code, row?.slug),
+  description: firstNonEmpty(row?.description),
+  requires_bank: Boolean(row?.requires_bank),
+  requires_reference_no: Boolean(row?.requires_reference_no),
+  requires_cheque_no: Boolean(row?.requires_cheque_no),
+  requires_cheque_date: Boolean(row?.requires_cheque_date),
+  sort_order: Number(row?.sort_order ?? index + 1) || 0,
+  active: row?.active !== false,
+});
+
+const sortTransactionModes = (rows = []) =>
+  [...rows].sort(
+    (a, b) =>
+      Number(a?.sort_order ?? 0) - Number(b?.sort_order ?? 0) ||
+      String(a?.name || "").localeCompare(String(b?.name || ""))
+  );
+
+const getActiveTransactionModes = (rows = []) => {
+  const source = Array.isArray(rows) && rows.length ? rows : DEFAULT_TRANSACTION_MODES;
+  const active = source.filter((row) => row?.active !== false);
+  return sortTransactionModes(active.length ? active : source);
+};
+
+const findModeByValue = (value, rows = []) => {
+  const source = Array.isArray(rows) && rows.length ? rows : DEFAULT_TRANSACTION_MODES;
+  const raw = String(value || "").trim();
+  const needle = raw.toLowerCase();
+  if (!needle) return null;
+
+  const exact = source.find(
+    (row) =>
+      String(row?.name || "").trim().toLowerCase() === needle ||
+      String(row?.code || "").trim().toLowerCase() === needle ||
+      String(row?.id || "").trim().toLowerCase() === needle
+  );
+  if (exact) return exact;
+
+  const aliasMap = {
+    cash: ["cash"],
+    cheque: ["cheque", "check"],
+    upi: ["upi"],
+    card: ["card"],
+    netbanking: ["netbanking", "net_banking", "net banking"],
+    online: ["online", "hdfc", "smart_hdfc", "smartgateway"],
+  };
+
+  for (const [canonical, values] of Object.entries(aliasMap)) {
+    if (!values.includes(needle)) continue;
+    const aliased = source.find(
+      (row) =>
+        String(row?.name || "").trim().toLowerCase() === canonical ||
+        String(row?.code || "").trim().toLowerCase() === canonical ||
+        String(row?.id || "").trim().toLowerCase() === canonical
+    );
+    if (aliased) return aliased;
+  }
+
+  return null;
+};
+
+const getDefaultPaymentModeName = (rows = []) => {
+  const source = getActiveTransactionModes(rows);
+  const cash = findModeByValue("cash", source);
+  return cash?.name || source[0]?.name || "Cash";
+};
+
+const normalizeBankAccountRow = (row, index = 0) => ({
+  id: Number(row?.id ?? row?.bank_account_id ?? row?.bankAccountId ?? 0) || 0,
+  bank_name: firstNonEmpty(row?.bank_name, row?.bankName, row?.name),
+  account_name: firstNonEmpty(row?.account_name, row?.accountName, row?.title, row?.label),
+  account_number: firstNonEmpty(row?.account_number, row?.accountNumber),
+  ifsc_code: firstNonEmpty(row?.ifsc_code, row?.ifscCode),
+  upi_id: firstNonEmpty(row?.upi_id, row?.upiId),
+  active: row?.active !== false,
+  sort_order: Number(row?.sort_order ?? index + 1) || 0,
+});
+
+const formatBankAccountLabel = (row) => {
+  if (!row) return "";
+  const left = firstNonEmpty(row.bank_name);
+  const right = firstNonEmpty(row.account_name);
+  const last4 = firstNonEmpty(row.account_number) ? ` • ${String(row.account_number).slice(-4)}` : "";
+  return [left, right].filter(Boolean).join(" - ") + last4;
+};
+
+const sortBankAccounts = (rows = []) =>
+  [...rows].sort(
+    (a, b) =>
+      Number(a?.sort_order ?? 0) - Number(b?.sort_order ?? 0) ||
+      String(formatBankAccountLabel(a) || "").localeCompare(String(formatBankAccountLabel(b) || ""))
+  );
+
+const normalizeDateInput = (value) => {
+  if (!value) return "";
+  const raw = String(value).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+
+  const parsed = new Date(raw);
+  if (!Number.isNaN(parsed.getTime())) {
+    const local = new Date(parsed.getTime() - parsed.getTimezoneOffset() * 60000);
+    return local.toISOString().slice(0, 10);
+  }
+
+  const m = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+
+  return "";
+};
+
+const modeNeedsBank = (mode) => Boolean(mode?.requires_bank);
+const modeNeedsReference = (mode) => Boolean(mode?.requires_reference_no);
+const modeNeedsChequeNo = (mode) => Boolean(mode?.requires_cheque_no);
+const modeNeedsChequeDate = (mode) => Boolean(mode?.requires_cheque_date);
+const modeNeedsChequeFields = (mode) => modeNeedsChequeNo(mode) || modeNeedsChequeDate(mode);
+
+const validatePaymentDetails = (details, mode) => {
+  if (modeNeedsBank(mode) && !String(details?.bank_account_id || "").trim()) {
+    return "Receiving bank account is required for this payment mode.";
+  }
+  if (modeNeedsReference(mode) && !String(details?.reference_no || details?.Transaction_ID || "").trim()) {
+    return "Reference / Transaction ID is required for this payment mode.";
+  }
+  if (modeNeedsChequeNo(mode) && !String(details?.cheque_no || details?.ChequeNumber || "").trim()) {
+    return "Cheque number is required for cheque payment.";
+  }
+  if (modeNeedsChequeDate(mode) && !String(details?.cheque_date || details?.ChequeDate || "").trim()) {
+    return "Cheque date is required for cheque payment.";
+  }
+  return null;
+};
+
+const getFileNameFromDisposition = (disposition) => {
+  if (!disposition) return null;
+
+  const utfMatch = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+  if (utfMatch?.[1]) return decodeURIComponent(utfMatch[1]);
+
+  const asciiMatch = disposition.match(/filename="?([^"]+)"?/i);
+  if (asciiMatch?.[1]) return asciiMatch[1];
+
+  return null;
+};
 
 // Group report data by fee heading.
 const groupByFeeHeading = (data) => {
@@ -159,14 +392,81 @@ const DayWiseReport = () => {
   const [school, setSchool] = useState(null);
 
   const [loading, setLoading] = useState(false);
+  const [downloadingExcel, setDownloadingExcel] = useState(false);
   const [error, setError] = useState("");
 
   const [currentPage, setCurrentPage] = useState(1);
   const recordsPerPage = 500;
 
+  const [userRole, setUserRole] = useState(localStorage.getItem("activeRole") || "");
+
   // Receipt Modal
   const [showReceiptModal, setShowReceiptModal] = useState(false);
   const [selectedSlipId, setSelectedSlipId] = useState(null);
+
+  // Edit Modal
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [editForm, setEditForm] = useState({
+    Serial: null,
+    Slip_ID: "",
+    PaymentMode: "Cash",
+    mode_of_transaction_id: "",
+    bank_account_id: "",
+    reference_no: "",
+    bank_name: "",
+    cheque_no: "",
+    cheque_date: "",
+    Transaction_ID: "",
+    BankName: "",
+    ChequeNumber: "",
+    ChequeDate: "",
+    DateOfTransaction: "",
+    Fee_Recieved: 0,
+    Concession: 0,
+    VanFee: 0,
+    Fine_Amount: 0,
+    Remarks: "",
+    status: "",
+  });
+
+  const [transactionModes, setTransactionModes] = useState(DEFAULT_TRANSACTION_MODES);
+  const [bankAccounts, setBankAccounts] = useState([]);
+  const [loadingPaymentMasters, setLoadingPaymentMasters] = useState(false);
+
+  const canManage = useMemo(() => {
+    const role = (userRole || "").toLowerCase();
+    return ["admin", "superadmin", "account", "accounts", "accountant"].includes(role);
+  }, [userRole]);
+
+  const canDelete = useMemo(() => {
+    return (userRole || "").toLowerCase() === "superadmin";
+  }, [userRole]);
+
+  const activeTransactionModes = useMemo(
+    () => getActiveTransactionModes(transactionModes),
+    [transactionModes]
+  );
+
+  const selectedEditModeMeta = useMemo(() => {
+    return (
+      findModeByValue(editForm.mode_of_transaction_id, activeTransactionModes) ||
+      findModeByValue(editForm.PaymentMode, activeTransactionModes) ||
+      findModeByValue(getDefaultPaymentModeName(activeTransactionModes), activeTransactionModes)
+    );
+  }, [editForm.mode_of_transaction_id, editForm.PaymentMode, activeTransactionModes]);
+
+  const selectedEditBankAccount = useMemo(() => {
+    const id = Number(editForm.bank_account_id || 0);
+    if (!id) return null;
+    return bankAccounts.find((row) => Number(row.id) === id) || null;
+  }, [editForm.bank_account_id, bankAccounts]);
+
+  useEffect(() => {
+    const handler = () => setUserRole(localStorage.getItem("activeRole") || "");
+    window.addEventListener("role-changed", handler);
+    return () => window.removeEventListener("role-changed", handler);
+  }, []);
 
   const fetchSchoolDetails = async () => {
     try {
@@ -188,6 +488,46 @@ const DayWiseReport = () => {
     fetchSchoolDetails();
   }, []);
 
+  const fetchPaymentMasters = async () => {
+    setLoadingPaymentMasters(true);
+    try {
+      const [modesResp, banksResp] = await Promise.allSettled([
+        api.get("/mode-of-transactions"),
+        api.get("/school-bank-accounts", { params: { active_only: true } }),
+      ]);
+
+      if (modesResp.status === "fulfilled") {
+        const rows = asArray(modesResp.value?.data)
+          .map(normalizeModeRow)
+          .filter((row) => row?.name);
+        setTransactionModes(rows.length ? sortTransactionModes(rows) : DEFAULT_TRANSACTION_MODES);
+      } else {
+        console.warn("Mode of transaction master failed:", modesResp.reason?.message || modesResp.reason);
+        setTransactionModes(DEFAULT_TRANSACTION_MODES);
+      }
+
+      if (banksResp.status === "fulfilled") {
+        const rows = asArray(banksResp.value?.data)
+          .map(normalizeBankAccountRow)
+          .filter((row) => row?.id && row?.active !== false);
+        setBankAccounts(sortBankAccounts(rows));
+      } else {
+        console.warn("School bank account master failed:", banksResp.reason?.message || banksResp.reason);
+        setBankAccounts([]);
+      }
+    } catch (err) {
+      console.error("Error loading payment masters:", err);
+      setTransactionModes(DEFAULT_TRANSACTION_MODES);
+      setBankAccounts([]);
+    } finally {
+      setLoadingPaymentMasters(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchPaymentMasters();
+  }, []);
+
   // Search filtering
   useEffect(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -204,6 +544,10 @@ const DayWiseReport = () => {
       const feeHeading = (item.feeHeadingName || "").toLowerCase();
       const pm = (item.PaymentMode || "").toLowerCase();
       const txnDate = String(item.DateOfTransaction || "").toLowerCase();
+      const status = String(item.status || "").toLowerCase();
+      const reference = String(item.reference_no || item.Transaction_ID || "").toLowerCase();
+      const bank = String(item.bank_name || item.BankName || item.bankAccount?.bank_name || "").toLowerCase();
+      const cheque = String(item.cheque_no || item.ChequeNumber || "").toLowerCase();
 
       return (
         studentName.includes(q) ||
@@ -211,7 +555,11 @@ const DayWiseReport = () => {
         slip.includes(q) ||
         feeHeading.includes(q) ||
         pm.includes(q) ||
-        txnDate.includes(q)
+        txnDate.includes(q) ||
+        status.includes(q) ||
+        reference.includes(q) ||
+        bank.includes(q) ||
+        cheque.includes(q)
       );
     });
 
@@ -231,7 +579,7 @@ const DayWiseReport = () => {
     try {
       const start = formatDate(startDate);
       const end = formatDate(endDate);
-      const response = await api.get(`/reports/day-wise?startDate=${start}&endDate=${end}`);
+      const response = await api.get(`/reports/day-wise?startDate=${start}&endDate=${end}&includeCancelled=true`);
 
       const rows = response.data || [];
       setReportData(rows);
@@ -250,6 +598,63 @@ const DayWiseReport = () => {
       }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDownloadExcel = async () => {
+    if (!startDate || !endDate) {
+      Swal.fire("Missing dates", "Please select both start and end dates.", "warning");
+      return;
+    }
+
+    setDownloadingExcel(true);
+
+    try {
+      const start = formatDate(startDate);
+      const end = formatDate(endDate);
+
+      const response = await api.get(
+        `/reports/day-wise?startDate=${start}&endDate=${end}&format=excel&includeCancelled=true`,
+        {
+          responseType: "blob",
+        }
+      );
+
+      const contentType =
+        response.headers?.["content-type"] ||
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+
+      const disposition = response.headers?.["content-disposition"];
+      const fileName =
+        getFileNameFromDisposition(disposition) ||
+        `DayWiseReport_${start}_to_${end}.xlsx`;
+
+      const blob = new Blob([response.data], { type: contentType });
+      const url = window.URL.createObjectURL(blob);
+
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", fileName);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+
+      setTimeout(() => window.URL.revokeObjectURL(url), 60 * 1000);
+    } catch (err) {
+      console.error("Excel download error:", err);
+
+      if (err?.response?.status === 401) {
+        Swal.fire({
+          title: "Session Expired",
+          text: "Your session has expired. Please log in again.",
+          icon: "warning",
+          confirmButtonText: "OK",
+        });
+      } else {
+        Swal.fire("Error", "Failed to download Excel report.", "error");
+      }
+    } finally {
+      setDownloadingExcel(false);
     }
   };
 
@@ -349,6 +754,191 @@ const DayWiseReport = () => {
       Swal.close();
       console.error("Unexpected error preparing receipt:", err);
       Swal.fire("Error", err?.message || "Failed to prepare receipt PDF", "error");
+    }
+  };
+
+  const openEditModal = (item) => {
+    const serial = getTxnSerial(item);
+    if (!serial) {
+      Swal.fire(
+        "Serial missing",
+        "This report response row does not include the real transaction Serial. View/Print works with Slip_ID, but Edit/Cancel/Delete need Serial from backend.",
+        "warning"
+      );
+      return;
+    }
+
+    const modeMeta =
+      findModeByValue(item?.mode_of_transaction_id, activeTransactionModes) ||
+      findModeByValue(item?.PaymentMode, activeTransactionModes) ||
+      findModeByValue("Cash", activeTransactionModes);
+
+    const bankId = item?.bank_account_id ? String(item.bank_account_id) : "";
+    const referenceNo = firstNonEmpty(item?.reference_no, item?.Transaction_ID);
+    const chequeNo = firstNonEmpty(item?.cheque_no, item?.ChequeNumber);
+    const chequeDate = normalizeDateInput(item?.cheque_date || item?.ChequeDate);
+    const bankName = firstNonEmpty(item?.bank_name, item?.BankName, item?.bankAccount?.bank_name);
+
+    setEditForm({
+      Serial: serial,
+      Slip_ID: item?.Slip_ID || "",
+      PaymentMode: modeMeta?.name || item?.PaymentMode || "Cash",
+      mode_of_transaction_id: modeMeta?.id ? String(modeMeta.id) : "",
+      bank_account_id: bankId,
+      reference_no: referenceNo,
+      bank_name: bankName,
+      cheque_no: chequeNo,
+      cheque_date: chequeDate,
+      Transaction_ID: referenceNo,
+      BankName: bankName,
+      ChequeNumber: chequeNo,
+      ChequeDate: chequeDate,
+      DateOfTransaction: toDateTimeLocalInput(item?.DateOfTransaction || item?.createdAt),
+      Fee_Recieved: toNum(item?.Fee_Recieved ?? item?.totalFeeReceived),
+      Concession: toNum(item?.Concession ?? item?.totalConcession),
+      VanFee: toNum(item?.VanFee ?? item?.totalVanFee),
+      Fine_Amount: toNum(item?.Fine_Amount ?? item?.totalFine),
+      Remarks: item?.Remarks || "",
+      status: item?.status || "",
+    });
+    setShowEditModal(true);
+  };
+
+  const handleEditInput = (field, value) => {
+    setEditForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleEditModeChange = (value) => {
+    const mode = findModeByValue(value, activeTransactionModes);
+    setEditForm((prev) => ({
+      ...prev,
+      PaymentMode: mode?.name || value || "Cash",
+      mode_of_transaction_id: mode?.id ? String(mode.id) : "",
+      bank_account_id: modeNeedsBank(mode) ? prev.bank_account_id || "" : "",
+      reference_no: modeNeedsReference(mode) ? prev.reference_no || prev.Transaction_ID || "" : "",
+      Transaction_ID: modeNeedsReference(mode) ? prev.Transaction_ID || prev.reference_no || "" : "",
+      bank_name: modeNeedsBank(mode) || modeNeedsChequeFields(mode) ? prev.bank_name || prev.BankName || "" : "",
+      BankName: modeNeedsBank(mode) || modeNeedsChequeFields(mode) ? prev.BankName || prev.bank_name || "" : "",
+      cheque_no: modeNeedsChequeNo(mode) ? prev.cheque_no || prev.ChequeNumber || "" : "",
+      ChequeNumber: modeNeedsChequeNo(mode) ? prev.ChequeNumber || prev.cheque_no || "" : "",
+      cheque_date: modeNeedsChequeDate(mode) ? normalizeDateInput(prev.cheque_date || prev.ChequeDate) : "",
+      ChequeDate: modeNeedsChequeDate(mode) ? normalizeDateInput(prev.ChequeDate || prev.cheque_date) : "",
+    }));
+  };
+
+  const handleEditBankChange = (bankAccountId) => {
+    const bank = bankAccounts.find((row) => Number(row.id) === Number(bankAccountId));
+    const bankLabel = bank ? formatBankAccountLabel(bank) : "";
+
+    setEditForm((prev) => ({
+      ...prev,
+      bank_account_id: bankAccountId,
+      bank_name: bank?.bank_name || prev.bank_name || "",
+      BankName: bank?.bank_name || prev.BankName || "",
+      _bankDisplayLabel: bankLabel,
+    }));
+  };
+
+  const saveEditedTransaction = async () => {
+    if (!editForm?.Serial) {
+      Swal.fire("Serial missing", "Transaction Serial not found.", "warning");
+      return;
+    }
+
+    const validationMessage = validatePaymentDetails(editForm, selectedEditModeMeta);
+    if (validationMessage) {
+      Swal.fire("Incomplete payment details", validationMessage, "warning");
+      return;
+    }
+
+    setSavingEdit(true);
+    try {
+      const referenceNo = firstNonEmpty(editForm.reference_no, editForm.Transaction_ID);
+      const chequeNo = firstNonEmpty(editForm.cheque_no, editForm.ChequeNumber);
+      const chequeDate = normalizeDateInput(editForm.cheque_date || editForm.ChequeDate);
+      const bankName = firstNonEmpty(editForm.bank_name, editForm.BankName, selectedEditBankAccount?.bank_name);
+
+      const updatedTransaction = {
+        Fee_Recieved: toNum(editForm.Fee_Recieved),
+        Concession: toNum(editForm.Concession),
+        VanFee: toNum(editForm.VanFee),
+        Fine_Amount: toNum(editForm.Fine_Amount),
+        PaymentMode: editForm.PaymentMode || selectedEditModeMeta?.name || "Cash",
+        mode_of_transaction_id: editForm.mode_of_transaction_id || null,
+        bank_account_id: modeNeedsBank(selectedEditModeMeta) ? editForm.bank_account_id || null : null,
+        reference_no: modeNeedsReference(selectedEditModeMeta) ? referenceNo || null : null,
+        Transaction_ID: modeNeedsReference(selectedEditModeMeta) ? referenceNo || null : null,
+        bank_name: modeNeedsBank(selectedEditModeMeta) || modeNeedsChequeFields(selectedEditModeMeta) ? bankName || null : null,
+        BankName: modeNeedsBank(selectedEditModeMeta) || modeNeedsChequeFields(selectedEditModeMeta) ? bankName || null : null,
+        cheque_no: modeNeedsChequeNo(selectedEditModeMeta) ? chequeNo || null : null,
+        ChequeNumber: modeNeedsChequeNo(selectedEditModeMeta) ? chequeNo || null : null,
+        cheque_date: modeNeedsChequeDate(selectedEditModeMeta) ? chequeDate || null : null,
+        ChequeDate: modeNeedsChequeDate(selectedEditModeMeta) ? chequeDate || null : null,
+        DateOfTransaction: toTransactionDatePayload(editForm.DateOfTransaction),
+        Remarks: editForm.Remarks || null,
+      };
+
+      const response = await api.put(`/transactions/${editForm.Serial}`, updatedTransaction);
+
+      if (response?.data?.success === false) {
+        Swal.fire("Error", response.data.message || "Unable to update transaction.", "error");
+        return;
+      }
+
+      Swal.fire("Updated!", "Transaction has been updated successfully.", "success");
+      setShowEditModal(false);
+      if (startDate && endDate) await handleGenerateReport();
+    } catch (error) {
+      console.error("Error updating transaction:", error);
+      Swal.fire(
+        "Error!",
+        error.response?.data?.message || "Unable to update transaction.",
+        "error"
+      );
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  const cancelTransaction = async (item) => {
+    const serial = getTxnSerial(item);
+    if (!serial) {
+      Swal.fire(
+        "Serial missing",
+        "This report response row does not include the real transaction Serial. View/Print works with Slip_ID, but Cancel needs Serial from backend.",
+        "warning"
+      );
+      return;
+    }
+
+    try {
+      await api.post(`/transactions/${serial}/cancel`);
+      Swal.fire("Cancelled!", "Transaction has been cancelled.", "success");
+      if (startDate && endDate) await handleGenerateReport();
+    } catch (error) {
+      console.error("Error cancelling transaction:", error);
+      Swal.fire("Error!", error.response?.data?.message || "Unable to cancel.", "error");
+    }
+  };
+
+  const deleteTransaction = async (item) => {
+    const serial = getTxnSerial(item);
+    if (!serial) {
+      Swal.fire(
+        "Serial missing",
+        "This report response row does not include the real transaction Serial. View/Print works with Slip_ID, but Delete needs Serial from backend.",
+        "warning"
+      );
+      return;
+    }
+
+    try {
+      await api.delete(`/transactions/${serial}`);
+      Swal.fire("Deleted!", "Transaction permanently deleted.", "success");
+      if (startDate && endDate) await handleGenerateReport();
+    } catch (error) {
+      console.error("Error deleting transaction:", error);
+      Swal.fire("Error!", error.response?.data?.message || "Unable to delete.", "error");
     }
   };
 
@@ -567,10 +1157,24 @@ const DayWiseReport = () => {
         <Col>
           <h2 className="mb-0">Day Wise Report</h2>
           <div className="text-muted" style={{ fontSize: 13 }}>
-            Select date range → generate report → search, view receipts, print PDFs
+            Select date range → generate report → search, view receipts, print PDFs, download Excel
           </div>
         </Col>
         <Col className="d-flex justify-content-end gap-2">
+          {hasData ? (
+            <Button
+              variant="outline-success"
+              onClick={handleDownloadExcel}
+              disabled={downloadingExcel}
+            >
+              {downloadingExcel ? "Downloading Excel..." : "Download Excel"}
+            </Button>
+          ) : (
+            <Button variant="outline-success" disabled>
+              Download Excel
+            </Button>
+          )}
+
           {hasData && school ? (
             <Button variant="outline-secondary" onClick={openPdfInNewTab}>
               Print Report PDF
@@ -701,7 +1305,9 @@ const DayWiseReport = () => {
               <Card.Body>
                 <div className="text-muted">Fee + Van</div>
                 <h4 className="mb-0">
-                  {formatTotalValue((totalSummary.totalFeeReceived || 0) + (totalSummary.totalVanFee || 0))}
+                  {formatTotalValue(
+                    (totalSummary.totalFeeReceived || 0) + (totalSummary.totalVanFee || 0)
+                  )}
                 </h4>
                 <div className="text-muted" style={{ fontSize: 12 }}>
                   Fine: {formatTotalValue(totalSummary.totalFine)}
@@ -783,6 +1389,7 @@ const DayWiseReport = () => {
                         "Student Name",
                         "Class",
                         "Payment Mode",
+                        "Reference / Bank",
                         "Fee Heading",
                         "Transaction Date & Time",
                         "Fee Received",
@@ -810,6 +1417,8 @@ const DayWiseReport = () => {
                       const van = Number(item.totalVanFee) || 0;
                       const fineAmt = Number(item.totalFine ?? item.Fine_Amount ?? 0) || 0;
                       const total = fee + van + fineAmt;
+                      const serial = getTxnSerial(item);
+                      const statusLabel = item?.status || "";
 
                       const pmKey = isOnline(item.PaymentMode)
                         ? "Online"
@@ -818,7 +1427,7 @@ const DayWiseReport = () => {
                         : "Other";
 
                       return (
-                        <tr key={`${item.Slip_ID}-${idx}`}>
+                        <tr key={`${item.Slip_ID}-${serial || idx}`}>
                           <td style={{ whiteSpace: "nowrap" }}>{indexOfFirstRecord + idx + 1}</td>
                           <td style={{ whiteSpace: "nowrap" }}>
                             <span className="fw-semibold">{item.Slip_ID}</span>
@@ -828,8 +1437,17 @@ const DayWiseReport = () => {
                           <td style={{ whiteSpace: "nowrap" }}>{item.Student?.Class?.class_name || "—"}</td>
                           <td style={{ whiteSpace: "nowrap" }}>
                             <Badge bg={pmKey === "Cash" ? "success" : pmKey === "Online" ? "primary" : "secondary"}>
-                              {isOnline(item.PaymentMode) ? "Online" : item.PaymentMode || "Other"}
+                              {item.modeOfTransaction?.name || item.PaymentMode || "Other"}
                             </Badge>
+                          </td>
+                          <td style={{ minWidth: 190 }}>
+                            <div className="fw-semibold" style={{ fontSize: 12 }}>
+                              {item.reference_no || item.Transaction_ID || "—"}
+                            </div>
+                            <div className="text-muted" style={{ fontSize: 11 }}>
+                              {item.bankAccount?.bank_name || item.bank_name || item.BankName || ""}
+                              {(item.cheque_no || item.ChequeNumber) ? ` • Chq: ${item.cheque_no || item.ChequeNumber}` : ""}
+                            </div>
                           </td>
                           <td style={{ minWidth: 180 }}>{item.feeHeadingName || "—"}</td>
                           <td style={{ whiteSpace: "nowrap" }}>
@@ -844,13 +1462,30 @@ const DayWiseReport = () => {
                           <td style={{ whiteSpace: "nowrap" }} className="fw-semibold">
                             {formatTotalValue(total)}
                           </td>
-                          <td style={{ minWidth: 160 }}>{item.Remarks || "—"}</td>
-                          <td style={{ whiteSpace: "nowrap" }}>
+                          <td style={{ minWidth: 160 }}>
+                            {item.Remarks || "—"}
+                            {statusLabel ? (
+                              <div className="mt-1">
+                                <Badge
+                                  bg={isCancelled(item) ? "danger" : "light"}
+                                  text={isCancelled(item) ? "white" : "dark"}
+                                >
+                                  {statusLabel}
+                                </Badge>
+                              </div>
+                            ) : null}
+                          </td>
+                          <td style={{ whiteSpace: "nowrap", minWidth: 320 }}>
+                            {!serial && (
+                              <div className="text-danger small mb-1">
+                                Serial missing in report row
+                              </div>
+                            )}
                             <Button
                               variant="outline-primary"
                               size="sm"
                               onClick={() => viewReceipt(item.Slip_ID)}
-                              className="me-2"
+                              className="me-2 mb-1"
                             >
                               View
                             </Button>
@@ -858,9 +1493,69 @@ const DayWiseReport = () => {
                               variant="outline-secondary"
                               size="sm"
                               onClick={() => handlePrintReceipt(item.Slip_ID)}
+                              className="me-2 mb-1"
                             >
                               Print
                             </Button>
+
+                            {canManage && !isCancelled(item) && (
+                              <Button
+                                variant="outline-success"
+                                size="sm"
+                                className="me-2 mb-1"
+                                disabled={!serial}
+                                title={!serial ? "Serial missing in /reports/day-wise row" : "Edit transaction"}
+                                onClick={() => openEditModal(item)}
+                              >
+                                Edit
+                              </Button>
+                            )}
+
+                            {canManage && !isCancelled(item) && (
+                              <Button
+                                variant="outline-warning"
+                                size="sm"
+                                className="me-2 mb-1"
+                                disabled={!serial}
+                                title={!serial ? "Serial missing in /reports/day-wise row" : "Cancel transaction"}
+                                onClick={() => {
+                                  Swal.fire({
+                                    title: "Cancel transaction?",
+                                    text: "This transaction will be marked as cancelled.",
+                                    icon: "warning",
+                                    showCancelButton: true,
+                                    confirmButtonText: "Yes, cancel it",
+                                  }).then((result) => {
+                                    if (result.isConfirmed) cancelTransaction(item);
+                                  });
+                                }}
+                              >
+                                Cancel
+                              </Button>
+                            )}
+
+                            {canDelete && isCancelled(item) && (
+                              <Button
+                                variant="outline-danger"
+                                size="sm"
+                                className="mb-1"
+                                disabled={!serial}
+                                title={!serial ? "Serial missing in /reports/day-wise row" : "Delete transaction"}
+                                onClick={() => {
+                                  Swal.fire({
+                                    title: "Delete transaction permanently?",
+                                    text: "This action cannot be undone.",
+                                    icon: "error",
+                                    showCancelButton: true,
+                                    confirmButtonText: "Yes, delete it",
+                                  }).then((result) => {
+                                    if (result.isConfirmed) deleteTransaction(item);
+                                  });
+                                }}
+                              >
+                                Delete
+                              </Button>
+                            )}
                           </td>
                         </tr>
                       );
@@ -1107,6 +1802,270 @@ const DayWiseReport = () => {
           slipId={selectedSlipId}
         />
       )}
+
+      <Modal
+        show={showEditModal}
+        onHide={() => setShowEditModal(false)}
+        centered
+        size="lg"
+        backdrop="static"
+      >
+        <Modal.Header closeButton className="border-0 pb-0">
+          <div>
+            <Modal.Title className="fw-bold">Edit Transaction</Modal.Title>
+            <div className="text-muted" style={{ fontSize: 13 }}>
+              Slip #{editForm.Slip_ID || "—"} • Update collection and payment details
+            </div>
+          </div>
+        </Modal.Header>
+
+        <Modal.Body>
+          <Card
+            className="border-0 mb-3"
+            style={{ background: "linear-gradient(135deg, #f8fbff 0%, #eef5ff 100%)" }}
+          >
+            <Card.Body className="py-3">
+              <Row className="g-3 align-items-end">
+                <Col md={4}>
+                  <Form.Group>
+                    <Form.Label className="fw-semibold">Slip ID</Form.Label>
+                    <Form.Control value={editForm.Slip_ID || ""} disabled />
+                  </Form.Group>
+                </Col>
+
+                <Col md={4}>
+                  <Form.Group>
+                    <Form.Label className="fw-semibold">Transaction Date & Time</Form.Label>
+                    <Form.Control
+                      type="datetime-local"
+                      value={editForm.DateOfTransaction || ""}
+                      onChange={(e) => handleEditInput("DateOfTransaction", e.target.value)}
+                    />
+                  </Form.Group>
+                </Col>
+
+                <Col md={4}>
+                  <Form.Group>
+                    <Form.Label className="fw-semibold">Status</Form.Label>
+                    <Form.Control value={editForm.status || "active"} disabled />
+                  </Form.Group>
+                </Col>
+              </Row>
+            </Card.Body>
+          </Card>
+
+          <Card className="shadow-sm border-0 mb-3">
+            <Card.Body>
+              <div className="d-flex align-items-center justify-content-between mb-3">
+                <div>
+                  <div className="fw-bold">Payment Details</div>
+                  <div className="text-muted" style={{ fontSize: 12 }}>
+                    Same master-based payment mode flow as Transactions page
+                  </div>
+                </div>
+                {loadingPaymentMasters ? (
+                  <Badge bg="light" text="dark">Loading modes…</Badge>
+                ) : (
+                  <Badge bg="primary">{activeTransactionModes.length} Modes</Badge>
+                )}
+              </div>
+
+              <Row className="g-3">
+                <Col md={6}>
+                  <Form.Group>
+                    <Form.Label className="fw-semibold">Payment Mode</Form.Label>
+                    <Form.Select
+                      value={editForm.mode_of_transaction_id || editForm.PaymentMode || "Cash"}
+                      onChange={(e) => handleEditModeChange(e.target.value)}
+                      disabled={loadingPaymentMasters}
+                    >
+                      {activeTransactionModes.map((mode) => (
+                        <option key={`${mode.id}-${mode.name}`} value={mode.id || mode.name}>
+                          {mode.name}
+                        </option>
+                      ))}
+                    </Form.Select>
+                    {selectedEditModeMeta?.description ? (
+                      <div className="text-muted mt-1" style={{ fontSize: 12 }}>
+                        {selectedEditModeMeta.description}
+                      </div>
+                    ) : null}
+                  </Form.Group>
+                </Col>
+
+                {modeNeedsBank(selectedEditModeMeta) && (
+                  <Col md={6}>
+                    <Form.Group>
+                      <Form.Label className="fw-semibold">Receiving Bank Account</Form.Label>
+                      <Form.Select
+                        value={editForm.bank_account_id || ""}
+                        onChange={(e) => handleEditBankChange(e.target.value)}
+                      >
+                        <option value="">Select receiving bank</option>
+                        {bankAccounts.map((bank) => (
+                          <option key={bank.id} value={bank.id}>
+                            {formatBankAccountLabel(bank)}
+                          </option>
+                        ))}
+                      </Form.Select>
+                    </Form.Group>
+                  </Col>
+                )}
+
+                {modeNeedsReference(selectedEditModeMeta) && (
+                  <Col md={6}>
+                    <Form.Group>
+                      <Form.Label className="fw-semibold">Reference / Transaction ID</Form.Label>
+                      <Form.Control
+                        value={editForm.reference_no || ""}
+                        placeholder="Enter UTR / Txn ID / reference no."
+                        onChange={(e) => {
+                          handleEditInput("reference_no", e.target.value);
+                          handleEditInput("Transaction_ID", e.target.value);
+                        }}
+                      />
+                    </Form.Group>
+                  </Col>
+                )}
+
+                {modeNeedsChequeNo(selectedEditModeMeta) && (
+                  <Col md={6}>
+                    <Form.Group>
+                      <Form.Label className="fw-semibold">Cheque Number</Form.Label>
+                      <Form.Control
+                        value={editForm.cheque_no || ""}
+                        placeholder="Enter cheque number"
+                        onChange={(e) => {
+                          handleEditInput("cheque_no", e.target.value);
+                          handleEditInput("ChequeNumber", e.target.value);
+                        }}
+                      />
+                    </Form.Group>
+                  </Col>
+                )}
+
+                {modeNeedsChequeDate(selectedEditModeMeta) && (
+                  <Col md={6}>
+                    <Form.Group>
+                      <Form.Label className="fw-semibold">Cheque Date</Form.Label>
+                      <Form.Control
+                        type="date"
+                        value={editForm.cheque_date || ""}
+                        onChange={(e) => {
+                          handleEditInput("cheque_date", e.target.value);
+                          handleEditInput("ChequeDate", e.target.value);
+                        }}
+                      />
+                    </Form.Group>
+                  </Col>
+                )}
+
+                {(modeNeedsBank(selectedEditModeMeta) || modeNeedsChequeFields(selectedEditModeMeta)) && (
+                  <Col md={6}>
+                    <Form.Group>
+                      <Form.Label className="fw-semibold">Bank Name / Instrument Bank</Form.Label>
+                      <Form.Control
+                        value={editForm.bank_name || ""}
+                        placeholder="Bank name"
+                        onChange={(e) => {
+                          handleEditInput("bank_name", e.target.value);
+                          handleEditInput("BankName", e.target.value);
+                        }}
+                      />
+                      <div className="text-muted mt-1" style={{ fontSize: 12 }}>
+                        Receiving bank is selected above; this field is saved for receipt/payment detail text.
+                      </div>
+                    </Form.Group>
+                  </Col>
+                )}
+              </Row>
+            </Card.Body>
+          </Card>
+
+          <Card className="shadow-sm border-0">
+            <Card.Body>
+              <div className="fw-bold mb-3">Amount Details</div>
+              <Row className="g-3">
+                <Col md={3} sm={6}>
+                  <Form.Group>
+                    <Form.Label className="fw-semibold">Fee Received</Form.Label>
+                    <Form.Control
+                      type="number"
+                      min="0"
+                      value={editForm.Fee_Recieved}
+                      onChange={(e) => handleEditInput("Fee_Recieved", e.target.value)}
+                    />
+                  </Form.Group>
+                </Col>
+
+                <Col md={3} sm={6}>
+                  <Form.Group>
+                    <Form.Label className="fw-semibold">Concession</Form.Label>
+                    <Form.Control
+                      type="number"
+                      min="0"
+                      value={editForm.Concession}
+                      onChange={(e) => handleEditInput("Concession", e.target.value)}
+                    />
+                  </Form.Group>
+                </Col>
+
+                <Col md={3} sm={6}>
+                  <Form.Group>
+                    <Form.Label className="fw-semibold">Van Fee</Form.Label>
+                    <Form.Control
+                      type="number"
+                      min="0"
+                      value={editForm.VanFee}
+                      onChange={(e) => handleEditInput("VanFee", e.target.value)}
+                    />
+                  </Form.Group>
+                </Col>
+
+                <Col md={3} sm={6}>
+                  <Form.Group>
+                    <Form.Label className="fw-semibold">Fine</Form.Label>
+                    <Form.Control
+                      type="number"
+                      min="0"
+                      value={editForm.Fine_Amount}
+                      onChange={(e) => handleEditInput("Fine_Amount", e.target.value)}
+                    />
+                  </Form.Group>
+                </Col>
+
+                <Col md={12}>
+                  <Form.Group>
+                    <Form.Label className="fw-semibold">Remarks</Form.Label>
+                    <Form.Control
+                      as="textarea"
+                      rows={3}
+                      value={editForm.Remarks || ""}
+                      placeholder="Add remarks to show in receipt/report"
+                      onChange={(e) => handleEditInput("Remarks", e.target.value)}
+                    />
+                  </Form.Group>
+                </Col>
+              </Row>
+            </Card.Body>
+          </Card>
+        </Modal.Body>
+
+        <Modal.Footer className="border-0 pt-0">
+          <Button variant="light" onClick={() => setShowEditModal(false)} disabled={savingEdit}>
+            Close
+          </Button>
+          <Button variant="primary" onClick={saveEditedTransaction} disabled={savingEdit}>
+            {savingEdit ? (
+              <>
+                <Spinner size="sm" className="me-2" /> Saving...
+              </>
+            ) : (
+              "Save Changes"
+            )}
+          </Button>
+        </Modal.Footer>
+      </Modal>
     </Container>
   );
 };

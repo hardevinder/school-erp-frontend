@@ -147,9 +147,49 @@ const downloadChart = (chartRef, filename = "chart.png") => {
   link.click();
 };
 
+const getStoredRoles = () => {
+  try {
+    const local = JSON.parse(localStorage.getItem("roles") || "[]");
+    const session = JSON.parse(sessionStorage.getItem("roles") || "[]");
+    return Array.from(
+      new Set(
+        [...local, ...session]
+          .map((r) => String(r || "").trim().toLowerCase())
+          .filter(Boolean)
+      )
+    );
+  } catch {
+    return [];
+  }
+};
+
+const getStoredPermissions = () => {
+  try {
+    const local = JSON.parse(localStorage.getItem("permissions") || "[]");
+    const session = JSON.parse(sessionStorage.getItem("permissions") || "[]");
+    return Array.from(
+      new Set(
+        [...local, ...session]
+          .map((p) => String(p || "").trim().toLowerCase())
+          .filter(Boolean)
+      )
+    );
+  } catch {
+    return [];
+  }
+};
+
 // ---------- COMPONENT ----------
 const Dashboard = () => {
   const navigate = useNavigate(); // ✅ ADDED
+  const storedRoles = useMemo(() => getStoredRoles(), []);
+  const storedPermissions = useMemo(() => getStoredPermissions(), []);
+  const canManagePermissions = useMemo(
+    () =>
+      storedPermissions.includes("permissions_manage") ||
+      storedRoles.includes("superadmin"),
+    [storedPermissions, storedRoles]
+  );
 
   // Sessions
   const [sessions, setSessions] = useState([]);
@@ -767,6 +807,14 @@ const Dashboard = () => {
       href: "/students",
       gradient: "linear-gradient(135deg, #a855f7, #7c3aed)",
     },
+    {
+      label: "Bulk Concessions",
+      sub: "Apply concession",
+      icon: "bi-tags",
+      href: "/students/bulk-concession",
+      gradient: "linear-gradient(135deg, #8b5cf6, #6d28d9)",
+      tag: "NEW",
+    },
 
     // ✅ NEW: Student Summary (House)
     {
@@ -792,6 +840,18 @@ const Dashboard = () => {
       href: "/reports/religion-gender",
       gradient: "linear-gradient(135deg, #0ea5e9, #0369a1)",
     },
+    ...(canManagePermissions
+      ? [
+          {
+            label: "Role Permissions",
+            sub: "Assign role access",
+            icon: "bi-shield-lock",
+            href: "/role-permissions",
+            gradient: "linear-gradient(135deg, #111827, #374151)",
+            tag: "ADMIN",
+          },
+        ]
+      : []),
   ];
 
   // ✅ UPDATED: premium LinkCard (better UI)
@@ -834,11 +894,11 @@ const Dashboard = () => {
       <div className="dashboard-overlay" />
 
       <div
-        className="container-fluid px-4"
+        className="container-fluid px-2 px-sm-3 px-xl-4"
         style={{ position: "relative", zIndex: 2 }}
       >
         {/* Header */}
-        <div className="d-flex flex-wrap align-items-center justify-content-between gap-3 my-4">
+        <div className="d-flex flex-wrap align-items-center justify-content-between gap-3 my-4 dashboard-header-card">
           <div className="d-flex flex-column">
             <div className="d-flex align-items-center gap-3">
               <h2
@@ -955,18 +1015,38 @@ const Dashboard = () => {
                 </span>
               </div>
 
-              {/* Small action (optional): open new summary quickly */}
-              <button
-                className="btn btn-sm btn-outline-primary"
-                onClick={() => navigate("/reports/student-summary")}
-                title="Open House Summary"
-              >
-                <i className="bi bi-bar-chart-line me-1" />
-                House Summary
-              </button>
+              <div className="quick-links-header-actions d-flex flex-wrap gap-2">
+                <button
+                  className="btn btn-sm btn-primary"
+                  onClick={() => navigate("/students/bulk-concession")}
+                  title="Open Bulk Concessions"
+                >
+                  <i className="bi bi-tags me-1" />
+                  Bulk Concessions
+                </button>
+                <button
+                  className="btn btn-sm btn-outline-primary"
+                  onClick={() => navigate("/reports/student-summary")}
+                  title="Open House Summary"
+                >
+                  <i className="bi bi-bar-chart-line me-1" />
+                  House Summary
+                </button>
+
+                {canManagePermissions && (
+                  <button
+                    className="btn btn-sm btn-outline-dark"
+                    onClick={() => navigate("/role-permissions")}
+                    title="Open Role Permissions"
+                  >
+                    <i className="bi bi-shield-lock me-1" />
+                    Role Permissions
+                  </button>
+                )}
+              </div>
             </div>
 
-            <div className="d-flex flex-wrap gap-3">
+            <div className="quick-links-grid">
               {quickLinks.map((q) => (
                 <LinkCard key={q.label} {...q} />
               ))}
@@ -1209,7 +1289,7 @@ const Dashboard = () => {
                   </button>
                 </div>
               </div>
-              <div className="card-body" style={{ height: 360 }}>
+              <div className="card-body" style={{ height: "clamp(260px, 34vw, 360px)" }}>
                 {loading.report ? (
                   <div className="skeleton-chart" />
                 ) : pieData.labels.length ? (
@@ -1261,7 +1341,7 @@ const Dashboard = () => {
                   </button>
                 </div>
               </div>
-              <div className="card-body" style={{ height: 400 }}>
+              <div className="card-body" style={{ height: "clamp(280px, 38vw, 400px)" }}>
                 {loading.day ? (
                   <div className="skeleton-chart" />
                 ) : uniqueDates.length ? (
@@ -1332,7 +1412,7 @@ const Dashboard = () => {
                   </button>
                 </div>
               </div>
-              <div className="card-body" style={{ height: 340 }}>
+              <div className="card-body" style={{ height: "clamp(250px, 30vw, 340px)" }}>
                 {loading.cr ? (
                   <div className="skeleton-chart" />
                 ) : genderTotals.boys + genderTotals.girls > 0 ? (
@@ -1395,7 +1475,7 @@ const Dashboard = () => {
                   </button>
                 </div>
               </div>
-              <div className="card-body" style={{ height: 340 }}>
+              <div className="card-body" style={{ height: "clamp(250px, 30vw, 340px)" }}>
                 {loading.cr ? (
                   <div className="skeleton-chart" />
                 ) : casteBoysGirls.labels.length ? (
@@ -1459,7 +1539,7 @@ const Dashboard = () => {
                   </button>
                 </div>
               </div>
-              <div className="card-body" style={{ height: 340 }}>
+              <div className="card-body" style={{ height: "clamp(250px, 30vw, 340px)" }}>
                 {loading.cr ? (
                   <div className="skeleton-chart" />
                 ) : religionBoysGirls.labels.length ? (
@@ -1626,7 +1706,7 @@ const Dashboard = () => {
                   </button>
                 </div>
               </div>
-              <div className="card-body" style={{ height: 400 }}>
+              <div className="card-body" style={{ height: "clamp(280px, 38vw, 400px)" }}>
                 {loading.class ? (
                   <div className="skeleton-chart" />
                 ) : uniqueClasses.length ? (
@@ -1651,21 +1731,38 @@ const Dashboard = () => {
             z-index: 1; pointer-events: none;
           }
           .quick-links { top: 5rem; z-index: 3; }
+          .dashboard-header-card {
+            padding: 1rem 1.15rem;
+            border-radius: 1.2rem;
+            background: rgba(255,255,255,0.72);
+            backdrop-filter: blur(12px) saturate(1.15);
+            border: 1px solid rgba(255,255,255,0.35);
+            box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
+          }
           .quick-links-inner {
             backdrop-filter: blur(12px) saturate(1.2);
             border-radius: 1.2rem; border: 1px solid rgba(255, 255, 255, 0.2);
             box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
           }
+          .quick-links-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: .9rem;
+          }
+          .quick-links-header-actions .btn {
+            white-space: nowrap;
+          }
 
           /* ✅ Upgraded quick link cards */
           .link-card-ex {
             display: inline-flex; align-items: center; gap: .9rem;
+            width: 100%;
+            min-width: 0;
             padding: .95rem 1.05rem; border-radius: 1.2rem; color: #fff; text-decoration: none;
             border: 1px solid rgba(255, 255, 255, 0.22);
             position: relative; overflow: hidden;
             transition: transform 0.25s ease, box-shadow 0.25s ease, background-position 0.25s ease;
             background-size: 200% 100%; background-position: 0% 50%;
-            min-width: 220px;
           }
           .link-card-ex::before{
             content:"";
@@ -1747,12 +1844,27 @@ const Dashboard = () => {
           .table { border-radius: .75rem; overflow: hidden; }
           .table th, .table td { padding: .75rem; font-family: 'Inter', sans-serif; }
           .badge { border-radius: .5rem; padding: .5em .75em; font-weight: 600; }
+          @media (max-width: 1200px) {
+            .quick-links { top: 4.5rem; }
+            .dashboard-header-card { padding: .9rem 1rem; }
+            .quick-links-grid { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+            .card-header { padding: .85rem 1rem; }
+            .table th, .table td { padding: .6rem; font-size: .9rem; }
+          }
+          @media (max-width: 992px) {
+            .dashboard-header-card { gap: .85rem !important; }
+            .quick-links-header-actions { width: 100%; }
+            .quick-links-header-actions .btn { flex: 1 1 auto; }
+            .quick-links-grid { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+          }
           @media (max-width: 768px) {
             .quick-links { top: 4rem; }
             .quick-links-inner { padding: 1rem; }
-            .link-card-ex { padding: .85rem 1rem; gap: .8rem; min-width: 190px; }
-            .link-card-ex .icon-wrap { width: 2.45rem; height: 2.45rem; border-radius: .95rem; }
+            .link-card-ex { padding: .85rem .95rem; gap: .8rem; }
+            .link-card-ex .icon-wrap { width: 2.35rem; height: 2.35rem; border-radius: .95rem; }
             .link-card-ex .label { font-size: .92rem; }
+            .link-card-ex .sub { font-size: .74rem; }
+            .dashboard-header-card .form-select { min-width: 100% !important; }
             .card-body { padding: 1rem; }
             .row.g-4 { gap: 1rem; }
           }
