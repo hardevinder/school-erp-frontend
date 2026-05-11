@@ -22,6 +22,7 @@ import Classes from "./pages/Classes";
 import Sessions from "./pages/Sessions";
 import Subjects from "./pages/Subjects";
 import Student from "./pages/Students";
+import StudentIdCards from "./pages/StudentIdCards";
 import BulkPromotion from "./pages/Students/BulkPromotion";
 import BulkConcession from "./pages/Students/BulkConcession";
 import PromotionHistory from "./pages/Students/PromotionHistory";
@@ -454,6 +455,18 @@ function App() {
                 fallbackRoles={["admin", "superadmin", "accounts", "frontoffice"]}
               >
                 <Student />
+              </RequirePermission>
+            }
+          />
+
+          <Route
+            path="/student-id-cards"
+            element={
+              <RequirePermission
+                permissions={["students_view"]}
+                fallbackRoles={["admin", "superadmin", "accounts", "frontoffice", "teacher", "academic_coordinator"]}
+              >
+                <StudentIdCards />
               </RequirePermission>
             }
           />

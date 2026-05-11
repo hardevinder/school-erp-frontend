@@ -808,6 +808,14 @@ const Dashboard = () => {
       gradient: "linear-gradient(135deg, #a855f7, #7c3aed)",
     },
     {
+      label: "Student I-Cards",
+      sub: "Generate ID cards",
+      icon: "bi-person-vcard",
+      href: "/student-id-cards",
+      gradient: "linear-gradient(135deg, #14b8a6, #0f766e)",
+      tag: "NEW",
+    },
+    {
       label: "Bulk Concessions",
       sub: "Apply concession",
       icon: "bi-tags",
@@ -1031,6 +1039,14 @@ const Dashboard = () => {
                 >
                   <i className="bi bi-bar-chart-line me-1" />
                   House Summary
+                </button>
+                <button
+                  className="btn btn-sm btn-outline-success"
+                  onClick={() => navigate("/student-id-cards")}
+                  title="Open Student I-Card Generator"
+                >
+                  <i className="bi bi-person-vcard me-1" />
+                  Student I-Cards
                 </button>
 
                 {canManagePermissions && (

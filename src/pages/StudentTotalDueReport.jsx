@@ -11,6 +11,10 @@
  * ✅ WhatsApp sends:
  *    - tillDate = selected Till Date
  *    - dueDate  = MAX PREVIOUS DUE DATE relative to selected Till Date (latest dueDate <= tillDate)
+ * ✅ App Push Notification support added:
+ *    - POST /api/notifications/fee-reminder
+ *    - POST /api/notifications/fee-reminder/bulk
+ * ✅ More professional actions area and action column
  *
  * APIs used:
  * - GET  /sessions
@@ -20,6 +24,8 @@
  * - GET  /feedue-status/fee-heading-wise-students?feeHeadingId=...&status=...&session_id=...
  * - GET  /opening-balances/outstanding?student_id=...&session_id=...
  * - POST /whatsapp/fee-reminder
+ * - POST /api/notifications/fee-reminder
+ * - POST /api/notifications/fee-reminder/bulk
  */
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -122,6 +128,33 @@ const toStartOfDay = (dt) => {
 };
 
 const isValidISODate = (s) => !!parseDateOnly(s);
+
+const hasStudentIdentity = (student) =>
+  !!(
+    safeStr(student?.name).trim() ||
+    safeStr(student?.admissionNumber).trim() ||
+    safeStr(student?.className).trim() ||
+    safeStr(student?.sectionName || student?.section).trim()
+  );
+
+const isInactiveStudentLike = (student) => {
+  const normalizedStatus = safeStr(
+    student?.studentStatus ?? student?.status ?? student?.student_status
+  )
+    .trim()
+    .toLowerCase();
+
+  if (normalizedStatus) {
+    return ["inactive", "disabled", "disable", "left", "suspended"].includes(
+      normalizedStatus
+    );
+  }
+
+  if (student?.is_active === false) return true;
+  if (student?.enabled === false) return true;
+
+  return false;
+};
 
 // ✅ Extract ONLY installment due date (do NOT mix fine keys here)
 const extractInstallmentDueDate = (obj) => {
@@ -285,6 +318,14 @@ const StudentTotalDueReport = () => {
     skipped: 0,
   });
 
+  const [pushSending, setPushSending] = useState(() => new Set());
+  const [pushAllSending, setPushAllSending] = useState(false);
+  const [pushAllProgress, setPushAllProgress] = useState({
+    done: 0,
+    total: 0,
+    failed: 0,
+  });
+
   // ✅ per-student recipient selection for individual WhatsApp
   // values: "father" | "mother" | "both"
   const [waRecipientByStudent, setWaRecipientByStudent] = useState({});
@@ -319,6 +360,8 @@ const StudentTotalDueReport = () => {
     if (!isValidISODate(tillDate)) setTillDate(toISODate(new Date()));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tillDate]);
+
+  const isAnyBulkSending = waAllSending || pushAllSending;
 
   // ---------------- Fetchers ----------------
   const fetchSchool = async () => {
@@ -412,6 +455,11 @@ const StudentTotalDueReport = () => {
     setExpandedIds(new Set());
 
     try {
+      const selectedSessionMeta = sessions.find(
+        (s) => Number(s.id) === Number(sessionId)
+      );
+      const selectedIsActiveSession = !!selectedSessionMeta?.is_active;
+
       const combosFast = (feeHeadingsInput || []).map((fh) => ({
         feeHeadingId: fh.id,
         status: "any",
@@ -457,13 +505,15 @@ const StudentTotalDueReport = () => {
           if (!aggExisting.name && student.name) aggExisting.name = student.name;
           if (!aggExisting.admissionNumber && student.admissionNumber)
             aggExisting.admissionNumber = student.admissionNumber;
-          if (!aggExisting.className && student.className)
+          // ✅ Always prefer latest non-empty class/section coming from backend.
+          // Earlier parallel fee-head responses may contain stale/current class,
+          // so do not keep the first non-empty value forever.
+          if (student.className) {
             aggExisting.className = student.className;
-          if (
-            !aggExisting.sectionName &&
-            (student.sectionName || student.section)
-          )
+          }
+          if (student.sectionName || student.section) {
             aggExisting.sectionName = student.sectionName || student.section;
+          }
           if (!aggExisting.fatherPhone && student.fatherPhone)
             aggExisting.fatherPhone = student.fatherPhone;
           if (!aggExisting.motherPhone && student.motherPhone)
@@ -526,6 +576,8 @@ const StudentTotalDueReport = () => {
         const rawData = Array.isArray(res?.data?.data) ? res.data.data : [];
 
         rawData.forEach((student) => {
+          if (selectedIsActiveSession && isInactiveStudentLike(student)) return;
+
           const agg = upsertStudent(student);
           if (!agg) return;
           mergeFeeDetails(agg, student.feeDetails || []);
@@ -564,25 +616,57 @@ const StudentTotalDueReport = () => {
       // ✅ Merge Transport heads from the transportMap passed to this exact build
       if (transportMapInput && typeof transportMapInput.forEach === "function") {
         transportMapInput.forEach((val, stuId) => {
-          if (!studentMap.has(stuId)) {
-            studentMap.set(stuId, {
-              id: stuId,
-              studentId: stuId,
-              name: "",
-              admissionNumber: "",
-              className: "",
-              sectionName: "",
-              fatherPhone: "",
-              motherPhone: "",
-              phone: "",
+          const normalizedStudentId =
+            Number(stuId) && !Number.isNaN(Number(stuId))
+              ? Number(stuId)
+              : stuId;
+
+          if (selectedIsActiveSession && isInactiveStudentLike(val)) return;
+          if (!studentMap.has(normalizedStudentId) && !hasStudentIdentity(val)) return;
+
+          if (!studentMap.has(normalizedStudentId)) {
+            studentMap.set(normalizedStudentId, {
+              id: normalizedStudentId,
+              studentId: val?.studentId ?? val?.student_id ?? normalizedStudentId,
+              name: val?.name || "",
+              admissionNumber: val?.admissionNumber || "",
+              className: val?.className || "",
+              sectionName: val?.sectionName || val?.section || "",
+              fatherPhone: val?.fatherPhone || "",
+              motherPhone: val?.motherPhone || "",
+              phone:
+                val?.phone ||
+                val?.parentPhone ||
+                val?.fatherPhone ||
+                val?.motherPhone ||
+                "",
               heads: [],
             });
           } else {
             const aggExisting = studentMap.get(stuId);
             if (!aggExisting.studentId) aggExisting.studentId = stuId;
+
+            // ✅ Let transport response also refresh class/section when available
+            if (val?.className) aggExisting.className = val.className;
+            if (val?.sectionName || val?.section) {
+              aggExisting.sectionName = val.sectionName || val.section;
+            }
+            if (!aggExisting.name && val?.name) aggExisting.name = val.name;
+            if (!aggExisting.admissionNumber && val?.admissionNumber) {
+              aggExisting.admissionNumber = val.admissionNumber;
+            }
+            if (!aggExisting.fatherPhone && val?.fatherPhone) {
+              aggExisting.fatherPhone = val.fatherPhone;
+            }
+            if (!aggExisting.motherPhone && val?.motherPhone) {
+              aggExisting.motherPhone = val.motherPhone;
+            }
+            if (!aggExisting.phone && (val?.phone || val?.parentPhone)) {
+              aggExisting.phone = val.phone || val.parentPhone;
+            }
           }
 
-          const agg = studentMap.get(stuId);
+          const agg = studentMap.get(normalizedStudentId);
 
           (val.heads || []).forEach((vh) => {
             const baseHeadName = vh.fee_heading_name;
@@ -743,7 +827,7 @@ const StudentTotalDueReport = () => {
       const [feeHeadingsRes, transportRes] = await Promise.all([
         api.get("/fee-headings"),
         api.get("/transport/pending-per-head", {
-          params: { session_id: sessionId, includeZeroPending: true },
+          params: { session_id: sessionId, includeZeroPending: false },
         }),
       ]);
 
@@ -761,13 +845,38 @@ const StudentTotalDueReport = () => {
 
       const tmap = new Map();
       transportRows.forEach((stu) => {
+        const key =
+          Number(stu.student_id) && !Number.isNaN(Number(stu.student_id))
+            ? Number(stu.student_id)
+            : stu.student_id;
+
         const totalPending = (stu.heads || []).reduce(
-          (a, h) => a + Number(h.pending || 0),
+          (a, h) => a + Number(h.pending || 0) + Number(h.fine || h.fineAmount || 0),
           0
         );
-        tmap.set(stu.student_id, {
+
+        tmap.set(key, {
           totalPending,
           heads: stu.heads || [],
+          studentId: stu.studentId ?? stu.student_id ?? key,
+          student_id: stu.student_id ?? key,
+          name: stu.name || "",
+          admissionNumber: stu.admissionNumber || "",
+          className: stu.className || "",
+          sectionName: stu.sectionName || stu.section || "",
+          fatherPhone: stu.fatherPhone || "",
+          motherPhone: stu.motherPhone || "",
+          phone:
+            stu.phone ||
+            stu.parentPhone ||
+            stu.fatherPhone ||
+            stu.motherPhone ||
+            "",
+          studentStatus: stu.studentStatus || stu.status || stu.student_status || "",
+          status: stu.status || "",
+          student_status: stu.student_status || "",
+          is_active: stu.is_active,
+          enabled: stu.enabled,
         });
       });
 
@@ -944,6 +1053,126 @@ const StudentTotalDueReport = () => {
       );
     } finally {
       setWaAllSending(false);
+    }
+  };
+
+  // ======== App Push Notification ========
+
+  const buildFeeNotificationPayload = (stu) => {
+    const classSection = stu.sectionName
+      ? `${stu.className} / ${stu.sectionName}`
+      : stu.className || "";
+
+    const dueDateToSend = computeWhatsAppDueDate(stu.heads || []);
+
+    return {
+      studentId: stu.studentId || stu.id,
+      admissionNumber: stu.admissionNumber || "",
+      session_id: activeSessionId,
+      amount: String(Math.round(Number(stu.totalDueTillDate || 0))),
+      tillDate,
+      dueDate: dueDateToSend || "",
+      grade: classSection || "-",
+    };
+  };
+
+  const sendAppFeeReminder = async (stu) => {
+    const rowKey = stu?.id;
+    if (!rowKey) return;
+
+    const amount = Number(stu.totalDueTillDate || 0);
+    if (amount <= 0) {
+      showToast("warning", "No pending due", "This student has no due till date.");
+      return;
+    }
+
+    setPushSending((prev) => new Set(prev).add(rowKey));
+
+    try {
+      const payload = buildFeeNotificationPayload(stu);
+      await api.post("/api/notifications/fee-reminder", payload);
+
+      showToast(
+        "success",
+        "App Notification Sent",
+        `Fee reminder sent to ${stu.name || stu.admissionNumber || "student"}.`
+      );
+    } catch (err) {
+      const apiMsg =
+        err?.response?.data?.message ||
+        err?.response?.data?.error ||
+        err?.message ||
+        "Failed to send app notification";
+
+      console.error("App notification error:", err?.response?.data || err);
+      showToast("danger", "App Notification Failed", safeStr(apiMsg));
+    } finally {
+      setPushSending((prev) => {
+        const next = new Set(prev);
+        next.delete(rowKey);
+        return next;
+      });
+    }
+  };
+
+  const sendAppFeeReminderToAllPending = async () => {
+    if (pushAllSending) return;
+
+    const pendingList = (filteredStudents || []).filter(
+      (s) => Number(s.totalDueTillDate || 0) > 0
+    );
+
+    if (!pendingList.length) {
+      showToast(
+        "warning",
+        "No pending students",
+        "No students have pending till date in current filtered list."
+      );
+      return;
+    }
+
+    const studentsPayload = pendingList.map((stu) => buildFeeNotificationPayload(stu));
+
+    setPushAllSending(true);
+    setPushAllProgress({
+      done: 0,
+      total: studentsPayload.length,
+      failed: 0,
+    });
+
+    try {
+      const res = await api.post("/api/notifications/fee-reminder/bulk", {
+        session_id: activeSessionId,
+        students: studentsPayload,
+      });
+
+      const summary = res?.data?.summary || {};
+      const sent = Number(summary.sent || 0);
+      const failed = Number(summary.failed || 0);
+      const total = Number(summary.total || studentsPayload.length);
+
+      setPushAllProgress({
+        done: sent,
+        total,
+        failed,
+      });
+
+      showToast(
+        "success",
+        "Bulk App Notification Done",
+        `Sent: ${sent}, Failed: ${failed}`
+      );
+    } catch (err) {
+      const apiMsg =
+        err?.response?.data?.message ||
+        err?.response?.data?.error ||
+        err?.message ||
+        "Failed to send bulk app notifications";
+
+      console.error("Bulk app notification error:", err?.response?.data || err);
+      showToast("danger", "Bulk App Notification Failed", safeStr(apiMsg));
+    } finally {
+      setPushAllSending(false);
     }
   };
 
@@ -1183,7 +1412,7 @@ const StudentTotalDueReport = () => {
             value={activeSessionId || ""}
             onChange={(e) => setActiveSessionId(Number(e.target.value))}
             style={{ minWidth: 220 }}
-            disabled={!sessions.length}
+            disabled={!sessions.length || isAnyBulkSending}
           >
             {sessions.length === 0 ? (
               <option value="">Loading sessions...</option>
@@ -1202,6 +1431,7 @@ const StudentTotalDueReport = () => {
               type="date"
               value={tillDate}
               onChange={(e) => setTillDate(toISODate(e.target.value))}
+              disabled={isAnyBulkSending}
             />
           </InputGroup>
 
@@ -1209,7 +1439,7 @@ const StudentTotalDueReport = () => {
             variant="outline-secondary"
             size="sm"
             onClick={() => loadSessionDataAndBuild(activeSessionId)}
-            disabled={loading || waAllSending || !activeSessionId}
+            disabled={loading || isAnyBulkSending || !activeSessionId}
           >
             {loading ? (
               <>
@@ -1243,7 +1473,7 @@ const StudentTotalDueReport = () => {
                 variant="outline-primary"
                 size="sm"
                 onClick={expandAll}
-                disabled={!filteredStudents.length}
+                disabled={!filteredStudents.length || isAnyBulkSending}
               >
                 Expand All
               </Button>
@@ -1251,7 +1481,7 @@ const StudentTotalDueReport = () => {
                 variant="outline-secondary"
                 size="sm"
                 onClick={collapseAll}
-                disabled={!expandedIds.size}
+                disabled={!expandedIds.size || isAnyBulkSending}
               >
                 Collapse All
               </Button>
@@ -1265,6 +1495,7 @@ const StudentTotalDueReport = () => {
                 placeholder="Name / Admission No..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
+                disabled={isAnyBulkSending}
               />
             </InputGroup>
 
@@ -1273,6 +1504,7 @@ const StudentTotalDueReport = () => {
               value={classFilter}
               onChange={(e) => setClassFilter(e.target.value)}
               style={{ minWidth: 170 }}
+              disabled={isAnyBulkSending}
             >
               <option value="all">All Classes</option>
               {classOptions.map((cls) => (
@@ -1287,6 +1519,7 @@ const StudentTotalDueReport = () => {
               value={pendingFilter}
               onChange={(e) => setPendingFilter(e.target.value)}
               style={{ minWidth: 200 }}
+              disabled={isAnyBulkSending}
             >
               <option value="all">All (Pending + Clear)</option>
               <option value="pending">Only Pending Till Date</option>
@@ -1297,7 +1530,7 @@ const StudentTotalDueReport = () => {
               variant="outline-danger"
               size="sm"
               onClick={handleClearFilters}
-              disabled={waAllSending}
+              disabled={isAnyBulkSending}
             >
               Clear Filters
             </Button>
@@ -1306,10 +1539,33 @@ const StudentTotalDueReport = () => {
               variant="success"
               size="sm"
               onClick={exportToExcel}
-              disabled={waAllSending || !filteredStudents.length}
+              disabled={isAnyBulkSending || !filteredStudents.length}
             >
               Excel
             </Button>
+
+            <div className="d-flex flex-column align-items-end">
+              <Button
+                variant="outline-primary"
+                size="sm"
+                onClick={sendAppFeeReminderToAllPending}
+                disabled={pushAllSending || !filteredStudents.length}
+              >
+                {pushAllSending ? (
+                  <>
+                    <Spinner animation="border" size="sm" className="me-2" />
+                    Sending {pushAllProgress.done}/{pushAllProgress.total}
+                  </>
+                ) : (
+                  "App Notify All (Pending)"
+                )}
+              </Button>
+              {pushAllSending && (
+                <div className="small text-muted mt-1">
+                  Failed: {pushAllProgress.failed}
+                </div>
+              )}
+            </div>
 
             <div className="d-flex flex-column align-items-end">
               <Button
@@ -1340,6 +1596,7 @@ const StudentTotalDueReport = () => {
           <span>• “Due Till Date” means installment due date ≤ selected Till Date.</span>
           <span>• Upcoming means pending but due date is after Till Date.</span>
           <span>• WhatsApp uses selected Till Date + max previous due date (≤ Till Date).</span>
+          <span>• App Notify sends a push reminder with direct payment flow.</span>
         </div>
       </div>
 
@@ -1362,7 +1619,7 @@ const StudentTotalDueReport = () => {
                 <th className="text-end">Total Due Till Date</th>
                 <th className="text-end">Total Due (All Heads)</th>
                 <th style={{ width: "95px" }}>Details</th>
-                <th style={{ width: "210px" }}>WhatsApp</th>
+                <th style={{ width: "250px" }}>Actions</th>
               </tr>
             </thead>
 
@@ -1375,6 +1632,7 @@ const StudentTotalDueReport = () => {
 
                 const hasPending = Number(stu.totalDueTillDate || 0) > 0;
                 const isSending = waSending.has(stu.id);
+                const isPushSending = pushSending.has(stu.id);
 
                 const recipient = waRecipientByStudent?.[stu.id] || "father";
                 const fatherOk = !!digitsOnly(stu.fatherPhone);
@@ -1453,6 +1711,39 @@ const StudentTotalDueReport = () => {
 
                       <td className="text-center">
                         <div className="d-flex flex-column align-items-center gap-1">
+                          <OverlayTrigger
+                            placement="top"
+                            overlay={
+                              <Tooltip>
+                                {hasPending
+                                  ? "Send app fee reminder with payment flow"
+                                  : "No due till date for this student"}
+                              </Tooltip>
+                            }
+                          >
+                            <span className="d-inline-block">
+                              <Button
+                                size="sm"
+                                variant="outline-primary"
+                                disabled={!hasPending || isPushSending || pushAllSending}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  sendAppFeeReminder(stu);
+                                }}
+                                style={{ minWidth: 110 }}
+                              >
+                                {isPushSending ? (
+                                  <>
+                                    <Spinner animation="border" size="sm" className="me-2" />
+                                    Sending
+                                  </>
+                                ) : (
+                                  "App Notify"
+                                )}
+                              </Button>
+                            </span>
+                          </OverlayTrigger>
+
                           <div
                             className="d-flex gap-1"
                             onClick={(e) => e.stopPropagation()}
@@ -1529,7 +1820,7 @@ const StudentTotalDueReport = () => {
                                   e.stopPropagation();
                                   sendWhatsAppReminder(stu, recipient);
                                 }}
-                                style={{ minWidth: 100 }}
+                                style={{ minWidth: 110 }}
                               >
                                 {isSending ? (
                                   <>

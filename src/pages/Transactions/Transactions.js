@@ -540,46 +540,69 @@ const hasModeExtraInfo = (details, mode) =>
       String(details?.bank_name || details?.BankName || "").trim()
   );
 
+const pad2 = (n) => String(n).padStart(2, "0");
+
 const normalizeDateInput = (value) => {
   if (!value) return "";
+
   const raw = String(value).trim();
+  if (!raw) return "";
+
   if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+
+  const dmy = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (dmy) return `${dmy[3]}-${dmy[2]}-${dmy[1]}`;
 
   const parsed = new Date(raw);
   if (!Number.isNaN(parsed.getTime())) {
-    return parsed.toISOString().slice(0, 10);
+    return `${parsed.getFullYear()}-${pad2(parsed.getMonth() + 1)}-${pad2(parsed.getDate())}`;
   }
 
-  const m = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-  if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+  const ymd = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (ymd) return `${ymd[1]}-${ymd[2]}-${ymd[3]}`;
 
   return "";
 };
 
+const formatDisplayDate = (value) => {
+  if (!value) return "—";
+  const raw = String(value).trim();
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(raw)) return raw;
+
+  const normalized = normalizeDateInput(value);
+  if (!normalized) return "—";
+
+  const [yyyy, mm, dd] = normalized.split("-");
+  return `${dd}/${mm}/${yyyy}`;
+};
+
+const toDisplayDateInput = (value) => {
+  if (!value) return "";
+  const raw = String(value).trim();
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(raw)) return raw;
+  const normalized = normalizeDateInput(value);
+  if (!normalized) return raw;
+  const [yyyy, mm, dd] = normalized.split("-");
+  return `${dd}/${mm}/${yyyy}`;
+};
+
 const getTodayDateInput = () => {
   const now = new Date();
-  const local = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
-  return local.toISOString().slice(0, 10);
+  return `${pad2(now.getDate())}/${pad2(now.getMonth() + 1)}/${now.getFullYear()}`;
 };
 
 const toTransactionDatePayload = (value) => {
   const normalized = normalizeDateInput(value);
-  return normalized ? `${normalized}T00:00:00` : new Date().toISOString();
+  return normalized ? `${normalized}T12:00:00` : new Date().toISOString();
 };
 
-const formatTransactionDateTime = (value) => {
-  if (!value) return "—";
-  const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime()) ? String(value) : parsed.toLocaleString();
-};
+const formatTransactionDateTime = (value) => formatDisplayDate(value);
 
-const formatTransactionDateOnly = (value) => {
-  if (!value) return "—";
-  const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime())
-    ? normalizeDateInput(value) || String(value)
-    : parsed.toLocaleDateString();
-};
+const formatTransactionDateOnly = (value) => formatDisplayDate(value);
+
+const zeroAsBlank = (value) => (Number(value || 0) === 0 ? "" : value);
+
+const parseNumberInput = (value) => (value === "" ? 0 : parseFloat(value) || 0);
 
 const validateModePopupInfo = (details, mode) => {
   if (
@@ -622,7 +645,7 @@ const buildPaymentDetailsState = (details, mode) => ({
     ? String(details?.cheque_no || details?.ChequeNumber || "").trim()
     : "",
   cheque_date: mode?.requires_cheque_date
-    ? normalizeDateInput(details?.cheque_date || details?.ChequeDate)
+    ? toDisplayDateInput(details?.cheque_date || details?.ChequeDate)
     : "",
   Transaction_ID: mode?.requires_reference_no
     ? String(details?.Transaction_ID || details?.reference_no || "").trim()
@@ -635,7 +658,7 @@ const buildPaymentDetailsState = (details, mode) => ({
     ? String(details?.ChequeNumber || details?.cheque_no || "").trim()
     : "",
   ChequeDate: mode?.requires_cheque_date
-    ? normalizeDateInput(details?.ChequeDate || details?.cheque_date)
+    ? toDisplayDateInput(details?.ChequeDate || details?.cheque_date)
     : "",
 });
 
@@ -647,7 +670,7 @@ const formatModeDetailsSummary = (details, mode, bankAccounts = []) => {
   }
 
   if (mode?.requires_cheque_date && String(details?.cheque_date || details?.ChequeDate || "").trim()) {
-    parts.push(normalizeDateInput(details?.cheque_date || details?.ChequeDate));
+    parts.push(formatDisplayDate(details?.cheque_date || details?.ChequeDate));
   }
 
   if (String(details?.bank_name || details?.BankName || "").trim()) {
@@ -1841,9 +1864,19 @@ const Transactions = () => {
     try {
       const res = await api.get("/fee-headings");
       const list = Array.isArray(res.data) ? res.data : res.data?.data || [];
-      const hit = list.find(
-        (h) => String(h.fee_heading).toLowerCase() === "previous balance"
-      );
+      const hit = list.find((h) => {
+        const label = String(
+          h?.fee_heading ??
+            h?.Fee_Heading_Name ??
+            h?.name ??
+            h?.label ??
+            ""
+        )
+          .trim()
+          .toLowerCase();
+
+        return label === "previous balance" || label === "opening balance";
+      });
       if (hit) {
         setPrevBalanceHeadId(hit.id);
         return hit.id;
@@ -2321,18 +2354,34 @@ const Transactions = () => {
       try {
         const headId = await ensurePrevBalanceHeadId();
         const backendPreviousBalance = Number(
-          feeResponse?.data?.previous_balance_due || 0
+          feeResponse?.data?.previous_balance_due ?? 0
         );
+        const resolvedPreviousBalance =
+          backendPreviousBalance > 0
+            ? backendPreviousBalance
+            : await fetchOpeningBalanceOutstanding(studentId, selectedSession);
 
-        setOpeningBalanceDue(backendPreviousBalance || 0);
+        setOpeningBalanceDue(resolvedPreviousBalance || 0);
 
-        if (headId && backendPreviousBalance > 0) {
+        const alreadyHasOpeningRow = feeDetails.some((row) => {
+          const rowName = String(row?.Fee_Heading_Name || "")
+            .trim()
+            .toLowerCase();
+          return (
+            row?.isOpeningBalance === true ||
+            rowName === "previous balance" ||
+            rowName === "opening balance" ||
+            (headId && Number(row?.Fee_Head || 0) === Number(headId))
+          );
+        });
+
+        if (headId && resolvedPreviousBalance > 0 && !alreadyHasOpeningRow) {
           const openingRow = {
             isOpeningBalance: true,
             Fee_Head: headId,
             Fee_Heading_Name: "Previous Balance",
-            Original_Fee_Due: backendPreviousBalance,
-            Fee_Due: backendPreviousBalance,
+            Original_Fee_Due: resolvedPreviousBalance,
+            Fee_Due: resolvedPreviousBalance,
             Fee_Recieved: 0,
             Concession: 0,
             fineAmount: 0,
@@ -3015,11 +3064,44 @@ const Transactions = () => {
   );
 }, [selectedSession]);
 
+  const paymentModeCollections = useMemo(() => {
+    const rows = Array.isArray(daySummary?.paymentSummary)
+      ? daySummary.paymentSummary
+      : [];
+
+    return rows.map((p, index) => {
+      const rawMode = firstNonEmpty(
+        p?.PaymentMode,
+        p?.paymentMode,
+        p?.payment_mode,
+        p?.Mode,
+        p?.mode,
+        p?.name,
+        p?.label
+      );
+
+      return {
+        key: firstNonEmpty(rawMode, `mode-${index}`),
+        PaymentMode: getPaymentModeLabel(rawMode, transactionModes),
+        TotalAmountCollected:
+          Number(
+            p?.TotalAmountCollected ??
+              p?.totalAmountCollected ??
+              p?.total_amount_collected ??
+              p?.AmountCollected ??
+              p?.amountCollected ??
+              p?.amount ??
+              0
+          ) || 0,
+      };
+    });
+  }, [daySummary?.paymentSummary, transactionModes]);
+
   const cashCollection = useMemo(() => {
-    return (daySummary.paymentSummary || [])
-      .filter((p) => p.PaymentMode === "Cash")
-      .reduce((acc, p) => acc + parseFloat(p.TotalAmountCollected || 0), 0);
-  }, [daySummary.paymentSummary]);
+    return paymentModeCollections
+      .filter((p) => String(p?.PaymentMode || "").trim().toLowerCase() === "cash")
+      .reduce((acc, p) => acc + Number(p?.TotalAmountCollected || 0), 0);
+  }, [paymentModeCollections]);
 
   const totalVanConcessionDay = useMemo(
     () => transactions.reduce((sum, t) => sum + (t.Van_Fee_Concession || 0), 0),
@@ -3127,15 +3209,15 @@ const Transactions = () => {
       )}
 
       <Row className="mb-4 g-3">
-        {(daySummary.paymentSummary || []).map((p) => (
-          <Col md={3} key={p.PaymentMode}>
+        {paymentModeCollections.map((p) => (
+          <Col md={3} key={p.key}>
             <Card className="shadow-sm border-0 h-100">
               <Card.Body className="text-center">
                 <div className="small text-uppercase text-muted mb-1">
-                  {`${getPaymentModeLabel(p.PaymentMode, transactionModes)} Collection`}
+                  {`${p.PaymentMode} Collection`}
                 </div>
                 <div className="fs-4 fw-bold">
-                  {formatINR(parseFloat(p.TotalAmountCollected || 0))}
+                  {formatINR(Number(p.TotalAmountCollected || 0))}
                 </div>
               </Card.Body>
             </Card>
@@ -3205,7 +3287,7 @@ const Transactions = () => {
               <th>Slip ID</th>
               <th>Adm. No.</th>
               <th>Class</th>
-              <th>Date & Time</th>
+              <th>Date</th>
               <th>Head</th>
               <th>Concession</th>
               <th>Fee Received</th>
@@ -3239,7 +3321,7 @@ const Transactions = () => {
                       <td>{t.Slip_ID}</td>
                       <td>{t.AdmissionNumber}</td>
                       <td>{t.Class?.class_name || "—"}</td>
-                      <td>{formatTransactionDateTime(t.DateOfTransaction)}</td>
+                      <td>{formatTransactionDateOnly(t.DateOfTransaction)}</td>
                       <td>{t.FeeHeading?.fee_heading || "—"}</td>
                       <td>{formatINR(t.Concession)}</td>
                       <td>{formatINR(t.Fee_Recieved)}</td>
@@ -3279,12 +3361,12 @@ const Transactions = () => {
                               reference_no: t.reference_no || t.Transaction_ID || "",
                               bank_name: t.bank_name || t.BankName || "",
                               cheque_no: t.cheque_no || t.ChequeNumber || "",
-                              cheque_date: normalizeDateInput(
+                              cheque_date: toDisplayDateInput(
                                 t.cheque_date || t.ChequeDate
                               ),
                               Transaction_ID: t.reference_no || t.Transaction_ID || "",
                               ChequeNumber: t.cheque_no || t.ChequeNumber || "",
-                              ChequeDate: normalizeDateInput(
+                              ChequeDate: toDisplayDateInput(
                                 t.cheque_date || t.ChequeDate
                               ),
                               BankName: t.bank_name || t.BankName || "",
@@ -3292,7 +3374,7 @@ const Transactions = () => {
                               StudentName: t.Student?.name || "—",
                               AdmissionNumber: t.AdmissionNumber,
                               ClassName: t.Class?.class_name || "—",
-                              DateOfTransaction: normalizeDateInput(t.DateOfTransaction),
+                              DateOfTransaction: toDisplayDateInput(t.DateOfTransaction),
                               session_id: t.session_id ?? null,
                               Remarks: t.Remarks || "",
                             });
@@ -4049,7 +4131,9 @@ const Transactions = () => {
                             </Button>
                           </div>
                           <Form.Control
-                            type="date"
+                            type="text"
+                            inputMode="numeric"
+                            placeholder="dd/mm/yyyy"
                             value={transactionDate}
                             onChange={(e) => setTransactionDate(e.target.value)}
                           />
@@ -4863,8 +4947,10 @@ const Transactions = () => {
                       <Form.Group>
                         <Form.Label>Transaction Date</Form.Label>
                         <Form.Control
-                          type="date"
-                          value={normalizeDateInput(editingTransaction?.DateOfTransaction)}
+                          type="text"
+                          inputMode="numeric"
+                          placeholder="dd/mm/yyyy"
+                          value={editingTransaction?.DateOfTransaction || ""}
                           onChange={(e) =>
                             setEditingTransaction((prev) => ({
                               ...prev,
@@ -4935,11 +5021,11 @@ const Transactions = () => {
                         <Form.Label>Fee Received</Form.Label>
                         <Form.Control
                           type="number"
-                          value={editingTransaction?.Fee_Recieved ?? 0}
+                          value={zeroAsBlank(editingTransaction?.Fee_Recieved)}
                           onChange={(e) =>
                             setEditingTransaction((prev) => ({
                               ...prev,
-                              Fee_Recieved: parseFloat(e.target.value) || 0,
+                              Fee_Recieved: parseNumberInput(e.target.value),
                             }))
                           }
                         />
@@ -4951,11 +5037,11 @@ const Transactions = () => {
                         <Form.Label>Concession</Form.Label>
                         <Form.Control
                           type="number"
-                          value={editingTransaction?.Concession ?? 0}
+                          value={zeroAsBlank(editingTransaction?.Concession)}
                           onChange={(e) =>
                             setEditingTransaction((prev) => ({
                               ...prev,
-                              Concession: parseFloat(e.target.value) || 0,
+                              Concession: parseNumberInput(e.target.value),
                             }))
                           }
                         />
@@ -4967,11 +5053,11 @@ const Transactions = () => {
                         <Form.Label>Van Fee</Form.Label>
                         <Form.Control
                           type="number"
-                          value={editingTransaction?.VanFee ?? 0}
+                          value={zeroAsBlank(editingTransaction?.VanFee)}
                           onChange={(e) =>
                             setEditingTransaction((prev) => ({
                               ...prev,
-                              VanFee: parseFloat(e.target.value) || 0,
+                              VanFee: parseNumberInput(e.target.value),
                             }))
                           }
                         />
@@ -4983,11 +5069,11 @@ const Transactions = () => {
                         <Form.Label>Van Fee Concession</Form.Label>
                         <Form.Control
                           type="number"
-                          value={editingTransaction?.Van_Fee_Concession ?? 0}
+                          value={zeroAsBlank(editingTransaction?.Van_Fee_Concession)}
                           onChange={(e) =>
                             setEditingTransaction((prev) => ({
                               ...prev,
-                              Van_Fee_Concession: parseFloat(e.target.value) || 0,
+                              Van_Fee_Concession: parseNumberInput(e.target.value),
                             }))
                           }
                         />
@@ -4999,11 +5085,11 @@ const Transactions = () => {
                         <Form.Label>Fine</Form.Label>
                         <Form.Control
                           type="number"
-                          value={editingTransaction?.Fine_Amount ?? 0}
+                          value={zeroAsBlank(editingTransaction?.Fine_Amount)}
                           onChange={(e) =>
                             setEditingTransaction((prev) => ({
                               ...prev,
-                              Fine_Amount: parseFloat(e.target.value) || 0,
+                              Fine_Amount: parseNumberInput(e.target.value),
                             }))
                           }
                         />
@@ -5277,7 +5363,9 @@ const Transactions = () => {
                 <Form.Group>
                   <Form.Label>Cheque Date</Form.Label>
                   <Form.Control
-                    type="date"
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="dd/mm/yyyy"
                     value={
                       editingTransaction
                         ? editingTransaction?.cheque_date || editingTransaction?.ChequeDate || ""

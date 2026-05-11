@@ -1867,15 +1867,48 @@ const Students = () => {
     );
   };
 
-  const filteredStudents = useMemo(
-    () =>
-      students.filter((stu) => {
-        const q = search.trim().toLowerCase();
+  const normalizeSearchText = (value) =>
+    String(value || "")
+      .toLowerCase()
+      .replace(/\s+/g, "")
+      .replace(/[^a-z0-9]/g, "");
+
+  const compareAdmissionNumberAsc = (a, b) => {
+    const aVal = String(a?.admission_number || "").trim();
+    const bVal = String(b?.admission_number || "").trim();
+
+    const aNum = /^\d+$/.test(aVal) ? Number(aVal) : null;
+    const bNum = /^\d+$/.test(bVal) ? Number(bVal) : null;
+
+    if (aNum !== null && bNum !== null) return aNum - bNum;
+    if (aNum !== null) return -1;
+    if (bNum !== null) return 1;
+
+    return aVal.localeCompare(bVal, undefined, {
+      numeric: true,
+      sensitivity: "base",
+    });
+  };
+
+  const filteredStudents = useMemo(() => {
+    const q = normalizeSearchText(search);
+
+    return students
+      .filter((stu) => {
+        const searchableFields = [
+          stu.admission_number,
+          stu.name,
+          stu.father_name,
+          stu.mother_name,
+          stu.aadhaar_number,
+          stu.class_name,
+          stu.section_name,
+          stu.roll_number,
+        ];
+
         const textMatch =
-          !q ||
-          [stu.name, stu.father_name, stu.aadhaar_number, stu.admission_number].some((v) =>
-            (v || "").toString().toLowerCase().includes(q)
-          );
+          !q || searchableFields.some((v) => normalizeSearchText(v).includes(q));
+
         const classMatch = !selectedClass || String(stu.class_id) === String(selectedClass);
         const statusMatch = !selectedStatus || stu.status === selectedStatus;
         const hasSibling = studentHasSibling(stu);
@@ -1884,9 +1917,10 @@ const Students = () => {
         if (hasSiblingFilter === "no") siblingMatch = !hasSibling;
 
         return textMatch && classMatch && statusMatch && siblingMatch;
-      }),
-    [students, search, selectedClass, selectedStatus, hasSiblingFilter]
-  );
+      })
+      .slice()
+      .sort(compareAdmissionNumberAsc);
+  }, [students, search, selectedClass, selectedStatus, hasSiblingFilter]);
 
   const totalCount = filteredStudents.length;
   const enabledCount = filteredStudents.filter((s) => s.status === "enabled").length;
@@ -2313,7 +2347,7 @@ const Students = () => {
                 type="text"
                 className="form-control form-control-sm"
                 style={{ maxWidth: 360, minWidth: 210, borderRadius: 12 }}
-                placeholder="Search name / admission / Aadhaar..."
+                placeholder="Search admission no / name / parent / Aadhaar..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
@@ -2428,7 +2462,6 @@ const Students = () => {
                 {filteredStudents.length ? (
                   filteredStudents
                     .slice()
-                    .reverse()
                     .map((stu, idx) => {
                       const combinedSiblings = [];
                       for (let i = 1; i <= 4; i++) {
