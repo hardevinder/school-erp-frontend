@@ -35,6 +35,7 @@ import Transportation from "./pages/Transportation";
 // ✅ NEW: Transport pages
 import Buses from "./pages/Buses";
 import StudentTransportAssignments from "./pages/StudentTransportAssignments";
+import StudentTransportFeeHeadAmounts from "./pages/StudentTransportFeeHeadAmounts";
 import ModeOfTransactions from "./pages/ModeOfTransactions";
 import SchoolBankAccounts from "./pages/SchoolBankAccounts";
 
@@ -43,6 +44,7 @@ import CancelledTransactions from "./pages/Transactions/CancelledTransactions";
 import Schools from "./pages/Schools";
 import Concessions from "./pages/Concessions";
 import StudentDueTable from "./pages/StudentDueTable";
+import StudentFeeHeadCollectionReport from "./pages/StudentFeeHeadCollectionReport";
 import FeeCategory from "./pages/FeeCategory";
 import DayWiseReport from "./pages/DayWiseReport";
 import DayWiseCategoryReports from "./pages/DayWiseCategoryReports";
@@ -127,6 +129,7 @@ import UserTracking from "./pages/UserTracking";
 import Houses from "./pages/Houses";
 import StudentFeeReport from "./pages/StudentFeeReport";
 import RolePermissions from "./pages/RolePermissions";
+import Messages from "./pages/Messages";
 
 // ✅ NEW pages
 import TransferCertificates from "./pages/TransferCertificates";
@@ -381,6 +384,29 @@ function App() {
         <Route element={<AppLayout key={activeAdmission} />}>
           <Route path="/dashboard" element={<RoleAwareDashboard />} />
           <Route path="/edit-profile" element={<EditProfile />} />
+
+          {/* ✅ Messages / Fee Reminder / Student-Teacher Chat */}
+          <Route
+            path="/messages"
+            element={
+              <RequireRole
+                roles={[
+                  "superadmin",
+                  "admin",
+                  "academic_coordinator",
+                  "hr",
+                  "teacher",
+                  "accounts",
+                  "accountant",
+                  "student",
+                  "parent",
+                ]}
+              >
+                <Messages />
+              </RequireRole>
+            }
+          />
+          <Route path="/admin/messages" element={<Navigate to="/messages" replace />} />
 
           {/* ✅ NEW: Transport Dashboard (direct route) */}
           <Route
@@ -746,6 +772,15 @@ function App() {
             />
 
           <Route path="/student-due" element={<StudentDueTable />} />
+          <Route
+                path="/student-fee-head-collection"
+                element={
+                  <RequireRole roles={["accounts", "admin", "superadmin"]}>
+                    <StudentFeeHeadCollectionReport />
+                  </RequireRole>
+                }
+              />
+          
           <Route path="/opening-balances" element={<OpeningBalances />} />
           <Route path="/reports/day-wise" element={<DayWiseReport />} />
           <Route path="/reports/student/:admissionNumber" element={<StudentFeeReport />} />
@@ -800,6 +835,15 @@ function App() {
               </RequireRole>
             }
           />
+
+          <Route
+              path="/student-transport-fee-head-amounts"
+              element={
+                <RequireRole roles={["transport", "admin", "superadmin", "accounts"]}>
+                  <StudentTransportFeeHeadAmounts />
+                </RequireRole>
+              }
+            />
 
           {/* Circulars */}
           <Route path="/combined-circulars" element={<CombinedCirculars />} />

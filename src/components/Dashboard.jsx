@@ -780,6 +780,14 @@ const Dashboard = () => {
       gradient: "linear-gradient(135deg, #22c55e, #16a34a)",
     },
     {
+      label: "Fee Head Collection",
+      sub: "Student collection matrix",
+      icon: "bi-table",
+      href: "/student-fee-head-collection",
+      gradient: "linear-gradient(135deg, #7c3aed, #4f46e5)",
+      tag: "NEW",
+    },
+    {
       label: "Pending Due",
       sub: "School Summary",
       icon: "bi-list-check",
@@ -813,6 +821,14 @@ const Dashboard = () => {
       icon: "bi-person-vcard",
       href: "/student-id-cards",
       gradient: "linear-gradient(135deg, #14b8a6, #0f766e)",
+      tag: "NEW",
+    },
+    {
+      label: "Messages",
+      sub: "Fee reminders & chat",
+      icon: "bi-chat-dots",
+      href: "/messages",
+      gradient: "linear-gradient(135deg, #2563eb, #7c3aed)",
       tag: "NEW",
     },
     {
@@ -1033,6 +1049,14 @@ const Dashboard = () => {
                   Bulk Concessions
                 </button>
                 <button
+                  className="btn btn-sm btn-outline-secondary"
+                  onClick={() => navigate("/student-fee-head-collection")}
+                  title="Open Fee Head Collection Report"
+                >
+                  <i className="bi bi-table me-1" />
+                  Fee Head Collection
+                </button>
+                <button
                   className="btn btn-sm btn-outline-primary"
                   onClick={() => navigate("/reports/student-summary")}
                   title="Open House Summary"
@@ -1047,6 +1071,15 @@ const Dashboard = () => {
                 >
                   <i className="bi bi-person-vcard me-1" />
                   Student I-Cards
+                </button>
+
+                <button
+                  className="btn btn-sm btn-outline-primary"
+                  onClick={() => navigate("/messages")}
+                  title="Open Messages"
+                >
+                  <i className="bi bi-chat-dots me-1" />
+                  Messages
                 </button>
 
                 {canManagePermissions && (

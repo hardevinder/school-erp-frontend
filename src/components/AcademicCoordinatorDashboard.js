@@ -4,6 +4,7 @@
 // ✅ Adds "Syllabus Approval" quick card
 // ✅ Adds "Admission Syllabus Assignee" quick card
 // ✅ Adds Academic Calendar quick card
+// ✅ Adds Messages quick card
 // ✅ Keeps attendance dashboard logic intact
 
 import React, { useEffect, useMemo, useState, useCallback } from "react";
@@ -269,6 +270,7 @@ export default function Dashboard() {
 
   // ---- navigation helpers ---------------------------------------------------
   const openAcademicCalendar = () => navigate("/academic-calendar");
+  const openMessages = () => navigate("/messages");
   const openSyllabusTeacherAssignment = () => navigate("/syllabus-teacher-assignment");
   const openTeacherAssignment = () => navigate("/teacher-assignment");
   const openSyllabusApproval = () => navigate("/syllabus-approval");
@@ -464,6 +466,40 @@ export default function Dashboard() {
                     title="Reload"
                   >
                     {loadingCalendar ? "…" : "⟳"}
+                  </button>
+                </div>
+              </div>
+            </CardShell>
+          </div>
+
+          {/* Messages */}
+          <div className="col-12 col-md-6 col-xl-3">
+            <CardShell
+              style={{
+                background: "linear-gradient(135deg, #eff6ff, #f5f3ff)",
+                border: "1px solid #bfdbfe",
+              }}
+            >
+              <div className="card-body quick-card-body">
+                <div className="quick-icon quick-indigo">
+                  <i className="bi bi-chat-dots" />
+                </div>
+
+                <div className="text-uppercase small text-muted mb-1">Communication</div>
+                <div className="fw-semibold fs-5">Messages</div>
+
+                <div className="text-muted small mt-1">
+                  Open student/parent messages, fee reminders, and replies from one place.
+                </div>
+
+                <div className="d-flex gap-2 flex-wrap mt-2">
+                  <span className="badge bg-light text-dark border">Fee Reminders</span>
+                  <span className="badge bg-light text-dark border">Replies</span>
+                </div>
+
+                <div className="d-flex gap-2 mt-3">
+                  <button className="btn btn-primary w-100" onClick={openMessages}>
+                    Open
                   </button>
                 </div>
               </div>
@@ -815,6 +851,11 @@ export default function Dashboard() {
         .quick-purple{
           background: linear-gradient(135deg, #ede9fe, #ddd6fe);
           color: #6d28d9;
+        }
+
+        .quick-indigo{
+          background: linear-gradient(135deg, #dbeafe, #ddd6fe);
+          color: #4f46e5;
         }
 
         .metric-card{

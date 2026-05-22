@@ -474,6 +474,14 @@ export default function TransportDashboard() {
         show: isTransport || isAdmin || isSuperadmin || isAccounts,
       },
       {
+        label: "Transport Fee Overrides",
+        icon: "bi-cash-coin",
+        href: "/student-transport-fee-head-amounts",
+        gradient: "linear-gradient(135deg, #8b5cf6, #6d28d9)",
+        desc: "Student-wise fee head transport override",
+        show: isTransport || isAdmin || isSuperadmin || isAccounts,
+      },
+      {
         label: "Drivers / Conductors",
         icon: "bi-person-badge",
         href: "/transport-staff",
@@ -533,6 +541,14 @@ export default function TransportDashboard() {
       { title: "Buses w/ Conductor", value: busKpis.withConductor, variant: "dark", to: "/buses", show: isTransport || isAdmin || isSuperadmin || isAccounts },
 
       { title: "Students w/ Transport", value: studentsWithTransportCount, variant: "dark", to: "/student-transport-assignments", show: isTransport || isAdmin || isSuperadmin || isAccounts },
+
+      {
+        title: "Fee Head Overrides",
+        value: "Open",
+        variant: "secondary",
+        to: "/student-transport-fee-head-amounts",
+        show: isTransport || isAdmin || isSuperadmin || isAccounts,
+      },
 
       { title: "Drivers", value: staffCounts.drivers, variant: "danger", to: "/transport-staff", show: isTransport || isAdmin || isSuperadmin || isAccounts },
       { title: "Conductors", value: staffCounts.conductors, variant: "danger", to: "/transport-staff", show: isTransport || isAdmin || isSuperadmin || isAccounts },
@@ -761,6 +777,9 @@ export default function TransportDashboard() {
                     </button>
                     <Link className="btn btn-sm btn-outline-primary" to="/student-transport-assignments">
                       Assignments
+                    </Link>
+                    <Link className="btn btn-sm btn-outline-dark" to="/student-transport-fee-head-amounts">
+                      Fee Overrides
                     </Link>
                     <Link className="btn btn-sm btn-outline-success" to="/buses">
                       Buses

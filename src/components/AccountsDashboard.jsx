@@ -39,6 +39,14 @@ const primaryTiles = [
     gradient: "linear-gradient(135deg, #8b5cf6, #7c3aed)",
     tag: "NEW",
   },
+  {
+    label: "Messages",
+    sub: "Fee reminders & replies",
+    icon: "bi-chat-dots",
+    href: "/messages",
+    gradient: "linear-gradient(135deg, #2563eb, #7c3aed)",
+    tag: "NEW",
+  },
 ];
 
 const reportsTiles = [
@@ -55,6 +63,14 @@ const reportsTiles = [
     icon: "bi-file-earmark-bar-graph",
     href: "/reports/concession",
     gradient: "linear-gradient(135deg, #a855f7, #7c3aed)",
+  },
+  {
+    label: "Fee Head Collection",
+    sub: "Student collection matrix",
+    icon: "bi-table",
+    href: "/student-fee-head-collection",
+    gradient: "linear-gradient(135deg, #14b8a6, #0f766e)",
+    tag: "NEW",
   },
   {
     label: "Transport Fee",
@@ -181,7 +197,7 @@ export default function AccountsDashboard() {
                 <h2 className="hero-title mb-1">Quick Actions</h2>
                 <p className="hero-sub mb-0">
                   Clean, fast access to fee collection, due reports, concessions,
-                  and daily accounts work.
+                  fee reminders, messages, and daily accounts work.
                 </p>
               </div>
 
@@ -197,6 +213,22 @@ export default function AccountsDashboard() {
                 >
                   <i className="bi bi-percent me-2" />
                   Bulk Concessions
+                </Link>
+
+                <Link
+                  to="/student-fee-head-collection"
+                  className="hero-btn hero-btn-tertiary"
+                >
+                  <i className="bi bi-table me-2" />
+                  Fee Head Collection
+                </Link>
+
+                <Link
+                  to="/messages"
+                  className="hero-btn hero-btn-messages"
+                >
+                  <i className="bi bi-chat-dots me-2" />
+                  Messages
                 </Link>
               </div>
             </div>
@@ -217,6 +249,10 @@ export default function AccountsDashboard() {
               <div className="hero-stat">
                 <span className="dot dot-orange" />
                 Setup
+              </div>
+              <div className="hero-stat">
+                <span className="dot dot-indigo" />
+                Messages
               </div>
             </div>
           </div>
@@ -341,6 +377,16 @@ export default function AccountsDashboard() {
             background: linear-gradient(135deg, #8b5cf6, #7c3aed);
           }
 
+          .hero-btn-tertiary {
+            color: #fff;
+            background: linear-gradient(135deg, #14b8a6, #0f766e);
+          }
+
+          .hero-btn-messages {
+            color: #fff;
+            background: linear-gradient(135deg, #2563eb, #7c3aed);
+          }
+
           .hero-stats {
             display: flex;
             flex-wrap: wrap;
@@ -371,6 +417,7 @@ export default function AccountsDashboard() {
           .dot-blue { background: #3b82f6; }
           .dot-purple { background: #8b5cf6; }
           .dot-orange { background: #f59e0b; }
+          .dot-indigo { background: #6366f1; }
 
           .section-head {
             display: flex;

@@ -78,9 +78,26 @@ const firstNonEmpty = (...vals) => {
   return "";
 };
 
+const hasValue = (value) =>
+  value !== "" && value !== null && value !== undefined;
+
+const isValidId = (value) =>
+  hasValue(value) && !Number.isNaN(Number(value));
+
+const firstValidId = (...values) => {
+  for (const value of values) {
+    if (isValidId(value)) return Number(value);
+  }
+  return null;
+};
+
 const normalizeClassRow = (x) => {
-  const id = Number(
-    x?.id ?? x?.class_id ?? x?.Class_ID ?? x?.classId ?? x?.Class?.id ?? 0
+  const id = firstValidId(
+    x?.id,
+    x?.class_id,
+    x?.Class_ID,
+    x?.classId,
+    x?.Class?.id
   );
   const name = firstNonEmpty(
     x?.class_name,
@@ -96,7 +113,7 @@ const normalizeClassRow = (x) => {
   );
   return {
     id,
-    class_name: name || (id ? `Class ${id}` : "—"),
+    class_name: name || (isValidId(id) ? `Class ${id}` : "—"),
   };
 };
 
@@ -171,6 +188,40 @@ const normalizeCustomFields = (s) => {
   return {};
 };
 
+const getStudentStatusInfo = (s = {}) => {
+  const rawStatus = firstNonEmpty(
+    s?.status,
+    s?.student_status,
+    s?.studentStatus,
+    s?.Student_Status,
+    s?.active_status,
+    s?.activeStatus
+  );
+
+  const normalizedStatus = String(rawStatus || "enabled").trim().toLowerCase();
+  const inactiveStatuses = [
+    "disabled",
+    "inactive",
+    "left",
+    "withdrawn",
+    "deactivated",
+    "deleted",
+  ];
+
+  const isInactive =
+    inactiveStatuses.includes(normalizedStatus) ||
+    s?.is_active === false ||
+    s?.isActive === false ||
+    s?.active === false ||
+    s?.enabled === false;
+
+  return {
+    status: isInactive ? "disabled" : normalizedStatus || "enabled",
+    isInactive,
+    label: isInactive ? "Inactive / Disabled" : "Active",
+  };
+};
+
 const normalizeStudentRow = (s) => {
   const id = Number(s?.id ?? s?.student_id ?? s?.Student_ID ?? 0);
 
@@ -238,12 +289,18 @@ const normalizeStudentRow = (s) => {
   );
 
   const custom_fields = normalizeCustomFields(s);
+  const statusInfo = getStudentStatusInfo(s);
 
   return {
     ...s,
     id,
     name,
     admission_number,
+    status: statusInfo.status,
+    student_status: statusInfo.status,
+    student_status_label: statusInfo.label,
+    is_student_inactive: statusInfo.isInactive,
+    isStudentInactive: statusInfo.isInactive,
     father_name: firstNonEmpty(
       s?.father_name,
       s?.Father_Name,
@@ -268,10 +325,10 @@ const normalizeStudentRow = (s) => {
 };
 
 const getClassLabelById = (classId, classes = []) => {
-  const id = Number(classId || 0);
-  if (!id) return "";
+  if (!isValidId(classId)) return "";
+  const id = Number(classId);
   const row = (Array.isArray(classes) ? classes : []).find(
-    (cls) => Number(cls?.id || 0) === id
+    (cls) => isValidId(cls?.id) && Number(cls.id) === id
   );
   return firstNonEmpty(
     row?.class_name,
@@ -283,10 +340,10 @@ const getClassLabelById = (classId, classes = []) => {
 };
 
 const getSectionLabelById = (sectionId, sections = []) => {
-  const id = Number(sectionId || 0);
-  if (!id) return "";
+  if (!isValidId(sectionId)) return "";
+  const id = Number(sectionId);
   const row = (Array.isArray(sections) ? sections : []).find(
-    (sec) => Number(sec?.id || 0) === id
+    (sec) => isValidId(sec?.id) && Number(sec.id) === id
   );
   return firstNonEmpty(
     row?.section_name,
@@ -902,7 +959,7 @@ const Transactions = () => {
         activeStudent?.Class?.class_name,
         activeStudent?.class_name,
         getClassLabelById(
-          activeStudent?.Class?.id || activeStudent?.class_id || selectedClass,
+          activeStudent?.Class?.id ?? activeStudent?.class_id ?? selectedClass,
           classes
         )
       ) || "—"
@@ -1287,8 +1344,8 @@ const Transactions = () => {
   const handlePickStudent = (s) => {
     if (!s) return;
     setModalError(null);
-    setSelectedClass(s.class_id || s.Class?.id || "");
-    setSelectedSection(s.section_id || s.Section?.id || "");
+    setSelectedClass(s.class_id ?? s.Class?.id ?? "");
+    setSelectedSection(s.section_id ?? s.Section?.id ?? "");
     setSelectedAdmissionStudent(s);
     setSelectedStudentInfo(s);
     setSbQuery(`${s.name} (${s.admission_number || "—"})`);
@@ -1297,7 +1354,7 @@ const Transactions = () => {
       setModalError("Please select an academic session before loading fee details.");
       return;
     }
-    fetchFeeHeadsForStudent(s.class_id || s.Class?.id, s.id, s);
+    fetchFeeHeadsForStudent(s.class_id ?? s.Class?.id, s.id, s);
   };
 
   const resolveStudentByToken = async (token) => {
@@ -1354,8 +1411,8 @@ const Transactions = () => {
         return;
       }
 
-      setSelectedClass(sibling.class_id || sibling.Class?.id || "");
-      setSelectedSection(sibling.section_id || sibling.Section?.id || "");
+      setSelectedClass(sibling.class_id ?? sibling.Class?.id ?? "");
+      setSelectedSection(sibling.section_id ?? sibling.Section?.id ?? "");
       setSelectedAdmissionStudent(sibling);
       setSelectedStudentInfo(sibling);
       setSbQuery(`${sibling.name} (${sibling.admission_number || "—"})`);
@@ -1814,7 +1871,7 @@ const Transactions = () => {
     try {
       const response = await api.get("/classes");
       const raw = asArray(response.data);
-      setClasses(raw.map(normalizeClassRow).filter((c) => c.id));
+      setClasses(raw.map(normalizeClassRow).filter((c) => isValidId(c.id)));
     } catch (error) {
       console.error("Error fetching classes:", error);
     }
@@ -1822,7 +1879,7 @@ const Transactions = () => {
 
   const fetchSections = async (classId = "") => {
     try {
-      const url = classId ? `/sections?class_id=${classId}` : `/sections`;
+      const url = hasValue(classId) ? `/sections?class_id=${classId}` : `/sections`;
       const res = await api.get(url);
       const raw = Array.isArray(res.data)
         ? res.data
@@ -1831,7 +1888,7 @@ const Transactions = () => {
         : Array.isArray(res.data?.sections)
         ? res.data.sections
         : [];
-      const list = raw.map(normalizeSectionRow).filter((s) => s.id);
+      const list = raw.map(normalizeSectionRow).filter((s) => isValidId(s.id));
       setSections(list);
     } catch (error) {
       console.error("Error fetching sections:", error);
@@ -1840,7 +1897,7 @@ const Transactions = () => {
   };
 
   const fetchStudentsByClassAndSection = useCallback(async () => {
-    if (!selectedClass || !selectedSection) {
+    if (!hasValue(selectedClass) || !hasValue(selectedSection)) {
       setStudents([]);
       return;
     }
@@ -2112,6 +2169,9 @@ const Transactions = () => {
             : historicalRouteId ?? currentRouteId ?? null;
         };
 
+        // IMPORTANT: Only use fields that are clearly transport/route fee fields.
+        // Do NOT use generic amount/price/fare here because those can be the
+        // normal academic fee amount and can wrongly appear as transport due.
         const feeDetailCost = pickNum(
           detail.transportCost,
           detail.TransportCost,
@@ -2121,10 +2181,7 @@ const Transactions = () => {
           detail.monthly_fee,
           detail.van_fee,
           detail.vanFee,
-          detail.transport_amount,
-          detail.amount,
-          detail.price,
-          detail.fare
+          detail.transport_amount
         );
 
         const routeId = inferredRouteIdForHead(headId);
@@ -2255,32 +2312,116 @@ const Transactions = () => {
             ? Number(transportItem.due ?? transportItem.FinalDue ?? 0)
             : Math.max(0, remainingBeforeFineFromServer + vanFineFromServer);
 
-        // let showVan;
-        // if (hasExistingTxnForStudent) {
-        //   showVan = Boolean(transportApplicable);
-        // } else {
-        //   const rid = inferredRouteIdForHead(headId);
-        //   showVan = Boolean(
-        //     transportApplicable &&
-        //       (transportItem ||
-        //         selectedRouteFee > 0 ||
-        //         rid ||
-        //         studentAssignedRouteId)
-        //   );
-        // }
-        let showVan = Boolean(transportApplicable);
+        const isRealRouteValue = (value) => {
+          const str = String(value ?? "").trim();
+          return (
+            str !== "" &&
+            str !== "0" &&
+            str.toLowerCase() !== "null" &&
+            str.toLowerCase() !== "undefined"
+          );
+        };
 
-        const vanFields = showVan
+        const currentRouteIdForStudent = normalizeRouteId(rawStudentAssignedRouteId);
+        const historicalRouteIdForHead = normalizeRouteId(lastRouteMap[headId]);
+
+        const hasCurrentTransportOptIn = Boolean(
+          currentRouteIdForStudent ||
+            isRealRouteValue(rawStudentAssignedRouteId) ||
+            isRealRouteValue(baseStudent?.transport_id) ||
+            isRealRouteValue(baseStudent?.route_id) ||
+            isRealRouteValue(baseStudent?.Route_Number) ||
+            isRealRouteValue(baseStudent?.Transportation?.id) ||
+            isRealRouteValue(studentRouteFromFeeDetails?.route_id)
+        );
+
+        const hasHistoricalTransportEvidence = Boolean(
+          historicalRouteIdForHead ||
+            isRealRouteValue(lastRouteMap[headId]) ||
+            Number(receivedFromServer || 0) > 0 ||
+            Number(concessionFromServer || 0) > 0 ||
+            Number(transportItem?.due || transportItem?.FinalDue || 0) > 0
+        );
+
+        const hasTransportDueItem = Boolean(
+          transportItem &&
+            (Number(transportItemCost || 0) > 0 ||
+              Number(transportItem?.due ?? transportItem?.FinalDue ?? 0) > 0 ||
+              Number(
+                transportItem?.remainingBeforeFine ??
+                  transportItem?.RemainingBeforeFine ??
+                  0
+              ) > 0 ||
+              Number(receivedFromServer || 0) > 0 ||
+              Number(concessionFromServer || 0) > 0 ||
+              Number(vanFineFromServer || 0) > 0 ||
+              isRealRouteValue(transportItem?.route_id) ||
+              isRealRouteValue(transportItem?.transportation_id) ||
+              isRealRouteValue(transportItem?.Route_Number))
+        );
+        const hasTransportPaymentHistory = Boolean(
+          Number(receivedFromServer || 0) > 0 ||
+            Number(concessionFromServer || 0) > 0
+        );
+
+        const hasRouteForSelectedSession = selectedSessionIsActive
+          ? hasCurrentTransportOptIn
+          : Boolean(hasHistoricalTransportEvidence || hasCurrentTransportOptIn);
+
+        const hasPositiveTransportCost =
+          Number(selectedRouteFee || 0) > 0 ||
+          Number(routeObjCost || 0) > 0 ||
+          Number(transportItemCost || 0) > 0 ||
+          Number(studentTransportCost || 0) > 0 ||
+          Number(serverCostVal || 0) > 0 ||
+          Number(feeDetailCost || 0) > 0 ||
+          Number(studentRouteFromFeeDetails?.route_cost || 0) > 0;
+
+        // Head-level rule:
+        // - If this fee head is NOT transport-enabled, hide Van Due / Van Cons / Van Pay.
+        // - If this fee head IS transport-enabled, keep Van Cons / Van Pay open even
+        //   when the student has not opted transport, so manual collection is possible.
+        // - Van Due is calculated only when the student actually has route evidence
+        //   for this session/history. Without route opt-in, Van Due must remain zero.
+        const canEditVanForHead = Boolean(transportApplicable);
+        const shouldShowTransportDue = Boolean(
+          transportApplicable &&
+            (hasTransportPaymentHistory ||
+              (hasRouteForSelectedSession && hasPositiveTransportCost))
+        );
+
+        let showVan = canEditVanForHead;
+
+        const effectiveRouteFee = shouldShowTransportDue ? selectedRouteFee : 0;
+        const effectiveReceivedVan = shouldShowTransportDue ? receivedFromServer : 0;
+        const effectiveVanConcession = shouldShowTransportDue ? concessionFromServer : 0;
+        const effectiveVanFine = shouldShowTransportDue ? vanFineFromServer : 0;
+        const effectiveRemainingBeforeFine = shouldShowTransportDue
+          ? Math.max(
+              0,
+              Number(effectiveRouteFee || 0) -
+                Number(effectiveReceivedVan || 0) -
+                Number(effectiveVanConcession || 0)
+            )
+          : 0;
+        const effectiveFinalDue = shouldShowTransportDue
+          ? Math.max(0, effectiveRemainingBeforeFine + effectiveVanFine)
+          : 0;
+
+        const vanFields = canEditVanForHead
           ? {
               VanFee: 0,
-              Van_Fee_Concession: concessionFromServer,
-              _vanFeeConcession: concessionFromServer,
-              _routeFee: selectedRouteFee,
-              _receivedVanFee: receivedFromServer,
-              Van_Fee_Remaining: remainingBeforeFineFromServer,
-              Van_Fee_Due: finalDue,
-              Van_Fine_Amount: vanFineFromServer,
-              SelectedRoute: inferredRouteIdForHead(headId),
+              Van_Fee_Concession: effectiveVanConcession,
+              _vanFeeConcession: effectiveVanConcession,
+              _routeFee: effectiveRouteFee,
+              _receivedVanFee: effectiveReceivedVan,
+              Van_Fee_Remaining: effectiveRemainingBeforeFine,
+              Van_Fee_Due: effectiveFinalDue,
+              Van_Fine_Amount: effectiveVanFine,
+              SelectedRoute: shouldShowTransportDue
+                ? inferredRouteIdForHead(headId)
+                : null,
+              HasTransportRouteDue: shouldShowTransportDue,
             }
           : {
               VanFee: 0,
@@ -2292,6 +2433,7 @@ const Transactions = () => {
               Van_Fee_Due: 0,
               Van_Fine_Amount: 0,
               SelectedRoute: null,
+              HasTransportRouteDue: false,
             };
 
         const baseRow = {
@@ -2311,23 +2453,29 @@ const Transactions = () => {
           ...vanFields,
         };
 
-        if (!hasExistingTxnForStudent && transportApplicable) {
+        if (!hasExistingTxnForStudent && transportApplicable && shouldShowTransportDue) {
           const hasGlobalCostSignal =
             Number(baseRow._routeFee) > 0 ||
-            serverTransportCostGlobal !== null ||
-            typeof serverCostPerHead !== "undefined" ||
+            Number(serverCostVal || 0) > 0 ||
             Number(routeObjCost) > 0 ||
+            Number(transportItemCost) > 0 ||
             Number(feeDetailCost) > 0 ||
             Number(studentTransportCost) > 0 ||
             Number(studentRouteFromFeeDetails?.route_cost || 0) > 0;
 
           const hasHeadSpecificItem = Boolean(transportDueMap[String(headId)]);
+          const hasStudentTransportEvidence = Boolean(
+            hasTransportPaymentHistory ||
+              (hasRouteForSelectedSession && hasPositiveTransportCost)
+          );
 
-          if (hasGlobalCostSignal && !hasHeadSpecificItem) {
+          if (hasGlobalCostSignal && hasStudentTransportEvidence && !hasHeadSpecificItem) {
             const fallbackCost = pickNum(
               baseRow._routeFee,
               studentTransportCost,
               routeObjCost,
+              transportItemCost,
+              serverCostVal,
               feeDetailCost,
               selectedRouteFee
             );
@@ -2344,6 +2492,7 @@ const Transactions = () => {
               Van_Fee_Remaining: remaining,
               Van_Fine_Amount: vanFine,
               Van_Fee_Due: Math.max(0, remaining + vanFine),
+              HasTransportRouteDue: true,
             };
           }
         }
@@ -2427,23 +2576,25 @@ const Transactions = () => {
           : {};
 
         const mergedClassId =
-          Number(normalizedFeeStudent?.Class?.id || normalizedFeeStudent?.class_id || 0) ||
-          Number(baseStudentFromAdmission?.Class?.id || baseStudentFromAdmission?.class_id || 0) ||
-          Number(safePreviousStudentData?.Class?.id || safePreviousStudentData?.class_id || 0) ||
-          Number(_classId || 0) ||
-          0;
+          firstValidId(
+            normalizedFeeStudent?.Class?.id,
+            normalizedFeeStudent?.class_id,
+            baseStudentFromAdmission?.Class?.id,
+            baseStudentFromAdmission?.class_id,
+            safePreviousStudentData?.Class?.id,
+            safePreviousStudentData?.class_id,
+            _classId
+          ) ?? 0;
 
         const mergedSectionId =
-          Number(
-            normalizedFeeStudent?.Section?.id || normalizedFeeStudent?.section_id || 0
-          ) ||
-          Number(
-            baseStudentFromAdmission?.Section?.id || baseStudentFromAdmission?.section_id || 0
-          ) ||
-          Number(
-            safePreviousStudentData?.Section?.id || safePreviousStudentData?.section_id || 0
-          ) ||
-          0;
+          firstValidId(
+            normalizedFeeStudent?.Section?.id,
+            normalizedFeeStudent?.section_id,
+            baseStudentFromAdmission?.Section?.id,
+            baseStudentFromAdmission?.section_id,
+            safePreviousStudentData?.Section?.id,
+            safePreviousStudentData?.section_id
+          ) ?? 0;
 
         const mergedClassName =
           firstNonEmpty(
@@ -2454,7 +2605,7 @@ const Transactions = () => {
             safePreviousStudentData?.Class?.class_name,
             safePreviousStudentData?.class_name,
             getClassLabelById(
-              mergedClassId || _classId || selectedClass,
+              firstValidId(mergedClassId, _classId, selectedClass),
               classes
             )
           ) || "—";
@@ -2468,7 +2619,7 @@ const Transactions = () => {
             safePreviousStudentData?.Section?.section_name,
             safePreviousStudentData?.section_name,
             getSectionLabelById(
-              mergedSectionId || selectedSection,
+              firstValidId(mergedSectionId, selectedSection),
               sections
             )
           ) || "—";
@@ -2519,8 +2670,8 @@ const Transactions = () => {
             normalizedFeeStudent.sibling_name_4 ?? baseStudentFromAdmission?.sibling_name_4 ?? safePreviousStudentData.sibling_name_4 ?? null,
         };
 
-        setSelectedClass(mergedClassId || _classId || "");
-        setSelectedSection(mergedSectionId || "");
+        setSelectedClass(firstValidId(mergedClassId, _classId) ?? "");
+        setSelectedSection(firstValidId(mergedSectionId) ?? "");
         setSelectedStudentInfo(mergedStudent);
         setSelectedAdmissionStudent(mergedStudent);
       }
@@ -3058,7 +3209,7 @@ const Transactions = () => {
   if (!selectedStudentInfo?.id) return;
 
   fetchFeeHeadsForStudent(
-    selectedStudentInfo.class_id || selectedStudentInfo.Class?.id,
+    selectedStudentInfo.class_id ?? selectedStudentInfo.Class?.id,
     selectedStudentInfo.id,
     selectedStudentInfo
   );
@@ -3620,8 +3771,11 @@ const Transactions = () => {
                 <div className="selected-student-strip">
                   <div className="d-flex justify-content-between align-items-start flex-wrap gap-2">
                     <div style={{ minWidth: 0, flex: "1 1 520px" }}>
-                      <div className="selected-student-name">
-                        {selectedStudentInfo?.name || "—"}
+                      <div className="selected-student-name d-flex align-items-center gap-2 flex-wrap">
+                        <span>{selectedStudentInfo?.name || "—"}</span>
+                        {selectedStudentInfo?.is_student_inactive && (
+                          <Badge bg="danger">Inactive / Disabled</Badge>
+                        )}
                       </div>
                       <div className="selected-student-meta">
                         <span><strong>Adm:</strong> {selectedStudentInfo?.admission_number || "—"}</span>
@@ -3691,8 +3845,11 @@ const Transactions = () => {
                       <div className="selected-student-strip mt-2 mb-0">
                         <div className="d-flex justify-content-between align-items-start flex-wrap gap-2">
                           <div style={{ minWidth: 0, flex: "1 1 520px" }}>
-                            <div className="selected-student-name">
-                              {selectedStudentInfo?.name || "—"}
+                            <div className="selected-student-name d-flex align-items-center gap-2 flex-wrap">
+                              <span>{selectedStudentInfo?.name || "—"}</span>
+                              {selectedStudentInfo?.is_student_inactive && (
+                                <Badge bg="danger">Inactive / Disabled</Badge>
+                              )}
                             </div>
                             <div className="selected-student-meta">
                               <span><strong>Adm:</strong> {selectedStudentInfo?.admission_number || "—"}</span>
@@ -3819,6 +3976,11 @@ const Transactions = () => {
                                             <div className="primary-line">
                                               {escapeHtml(s.name)}
                                               <span className="pill">{escapeHtml(adm)}</span>
+                                              {s.is_student_inactive && (
+                                                <Badge bg="danger" pill className="ms-2">
+                                                  Inactive
+                                                </Badge>
+                                              )}
                                             </div>
                                             <div className="secondary-line">Class: {escapeHtml(className)}</div>
                                           </div>
@@ -3858,6 +4020,11 @@ const Transactions = () => {
                                   <span>
                                     | <strong>Adm No:</strong> {selectedAdmissionStudent?.admission_number || "—"}
                                   </span>
+                                  {selectedAdmissionStudent?.is_student_inactive && (
+                                    <Badge bg="danger" className="ms-1">
+                                      Inactive / Disabled Student
+                                    </Badge>
+                                  )}
                                   {siblingSummaryRows.length > 0 && (
                                     <span>
                                       | <strong>Siblings:</strong>{" "}
@@ -3984,8 +4151,8 @@ const Transactions = () => {
                                     return;
                                   }
 
-                                  setSelectedClass(student.class_id || student.Class?.id || "");
-                                  setSelectedSection(student.section_id || student.Section?.id || "");
+                                  setSelectedClass(student.class_id ?? student.Class?.id ?? "");
+                                  setSelectedSection(student.section_id ?? student.Section?.id ?? "");
 
                                   if (!selectedSession) {
                                     setModalError(
@@ -3995,7 +4162,7 @@ const Transactions = () => {
                                   }
 
                                   fetchFeeHeadsForStudent(
-                                    student.class_id || student.Class?.id,
+                                    student.class_id ?? student.Class?.id,
                                     student.id,
                                     student
                                   );
@@ -4005,7 +4172,7 @@ const Transactions = () => {
                                 <option value="">Select Student</option>
                                 {students.map((s) => (
                                   <option key={s.id} value={s.id}>
-                                    {s.name} - {s.admission_number}
+                                    {s.name} - {s.admission_number}{s.is_student_inactive ? " (Inactive / Disabled)" : ""}
                                   </option>
                                 ))}
                               </Form.Select>
@@ -4031,6 +4198,11 @@ const Transactions = () => {
                                   <div>
                                     | <strong>Adm No:</strong> {selectedStudentInfo?.admission_number || "—"}
                                   </div>
+                                  {selectedStudentInfo?.is_student_inactive && (
+                                    <Badge bg="danger" className="ms-1">
+                                      Inactive / Disabled Student
+                                    </Badge>
+                                  )}
                                   <Button
                                     variant="success"
                                     size="sm"
@@ -4069,6 +4241,11 @@ const Transactions = () => {
                           Student: {selectedStudentInfo?.name || "—"} | {selectedStudentClassLabel} / {selectedStudentSectionLabel}
                         </div>
                       )}
+                      {(selectedStudentInfo || selectedAdmissionStudent)?.is_student_inactive && (
+                        <div className="transaction-meta-chip text-danger fw-semibold">
+                          Inactive / Disabled Student
+                        </div>
+                      )}
                       {loadingSiblingSummary ? (
                         <div className="transaction-meta-chip">
                           Loading siblings...
@@ -4095,6 +4272,13 @@ const Transactions = () => {
                       ) : null}
                     </div>
                   </div>
+
+                  {(selectedStudentInfo || selectedAdmissionStudent)?.is_student_inactive && (
+                    <Alert variant="warning" className="mt-3 mb-0 py-2">
+                      <strong>Warning:</strong> This student is marked as{" "}
+                      <strong>Inactive / Disabled</strong>. Please confirm before collecting fee.
+                    </Alert>
+                  )}
 
                   {showCollectionDetails && (
                     <Row className="g-2 collection-details-grid mt-2">

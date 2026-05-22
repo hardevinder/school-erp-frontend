@@ -1,9 +1,12 @@
-// src/components/HRDashboard.jsx — Attendance + Latest Leave Request Spotlight
+// src/components/HRDashboard.jsx — Attendance + Latest Leave Request Spotlight + Messages Quick Access
 import React, { useEffect, useMemo, useState } from "react";
 import api from "../api";
 import Swal from "sweetalert2";
+import { useNavigate } from "react-router-dom";
 
 export default function HRDashboard() {
+  const navigate = useNavigate();
+
   const [date, setDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [employees, setEmployees] = useState([]);
   const [records, setRecords] = useState([]);
@@ -346,6 +349,8 @@ export default function HRDashboard() {
 
   const goToday = () => setDate(new Date().toISOString().split("T")[0]);
 
+  const openMessages = () => navigate("/messages");
+
   const latestLeave = pendingLeaves[0] || null;
   const latestEmpName = latestLeave?.employee?.name || "—";
   const latestDeptName = getDeptName(latestLeave?.employee || {});
@@ -391,6 +396,59 @@ export default function HRDashboard() {
               ▶
             </button>
           </div>
+        </div>
+      </div>
+
+      {/* QUICK ACTIONS */}
+      <div className="row g-3 mb-4">
+        <div className="col-12 col-md-6 col-xl-3">
+          <button
+            type="button"
+            className="card shadow-sm rounded-4 border-0 h-100 w-100 text-start overflow-hidden quick-action-card"
+            onClick={openMessages}
+            style={{
+              background: "linear-gradient(135deg, #2563eb, #7c3aed)",
+              color: "white",
+              minHeight: 128,
+              cursor: "pointer",
+            }}
+          >
+            <div className="card-body position-relative">
+              <div
+                className="position-absolute top-0 end-0 rounded-circle"
+                style={{
+                  width: 118,
+                  height: 118,
+                  background: "rgba(255,255,255,0.12)",
+                  transform: "translate(35px, -42px)",
+                }}
+              />
+
+              <div className="d-flex align-items-start justify-content-between gap-3 position-relative">
+                <div>
+                  <div
+                    className="d-inline-flex align-items-center justify-content-center rounded-4 mb-3"
+                    style={{
+                      width: 48,
+                      height: 48,
+                      background: "rgba(255,255,255,0.18)",
+                      border: "1px solid rgba(255,255,255,0.22)",
+                    }}
+                  >
+                    <i className="bi bi-chat-dots fs-4" />
+                  </div>
+
+                  <div className="text-uppercase small opacity-75 mb-1">Communication</div>
+                  <div className="fw-bold fs-5">Messages</div>
+                  <div className="small opacity-75 mt-1">
+                    Open reminders, conversations and replies
+                  </div>
+                </div>
+
+                <span className="badge bg-light text-dark border">NEW</span>
+              </div>
+            </div>
+          </button>
         </div>
       </div>
 

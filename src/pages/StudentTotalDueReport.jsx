@@ -7,25 +7,20 @@
  * ✅ Session selector (session-wise everywhere)
  * ✅ FAST mode: uses status="any" (auto fallback to full/partial/unpaid if backend doesn't support)
  * ✅ Till Date selector (can be future e.g. cover up to March)
- * ✅ Totals, Overdue/Upcoming status, Excel export and WhatsApp all follow selected Till Date
+ * ✅ Totals, Overdue/Upcoming status, Excel/PDF export and WhatsApp all follow selected Till Date
+ * ✅ Excel/PDF now export from backend:
+ *    - GET /reports/student-total-due/excel
+ *    - GET /reports/student-total-due/pdf
  * ✅ WhatsApp sends:
  *    - tillDate = selected Till Date
  *    - dueDate  = MAX PREVIOUS DUE DATE relative to selected Till Date (latest dueDate <= tillDate)
- * ✅ App Push Notification support added:
- *    - POST /api/notifications/fee-reminder
- *    - POST /api/notifications/fee-reminder/bulk
+ * ✅ Personalized Fee Message support added:
+ *    - POST /api/messages/fee-reminder
+ *    - POST /api/messages/fee-reminder/bulk
+ * ✅ Custom app fee message modal added:
+ *    - user can edit title/body before sending
+ *    - supports placeholders like {name}, {amount}, {tillDate}, {dueDate}
  * ✅ More professional actions area and action column
- *
- * APIs used:
- * - GET  /sessions
- * - GET  /schools
- * - GET  /fee-headings
- * - GET  /transport/pending-per-head?session_id=...
- * - GET  /feedue-status/fee-heading-wise-students?feeHeadingId=...&status=...&session_id=...
- * - GET  /opening-balances/outstanding?student_id=...&session_id=...
- * - POST /whatsapp/fee-reminder
- * - POST /api/notifications/fee-reminder
- * - POST /api/notifications/fee-reminder/bulk
  */
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -42,11 +37,10 @@ import {
   ToastContainer,
   OverlayTrigger,
   Tooltip,
+  Modal,
 } from "react-bootstrap";
 import api from "../api";
 import "./SchoolFeeSummary.css";
-import * as XLSX from "xlsx";
-import { saveAs } from "file-saver";
 
 /* ---------- Helpers ---------- */
 
@@ -243,6 +237,9 @@ const isHeadDueTillDate = (head, tillDateISO) => {
   // Opening Balance -> always due if pending
   if (head.isOpeningBalance) return true;
 
+  // Safety fallback for transport-only pending heads with missing due date
+  if (head.isTransport && !head.dueDate) return true;
+
   const dueStr = head.dueDate; // installment due date only
   if (!dueStr) return false;
 
@@ -284,12 +281,70 @@ const computeMaxPreviousDueDate = (heads, tillDateISO) => {
   return best;
 };
 
+const getFilenameFromDisposition = (disposition, fallbackName) => {
+  const value = safeStr(disposition);
+
+  const utfMatch = value.match(/filename\*\s*=\s*UTF-8''([^;]+)/i);
+  if (utfMatch?.[1]) {
+    try {
+      return decodeURIComponent(utfMatch[1].replace(/["']/g, ""));
+    } catch {
+      return utfMatch[1].replace(/["']/g, "");
+    }
+  }
+
+  const normalMatch = value.match(/filename\s*=\s*"([^"]+)"/i);
+  if (normalMatch?.[1]) return normalMatch[1];
+
+  const plainMatch = value.match(/filename\s*=\s*([^;]+)/i);
+  if (plainMatch?.[1]) return plainMatch[1].replace(/["']/g, "").trim();
+
+  return fallbackName;
+};
+
+const triggerBlobDownload = (blob, filename) => {
+  const url = window.URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename || "download";
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.URL.revokeObjectURL(url);
+};
+
+// ✅ Session helpers: backend may send is_active as true/1/"true"/"1"
+const isTruthyFlag = (value) =>
+  value === true ||
+  value === 1 ||
+  String(value || "").trim().toLowerCase() === "true" ||
+  String(value || "").trim() === "1";
+
+const isSessionMarkedActive = (session) =>
+  isTruthyFlag(session?.is_active ?? session?.isActive ?? session?.active);
+
+const hasBasicCurrentStudentInfo = (student) =>
+  !!(
+    safeStr(student?.admissionNumber || student?.admission_number).trim() ||
+    safeStr(student?.className || student?.class_name).trim()
+  );
+
+const DEFAULT_CUSTOM_FEE_MESSAGE_TEMPLATE = `Dear {name},
+Your pending fee is {amount} till {tillDate}. Kindly clear it at the earliest.
+
+Regards,
+School Office`;
+
+const FEE_MESSAGE_PLACEHOLDER_HELP =
+  "Use placeholders: {name}, {amount}, {tillDate}, {dueDate}, {grade}, {admissionNumber}";
+
 // ================= Component =================
 const StudentTotalDueReport = () => {
   const [school, setSchool] = useState(null);
 
   const [sessions, setSessions] = useState([]);
   const [activeSessionId, setActiveSessionId] = useState(null);
+  const [systemActiveSessionId, setSystemActiveSessionId] = useState(null);
 
   const [feeHeadings, setFeeHeadings] = useState([]);
 
@@ -310,6 +365,9 @@ const StudentTotalDueReport = () => {
   // ✅ Till Date selector (can be future)
   const [tillDate, setTillDate] = useState(() => toISODate(new Date()));
 
+  const [excelDownloading, setExcelDownloading] = useState(false);
+  const [pdfDownloading, setPdfDownloading] = useState(false);
+
   const [waSending, setWaSending] = useState(() => new Set());
   const [waAllSending, setWaAllSending] = useState(false);
   const [waAllProgress, setWaAllProgress] = useState({
@@ -325,6 +383,18 @@ const StudentTotalDueReport = () => {
     total: 0,
     failed: 0,
   });
+
+  // ✅ Custom App Fee Message modal
+  // mode: "single" | "bulk"
+  const [feeMessageModal, setFeeMessageModal] = useState({
+    show: false,
+    mode: "single",
+    student: null,
+  });
+  const [feeMessageTitle, setFeeMessageTitle] = useState("Fee Reminder");
+  const [feeMessageBody, setFeeMessageBody] = useState(
+    DEFAULT_CUSTOM_FEE_MESSAGE_TEMPLATE
+  );
 
   // ✅ per-student recipient selection for individual WhatsApp
   // values: "father" | "mother" | "both"
@@ -361,7 +431,31 @@ const StudentTotalDueReport = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tillDate]);
 
-  const isAnyBulkSending = waAllSending || pushAllSending;
+  const isAnyBulkSending =
+    waAllSending || pushAllSending || excelDownloading || pdfDownloading;
+
+  const isSelectedSessionActive = (sessionIdToCheck) => {
+    const selectedSessionMeta = sessions.find(
+      (s) => Number(s.id) === Number(sessionIdToCheck)
+    );
+
+    return (
+      isSessionMarkedActive(selectedSessionMeta) ||
+      (!!systemActiveSessionId &&
+        Number(sessionIdToCheck) === Number(systemActiveSessionId))
+    );
+  };
+
+  // ✅ Send active-only hints to backend only for current active session.
+  // Older backend will ignore these safely; updated backend can use them.
+  const buildStudentStatusApiParams = (sessionIdToCheck) =>
+    isSelectedSessionActive(sessionIdToCheck)
+      ? {
+          studentStatus: "active",
+          studentStatusFilter: "active",
+          includeDisabled: false,
+        }
+      : {};
 
   // ---------------- Fetchers ----------------
   const fetchSchool = async () => {
@@ -384,8 +478,11 @@ const StudentTotalDueReport = () => {
 
       setSessions(data);
 
-      const active = data.find((s) => s.is_active) || data[0];
-      if (active) setActiveSessionId(active.id);
+      const actualActive = data.find((s) => isSessionMarkedActive(s));
+      if (actualActive?.id) setSystemActiveSessionId(Number(actualActive.id));
+
+      const active = actualActive || data[0];
+      if (active) setActiveSessionId(Number(active.id));
     } catch (e) {
       console.error("Session fetch error", e);
     }
@@ -455,10 +552,7 @@ const StudentTotalDueReport = () => {
     setExpandedIds(new Set());
 
     try {
-      const selectedSessionMeta = sessions.find(
-        (s) => Number(s.id) === Number(sessionId)
-      );
-      const selectedIsActiveSession = !!selectedSessionMeta?.is_active;
+      const selectedIsActiveSession = isSelectedSessionActive(sessionId);
 
       const combosFast = (feeHeadingsInput || []).map((fh) => ({
         feeHeadingId: fh.id,
@@ -496,6 +590,12 @@ const StudentTotalDueReport = () => {
               student.fatherPhone ||
               student.motherPhone ||
               "",
+            studentStatus:
+              student.studentStatus || student.status || student.student_status || "",
+            status: student.status || "",
+            student_status: student.student_status || "",
+            is_active: student.is_active,
+            enabled: student.enabled,
             heads: [],
           });
         } else {
@@ -505,9 +605,6 @@ const StudentTotalDueReport = () => {
           if (!aggExisting.name && student.name) aggExisting.name = student.name;
           if (!aggExisting.admissionNumber && student.admissionNumber)
             aggExisting.admissionNumber = student.admissionNumber;
-          // ✅ Always prefer latest non-empty class/section coming from backend.
-          // Earlier parallel fee-head responses may contain stale/current class,
-          // so do not keep the first non-empty value forever.
           if (student.className) {
             aggExisting.className = student.className;
           }
@@ -520,6 +617,19 @@ const StudentTotalDueReport = () => {
             aggExisting.motherPhone = student.motherPhone;
           if (!aggExisting.phone && (student.phone || student.parentPhone))
             aggExisting.phone = student.phone || student.parentPhone;
+
+          const incomingStatus =
+            student.studentStatus || student.status || student.student_status || "";
+          if (!aggExisting.studentStatus && incomingStatus)
+            aggExisting.studentStatus = incomingStatus;
+          if (!aggExisting.status && student.status)
+            aggExisting.status = student.status;
+          if (!aggExisting.student_status && student.student_status)
+            aggExisting.student_status = student.student_status;
+          if (aggExisting.is_active === undefined && student.is_active !== undefined)
+            aggExisting.is_active = student.is_active;
+          if (aggExisting.enabled === undefined && student.enabled !== undefined)
+            aggExisting.enabled = student.enabled;
         }
 
         return studentMap.get(sid);
@@ -570,7 +680,12 @@ const StudentTotalDueReport = () => {
 
       const worker = async ({ feeHeadingId, status }) => {
         const res = await api.get("/feedue-status/fee-heading-wise-students", {
-          params: { feeHeadingId, status, session_id: sessionId },
+          params: {
+            feeHeadingId,
+            status,
+            session_id: sessionId,
+            ...buildStudentStatusApiParams(sessionId),
+          },
         });
 
         const rawData = Array.isArray(res?.data?.data) ? res.data.data : [];
@@ -596,12 +711,21 @@ const StudentTotalDueReport = () => {
       if (!usedFast) {
         const workerFallback = async ({ feeHeadingId, status }) => {
           const res = await api.get("/feedue-status/fee-heading-wise-students", {
-            params: { feeHeadingId, status, session_id: sessionId },
+            params: {
+            feeHeadingId,
+            status,
+            session_id: sessionId,
+            ...buildStudentStatusApiParams(sessionId),
+          },
           });
 
           const rawData = Array.isArray(res?.data?.data) ? res.data.data : [];
 
           rawData.forEach((student) => {
+            // ✅ Important: fallback mode must also hide disabled students
+            // from current active session.
+            if (selectedIsActiveSession && isInactiveStudentLike(student)) return;
+
             const agg = upsertStudent(student);
             if (!agg) return;
             mergeFeeDetails(agg, student.feeDetails || []);
@@ -622,7 +746,8 @@ const StudentTotalDueReport = () => {
               : stuId;
 
           if (selectedIsActiveSession && isInactiveStudentLike(val)) return;
-          if (!studentMap.has(normalizedStudentId) && !hasStudentIdentity(val)) return;
+          if (!studentMap.has(normalizedStudentId) && !hasStudentIdentity(val))
+            return;
 
           if (!studentMap.has(normalizedStudentId)) {
             studentMap.set(normalizedStudentId, {
@@ -640,13 +765,18 @@ const StudentTotalDueReport = () => {
                 val?.fatherPhone ||
                 val?.motherPhone ||
                 "",
+              studentStatus:
+                val?.studentStatus || val?.status || val?.student_status || "",
+              status: val?.status || "",
+              student_status: val?.student_status || "",
+              is_active: val?.is_active,
+              enabled: val?.enabled,
               heads: [],
             });
           } else {
             const aggExisting = studentMap.get(stuId);
             if (!aggExisting.studentId) aggExisting.studentId = stuId;
 
-            // ✅ Let transport response also refresh class/section when available
             if (val?.className) aggExisting.className = val.className;
             if (val?.sectionName || val?.section) {
               aggExisting.sectionName = val.sectionName || val.section;
@@ -663,6 +793,24 @@ const StudentTotalDueReport = () => {
             }
             if (!aggExisting.phone && (val?.phone || val?.parentPhone)) {
               aggExisting.phone = val.phone || val.parentPhone;
+            }
+
+            const incomingStatus =
+              val?.studentStatus || val?.status || val?.student_status || "";
+            if (!aggExisting.studentStatus && incomingStatus) {
+              aggExisting.studentStatus = incomingStatus;
+            }
+            if (!aggExisting.status && val?.status) {
+              aggExisting.status = val.status;
+            }
+            if (!aggExisting.student_status && val?.student_status) {
+              aggExisting.student_status = val.student_status;
+            }
+            if (aggExisting.is_active === undefined && val?.is_active !== undefined) {
+              aggExisting.is_active = val.is_active;
+            }
+            if (aggExisting.enabled === undefined && val?.enabled !== undefined) {
+              aggExisting.enabled = val.enabled;
             }
           }
 
@@ -693,7 +841,8 @@ const StudentTotalDueReport = () => {
               const academicIndex = agg.heads.findIndex(
                 (h) => !h.isTransport && h.name === baseHeadName
               );
-              if (academicIndex >= 0) agg.heads.splice(academicIndex + 1, 0, head);
+              if (academicIndex >= 0)
+                agg.heads.splice(academicIndex + 1, 0, head);
               else agg.heads.push(head);
             } else {
               head = agg.heads[idx];
@@ -705,8 +854,7 @@ const StudentTotalDueReport = () => {
             let tDue = extractInstallmentDueDate(vh);
             if (!tDue) {
               const academicHead = agg.heads.find(
-                (h) =>
-                  !h.isTransport && h.name === baseHeadName && h.dueDate
+                (h) => !h.isTransport && h.name === baseHeadName && h.dueDate
               );
               if (academicHead?.dueDate) tDue = academicHead.dueDate;
             }
@@ -730,9 +878,7 @@ const StudentTotalDueReport = () => {
         await withConcurrency(studentList, 8, async (s) => {
           const pk =
             s.studentId ??
-            (Number(s.id) && !Number.isNaN(Number(s.id))
-              ? Number(s.id)
-              : null);
+            (Number(s.id) && !Number.isNaN(Number(s.id)) ? Number(s.id) : null);
           if (!pk) return;
 
           const ob = await fetchOpeningBalanceOutstanding(pk, sessionId);
@@ -776,13 +922,22 @@ const StudentTotalDueReport = () => {
         return aKey.localeCompare(bKey, "en");
       });
 
+      // ✅ Final safety guard:
+      // In the current active session, never show disabled/inactive rows.
+      // Also hide ghost/disabled-like rows which have no admission no and no class.
+      const finalStudentsArr = selectedIsActiveSession
+        ? studentsArr.filter(
+            (s) => !isInactiveStudentLike(s) && hasBasicCurrentStudentInfo(s)
+          )
+        : studentsArr;
+
       if (!aliveRef.current || buildId !== buildSeqRef.current) return;
 
-      setStudents(studentsArr);
+      setStudents(finalStudentsArr);
 
       setWaRecipientByStudent((prev) => {
         const next = { ...(prev || {}) };
-        studentsArr.forEach((s) => {
+        finalStudentsArr.forEach((s) => {
           const key = s?.id;
           if (key && !next[key]) next[key] = "father";
         });
@@ -827,7 +982,11 @@ const StudentTotalDueReport = () => {
       const [feeHeadingsRes, transportRes] = await Promise.all([
         api.get("/fee-headings"),
         api.get("/transport/pending-per-head", {
-          params: { session_id: sessionId, includeZeroPending: false },
+          params: {
+            session_id: sessionId,
+            includeZeroPending: false,
+            ...buildStudentStatusApiParams(sessionId),
+          },
         }),
       ]);
 
@@ -851,7 +1010,8 @@ const StudentTotalDueReport = () => {
             : stu.student_id;
 
         const totalPending = (stu.heads || []).reduce(
-          (a, h) => a + Number(h.pending || 0) + Number(h.fine || h.fineAmount || 0),
+          (a, h) =>
+            a + Number(h.pending || 0) + Number(h.fine || h.fineAmount || 0),
           0
         );
 
@@ -872,7 +1032,8 @@ const StudentTotalDueReport = () => {
             stu.fatherPhone ||
             stu.motherPhone ||
             "",
-          studentStatus: stu.studentStatus || stu.status || stu.student_status || "",
+          studentStatus:
+            stu.studentStatus || stu.status || stu.student_status || "",
           status: stu.status || "",
           student_status: stu.student_status || "",
           is_active: stu.is_active,
@@ -899,6 +1060,82 @@ const StudentTotalDueReport = () => {
         safeStr(err?.message || "Failed to load report")
       );
       setLoading(false);
+    }
+  };
+
+  const buildExportParams = () => ({
+    session_id: activeSessionId,
+    tillDate,
+    search: search.trim() || undefined,
+    classFilter: classFilter !== "all" ? classFilter : undefined,
+    pendingFilter: pendingFilter !== "all" ? pendingFilter : undefined,
+  });
+
+  const handleExportExcel = async () => {
+    if (!activeSessionId) {
+      showToast("warning", "Session missing", "Please select a session first.");
+      return;
+    }
+
+    setExcelDownloading(true);
+    try {
+      const response = await api.get("/reports/student-total-due/excel", {
+        params: buildExportParams(),
+        responseType: "blob",
+      });
+
+      const fallbackName = `Student_Total_Due_${activeSession?.name || activeSessionId}_Till_${tillDate}.xlsx`;
+      const filename = getFilenameFromDisposition(
+        response.headers?.["content-disposition"],
+        fallbackName
+      );
+
+      triggerBlobDownload(response.data, filename);
+      showToast("success", "Excel Exported", "Excel downloaded successfully.");
+    } catch (err) {
+      console.error("Excel export error:", err);
+      const apiMsg =
+        err?.response?.data?.message ||
+        err?.response?.data?.error ||
+        err?.message ||
+        "Failed to export Excel";
+      showToast("danger", "Excel Export Failed", safeStr(apiMsg));
+    } finally {
+      setExcelDownloading(false);
+    }
+  };
+
+  const handleExportPdf = async () => {
+    if (!activeSessionId) {
+      showToast("warning", "Session missing", "Please select a session first.");
+      return;
+    }
+
+    setPdfDownloading(true);
+    try {
+      const response = await api.get("/reports/student-total-due/pdf", {
+        params: buildExportParams(),
+        responseType: "blob",
+      });
+
+      const fallbackName = `Student_Total_Due_${activeSession?.name || activeSessionId}_Till_${tillDate}.pdf`;
+      const filename = getFilenameFromDisposition(
+        response.headers?.["content-disposition"],
+        fallbackName
+      );
+
+      triggerBlobDownload(response.data, filename);
+      showToast("success", "PDF Exported", "PDF downloaded successfully.");
+    } catch (err) {
+      console.error("PDF export error:", err);
+      const apiMsg =
+        err?.response?.data?.message ||
+        err?.response?.data?.error ||
+        err?.message ||
+        "Failed to export PDF";
+      showToast("danger", "PDF Export Failed", safeStr(apiMsg));
+    } finally {
+      setPdfDownloading(false);
     }
   };
 
@@ -1056,72 +1293,34 @@ const StudentTotalDueReport = () => {
     }
   };
 
-  // ======== App Push Notification ========
+  // ======== Personalized Fee Messages ========
 
-  const buildFeeNotificationPayload = (stu) => {
-    const classSection = stu.sectionName
-      ? `${stu.className} / ${stu.sectionName}`
-      : stu.className || "";
+  const getPendingStudentsForFeeMessage = () =>
+    (filteredStudents || []).filter((s) => Number(s.totalDueTillDate || 0) > 0);
 
-    const dueDateToSend = computeWhatsAppDueDate(stu.heads || []);
+  const getFeeMessageOptionsFromModal = () => ({
+    customTitle: safeStr(feeMessageTitle).trim() || "Fee Reminder",
+    customMessage: safeStr(feeMessageBody).trim(),
+  });
 
-    return {
-      studentId: stu.studentId || stu.id,
-      admissionNumber: stu.admissionNumber || "",
-      session_id: activeSessionId,
-      amount: String(Math.round(Number(stu.totalDueTillDate || 0))),
-      tillDate,
-      dueDate: dueDateToSend || "",
-      grade: classSection || "-",
-    };
-  };
-
-  const sendAppFeeReminder = async (stu) => {
-    const rowKey = stu?.id;
-    if (!rowKey) return;
-
-    const amount = Number(stu.totalDueTillDate || 0);
-    if (amount <= 0) {
-      showToast("warning", "No pending due", "This student has no due till date.");
+  const openSingleFeeMessageModal = (stu) => {
+    const amount = Number(stu?.totalDueTillDate || 0);
+    if (!stu || amount <= 0) {
+      showToast(
+        "warning",
+        "No pending due",
+        "This student has no due till date."
+      );
       return;
     }
 
-    setPushSending((prev) => new Set(prev).add(rowKey));
-
-    try {
-      const payload = buildFeeNotificationPayload(stu);
-      await api.post("/api/notifications/fee-reminder", payload);
-
-      showToast(
-        "success",
-        "App Notification Sent",
-        `Fee reminder sent to ${stu.name || stu.admissionNumber || "student"}.`
-      );
-    } catch (err) {
-      const apiMsg =
-        err?.response?.data?.message ||
-        err?.response?.data?.error ||
-        err?.message ||
-        "Failed to send app notification";
-
-      console.error("App notification error:", err?.response?.data || err);
-      showToast("danger", "App Notification Failed", safeStr(apiMsg));
-    } finally {
-      setPushSending((prev) => {
-        const next = new Set(prev);
-        next.delete(rowKey);
-        return next;
-      });
-    }
+    setFeeMessageTitle("Fee Reminder");
+    setFeeMessageBody(DEFAULT_CUSTOM_FEE_MESSAGE_TEMPLATE);
+    setFeeMessageModal({ show: true, mode: "single", student: stu });
   };
 
-  const sendAppFeeReminderToAllPending = async () => {
-    if (pushAllSending) return;
-
-    const pendingList = (filteredStudents || []).filter(
-      (s) => Number(s.totalDueTillDate || 0) > 0
-    );
-
+  const openBulkFeeMessageModal = () => {
+    const pendingList = getPendingStudentsForFeeMessage();
     if (!pendingList.length) {
       showToast(
         "warning",
@@ -1131,7 +1330,111 @@ const StudentTotalDueReport = () => {
       return;
     }
 
-    const studentsPayload = pendingList.map((stu) => buildFeeNotificationPayload(stu));
+    setFeeMessageTitle("Fee Reminder");
+    setFeeMessageBody(DEFAULT_CUSTOM_FEE_MESSAGE_TEMPLATE);
+    setFeeMessageModal({ show: true, mode: "bulk", student: null });
+  };
+
+  const closeFeeMessageModal = () => {
+    const singleStudentId = feeMessageModal?.student?.id;
+    const singleSending = singleStudentId ? pushSending.has(singleStudentId) : false;
+    if (singleSending || pushAllSending) return;
+
+    setFeeMessageModal({ show: false, mode: "single", student: null });
+  };
+
+  // Builds per-student personalized/custom fee message payload.
+  // Backend saves it in Messages module and sends app push notification.
+  const buildFeeNotificationPayload = (stu, messageOptions = {}) => {
+    const classSection = stu.sectionName
+      ? `${stu.className} / ${stu.sectionName}`
+      : stu.className || "";
+
+    const dueDateToSend = computeWhatsAppDueDate(stu.heads || []);
+    const customTitle = safeStr(messageOptions.customTitle).trim();
+    const customMessage = safeStr(messageOptions.customMessage).trim();
+
+    const payload = {
+      studentId: stu.studentId || stu.id,
+      admissionNumber: stu.admissionNumber || "",
+      session_id: activeSessionId,
+      amount: String(Math.round(Number(stu.totalDueTillDate || 0))),
+      tillDate,
+      dueDate: dueDateToSend || "",
+      grade: classSection || "-",
+    };
+
+    if (customTitle) payload.customTitle = customTitle;
+    if (customMessage) payload.customMessage = customMessage;
+
+    return payload;
+  };
+
+  const sendAppFeeReminder = async (stu, messageOptions = {}) => {
+    const rowKey = stu?.id;
+    if (!rowKey) return false;
+
+    const amount = Number(stu.totalDueTillDate || 0);
+    if (amount <= 0) {
+      showToast(
+        "warning",
+        "No pending due",
+        "This student has no due till date."
+      );
+      return false;
+    }
+
+    setPushSending((prev) => new Set(prev).add(rowKey));
+
+    try {
+      const payload = buildFeeNotificationPayload(stu, messageOptions);
+      await api.post("/api/messages/fee-reminder", payload);
+
+      showToast(
+        "success",
+        "Fee Message Sent",
+        `Message sent to ${stu.name || stu.admissionNumber || "student"}.`
+      );
+      return true;
+    } catch (err) {
+      const apiMsg =
+        err?.response?.data?.message ||
+        err?.response?.data?.error ||
+        err?.message ||
+        "Failed to send fee message";
+
+      console.error("Fee message error:", err?.response?.data || err);
+      showToast("danger", "Fee Message Failed", safeStr(apiMsg));
+      return false;
+    } finally {
+      setPushSending((prev) => {
+        const next = new Set(prev);
+        next.delete(rowKey);
+        return next;
+      });
+    }
+  };
+
+  const sendAppFeeReminderToAllPending = async (messageOptions = {}) => {
+    if (pushAllSending) return false;
+
+    const pendingList = getPendingStudentsForFeeMessage();
+
+    if (!pendingList.length) {
+      showToast(
+        "warning",
+        "No pending students",
+        "No students have pending till date in current filtered list."
+      );
+      return false;
+    }
+
+    const studentsPayload = pendingList.map((stu) =>
+      buildFeeNotificationPayload(stu, messageOptions)
+    );
+
+    const customTitle = safeStr(messageOptions.customTitle).trim();
+    const customMessage = safeStr(messageOptions.customMessage).trim();
 
     setPushAllSending(true);
     setPushAllProgress({
@@ -1141,13 +1444,15 @@ const StudentTotalDueReport = () => {
     });
 
     try {
-      const res = await api.post("/api/notifications/fee-reminder/bulk", {
+      const res = await api.post("/api/messages/fee-reminder/bulk", {
         session_id: activeSessionId,
+        customTitle: customTitle || undefined,
+        customMessage: customMessage || undefined,
         students: studentsPayload,
       });
 
       const summary = res?.data?.summary || {};
-      const sent = Number(summary.sent || 0);
+      const sent = Number(summary.created || summary.sent || 0);
       const failed = Number(summary.failed || 0);
       const total = Number(summary.total || studentsPayload.length);
 
@@ -1159,20 +1464,37 @@ const StudentTotalDueReport = () => {
 
       showToast(
         "success",
-        "Bulk App Notification Done",
-        `Sent: ${sent}, Failed: ${failed}`
+        "Bulk Fee Messages Done",
+        `Created/Sent: ${sent}, Failed: ${failed}`
       );
+      return true;
     } catch (err) {
       const apiMsg =
         err?.response?.data?.message ||
         err?.response?.data?.error ||
         err?.message ||
-        "Failed to send bulk app notifications";
+        "Failed to send bulk fee messages";
 
-      console.error("Bulk app notification error:", err?.response?.data || err);
-      showToast("danger", "Bulk App Notification Failed", safeStr(apiMsg));
+      console.error("Bulk fee message error:", err?.response?.data || err);
+      showToast("danger", "Bulk Fee Messages Failed", safeStr(apiMsg));
+      return false;
     } finally {
       setPushAllSending(false);
+    }
+  };
+
+  const submitFeeMessageModal = async () => {
+    const options = getFeeMessageOptionsFromModal();
+
+    let ok = false;
+    if (feeMessageModal.mode === "bulk") {
+      ok = await sendAppFeeReminderToAllPending(options);
+    } else {
+      ok = await sendAppFeeReminder(feeMessageModal.student, options);
+    }
+
+    if (ok) {
+      setFeeMessageModal({ show: false, mode: "single", student: null });
     }
   };
 
@@ -1268,86 +1590,6 @@ const StudentTotalDueReport = () => {
     [sessions, activeSessionId]
   );
 
-  // Excel export
-  const exportToExcel = () => {
-    if (!filteredStudents.length) return;
-
-    const summaryRows = filteredStudents.map((stu, idx) => {
-      const cs = stu.sectionName
-        ? `${stu.className} / ${stu.sectionName}`
-        : stu.className;
-      return {
-        "#": idx + 1,
-        Name: stu.name,
-        "Admission No": stu.admissionNumber,
-        "Class / Section": cs,
-        Phone: stu.phone || "",
-        "Father Phone": stu.fatherPhone || "",
-        "Mother Phone": stu.motherPhone || "",
-        "Till Date": tillDate,
-        "Total Due Till Date": Number(stu.totalDueTillDate || 0),
-        "Total Due (All Heads)": Number(stu.totalDueAllTime || 0),
-        Status: Number(stu.totalDueTillDate || 0) > 0 ? "Pending" : "Clear",
-      };
-    });
-
-    const wb = XLSX.utils.book_new();
-    const wsSummary = XLSX.utils.json_to_sheet(summaryRows);
-    XLSX.utils.book_append_sheet(wb, wsSummary, "Summary");
-
-    const headRows = [];
-    filteredStudents.forEach((stu) => {
-      const cs = stu.sectionName
-        ? `${stu.className} / ${stu.sectionName}`
-        : stu.className;
-
-      (stu.heads || []).forEach((h) => {
-        const isDueTill = isHeadDueTillDate(h, tillDate);
-        const remaining = Number(h.remaining || 0);
-        const fine = Number(h.fine || 0);
-        const headDueTillDate = isDueTill ? remaining + fine : 0;
-
-        headRows.push({
-          "Student Name": stu.name,
-          "Admission No": stu.admissionNumber,
-          "Class / Section": cs,
-          "Fee Head": h.name,
-          "Is Transport": h.isTransport ? "Yes" : "No",
-          Remaining: remaining,
-          Fine: fine,
-          "Due Till Date (Head)": headDueTillDate,
-          Status: isDueTill
-            ? "Due Till Date"
-            : remaining > 0
-            ? "Upcoming"
-            : "Cleared",
-          "Due Date": h.dueDate || "",
-          "Next Fine Date": h.nextFineDate || "",
-          "Till Date": tillDate,
-        });
-      });
-    });
-
-    if (headRows.length) {
-      const wsHeads = XLSX.utils.json_to_sheet(headRows);
-      XLSX.utils.book_append_sheet(wb, wsHeads, "Head Details");
-    }
-
-    const excelBuffer = XLSX.write(wb, { bookType: "xlsx", type: "array" });
-    const blob = new Blob([excelBuffer], {
-      type: "application/octet-stream",
-    });
-
-    const todayStr = new Date().toISOString().slice(0, 10);
-    const sess = activeSession?.name
-      ? String(activeSession.name).replace(/\s+/g, "_")
-      : `session_${activeSessionId}`;
-    saveAs(
-      blob,
-      `Student_Total_Due_${sess}_Till_${tillDate}_${todayStr}.xlsx`
-    );
-  };
-
   const toggleExpand = (id) => {
     setExpandedIds((prev) => {
       const next = new Set(prev);
@@ -1371,7 +1613,11 @@ const StudentTotalDueReport = () => {
 
   return (
     <Container className="mt-4">
-      <ToastContainer position="top-end" className="p-3" style={{ zIndex: 9999 }}>
+      <ToastContainer
+        position="top-end"
+        className="p-3"
+        style={{ zIndex: 9999 }}
+      >
         <Toast
           bg={toast.bg}
           show={toast.show}
@@ -1387,6 +1633,110 @@ const StudentTotalDueReport = () => {
           </Toast.Body>
         </Toast>
       </ToastContainer>
+
+      <Modal
+        show={feeMessageModal.show}
+        onHide={closeFeeMessageModal}
+        centered
+        backdrop="static"
+        size="lg"
+      >
+        <Modal.Header closeButton>
+          <Modal.Title>
+            {feeMessageModal.mode === "bulk"
+              ? "Send Custom Fee Message to Pending Students"
+              : "Send Custom Fee Message"}
+          </Modal.Title>
+        </Modal.Header>
+
+        <Modal.Body>
+          {feeMessageModal.mode === "bulk" ? (
+            <Alert variant="info" className="py-2">
+              This will send an app message to all students currently visible in
+              filters with pending due till date. Count: <strong>{getPendingStudentsForFeeMessage().length}</strong>
+            </Alert>
+          ) : feeMessageModal.student ? (
+            <Alert variant="light" className="border py-2">
+              <div className="fw-semibold">
+                {feeMessageModal.student.name || "Student"}
+              </div>
+              <div className="small text-muted">
+                Admission No: {feeMessageModal.student.admissionNumber || "—"} | Due: {formatCurrency(feeMessageModal.student.totalDueTillDate)}
+              </div>
+            </Alert>
+          ) : null}
+
+          <Form.Group className="mb-3">
+            <Form.Label className="fw-semibold">Notification Title</Form.Label>
+            <Form.Control
+              value={feeMessageTitle}
+              onChange={(e) => setFeeMessageTitle(e.target.value)}
+              placeholder="Fee Reminder"
+              disabled={pushAllSending}
+            />
+          </Form.Group>
+
+          <Form.Group>
+            <div className="d-flex justify-content-between align-items-center gap-2 flex-wrap mb-1">
+              <Form.Label className="fw-semibold mb-0">Message</Form.Label>
+              <Button
+                type="button"
+                variant="outline-secondary"
+                size="sm"
+                onClick={() => setFeeMessageBody(DEFAULT_CUSTOM_FEE_MESSAGE_TEMPLATE)}
+                disabled={pushAllSending}
+              >
+                Reset Template
+              </Button>
+            </div>
+            <Form.Control
+              as="textarea"
+              rows={7}
+              value={feeMessageBody}
+              onChange={(e) => setFeeMessageBody(e.target.value)}
+              placeholder="Leave blank to send the default fee reminder."
+              disabled={pushAllSending}
+            />
+            <Form.Text className="text-muted">
+              {FEE_MESSAGE_PLACEHOLDER_HELP}. Leave message blank to use the old default fee reminder.
+            </Form.Text>
+          </Form.Group>
+        </Modal.Body>
+
+        <Modal.Footer className="d-flex justify-content-between flex-wrap gap-2">
+          <Button
+            variant="outline-secondary"
+            onClick={closeFeeMessageModal}
+            disabled={pushAllSending}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            onClick={submitFeeMessageModal}
+            disabled={
+              pushAllSending ||
+              (feeMessageModal.mode === "single" &&
+                feeMessageModal.student?.id &&
+                pushSending.has(feeMessageModal.student.id))
+            }
+          >
+            {pushAllSending ||
+            (feeMessageModal.mode === "single" &&
+              feeMessageModal.student?.id &&
+              pushSending.has(feeMessageModal.student.id)) ? (
+              <>
+                <Spinner animation="border" size="sm" className="me-2" />
+                Sending
+              </>
+            ) : feeMessageModal.mode === "bulk" ? (
+              "Send to Pending Students"
+            ) : (
+              "Send Message"
+            )}
+          </Button>
+        </Modal.Footer>
+      </Modal>
 
       <div className="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
         <div>
@@ -1538,26 +1888,53 @@ const StudentTotalDueReport = () => {
             <Button
               variant="success"
               size="sm"
-              onClick={exportToExcel}
-              disabled={isAnyBulkSending || !filteredStudents.length}
+              onClick={handleExportExcel}
+              disabled={isAnyBulkSending || !activeSessionId}
             >
-              Excel
+              {excelDownloading ? (
+                <>
+                  <Spinner animation="border" size="sm" className="me-2" />
+                  Exporting
+                </>
+              ) : (
+                "Excel"
+              )}
+            </Button>
+
+            <Button
+              variant="outline-danger"
+              size="sm"
+              onClick={handleExportPdf}
+              disabled={isAnyBulkSending || !activeSessionId}
+            >
+              {pdfDownloading ? (
+                <>
+                  <Spinner animation="border" size="sm" className="me-2" />
+                  Exporting
+                </>
+              ) : (
+                "PDF"
+              )}
             </Button>
 
             <div className="d-flex flex-column align-items-end">
               <Button
                 variant="outline-primary"
                 size="sm"
-                onClick={sendAppFeeReminderToAllPending}
+                onClick={openBulkFeeMessageModal}
                 disabled={pushAllSending || !filteredStudents.length}
               >
                 {pushAllSending ? (
                   <>
-                    <Spinner animation="border" size="sm" className="me-2" />
+                    <Spinner
+                      animation="border"
+                      size="sm"
+                      className="me-2"
+                    />
                     Sending {pushAllProgress.done}/{pushAllProgress.total}
                   </>
                 ) : (
-                  "App Notify All (Pending)"
+                  "Fee Message All (Pending)"
                 )}
               </Button>
               {pushAllSending && (
@@ -1593,10 +1970,15 @@ const StudentTotalDueReport = () => {
         </div>
 
         <div className="d-flex flex-wrap gap-2 mt-3 small text-muted">
-          <span>• “Due Till Date” means installment due date ≤ selected Till Date.</span>
+          <span>
+            • “Due Till Date” means installment due date ≤ selected Till Date.
+          </span>
           <span>• Upcoming means pending but due date is after Till Date.</span>
-          <span>• WhatsApp uses selected Till Date + max previous due date (≤ Till Date).</span>
-          <span>• App Notify sends a push reminder with direct payment flow.</span>
+          <span>
+            • WhatsApp uses selected Till Date + max previous due date (≤ Till
+            Date).
+          </span>
+          <span>• Fee Message opens a custom in-app message modal with push notification.</span>
         </div>
       </div>
 
@@ -1716,7 +2098,7 @@ const StudentTotalDueReport = () => {
                             overlay={
                               <Tooltip>
                                 {hasPending
-                                  ? "Send app fee reminder with payment flow"
+                                  ? "Open custom app fee message with push notification"
                                   : "No due till date for this student"}
                               </Tooltip>
                             }
@@ -1725,20 +2107,26 @@ const StudentTotalDueReport = () => {
                               <Button
                                 size="sm"
                                 variant="outline-primary"
-                                disabled={!hasPending || isPushSending || pushAllSending}
+                                disabled={
+                                  !hasPending || isPushSending || pushAllSending
+                                }
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  sendAppFeeReminder(stu);
+                                  openSingleFeeMessageModal(stu);
                                 }}
                                 style={{ minWidth: 110 }}
                               >
                                 {isPushSending ? (
                                   <>
-                                    <Spinner animation="border" size="sm" className="me-2" />
+                                    <Spinner
+                                      animation="border"
+                                      size="sm"
+                                      className="me-2"
+                                    />
                                     Sending
                                   </>
                                 ) : (
-                                  "App Notify"
+                                  "Fee Message"
                                 )}
                               </Button>
                             </span>

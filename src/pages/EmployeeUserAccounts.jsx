@@ -1,4 +1,5 @@
 // File: src/pages/EmployeeUserAccounts.jsx
+
 import React, { useEffect, useMemo, useState, useCallback } from "react";
 import api from "../api";
 import Swal from "sweetalert2";
@@ -10,12 +11,26 @@ import AddEmployeeModal from "../components/AddEmployeeModal";
 
 const MySwal = withReactContent(Swal);
 
+const pageLimitDefault = 10;
+
 const getRoleFlags = () => {
-  const rawMulti = JSON.parse(localStorage.getItem("roles") || "[]");
+  let rawMulti = [];
+
+  try {
+    rawMulti = JSON.parse(localStorage.getItem("roles") || "[]");
+  } catch {
+    rawMulti = [];
+  }
+
   const rawSingle = localStorage.getItem("userRole");
-  const multi = rawMulti.map((r) => String(r).toLowerCase());
+
+  const multi = Array.isArray(rawMulti)
+    ? rawMulti.map((r) => String(r).toLowerCase())
+    : [];
+
   const single = rawSingle ? String(rawSingle).toLowerCase() : null;
   const roles = multi.length ? multi : single ? [single] : [];
+
   return {
     roles,
     isAdmin: roles.includes("admin"),
@@ -24,17 +39,24 @@ const getRoleFlags = () => {
   };
 };
 
-const pageLimitDefault = 10;
+const getApiErrorMessage = (err, fallback = "Something went wrong.") => {
+  return (
+    err?.response?.data?.message ||
+    err?.response?.data?.error ||
+    err?.message ||
+    fallback
+  );
+};
 
 const EmployeeUserAccounts = () => {
   const { isAdmin, isSuperadmin, isHR } = getRoleFlags();
 
-  // data
+  // Data
   const [users, setUsers] = useState([]);
   const [departments, setDepartments] = useState([]);
   const [allEmployees, setAllEmployees] = useState([]);
 
-  // ui state
+  // UI state
   const [selectedDept, setSelectedDept] = useState("");
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -45,49 +67,82 @@ const EmployeeUserAccounts = () => {
   const [editingUser, setEditingUser] = useState(null);
   const [loadingFilters, setLoadingFilters] = useState(true);
   const [loadingUsers, setLoadingUsers] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const canManage = isHR || isAdmin || isSuperadmin;
 
   const existingUsernames = useMemo(
-    () => users.map((u) => String(u.username)),
+    () => users.map((u) => String(u.username || "")),
     [users]
   );
 
-  // Debounce search (nice UX)
   useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(search.trim().toLowerCase()), 250);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search.trim().toLowerCase());
+    }, 250);
+
+    return () => clearTimeout(timer);
   }, [search]);
 
-  // Department map for quick lookup
   const deptById = useMemo(() => {
-    const m = new Map();
-    (departments || []).forEach((d) => m.set(d.id, d));
-    return m;
+    const map = new Map();
+
+    (departments || []).forEach((dept) => {
+      map.set(String(dept.id), dept);
+    });
+
+    return map;
   }, [departments]);
 
   const loadFiltersAndEmployees = useCallback(async () => {
     setLoadingFilters(true);
+
     try {
-      // Departments
       const { data: deptData } = await api.get("/departments");
+
       const deptArr = Array.isArray(deptData)
         ? deptData
         : Array.isArray(deptData?.departments)
         ? deptData.departments
         : [];
+
       setDepartments(deptArr);
 
-      // Employees for drop-down (only those without user accounts)
       const { data: empData } = await api.get("/employees");
-      const employees = Array.isArray(empData?.employees) ? empData.employees : [];
-      const hasAccount = (e) => Boolean(e.user_id || e.userAccount?.id);
-      const filtered = employees
-        .filter((e) => !hasAccount(e))
-        .filter((e) => (e.status ? String(e.status).toLowerCase() !== "disabled" : true))
-        .sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
-      setAllEmployees(filtered);
+
+      const employees = Array.isArray(empData?.employees)
+        ? empData.employees
+        : Array.isArray(empData)
+        ? empData
+        : [];
+
+      const hasAccount = (employee) =>
+        Boolean(employee.user_id || employee.userAccount?.id);
+
+      const filteredEmployees = employees
+        .filter((employee) => !hasAccount(employee))
+        .filter((employee) =>
+          employee.status
+            ? String(employee.status).toLowerCase() !== "disabled"
+            : true
+        )
+        .sort((a, b) =>
+          String(a.name || "").localeCompare(String(b.name || ""))
+        );
+
+      setAllEmployees(filteredEmployees);
     } catch (err) {
-      console.error(err);
-      Swal.fire("Error", "Failed to load departments or employees for the drop-down.", "error");
+      console.error("Filter/employee load error:", err);
+
+      await Swal.fire({
+        icon: "error",
+        title: "Unable to Load Filters",
+        text: getApiErrorMessage(
+          err,
+          "Failed to load departments or employees for the drop-down."
+        ),
+        confirmButtonText: "OK",
+      });
     } finally {
       setLoadingFilters(false);
     }
@@ -95,36 +150,75 @@ const EmployeeUserAccounts = () => {
 
   const fetchUsers = useCallback(async () => {
     setLoadingUsers(true);
+
     try {
       const { data } = await api.get("/users/employees", {
-        params: { department_id: selectedDept, page, limit },
+        params: {
+          department_id: selectedDept,
+          page,
+          limit,
+        },
       });
 
-      const normalized = (data?.employees || []).map((u) => ({
-        ...u,
-        status: u.status || "active",
-        roles: Array.isArray(u.roles) ? u.roles.map((r) => String(r).toLowerCase()) : [],
-      }));
+      const normalizedUsers = Array.isArray(data?.employees)
+        ? data.employees.map((user) => ({
+            ...user,
+            status: user.status || "active",
+            roles: Array.isArray(user.roles)
+              ? user.roles.map((role) => String(role).toLowerCase())
+              : [],
+          }))
+        : [];
 
-      setUsers(normalized);
+      setUsers(normalizedUsers);
       setTotalPages(Number(data?.totalPages) || 1);
     } catch (err) {
-      console.error(err);
-      Swal.fire("Error", "Failed to fetch employee user accounts.", "error");
+      console.error("Fetch employee users error:", err);
+
+      await Swal.fire({
+        icon: "error",
+        title: "Unable to Fetch Users",
+        text: getApiErrorMessage(
+          err,
+          "Failed to fetch employee user accounts."
+        ),
+        confirmButtonText: "OK",
+      });
     } finally {
       setLoadingUsers(false);
     }
   }, [selectedDept, page, limit]);
 
-  // initial load
   useEffect(() => {
     loadFiltersAndEmployees();
   }, [loadFiltersAndEmployees]);
 
-  // users fetch on filters/page/limit change
   useEffect(() => {
     fetchUsers();
   }, [fetchUsers]);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+
+    const results = await Promise.allSettled([
+      fetchUsers(),
+      loadFiltersAndEmployees(),
+    ]);
+
+    setRefreshing(false);
+
+    const failed = results.some((result) => result.status === "rejected");
+
+    if (!failed) {
+      Swal.fire({
+        icon: "success",
+        title: "Refreshed",
+        text: "Employee user account data has been refreshed.",
+        timer: 1400,
+        showConfirmButton: false,
+      });
+    }
+  };
 
   const handleDisable = async (userId, userName) => {
     const { value: reason } = await MySwal.fire({
@@ -132,41 +226,97 @@ const EmployeeUserAccounts = () => {
       text: "Please provide a reason for disabling this user.",
       input: "textarea",
       inputPlaceholder: "Enter reason...",
+      icon: "warning",
       showCancelButton: true,
-      confirmButtonText: "Disable",
+      confirmButtonText: "Disable User",
+      cancelButtonText: "Cancel",
       confirmButtonColor: "#d33",
-      inputValidator: (value) => (!value && "Reason required"),
+      inputValidator: (value) => (!value ? "Reason is required." : undefined),
     });
+
     if (!reason) return;
+
     try {
+      Swal.fire({
+        title: "Disabling user...",
+        text: "Please wait.",
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        didOpen: () => Swal.showLoading(),
+      });
+
       await api.put(`/users/${userId}/disable`, { reason });
-      Swal.fire("Disabled!", `${userName} has been disabled.`, "success");
-      fetchUsers();
-    } catch (error) {
-      console.error(error);
-      Swal.fire("Error", "Failed to disable user.", "error");
+
+      await fetchUsers();
+
+      await Swal.fire({
+        icon: "success",
+        title: "User Disabled",
+        text: `${userName} has been disabled successfully.`,
+        confirmButtonText: "OK",
+      });
+    } catch (err) {
+      console.error("Disable user error:", err);
+
+      await Swal.fire({
+        icon: "error",
+        title: "User Not Disabled",
+        text: getApiErrorMessage(err, "Failed to disable user."),
+        confirmButtonText: "OK",
+      });
     }
   };
 
   const handleEnable = async (userId, userName) => {
     const result = await Swal.fire({
       title: `Enable ${userName}?`,
+      text: "This user will be allowed to access the system again.",
       icon: "question",
       showCancelButton: true,
-      confirmButtonText: "Enable",
+      confirmButtonText: "Enable User",
+      cancelButtonText: "Cancel",
+      confirmButtonColor: "#198754",
     });
+
     if (!result.isConfirmed) return;
+
     try {
+      Swal.fire({
+        title: "Enabling user...",
+        text: "Please wait.",
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        didOpen: () => Swal.showLoading(),
+      });
+
       await api.put(`/users/${userId}/enable`);
-      Swal.fire("Enabled!", `${userName} has been restored.`, "success");
-      fetchUsers();
-    } catch (error) {
-      console.error(error);
-      Swal.fire("Error", "Failed to enable user.", "error");
+
+      await fetchUsers();
+
+      await Swal.fire({
+        icon: "success",
+        title: "User Enabled",
+        text: `${userName} has been restored successfully.`,
+        confirmButtonText: "OK",
+      });
+    } catch (err) {
+      console.error("Enable user error:", err);
+
+      await Swal.fire({
+        icon: "error",
+        title: "User Not Enabled",
+        text: getApiErrorMessage(err, "Failed to enable user."),
+        confirmButtonText: "OK",
+      });
     }
   };
 
   const handleSaveNew = async (formValues) => {
+    const employeeName =
+      String(formValues?.name || "").trim() ||
+      String(formValues?.username || "").trim() ||
+      "Employee";
+
     try {
       const payload = {
         ...formValues,
@@ -179,10 +329,19 @@ const EmployeeUserAccounts = () => {
         delete payload.employee_id;
       }
 
+      Swal.fire({
+        title: "Creating User Account",
+        text: "Please wait while the employee user account is being created.",
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        didOpen: () => Swal.showLoading(),
+      });
+
       const resp = await api.post("/users/register", payload);
       const backendId = resp.data?.user?.id || resp.data?.id;
 
-      // Firestore sync (best-effort)
+      let firestoreSynced = true;
+
       try {
         await addDoc(collection(firestore, "users"), {
           ...payload,
@@ -191,158 +350,408 @@ const EmployeeUserAccounts = () => {
           status: "active",
         });
       } catch (fsErr) {
+        firestoreSynced = false;
         console.error("Firestore sync error:", fsErr);
-        Swal.fire("Warning", "User registered but failed to sync with Firestore.", "warning");
       }
 
-      Swal.fire("Success!", `${formValues.name} has been added.`, "success");
-      fetchUsers();
       setShowAddModal(false);
+      setEditingUser(null);
+
+      const refreshResults = await Promise.allSettled([
+        fetchUsers(),
+        loadFiltersAndEmployees(),
+      ]);
+
+      const refreshFailed = refreshResults.some(
+        (result) => result.status === "rejected"
+      );
+
+      if (firestoreSynced && !refreshFailed) {
+        await Swal.fire({
+          icon: "success",
+          title: "User Created Successfully",
+          html: `
+            <div style="text-align:left">
+              <p class="mb-2"><b>${employeeName}</b> account has been created.</p>
+              <p class="mb-0 text-muted">The employee can now use login access based on assigned role permissions.</p>
+            </div>
+          `,
+          confirmButtonText: "OK",
+          confirmButtonColor: "#198754",
+        });
+      } else if (!firestoreSynced) {
+        await Swal.fire({
+          icon: "warning",
+          title: "User Created",
+          html: `
+            <div style="text-align:left">
+              <p class="mb-2"><b>${employeeName}</b> account was created successfully.</p>
+              <p class="mb-0 text-muted">However, Firestore sync failed. Login account is created in backend, but chat/Firestore user sync may need checking.</p>
+            </div>
+          `,
+          confirmButtonText: "OK",
+          confirmButtonColor: "#f59f00",
+        });
+      } else {
+        await Swal.fire({
+          icon: "warning",
+          title: "User Created",
+          html: `
+            <div style="text-align:left">
+              <p class="mb-2"><b>${employeeName}</b> account was created successfully.</p>
+              <p class="mb-0 text-muted">However, the list refresh failed. Please click Refresh to reload latest data.</p>
+            </div>
+          `,
+          confirmButtonText: "OK",
+          confirmButtonColor: "#f59f00",
+        });
+      }
     } catch (err) {
       console.error("API registration error:", err);
-      const apiMsg = err.response?.data?.message || err.response?.data?.error;
-      Swal.fire("Error", apiMsg || "Failed to add user.", "error");
+
+      await Swal.fire({
+        icon: "error",
+        title: "User Not Created",
+        html: `
+          <div style="text-align:left">
+            <p class="mb-2">The employee user account could not be created.</p>
+            <p class="mb-0 text-muted">${getApiErrorMessage(
+              err,
+              "Please check required fields and try again."
+            )}</p>
+          </div>
+        `,
+        confirmButtonText: "OK",
+        confirmButtonColor: "#d33",
+      });
     }
   };
 
   const handleSaveEdit = async (formValues) => {
+    const employeeName =
+      String(formValues?.name || "").trim() ||
+      String(formValues?.username || "").trim() ||
+      "Employee";
+
     try {
       const payload = {
         ...formValues,
         roles: formValues.roles || [],
       };
 
+      Swal.fire({
+        title: "Updating User Account",
+        text: "Please wait while the employee user account is being updated.",
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        didOpen: () => Swal.showLoading(),
+      });
+
       await api.put(`/users/${formValues.id}`, payload);
 
-      Swal.fire("Updated!", `${formValues.name} has been updated.`, "success");
-      fetchUsers();
       setShowAddModal(false);
       setEditingUser(null);
+
+      await fetchUsers();
+
+      await Swal.fire({
+        icon: "success",
+        title: "User Updated",
+        text: `${employeeName} account has been updated successfully.`,
+        confirmButtonText: "OK",
+        confirmButtonColor: "#198754",
+      });
     } catch (err) {
       console.error("API update error:", err);
-      const apiMsg = err.response?.data?.message || err.response?.data?.error;
-      Swal.fire("Error", apiMsg || "Failed to update user.", "error");
+
+      await Swal.fire({
+        icon: "error",
+        title: "User Not Updated",
+        text: getApiErrorMessage(err, "Failed to update user."),
+        confirmButtonText: "OK",
+        confirmButtonColor: "#d33",
+      });
     }
   };
 
   const filteredUsers = useMemo(() => {
-    const q = debouncedSearch;
+    const query = debouncedSearch;
+
     return users
-      .filter((u) => `${u.name} ${u.username} ${u.email}`.toLowerCase().includes(q))
-      .sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
+      .filter((user) => {
+        if (!query) return true;
+
+        return `${user.name || ""} ${user.username || ""} ${user.email || ""}`
+          .toLowerCase()
+          .includes(query);
+      })
+      .sort((a, b) =>
+        String(a.name || "").localeCompare(String(b.name || ""))
+      );
   }, [users, debouncedSearch]);
 
-  const canManage = isHR || isAdmin || isSuperadmin;
+  const loadedCount = users.length;
+  const activeCount = users.filter((user) => user.status === "active").length;
+  const disabledCount = users.filter(
+    (user) => user.status === "disabled"
+  ).length;
+
+  const fromRecord = loadingUsers || filteredUsers.length === 0 ? 0 : (page - 1) * limit + 1;
+  const toRecord =
+    loadingUsers || filteredUsers.length === 0
+      ? 0
+      : Math.min((page - 1) * limit + filteredUsers.length, page * limit);
 
   return (
-    <div className="container my-4">
-      {/* Header Card */}
-      <div className="card shadow-sm border-0 mb-3">
-        <div className="card-body d-flex flex-wrap justify-content-between align-items-center gap-2">
-          <div>
-            <h2 className="h4 mb-1 d-flex align-items-center gap-2">
-              <i className="bi bi-people-fill"></i>
-              Employee User Accounts
-            </h2>
-            <div className="text-muted small">
-              Manage login access for staff. Create accounts only for employees who don’t already have one.
+    <div className="container-fluid px-3 px-md-4 my-4">
+      {/* Header */}
+      <div className="card shadow-sm border-0 mb-3 overflow-hidden">
+        <div className="card-body p-4">
+          <div className="d-flex flex-wrap justify-content-between align-items-start gap-3">
+            <div>
+              <div className="d-flex align-items-center gap-2 mb-2">
+                <span className="badge rounded-pill text-bg-primary px-3 py-2">
+                  Staff Access
+                </span>
+                {!canManage && (
+                  <span className="badge rounded-pill text-bg-warning px-3 py-2">
+                    View Only
+                  </span>
+                )}
+              </div>
+
+              <h2 className="h3 mb-1 fw-bold d-flex align-items-center gap-2">
+                <i className="bi bi-people-fill text-primary"></i>
+                Employee User Accounts
+              </h2>
+
+              <p className="text-muted mb-0">
+                Create, update, enable, and disable staff login accounts with
+                role-based access.
+              </p>
+            </div>
+
+            <div className="d-flex flex-wrap gap-2">
+              <button
+                type="button"
+                className="btn btn-outline-secondary d-flex align-items-center gap-2"
+                onClick={handleRefresh}
+                disabled={loadingUsers || loadingFilters || refreshing}
+              >
+                <i
+                  className={`bi ${
+                    refreshing ? "bi-arrow-repeat" : "bi-arrow-clockwise"
+                  }`}
+                ></i>
+                {refreshing ? "Refreshing..." : "Refresh"}
+              </button>
+
+              <button
+                type="button"
+                className="btn btn-success d-flex align-items-center gap-2"
+                onClick={() => {
+                  setEditingUser(null);
+                  setShowAddModal(true);
+                }}
+                disabled={!canManage || loadingFilters}
+              >
+                <i className="bi bi-person-plus-fill"></i>
+                Add Employee User
+              </button>
             </div>
           </div>
-          <button
-            className="btn btn-success d-flex align-items-center gap-2"
-            onClick={() => {
-              setShowAddModal(true);
-              setEditingUser(null);
-            }}
-            disabled={!canManage || loadingFilters}
-          >
-            <i className="bi bi-person-plus-fill"></i>
-            Add Employee
-          </button>
         </div>
       </div>
 
-      {/* Toolbar */}
-      <div className="card shadow-sm border-0 mb-3">
-        <div className="card-body d-flex flex-wrap gap-2 align-items-center">
-          <div className="d-flex align-items-center gap-2">
-            <label className="text-muted small mb-0">Department</label>
-            <select
-              className="form-select"
-              value={selectedDept}
-              onChange={(e) => {
-                setSelectedDept(e.target.value);
-                setPage(1);
-              }}
-              style={{ minWidth: 220 }}
-              disabled={loadingFilters}
-            >
-              <option value="">All Departments</option>
-              {departments.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.name}
-                </option>
-              ))}
-            </select>
+      {/* Summary Cards */}
+      <div className="row g-3 mb-3">
+        <div className="col-12 col-md-4">
+          <div className="card border-0 shadow-sm h-100">
+            <div className="card-body d-flex align-items-center justify-content-between">
+              <div>
+                <div className="text-muted small">Loaded Accounts</div>
+                <div className="h4 fw-bold mb-0">{loadedCount}</div>
+              </div>
+              <div
+                className="rounded-circle bg-primary-subtle text-primary d-flex align-items-center justify-content-center"
+                style={{ width: 46, height: 46 }}
+              >
+                <i className="bi bi-person-lines-fill fs-4"></i>
+              </div>
+            </div>
           </div>
+        </div>
 
-          <div className="ms-auto d-flex flex-wrap gap-2">
-            <div className="input-group" style={{ minWidth: 280 }}>
-              <span className="input-group-text border-0 bg-light">
-                <i className="bi bi-search"></i>
-              </span>
-              <input
-                type="text"
-                className="form-control border-0 bg-light"
-                placeholder="Search name, username, email…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
+        <div className="col-12 col-md-4">
+          <div className="card border-0 shadow-sm h-100">
+            <div className="card-body d-flex align-items-center justify-content-between">
+              <div>
+                <div className="text-muted small">Active Users</div>
+                <div className="h4 fw-bold mb-0 text-success">{activeCount}</div>
+              </div>
+              <div
+                className="rounded-circle bg-success-subtle text-success d-flex align-items-center justify-content-center"
+                style={{ width: 46, height: 46 }}
+              >
+                <i className="bi bi-check-circle-fill fs-4"></i>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="col-12 col-md-4">
+          <div className="card border-0 shadow-sm h-100">
+            <div className="card-body d-flex align-items-center justify-content-between">
+              <div>
+                <div className="text-muted small">Disabled Users</div>
+                <div className="h4 fw-bold mb-0 text-warning">
+                  {disabledCount}
+                </div>
+              </div>
+              <div
+                className="rounded-circle bg-warning-subtle text-warning d-flex align-items-center justify-content-center"
+                style={{ width: 46, height: 46 }}
+              >
+                <i className="bi bi-lock-fill fs-4"></i>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {!canManage && (
+        <div className="alert alert-warning border-0 shadow-sm d-flex align-items-start gap-2">
+          <i className="bi bi-shield-lock-fill mt-1"></i>
+          <div>
+            <div className="fw-semibold">Limited Access</div>
+            <div className="small">
+              Your current role can view employee user accounts but cannot add,
+              edit, enable, or disable users.
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Filters */}
+      <div className="card shadow-sm border-0 mb-3">
+        <div className="card-body">
+          <div className="row g-3 align-items-end">
+            <div className="col-12 col-md-4">
+              <label className="form-label text-muted small mb-1">
+                Department
+              </label>
+              <select
+                className="form-select"
+                value={selectedDept}
+                onChange={(e) => {
+                  setSelectedDept(e.target.value);
+                  setPage(1);
+                }}
+                disabled={loadingFilters}
+              >
+                <option value="">All Departments</option>
+                {departments.map((dept) => (
+                  <option key={dept.id} value={dept.id}>
+                    {dept.name}
+                  </option>
+                ))}
+              </select>
             </div>
 
-            <select
-              className="form-select"
-              value={limit}
-              onChange={(e) => {
-                setLimit(Number(e.target.value) || pageLimitDefault);
-                setPage(1);
-              }}
-              title="Rows per page"
-              style={{ width: 120 }}
-            >
-              {[10, 20, 50].map((n) => (
-                <option key={n} value={n}>
-                  {n} / page
-                </option>
-              ))}
-            </select>
+            <div className="col-12 col-md-5">
+              <label className="form-label text-muted small mb-1">
+                Search
+              </label>
+              <div className="input-group">
+                <span className="input-group-text bg-light border-end-0">
+                  <i className="bi bi-search"></i>
+                </span>
+                <input
+                  type="text"
+                  className="form-control bg-light border-start-0"
+                  placeholder="Search by name, username, or email..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
+                {search && (
+                  <button
+                    type="button"
+                    className="btn btn-outline-secondary"
+                    onClick={() => setSearch("")}
+                    title="Clear search"
+                  >
+                    <i className="bi bi-x-lg"></i>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="col-12 col-md-3">
+              <label className="form-label text-muted small mb-1">
+                Rows Per Page
+              </label>
+              <select
+                className="form-select"
+                value={limit}
+                onChange={(e) => {
+                  setLimit(Number(e.target.value) || pageLimitDefault);
+                  setPage(1);
+                }}
+              >
+                {[10, 20, 50].map((value) => (
+                  <option key={value} value={value}>
+                    {value} / page
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
         </div>
       </div>
 
       {/* Table */}
       <div className="card shadow-sm border-0">
+        <div className="card-header bg-white border-0 py-3 d-flex flex-wrap align-items-center justify-content-between gap-2">
+          <div>
+            <div className="fw-bold">Employee Login Accounts</div>
+            <div className="small text-muted">
+              Showing accounts according to selected department and search
+              filter.
+            </div>
+          </div>
+
+          <span className="badge rounded-pill text-bg-light border px-3 py-2">
+            {loadingUsers ? "Loading..." : `${filteredUsers.length} visible`}
+          </span>
+        </div>
+
         <div className="table-responsive" style={{ maxHeight: "62vh" }}>
           <table className="table align-middle table-hover mb-0">
-            <thead className="table-dark" style={{ position: "sticky", top: 0, zIndex: 1 }}>
+            <thead
+              className="table-dark"
+              style={{ position: "sticky", top: 0, zIndex: 1 }}
+            >
               <tr>
-                <th style={{ width: 60 }}>#</th>
+                <th style={{ width: 70 }}>#</th>
                 <th>Name</th>
                 <th>Username</th>
                 <th>Email</th>
                 <th>Department</th>
                 <th style={{ width: 140 }}>Status</th>
-                <th style={{ width: 220 }}>Actions</th>
+                <th style={{ width: 230 }}>Actions</th>
               </tr>
             </thead>
+
             <tbody>
               {loadingUsers ? (
-                // Loading rows
-                [...Array(5)].map((_, i) => (
-                  <tr key={`skeleton-${i}`}>
-                    <td colSpan={7}>
+                [...Array(6)].map((_, index) => (
+                  <tr key={`skeleton-${index}`}>
+                    <td colSpan={7} className="py-3">
                       <div className="placeholder-glow">
-                        <span className="placeholder col-12" style={{ height: 18 }}></span>
+                        <span
+                          className="placeholder col-12 rounded"
+                          style={{ height: 18 }}
+                        ></span>
                       </div>
                     </td>
                   </tr>
@@ -350,131 +759,188 @@ const EmployeeUserAccounts = () => {
               ) : filteredUsers.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="text-center py-5">
-                    <div className="text-muted">
-                      <i className="bi bi-inboxes"></i> No users found for the selected filters.
+                    <div className="d-flex flex-column align-items-center gap-2 text-muted">
+                      <i className="bi bi-inboxes fs-1"></i>
+                      <div className="fw-semibold">No users found</div>
+                      <div className="small">
+                        Try changing department, search text, or refresh the
+                        list.
+                      </div>
                     </div>
                   </td>
                 </tr>
               ) : (
-                filteredUsers.map((u, idx) => (
-                  <tr key={u.id} className={u.status === "disabled" ? "table-warning" : ""}>
-                    <td>{(page - 1) * limit + idx + 1}</td>
-                    <td>
-                      <div className="d-flex align-items-center gap-2">
-                        <div
-                          className="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center"
-                          style={{ width: 36, height: 36, fontWeight: 600 }}
-                          title={u.name}
-                        >
-                          {String(u.name || "?")
-                            .split(" ")
-                            .map((p) => p[0])
-                            .join("")
-                            .slice(0, 2)
-                            .toUpperCase()}
-                        </div>
-                        <div>
-                          <div className="fw-semibold">{u.name}</div>
-                          {/* roles chip(s) */}
-                          {Array.isArray(u.roles) && u.roles.length > 0 && (
-                            <div className="small">
-                              {u.roles.map((r) => (
-                                <span key={r} className="badge text-bg-light border me-1">
-                                  <i className="bi bi-shield-lock me-1"></i>
-                                  {r}
-                                </span>
-                              ))}
+                filteredUsers.map((user, index) => {
+                  const isDisabled = user.status === "disabled";
+                  const departmentName =
+                    deptById.get(String(user.department_id))?.name || "N/A";
+
+                  const initials = String(user.name || "?")
+                    .split(" ")
+                    .filter(Boolean)
+                    .map((part) => part[0])
+                    .join("")
+                    .slice(0, 2)
+                    .toUpperCase();
+
+                  return (
+                    <tr
+                      key={user.id}
+                      className={isDisabled ? "table-warning" : ""}
+                    >
+                      <td>{(page - 1) * limit + index + 1}</td>
+
+                      <td>
+                        <div className="d-flex align-items-center gap-2">
+                          <div
+                            className={`rounded-circle text-white d-flex align-items-center justify-content-center ${
+                              isDisabled ? "bg-secondary" : "bg-primary"
+                            }`}
+                            style={{
+                              width: 40,
+                              height: 40,
+                              fontWeight: 700,
+                              flex: "0 0 auto",
+                            }}
+                            title={user.name}
+                          >
+                            {initials || "?"}
+                          </div>
+
+                          <div className="min-w-0">
+                            <div className="fw-semibold text-truncate">
+                              {user.name || "N/A"}
                             </div>
+
+                            {Array.isArray(user.roles) &&
+                              user.roles.length > 0 && (
+                                <div className="small mt-1">
+                                  {user.roles.map((role) => (
+                                    <span
+                                      key={role}
+                                      className="badge text-bg-light border me-1 mb-1"
+                                    >
+                                      <i className="bi bi-shield-lock me-1"></i>
+                                      {role}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                          </div>
+                        </div>
+                      </td>
+
+                      <td className="text-muted">{user.username || "N/A"}</td>
+                      <td className="text-muted">{user.email || "N/A"}</td>
+                      <td>{departmentName}</td>
+
+                      <td>
+                        <span
+                          className={`badge rounded-pill px-3 py-2 ${
+                            isDisabled ? "text-bg-warning" : "text-bg-success"
+                          }`}
+                        >
+                          <i
+                            className={`bi ${
+                              isDisabled ? "bi-lock-fill" : "bi-check-circle"
+                            } me-1`}
+                          ></i>
+                          {isDisabled ? "Disabled" : "Active"}
+                        </span>
+                      </td>
+
+                      <td>
+                        <div className="d-flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-primary"
+                            onClick={() => {
+                              setEditingUser(user);
+                              setShowAddModal(true);
+                            }}
+                            disabled={!canManage}
+                            title="Edit user"
+                          >
+                            <i className="bi bi-pencil-square me-1"></i>
+                            Edit
+                          </button>
+
+                          {!isDisabled ? (
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-outline-warning"
+                              onClick={() =>
+                                handleDisable(user.id, user.name || "User")
+                              }
+                              disabled={!canManage}
+                              title="Disable user"
+                            >
+                              <i className="bi bi-lock me-1"></i>
+                              Disable
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-outline-success"
+                              onClick={() =>
+                                handleEnable(user.id, user.name || "User")
+                              }
+                              disabled={!canManage}
+                              title="Enable user"
+                            >
+                              <i className="bi bi-unlock me-1"></i>
+                              Enable
+                            </button>
                           )}
                         </div>
-                      </div>
-                    </td>
-                    <td className="text-muted">{u.username}</td>
-                    <td className="text-muted">{u.email || "N/A"}</td>
-                    <td>{deptById.get(u.department_id)?.name || "N/A"}</td>
-                    <td>
-                      <span
-                        className={`badge rounded-pill ${
-                          u.status === "active" ? "text-bg-success" : "text-bg-warning"
-                        }`}
-                      >
-                        {u.status}
-                      </span>
-                    </td>
-                    <td>
-                      <div className="d-flex flex-wrap gap-2">
-                        <button
-                          className="btn btn-sm btn-primary"
-                          onClick={() => {
-                            setEditingUser(u);
-                            setShowAddModal(true);
-                          }}
-                          disabled={!canManage}
-                          title="Edit user"
-                        >
-                          <i className="bi bi-pencil"></i> Edit
-                        </button>
-
-                        {u.status === "active" ? (
-                          <button
-                            className="btn btn-sm btn-outline-warning"
-                            onClick={() => handleDisable(u.id, u.name)}
-                            disabled={!canManage}
-                            title="Disable user"
-                          >
-                            <i className="bi bi-lock"></i> Disable
-                          </button>
-                        ) : (
-                          <button
-                            className="btn btn-sm btn-outline-success"
-                            onClick={() => handleEnable(u.id, u.name)}
-                            disabled={!canManage}
-                            title="Enable user"
-                          >
-                            <i className="bi bi-unlock"></i> Enable
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
         </div>
 
-        {/* Footer / Pagination */}
-        <div className="card-footer d-flex flex-wrap justify-content-between align-items-center gap-2">
+        {/* Pagination */}
+        <div className="card-footer bg-white d-flex flex-wrap justify-content-between align-items-center gap-2 py-3">
           <div className="text-muted small">
-            Showing{" "}
             {loadingUsers
-              ? "—"
-              : `${(page - 1) * limit + 1}–${Math.min(page * limit, filteredUsers.length + (page - 1) * limit)}`
-            }
+              ? "Loading records..."
+              : filteredUsers.length === 0
+              ? "No records to show"
+              : `Showing ${fromRecord}–${toRecord}`}
           </div>
+
           <div className="d-flex align-items-center gap-2">
             <button
-              className="btn btn-sm btn-secondary"
+              type="button"
+              className="btn btn-sm btn-outline-secondary"
               disabled={page <= 1 || loadingUsers}
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              onClick={() => setPage((prev) => Math.max(1, prev - 1))}
             >
-              <i className="bi bi-chevron-left"></i> Prev
+              <i className="bi bi-chevron-left"></i>
+              Prev
             </button>
-            <span className="small">
-              Page {page} of {totalPages}
+
+            <span className="small text-muted">
+              Page <b>{page}</b> of <b>{totalPages}</b>
             </span>
+
             <button
-              className="btn btn-sm btn-secondary"
+              type="button"
+              className="btn btn-sm btn-outline-secondary"
               disabled={page >= totalPages || loadingUsers}
-              onClick={() => setPage((p) => p + 1)}
+              onClick={() => setPage((prev) => prev + 1)}
             >
-              Next <i className="bi bi-chevron-right"></i>
+              Next
+              <i className="bi bi-chevron-right"></i>
             </button>
           </div>
         </div>
       </div>
 
-      {/* Modal */}
+      {/* Add/Edit Modal */}
       <AddEmployeeModal
         show={showAddModal}
         onHide={() => {
