@@ -21,6 +21,10 @@
  *    - user can edit title/body before sending
  *    - supports placeholders like {name}, {amount}, {tillDate}, {dueDate}
  * ✅ More professional actions area and action column
+ * ✅ Transport due now strictly follows fee head due date:
+ *    - sends tillDate to /transport/pending-per-head
+ *    - does NOT count transport in Till Date when dueDate is missing/future
+ *    - frontend status/amount is calculated from actual dueDate <= selected Till Date
  */
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -229,18 +233,39 @@ const extractFineDate = (obj) => {
   return s.length > 10 ? s.slice(0, 10) : s;
 };
 
+const toOptionalAmount = (value) => {
+  if (value === null || value === undefined || value === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+};
+
+const readBooleanLike = (value) => {
+  if (value === true || value === false) return value;
+
+  const normalized = safeStr(value).trim().toLowerCase();
+  if (["true", "1", "yes", "y"].includes(normalized)) return true;
+  if (["false", "0", "no", "n"].includes(normalized)) return false;
+
+  return null;
+};
+
 // ✅ Head-level due check (based on selected tillDate)
+// Important:
+// Transport due date is SAME as the academic fee head due date.
+// Do NOT trust backend pendingTillDate/isDueTillDate when they conflict with dueDate,
+// because old backend may send pendingTillDate = 0 even when dueDate <= tillDate.
 const isHeadDueTillDate = (head, tillDateISO) => {
-  const remaining = Number(head.remaining || 0) || 0;
-  if (remaining <= 0) return false;
+  const remaining = Number(head?.remaining || 0) || 0;
+  const fine = Number(head?.fine || 0) || 0;
+  if (remaining <= 0 && fine <= 0) return false;
 
   // Opening Balance -> always due if pending
-  if (head.isOpeningBalance) return true;
+  if (head?.isOpeningBalance) return true;
 
-  // Safety fallback for transport-only pending heads with missing due date
-  if (head.isTransport && !head.dueDate) return true;
+  // Transport without dueDate must NOT be counted in Till Date.
+  if (head?.isTransport && !head?.dueDate) return false;
 
-  const dueStr = head.dueDate; // installment due date only
+  const dueStr = head?.dueDate; // installment / fee head due date only
   if (!dueStr) return false;
 
   const due = parseDateOnly(dueStr);
@@ -248,7 +273,22 @@ const isHeadDueTillDate = (head, tillDateISO) => {
 
   const ref =
     toStartOfDay(parseDateOnly(tillDateISO)) || toStartOfDay(new Date());
+
   return due.getTime() <= ref.getTime();
+};
+
+const getHeadFineTillDateAmount = (head, tillDateISO) => {
+  if (!isHeadDueTillDate(head, tillDateISO)) return 0;
+  return Math.max(Number(head?.fine || 0) || 0, 0);
+};
+
+const getHeadDueTillDateAmount = (head, tillDateISO) => {
+  if (!isHeadDueTillDate(head, tillDateISO)) return 0;
+
+  const remaining = Math.max(Number(head?.remaining || 0) || 0, 0);
+  const fine = Math.max(Number(head?.fine || 0) || 0, 0);
+
+  return remaining + fine;
 };
 
 // ✅ MAX PREVIOUS installment due date (latest <= tillDate) among pending heads
@@ -848,8 +888,53 @@ const StudentTotalDueReport = () => {
               head = agg.heads[idx];
             }
 
-            head.remaining = Number(vh.pending || 0);
+            head.due = Number(vh.due || vh.routeCost || vh.route_cost || 0);
+            head.paid = Number(vh.paid || vh.vanPaid || vh.van_paid || 0);
+            head.concession = Number(
+              vh.concession ||
+                vh.vanConcessionPaid ||
+                vh.van_concession_paid ||
+                0
+            );
+            head.remaining = Number(vh.pending || vh.remaining || 0);
             head.fine = Number(vh.fine || vh.fineAmount || 0);
+
+            const pendingTillDate = toOptionalAmount(
+              vh.pendingTillDate ??
+                vh.pending_till_date ??
+                vh.tillDatePending ??
+                vh.till_date_pending
+            );
+            const fineTillDate = toOptionalAmount(
+              vh.fineTillDate ??
+                vh.fine_till_date ??
+                vh.tillDateFine ??
+                vh.till_date_fine
+            );
+            const isDueTillDateFlag = readBooleanLike(
+              vh.isDueTillDate ??
+                vh.is_due_till_date ??
+                vh.transportDueTillDate ??
+                vh.transport_due_till_date
+            );
+
+            if (pendingTillDate !== null) {
+              head.pendingTillDate = pendingTillDate;
+            } else {
+              delete head.pendingTillDate;
+            }
+
+            if (fineTillDate !== null) {
+              head.fineTillDate = fineTillDate;
+            } else {
+              delete head.fineTillDate;
+            }
+
+            if (isDueTillDateFlag !== null) {
+              head.isDueTillDate = isDueTillDateFlag;
+            } else {
+              delete head.isDueTillDate;
+            }
 
             let tDue = extractInstallmentDueDate(vh);
             if (!tDue) {
@@ -906,12 +991,10 @@ const StudentTotalDueReport = () => {
           return sum + remaining + fine;
         }, 0);
 
-        const totalDueTillDate = (s.heads || []).reduce((sum, h) => {
-          if (!isHeadDueTillDate(h, tillDate)) return sum;
-          const remaining = Number(h.remaining || 0);
-          const fine = Number(h.fine || 0);
-          return sum + remaining + fine;
-        }, 0);
+        const totalDueTillDate = (s.heads || []).reduce(
+          (sum, h) => sum + getHeadDueTillDateAmount(h, tillDate),
+          0
+        );
 
         return { ...s, totalDueAllTime, totalDueTillDate };
       });
@@ -984,6 +1067,7 @@ const StudentTotalDueReport = () => {
         api.get("/transport/pending-per-head", {
           params: {
             session_id: sessionId,
+            tillDate,
             includeZeroPending: false,
             ...buildStudentStatusApiParams(sessionId),
           },
@@ -1143,8 +1227,7 @@ const StudentTotalDueReport = () => {
 
   const computeFineTotalTillDate = (heads) =>
     (heads || []).reduce(
-      (sum, h) =>
-        isHeadDueTillDate(h, tillDate) ? sum + Number(h.fine || 0) : sum,
+      (sum, h) => sum + getHeadFineTillDateAmount(h, tillDate),
       0
     );
 
@@ -1514,16 +1597,13 @@ const StudentTotalDueReport = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSessionId]);
 
-  // Rebuild totals when only tillDate changes, using current loaded data
+  // Re-load session data when tillDate changes so transport API also receives tillDate.
+  // Older backend can ignore tillDate; updated backend can return pendingTillDate/fineTillDate.
   useEffect(() => {
     if (!activeSessionId) return;
     if (!feeHeadings.length) return;
 
-    buildStudentReport({
-      sessionId: activeSessionId,
-      feeHeadingsInput: feeHeadings,
-      transportMapInput: transportMap,
-    });
+    loadSessionDataAndBuild(activeSessionId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tillDate]);
 
@@ -1973,6 +2053,9 @@ const StudentTotalDueReport = () => {
           <span>
             • “Due Till Date” means installment due date ≤ selected Till Date.
           </span>
+          <span>
+            • Transport without a due date is not counted in Till Date.
+          </span>
           <span>• Upcoming means pending but due date is after Till Date.</span>
           <span>
             • WhatsApp uses selected Till Date + max previous due date (≤ Till
@@ -2273,9 +2356,10 @@ const StudentTotalDueReport = () => {
                                   );
                                   const remaining = Number(h.remaining || 0);
                                   const fine = Number(h.fine || 0);
-                                  const headDueTillDate = isDueTill
-                                    ? remaining + fine
-                                    : 0;
+                                  const headDueTillDate =
+                                    getHeadDueTillDateAmount(h, tillDate);
+                                  const missingTransportDueDate =
+                                    h.isTransport && !h.dueDate && remaining > 0;
 
                                   return (
                                     <tr key={idx}>
@@ -2296,6 +2380,10 @@ const StudentTotalDueReport = () => {
                                           <Badge bg="danger">
                                             Due Till Date
                                           </Badge>
+                                        ) : missingTransportDueDate ? (
+                                          <Badge bg="secondary">
+                                            Missing Due Date
+                                          </Badge>
                                         ) : remaining > 0 ? (
                                           <Badge bg="warning" text="dark">
                                             Upcoming
@@ -2304,7 +2392,11 @@ const StudentTotalDueReport = () => {
                                           <Badge bg="success">Cleared</Badge>
                                         )}
                                         <div className="small text-muted mt-1">
-                                          {h.isOpeningBalance ? "Opening" : ""}
+                                          {h.isOpeningBalance
+                                            ? "Opening"
+                                            : missingTransportDueDate
+                                            ? "Transport dueDate required"
+                                            : ""}
                                         </div>
                                       </td>
                                     </tr>

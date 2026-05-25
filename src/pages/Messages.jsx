@@ -388,6 +388,7 @@ const Messages = () => {
     studentId: "",
     studentIds: "",
     classId: "",
+    classIds: [],
     sectionId: "",
   });
 
@@ -630,6 +631,7 @@ const Messages = () => {
       studentId: "",
       studentIds: "",
       classId: "",
+      classIds: [],
       sectionId: "",
     });
   };
@@ -705,6 +707,23 @@ const Messages = () => {
           }
           payload.classId = Number(compose.classId);
           payload.sectionId = Number(compose.sectionId);
+        }
+
+        if (compose.targetMode === "MULTIPLE_CLASSES") {
+          const classIds = (compose.classIds || [])
+            .map((id) => Number(id))
+            .filter(Boolean);
+
+          if (!classIds.length) {
+            showToast(
+              "warning",
+              "Classes missing",
+              "Please select at least one class."
+            );
+            return;
+          }
+
+          payload.classIds = classIds;
         }
       }
 
@@ -882,6 +901,15 @@ const Messages = () => {
 
     return list;
   }, [allStudentOptions, compose.classId, compose.sectionId]);
+
+  const selectedClassNames = useMemo(() => {
+    const selected = new Set((compose.classIds || []).map((id) => String(id)));
+
+    return (classes || [])
+      .filter((c) => selected.has(String(getClassId(c))))
+      .map((c) => getClassName(c))
+      .filter(Boolean);
+  }, [classes, compose.classIds]);
 
   const staffRecipients = useMemo(() => {
     return [
@@ -1275,12 +1303,21 @@ const Messages = () => {
                 <Form.Select
                   value={compose.targetMode}
                   onChange={(e) =>
-                    setCompose((p) => ({ ...p, targetMode: e.target.value }))
+                    setCompose((p) => ({
+                      ...p,
+                      targetMode: e.target.value,
+                      studentId: "",
+                      studentIds: "",
+                      classId: "",
+                      classIds: [],
+                      sectionId: "",
+                    }))
                   }
                 >
                   <option value="SINGLE">Single Student</option>
                   <option value="SELECTED_STUDENTS">Selected Students</option>
                   <option value="CLASS_SECTION">Class / Section</option>
+                  <option value="MULTIPLE_CLASSES">Multiple Classes</option>
                 </Form.Select>
               </Col>
             )}
@@ -1458,6 +1495,104 @@ const Messages = () => {
                   </Form.Select>
                 </Col>
               </>
+            )}
+
+            {!isStudent && compose.targetMode === "MULTIPLE_CLASSES" && (
+              <Col md={12}>
+                <div className="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                  <Form.Label className="mb-0">Select Classes</Form.Label>
+
+                  <div className="d-flex gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline-primary"
+                      disabled={!classes.length}
+                      onClick={() =>
+                        setCompose((p) => ({
+                          ...p,
+                          classIds: (classes || [])
+                            .map((c) => String(getClassId(c)))
+                            .filter(Boolean),
+                        }))
+                      }
+                    >
+                      Select All
+                    </Button>
+
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline-secondary"
+                      disabled={!compose.classIds.length}
+                      onClick={() =>
+                        setCompose((p) => ({
+                          ...p,
+                          classIds: [],
+                        }))
+                      }
+                    >
+                      Clear
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="border rounded p-3 mt-2">
+                  {classes.length ? (
+                    <Row className="g-2">
+                      {classes.map((c) => {
+                        const id = String(getClassId(c));
+                        if (!id) return null;
+
+                        const checked = (compose.classIds || []).includes(id);
+
+                        return (
+                          <Col key={id} xs={12} sm={6} md={4}>
+                            <Form.Check
+                              type="checkbox"
+                              id={`message-class-${id}`}
+                              label={getClassName(c)}
+                              checked={checked}
+                              onChange={(e) => {
+                                setCompose((p) => {
+                                  const current = (p.classIds || []).map((x) =>
+                                    String(x)
+                                  );
+
+                                  return {
+                                    ...p,
+                                    classIds: e.target.checked
+                                      ? Array.from(new Set([...current, id]))
+                                      : current.filter((x) => x !== id),
+                                  };
+                                });
+                              }}
+                            />
+                          </Col>
+                        );
+                      })}
+                    </Row>
+                  ) : (
+                    <div className="small text-muted">
+                      Classes not loaded. Check console for classes API response.
+                    </div>
+                  )}
+                </div>
+
+                {compose.classIds.length > 0 ? (
+                  <div className="small text-muted mt-2">
+                    Selected {compose.classIds.length} class(es)
+                    {selectedClassNames.length
+                      ? `: ${selectedClassNames.join(", ")}`
+                      : "."}
+                  </div>
+                ) : (
+                  <div className="small text-muted mt-2">
+                    Select one or more classes. Message will be sent to students
+                    of selected classes.
+                  </div>
+                )}
+              </Col>
             )}
 
             <Col md={12}>
