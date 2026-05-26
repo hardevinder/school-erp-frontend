@@ -8,7 +8,8 @@
  * ✅ FAST mode: uses status="any" (auto fallback to full/partial/unpaid if backend doesn't support)
  * ✅ Till Date selector (can be future e.g. cover up to March)
  * ✅ Totals, Overdue/Upcoming status, Excel/PDF export and WhatsApp all follow selected Till Date
- * ✅ Excel/PDF now export from backend:
+ * ✅ Table/Excel/PDF now use same backend report dataset:
+ *    - GET /reports/student-total-due
  *    - GET /reports/student-total-due/excel
  *    - GET /reports/student-total-due/pdf
  * ✅ WhatsApp sends:
@@ -572,483 +573,121 @@ const StudentTotalDueReport = () => {
     }
   };
 
-  // ======== Build Student-Wise Aggregated Report (FAST) ========
-  const buildStudentReport = async ({
-    sessionId = activeSessionId,
-    feeHeadingsInput = feeHeadings,
-    transportMapInput = transportMap,
-  } = {}) => {
-    if (!sessionId) return;
+  // ======== Build Student-Wise Aggregated Report ========
+  // ✅ Source of truth is now backend report dataset:
+  // GET /reports/student-total-due
+  // This keeps frontend table count, Excel, and PDF perfectly aligned.
+  const normalizeBackendReportStudent = (student = {}) => {
+    const heads = Array.isArray(student.heads)
+      ? student.heads.map((head = {}) => {
+          const rawName =
+            head.name ||
+            head.fee_heading_name ||
+            head.fee_heading ||
+            head.heading ||
+            "";
 
-    if (!Array.isArray(feeHeadingsInput) || feeHeadingsInput.length === 0) {
-      setStudents([]);
-      return;
-    }
+          const isTransport =
+            Boolean(head.isTransport || head.is_transport) ||
+            /\(transport\)$/i.test(rawName);
 
-    const buildId = ++buildSeqRef.current;
+          const displayName =
+            rawName ||
+            (isTransport
+              ? `${head.fee_heading_name || "Transport"} (Transport)`
+              : "Fee Head");
 
-    setLoading(true);
-    setError("");
-    setExpandedIds(new Set());
-
-    try {
-      const selectedIsActiveSession = isSelectedSessionActive(sessionId);
-
-      const combosFast = (feeHeadingsInput || []).map((fh) => ({
-        feeHeadingId: fh.id,
-        status: "any",
-      }));
-
-      const statusesFallback = ["full", "partial", "unpaid"];
-      const combosFallback = [];
-      (feeHeadingsInput || []).forEach((fh) =>
-        statusesFallback.forEach((status) =>
-          combosFallback.push({ feeHeadingId: fh.id, status })
-        )
-      );
-
-      const studentMap = new Map();
-
-      const upsertStudent = (student) => {
-        const pk = student.student_id ?? student.Student_ID ?? student.id ?? null;
-        const sid = pk ?? student.admissionNumber;
-        if (!sid) return null;
-
-        if (!studentMap.has(sid)) {
-          studentMap.set(sid, {
-            id: sid,
-            studentId: pk,
-            name: student.name || "",
-            admissionNumber: student.admissionNumber || "",
-            className: student.className || "",
-            sectionName: student.sectionName || student.section || "",
-            fatherPhone: student.fatherPhone || "",
-            motherPhone: student.motherPhone || "",
-            phone:
-              student.phone ||
-              student.parentPhone ||
-              student.fatherPhone ||
-              student.motherPhone ||
-              "",
-            studentStatus:
-              student.studentStatus || student.status || student.student_status || "",
-            status: student.status || "",
-            student_status: student.student_status || "",
-            is_active: student.is_active,
-            enabled: student.enabled,
-            heads: [],
-          });
-        } else {
-          const aggExisting = studentMap.get(sid);
-          if (!aggExisting.studentId && pk) aggExisting.studentId = pk;
-
-          if (!aggExisting.name && student.name) aggExisting.name = student.name;
-          if (!aggExisting.admissionNumber && student.admissionNumber)
-            aggExisting.admissionNumber = student.admissionNumber;
-          if (student.className) {
-            aggExisting.className = student.className;
-          }
-          if (student.sectionName || student.section) {
-            aggExisting.sectionName = student.sectionName || student.section;
-          }
-          if (!aggExisting.fatherPhone && student.fatherPhone)
-            aggExisting.fatherPhone = student.fatherPhone;
-          if (!aggExisting.motherPhone && student.motherPhone)
-            aggExisting.motherPhone = student.motherPhone;
-          if (!aggExisting.phone && (student.phone || student.parentPhone))
-            aggExisting.phone = student.phone || student.parentPhone;
-
-          const incomingStatus =
-            student.studentStatus || student.status || student.student_status || "";
-          if (!aggExisting.studentStatus && incomingStatus)
-            aggExisting.studentStatus = incomingStatus;
-          if (!aggExisting.status && student.status)
-            aggExisting.status = student.status;
-          if (!aggExisting.student_status && student.student_status)
-            aggExisting.student_status = student.student_status;
-          if (aggExisting.is_active === undefined && student.is_active !== undefined)
-            aggExisting.is_active = student.is_active;
-          if (aggExisting.enabled === undefined && student.enabled !== undefined)
-            aggExisting.enabled = student.enabled;
-        }
-
-        return studentMap.get(sid);
-      };
-
-      const mergeFeeDetails = (agg, feeDetails) => {
-        (feeDetails || []).forEach((fd) => {
-          const headName = fd.fee_heading;
-          if (!headName) return;
-
-          let head = agg.heads.find((h) => h.name === headName && !h.isTransport);
-          if (!head) {
-            head = {
-              name: headName,
-              isTransport: false,
-              due: 0,
-              paid: 0,
-              concession: 0,
-              remaining: 0,
-              fine: 0,
-              dueDate: null,
-              nextFineDate: null,
-            };
-            agg.heads.push(head);
-          }
-
-          const due = Number(fd.due || 0);
-          const paid = Number(fd.paid || 0);
-          const concession = Number(fd.concession || 0);
-          const fine = Number(fd.fineAmount || 0);
-          const remaining = Number(fd.remaining ?? due - (paid + concession));
-
-          head.due = due;
-          head.paid = paid;
-          head.concession = concession;
-          head.remaining = remaining;
-          head.fine = fine;
-
-          const dueDate = extractInstallmentDueDate(fd);
-          if (dueDate) head.dueDate = dueDate;
-
-          const fineDate = extractFineDate(fd);
-          if (fineDate) head.nextFineDate = fineDate;
-        });
-      };
-
-      let usedFast = false;
-
-      const worker = async ({ feeHeadingId, status }) => {
-        const res = await api.get("/feedue-status/fee-heading-wise-students", {
-          params: {
-            feeHeadingId,
-            status,
-            session_id: sessionId,
-            ...buildStudentStatusApiParams(sessionId),
-          },
-        });
-
-        const rawData = Array.isArray(res?.data?.data) ? res.data.data : [];
-
-        rawData.forEach((student) => {
-          if (selectedIsActiveSession && isInactiveStudentLike(student)) return;
-
-          const agg = upsertStudent(student);
-          if (!agg) return;
-          mergeFeeDetails(agg, student.feeDetails || []);
-        });
-      };
-
-      try {
-        if (combosFast.length > 0) {
-          usedFast = true;
-          await withConcurrency(combosFast, 4, worker);
-        }
-      } catch (e) {
-        usedFast = false;
-      }
-
-      if (!usedFast) {
-        const workerFallback = async ({ feeHeadingId, status }) => {
-          const res = await api.get("/feedue-status/fee-heading-wise-students", {
-            params: {
-            feeHeadingId,
-            status,
-            session_id: sessionId,
-            ...buildStudentStatusApiParams(sessionId),
-          },
-          });
-
-          const rawData = Array.isArray(res?.data?.data) ? res.data.data : [];
-
-          rawData.forEach((student) => {
-            // ✅ Important: fallback mode must also hide disabled students
-            // from current active session.
-            if (selectedIsActiveSession && isInactiveStudentLike(student)) return;
-
-            const agg = upsertStudent(student);
-            if (!agg) return;
-            mergeFeeDetails(agg, student.feeDetails || []);
-          });
-        };
-
-        if (combosFallback.length > 0) {
-          await withConcurrency(combosFallback, 4, workerFallback);
-        }
-      }
-
-      // ✅ Merge Transport heads from the transportMap passed to this exact build
-      if (transportMapInput && typeof transportMapInput.forEach === "function") {
-        transportMapInput.forEach((val, stuId) => {
-          const normalizedStudentId =
-            Number(stuId) && !Number.isNaN(Number(stuId))
-              ? Number(stuId)
-              : stuId;
-
-          if (selectedIsActiveSession && isInactiveStudentLike(val)) return;
-          if (!studentMap.has(normalizedStudentId) && !hasStudentIdentity(val))
-            return;
-
-          if (!studentMap.has(normalizedStudentId)) {
-            studentMap.set(normalizedStudentId, {
-              id: normalizedStudentId,
-              studentId: val?.studentId ?? val?.student_id ?? normalizedStudentId,
-              name: val?.name || "",
-              admissionNumber: val?.admissionNumber || "",
-              className: val?.className || "",
-              sectionName: val?.sectionName || val?.section || "",
-              fatherPhone: val?.fatherPhone || "",
-              motherPhone: val?.motherPhone || "",
-              phone:
-                val?.phone ||
-                val?.parentPhone ||
-                val?.fatherPhone ||
-                val?.motherPhone ||
-                "",
-              studentStatus:
-                val?.studentStatus || val?.status || val?.student_status || "",
-              status: val?.status || "",
-              student_status: val?.student_status || "",
-              is_active: val?.is_active,
-              enabled: val?.enabled,
-              heads: [],
-            });
-          } else {
-            const aggExisting = studentMap.get(stuId);
-            if (!aggExisting.studentId) aggExisting.studentId = stuId;
-
-            if (val?.className) aggExisting.className = val.className;
-            if (val?.sectionName || val?.section) {
-              aggExisting.sectionName = val.sectionName || val.section;
-            }
-            if (!aggExisting.name && val?.name) aggExisting.name = val.name;
-            if (!aggExisting.admissionNumber && val?.admissionNumber) {
-              aggExisting.admissionNumber = val.admissionNumber;
-            }
-            if (!aggExisting.fatherPhone && val?.fatherPhone) {
-              aggExisting.fatherPhone = val.fatherPhone;
-            }
-            if (!aggExisting.motherPhone && val?.motherPhone) {
-              aggExisting.motherPhone = val.motherPhone;
-            }
-            if (!aggExisting.phone && (val?.phone || val?.parentPhone)) {
-              aggExisting.phone = val.phone || val.parentPhone;
-            }
-
-            const incomingStatus =
-              val?.studentStatus || val?.status || val?.student_status || "";
-            if (!aggExisting.studentStatus && incomingStatus) {
-              aggExisting.studentStatus = incomingStatus;
-            }
-            if (!aggExisting.status && val?.status) {
-              aggExisting.status = val.status;
-            }
-            if (!aggExisting.student_status && val?.student_status) {
-              aggExisting.student_status = val.student_status;
-            }
-            if (aggExisting.is_active === undefined && val?.is_active !== undefined) {
-              aggExisting.is_active = val.is_active;
-            }
-            if (aggExisting.enabled === undefined && val?.enabled !== undefined) {
-              aggExisting.enabled = val.enabled;
-            }
-          }
-
-          const agg = studentMap.get(normalizedStudentId);
-
-          (val.heads || []).forEach((vh) => {
-            const baseHeadName = vh.fee_heading_name;
-            const headName = `${baseHeadName} (Transport)`;
-
-            let idx = agg.heads.findIndex(
-              (h) => h.name === headName && h.isTransport
-            );
-            let head;
-
-            if (idx === -1) {
-              head = {
-                name: headName,
-                isTransport: true,
-                due: 0,
-                paid: 0,
-                concession: 0,
-                remaining: 0,
-                fine: 0,
-                dueDate: null,
-                nextFineDate: null,
-              };
-
-              const academicIndex = agg.heads.findIndex(
-                (h) => !h.isTransport && h.name === baseHeadName
-              );
-              if (academicIndex >= 0)
-                agg.heads.splice(academicIndex + 1, 0, head);
-              else agg.heads.push(head);
-            } else {
-              head = agg.heads[idx];
-            }
-
-            head.due = Number(vh.due || vh.routeCost || vh.route_cost || 0);
-            head.paid = Number(vh.paid || vh.vanPaid || vh.van_paid || 0);
-            head.concession = Number(
-              vh.concession ||
-                vh.vanConcessionPaid ||
-                vh.van_concession_paid ||
+          const normalizedHead = {
+            ...head,
+            name: displayName,
+            isTransport,
+            isOpeningBalance: Boolean(
+              head.isOpeningBalance || head.is_opening_balance
+            ),
+            due: Number(head.due || head.amount || 0),
+            paid: Number(head.paid || head.received || 0),
+            concession: Number(head.concession || 0),
+            remaining: Number(
+              head.remaining ??
+                head.pending ??
+                head.balance ??
+                head.amount_due ??
                 0
-            );
-            head.remaining = Number(vh.pending || vh.remaining || 0);
-            head.fine = Number(vh.fine || vh.fineAmount || 0);
+            ),
+            fine: Number(head.fine ?? head.fineAmount ?? 0),
+            dueDate: extractInstallmentDueDate(head),
+            nextFineDate: extractFineDate(head),
+          };
 
-            const pendingTillDate = toOptionalAmount(
-              vh.pendingTillDate ??
-                vh.pending_till_date ??
-                vh.tillDatePending ??
-                vh.till_date_pending
-            );
-            const fineTillDate = toOptionalAmount(
-              vh.fineTillDate ??
-                vh.fine_till_date ??
-                vh.tillDateFine ??
-                vh.till_date_fine
-            );
-            const isDueTillDateFlag = readBooleanLike(
-              vh.isDueTillDate ??
-                vh.is_due_till_date ??
-                vh.transportDueTillDate ??
-                vh.transport_due_till_date
-            );
-
-            if (pendingTillDate !== null) {
-              head.pendingTillDate = pendingTillDate;
-            } else {
-              delete head.pendingTillDate;
-            }
-
-            if (fineTillDate !== null) {
-              head.fineTillDate = fineTillDate;
-            } else {
-              delete head.fineTillDate;
-            }
-
-            if (isDueTillDateFlag !== null) {
-              head.isDueTillDate = isDueTillDateFlag;
-            } else {
-              delete head.isDueTillDate;
-            }
-
-            let tDue = extractInstallmentDueDate(vh);
-            if (!tDue) {
-              const academicHead = agg.heads.find(
-                (h) => !h.isTransport && h.name === baseHeadName && h.dueDate
-              );
-              if (academicHead?.dueDate) tDue = academicHead.dueDate;
-            }
-            if (tDue) head.dueDate = tDue;
-
-            let tFine = extractFineDate(vh);
-            if (!tFine) {
-              const academicHead = agg.heads.find(
-                (h) =>
-                  !h.isTransport && h.name === baseHeadName && h.nextFineDate
-              );
-              if (academicHead?.nextFineDate) tFine = academicHead.nextFineDate;
-            }
-            if (tFine) head.nextFineDate = tFine;
-          });
-        });
-      }
-
-      if (sessionId) {
-        const studentList = Array.from(studentMap.values());
-        await withConcurrency(studentList, 8, async (s) => {
-          const pk =
-            s.studentId ??
-            (Number(s.id) && !Number.isNaN(Number(s.id)) ? Number(s.id) : null);
-          if (!pk) return;
-
-          const ob = await fetchOpeningBalanceOutstanding(pk, sessionId);
-          if (ob > 0) {
-            s.heads.push({
-              name: "Previous Balance",
-              isTransport: false,
-              isOpeningBalance: true,
-              due: ob,
-              paid: 0,
-              concession: 0,
-              remaining: ob,
-              fine: 0,
-              dueDate: null,
-              nextFineDate: null,
-            });
+          if (!normalizedHead.dueDate && head.dueDate) {
+            normalizedHead.dueDate = safeStr(head.dueDate).slice(0, 10);
           }
-        });
-      }
 
-      const studentsArr = Array.from(studentMap.values()).map((s) => {
-        const totalDueAllTime = (s.heads || []).reduce((sum, h) => {
-          const remaining = Number(h.remaining || 0);
-          const fine = Number(h.fine || 0);
-          return sum + remaining + fine;
-        }, 0);
+          return normalizedHead;
+        })
+      : [];
 
-        const totalDueTillDate = (s.heads || []).reduce(
-          (sum, h) => sum + getHeadDueTillDateAmount(h, tillDate),
-          0
-        );
+    const fallbackAllTime = heads.reduce((sum, h) => {
+      const remaining = Number(h.remaining || 0);
+      const fine = Number(h.fine || h.fineAmount || 0);
+      return sum + remaining + fine;
+    }, 0);
 
-        return { ...s, totalDueAllTime, totalDueTillDate };
-      });
+    const fallbackTillDate = heads.reduce(
+      (sum, h) => sum + getHeadDueTillDateAmount(h, tillDate),
+      0
+    );
 
-      studentsArr.sort((a, b) => {
-        const aKey = `${a.className || ""} ${a.sectionName || ""} ${a.name || ""}`.trim();
-        const bKey = `${b.className || ""} ${b.sectionName || ""} ${b.name || ""}`.trim();
-        return aKey.localeCompare(bKey, "en");
-      });
+    const id =
+      student.id ??
+      student.studentId ??
+      student.student_id ??
+      student.admissionNumber ??
+      student.admission_number;
 
-      // ✅ Final safety guard:
-      // In the current active session, never show disabled/inactive rows.
-      // Also hide ghost/disabled-like rows which have no admission no and no class.
-      const finalStudentsArr = selectedIsActiveSession
-        ? studentsArr.filter(
-            (s) => !isInactiveStudentLike(s) && hasBasicCurrentStudentInfo(s)
-          )
-        : studentsArr;
+    const fatherPhone =
+      student.fatherPhone || student.father_phone || student.father_mobile || "";
+    const motherPhone =
+      student.motherPhone || student.mother_phone || student.mother_mobile || "";
 
-      if (!aliveRef.current || buildId !== buildSeqRef.current) return;
-
-      setStudents(finalStudentsArr);
-
-      setWaRecipientByStudent((prev) => {
-        const next = { ...(prev || {}) };
-        finalStudentsArr.forEach((s) => {
-          const key = s?.id;
-          if (key && !next[key]) next[key] = "father";
-        });
-        return next;
-      });
-
-      showToast(
-        "success",
-        "Report Ready",
-        usedFast ? "Loaded using FAST mode ✅" : "Loaded using fallback mode ⚠️"
-      );
-    } catch (err) {
-      if (!aliveRef.current || buildId !== buildSeqRef.current) return;
-      console.error("Student report build error:", err);
-      setError("Failed to load student-wise due report.");
-      showToast(
-        "danger",
-        "Error",
-        safeStr(err?.message || "Failed to load report")
-      );
-    } finally {
-      if (aliveRef.current && buildId === buildSeqRef.current) {
-        setLoading(false);
-      }
-    }
+    return {
+      ...student,
+      id,
+      studentId: student.studentId ?? student.student_id ?? id,
+      name: student.name || "",
+      admissionNumber:
+        student.admissionNumber || student.admission_number || "",
+      className: student.className || student.class_name || "",
+      sectionName: student.sectionName || student.section_name || student.section || "",
+      fatherPhone,
+      motherPhone,
+      phone:
+        student.phone ||
+        student.parentPhone ||
+        student.parent_phone ||
+        fatherPhone ||
+        motherPhone ||
+        "",
+      studentStatus:
+        student.studentStatus || student.status || student.student_status || "",
+      status: student.status || "",
+      heads,
+      totalDueAllTime: Number(
+        student.totalDueAllTime ??
+          student.total_due_all_time ??
+          student.totalDue ??
+          fallbackAllTime
+      ),
+      totalDueTillDate: Number(
+        student.totalDueTillDate ??
+          student.total_due_till_date ??
+          student.pendingTillDate ??
+          fallbackTillDate
+      ),
+    };
   };
 
-  const loadSessionDataAndBuild = async (sessionId) => {
+  const loadSessionDataAndBuild = async (sessionId = activeSessionId) => {
     if (!sessionId) return;
 
     const loadId = ++loadSeqRef.current;
@@ -1059,91 +698,54 @@ const StudentTotalDueReport = () => {
     setStudents([]);
     setTransportData([]);
     setTransportMap(new Map());
-    setFeeHeadings([]);
 
     try {
-      const [feeHeadingsRes, transportRes] = await Promise.all([
-        api.get("/fee-headings"),
-        api.get("/transport/pending-per-head", {
-          params: {
-            session_id: sessionId,
-            tillDate,
-            includeZeroPending: false,
-            ...buildStudentStatusApiParams(sessionId),
-          },
-        }),
-      ]);
+      const res = await api.get("/reports/student-total-due", {
+        params: {
+          session_id: sessionId,
+          tillDate,
+        },
+      });
 
       if (!aliveRef.current || loadId !== loadSeqRef.current) return;
 
-      const feeHeadingsRows = Array.isArray(feeHeadingsRes.data)
-        ? feeHeadingsRes.data
+      const rows = Array.isArray(res?.data?.data)
+        ? res.data.data
+        : Array.isArray(res?.data)
+        ? res.data
         : [];
 
-      const transportRows = Array.isArray(transportRes.data?.data)
-        ? transportRes.data.data
-        : Array.isArray(transportRes.data)
-        ? transportRes.data
-        : [];
+      const normalizedRows = rows.map(normalizeBackendReportStudent);
 
-      const tmap = new Map();
-      transportRows.forEach((stu) => {
-        const key =
-          Number(stu.student_id) && !Number.isNaN(Number(stu.student_id))
-            ? Number(stu.student_id)
-            : stu.student_id;
+      setStudents(normalizedRows);
 
-        const totalPending = (stu.heads || []).reduce(
-          (a, h) =>
-            a + Number(h.pending || 0) + Number(h.fine || h.fineAmount || 0),
-          0
-        );
-
-        tmap.set(key, {
-          totalPending,
-          heads: stu.heads || [],
-          studentId: stu.studentId ?? stu.student_id ?? key,
-          student_id: stu.student_id ?? key,
-          name: stu.name || "",
-          admissionNumber: stu.admissionNumber || "",
-          className: stu.className || "",
-          sectionName: stu.sectionName || stu.section || "",
-          fatherPhone: stu.fatherPhone || "",
-          motherPhone: stu.motherPhone || "",
-          phone:
-            stu.phone ||
-            stu.parentPhone ||
-            stu.fatherPhone ||
-            stu.motherPhone ||
-            "",
-          studentStatus:
-            stu.studentStatus || stu.status || stu.student_status || "",
-          status: stu.status || "",
-          student_status: stu.student_status || "",
-          is_active: stu.is_active,
-          enabled: stu.enabled,
+      setWaRecipientByStudent((prev) => {
+        const next = { ...(prev || {}) };
+        normalizedRows.forEach((s) => {
+          const key = s?.id;
+          if (key && !next[key]) next[key] = "father";
         });
+        return next;
       });
 
-      setFeeHeadings(feeHeadingsRows);
-      setTransportData(transportRows);
-      setTransportMap(tmap);
-
-      await buildStudentReport({
-        sessionId,
-        feeHeadingsInput: feeHeadingsRows,
-        transportMapInput: tmap,
-      });
+      showToast(
+        "success",
+        "Report Ready",
+        "Loaded from backend report dataset ✅"
+      );
     } catch (err) {
       if (!aliveRef.current || loadId !== loadSeqRef.current) return;
-      console.error("Session change load error:", err);
+      console.error("Student total due report load error:", err);
       setError("Failed to load student-wise due report.");
       showToast(
         "danger",
         "Error",
-        safeStr(err?.message || "Failed to load report")
+        safeStr(err?.response?.data?.message || err?.message || "Failed to load report")
       );
-      setLoading(false);
+    } finally {
+      if (aliveRef.current && loadId === loadSeqRef.current) {
+        setLoading(false);
+      }
     }
   };
 
@@ -1597,11 +1199,9 @@ const StudentTotalDueReport = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSessionId]);
 
-  // Re-load session data when tillDate changes so transport API also receives tillDate.
-  // Older backend can ignore tillDate; updated backend can return pendingTillDate/fineTillDate.
+  // Re-load backend report when tillDate changes.
   useEffect(() => {
     if (!activeSessionId) return;
-    if (!feeHeadings.length) return;
 
     loadSessionDataAndBuild(activeSessionId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
