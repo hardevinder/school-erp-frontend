@@ -42,6 +42,7 @@ import SchoolBankAccounts from "./pages/SchoolBankAccounts";
 import Transactions from "./pages/Transactions/Transactions";
 import CancelledTransactions from "./pages/Transactions/CancelledTransactions";
 import Schools from "./pages/Schools";
+import AdmissionTypes from "./pages/AdmissionTypes";
 import Concessions from "./pages/Concessions";
 import StudentDueTable from "./pages/StudentDueTable";
 import StudentFeeHeadCollectionReport from "./pages/StudentFeeHeadCollectionReport";
@@ -535,7 +536,14 @@ function App() {
 
           <Route path="/sections" element={<Sections />} />
           <Route path="/schools" element={<Schools />} />
-
+          <Route
+            path="/admission-types"
+            element={
+              <RequireRole roles={["admin", "superadmin"]}>
+                <AdmissionTypes />
+              </RequireRole>
+            }
+          />
           {/* ✅ Inventory */}
           <Route
             path="/inventory"

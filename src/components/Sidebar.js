@@ -959,7 +959,20 @@ export default function Sidebar({ headerHeight = 56 }) {
       groups.push({
         heading: "Admissions",
         items: [
-          { key: "enquiries", label: "Enquiries", icon: "bi-person-lines-fill", path: "/enquiries", roles: ["admin", "superadmin"] },
+          {
+            key: "admission-types",
+            label: "Admission Types",
+            icon: "bi-ui-checks-grid",
+            path: "/admission-types",
+            roles: ["admin", "superadmin"],
+          },
+          {
+            key: "enquiries",
+            label: "Enquiries",
+            icon: "bi-person-lines-fill",
+            path: "/enquiries",
+            roles: ["admin", "superadmin"],
+          },
         ],
       });
 

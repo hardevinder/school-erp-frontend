@@ -61,6 +61,42 @@ const normalizeBoolToSelectValue = (value) => {
   return "false";
 };
 
+const extractAdmissionTypes = (data) => {
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.admissionTypes)) return data.admissionTypes;
+  if (Array.isArray(data?.data)) return data.data;
+  return [];
+};
+
+const getAdmissionDisplay = (fee) => {
+  return (
+    fee?.AdmissionType?.name ||
+    fee?.admissionTypeName ||
+    fee?.admissionType ||
+    "-"
+  );
+};
+
+const getAdmissionSelectValue = (fee, admissionTypes = []) => {
+  const id = fee?.admission_type_id ?? fee?.AdmissionType?.id;
+  if (id !== undefined && id !== null && id !== "") return String(id);
+
+  const oldName = String(fee?.admissionType || "").trim();
+  if (!oldName || oldName.toLowerCase() === "all") return "__ALL__";
+
+  const matched = admissionTypes.find(
+    (t) =>
+      String(t.name || "").trim().toLowerCase() === oldName.toLowerCase() ||
+      String(t.code || "").trim().toLowerCase() === oldName.toLowerCase()
+  );
+
+  return matched ? String(matched.id) : "__ALL__";
+};
+
+const findAdmissionTypeById = (admissionTypes = [], id) => {
+  return admissionTypes.find((t) => Number(t.id) === Number(id)) || null;
+};
+
 const FeeStructure = () => {
   const { isAdmin, isSuperadmin } = useMemo(getRoleFlags, []);
   const canEdit = isAdmin || isSuperadmin;
@@ -69,6 +105,7 @@ const FeeStructure = () => {
   const [classes, setClasses] = useState([]);
   const [feeHeadings, setFeeHeadings] = useState([]);
   const [sessions, setSessions] = useState([]);
+  const [admissionTypes, setAdmissionTypes] = useState([]);
 
   const [selectedSessionId, setSelectedSessionId] = useState(null);
 
@@ -88,7 +125,7 @@ const FeeStructure = () => {
     fineAmountPerSlab: "",
     fineSlabDuration: "",
     fineStartDate: "",
-    admissionType: "",
+    admission_type_id: "",
     concessionApplicable: "",
     transportApplicable: "",
   });
@@ -142,6 +179,24 @@ const FeeStructure = () => {
       Swal.fire(
         "Error",
         getApiErrorMessage(err, "Failed to fetch fee headings."),
+        "error"
+      );
+      return [];
+    }
+  };
+
+
+  const fetchAdmissionTypes = async () => {
+    try {
+      const { data } = await api.get("/admission-types/active");
+      const list = extractAdmissionTypes(data).filter((t) => t?.is_active !== false);
+      setAdmissionTypes(list);
+      return list;
+    } catch (err) {
+      console.error(err);
+      Swal.fire(
+        "Error",
+        getApiErrorMessage(err, "Failed to fetch admission types."),
         "error"
       );
       return [];
@@ -207,6 +262,9 @@ const FeeStructure = () => {
     const classesData = classes.length ? classes : await fetchClasses();
     const feeHeadingsData = feeHeadings.length ? feeHeadings : await fetchFeeHeadings();
     const sessionData = sessions.length ? sessions : await fetchSessions();
+    const admissionTypesData = admissionTypes.length
+      ? admissionTypes
+      : await fetchAdmissionTypes();
 
     const classOptionsHtml = classesData
       .map((cls) => `<option value="${cls.id}">${cls.class_name}</option>`)
@@ -222,6 +280,17 @@ const FeeStructure = () => {
           `<option value="${s.id}">${s.name}${s.is_active ? " (Active)" : ""}</option>`
       )
       .join("");
+
+    const admissionTypeOptionsHtml = [
+      `<option value="__ALL__">All / Common</option>`,
+      ...admissionTypesData.map(
+        (t) =>
+          `<option value="${t.id}">${t.name}${t.is_default ? " (Default)" : ""}</option>`
+      ),
+    ].join("");
+
+    const defaultAdmissionType =
+      admissionTypesData.find((t) => t.is_default) || admissionTypesData[0] || null;
 
     const isEdit = Boolean(existing);
 
@@ -332,12 +401,13 @@ const FeeStructure = () => {
         </div>
 
         <div>
-          <label class="fs-lbl">Admission</label>
-          <select id="admissionType" class="fs-inp">
-            <option value="New">New</option>
-            <option value="Old">Old</option>
-            <option value="All">All</option>
+          <label class="fs-lbl">Admission Type</label>
+          <select id="admissionTypeId" class="fs-inp">
+            ${admissionTypeOptionsHtml}
           </select>
+          <div style="font-size:12px;color:#6b7280;margin-top:4px;">
+            Manage options from Admission Types master.
+          </div>
         </div>
 
         <div>
@@ -372,8 +442,8 @@ const FeeStructure = () => {
             existing.Class?.id ?? existing.class_id ?? "";
           document.getElementById("feeHeadingId").value =
             existing.FeeHeading?.id ?? existing.fee_heading_id ?? "";
-          document.getElementById("admissionType").value =
-            existing.admissionType ?? "All";
+          document.getElementById("admissionTypeId").value =
+            getAdmissionSelectValue(existing, admissionTypesData);
           document.getElementById("concessionApplicable").value =
             normalizeBoolToSelectValue(existing?.concessionApplicable);
           document.getElementById("transportApplicable").value =
@@ -384,7 +454,9 @@ const FeeStructure = () => {
           if (selectedSessionId) {
             document.getElementById("sessionId").value = selectedSessionId;
           }
-          document.getElementById("admissionType").value = "All";
+          document.getElementById("admissionTypeId").value = defaultAdmissionType
+            ? String(defaultAdmissionType.id)
+            : "__ALL__";
           document.getElementById("concessionApplicable").value = "false";
           document.getElementById("transportApplicable").value = "false";
           document.getElementById("fineType").value = "percentage";
@@ -418,7 +490,7 @@ const FeeStructure = () => {
         const classId = document.getElementById("classId").value;
         const feeHeadingId = document.getElementById("feeHeadingId").value;
         const feeDue = document.getElementById("feeDue").value;
-        const admissionType = document.getElementById("admissionType").value;
+        const admissionTypeIdValue = document.getElementById("admissionTypeId").value;
         const fineType = document.getElementById("fineType").value;
 
         if (!sessionId) {
@@ -437,10 +509,15 @@ const FeeStructure = () => {
           Swal.showValidationMessage("Fee Due is required");
           return false;
         }
-        if (!admissionType) {
+        if (!admissionTypeIdValue) {
           Swal.showValidationMessage("Admission Type is required");
           return false;
         }
+
+        const selectedAdmissionType =
+          admissionTypeIdValue === "__ALL__"
+            ? null
+            : findAdmissionTypeById(admissionTypesData, admissionTypeIdValue);
 
         return {
           session_id: Number(sessionId),
@@ -466,7 +543,9 @@ const FeeStructure = () => {
             document.getElementById("fineStartDate").value
           ),
 
-          admissionType,
+          admission_type_id:
+            admissionTypeIdValue === "__ALL__" ? null : Number(admissionTypeIdValue),
+          admissionType: selectedAdmissionType?.name || "All",
           concessionApplicable:
             document.getElementById("concessionApplicable").value === "true",
           transportApplicable:
@@ -930,7 +1009,7 @@ const FeeStructure = () => {
           <div><b>Source Class:</b> ${sourceClassName}</div>
           <div><b>Source Session:</b> ${sourceSessionName}</div>
           <div><b>Source Fee Head:</b> ${sourceFeeHeadingName}</div>
-          <div><b>Admission Type:</b> ${fee.admissionType || "-"}</div>
+          <div><b>Admission Type:</b> ${getAdmissionDisplay(fee)}</div>
         </div>
 
         <label class="fs-lbl" for="targetFeeHeadingIds">Target Fee Heads</label>
@@ -1061,6 +1140,7 @@ const FeeStructure = () => {
           fee.Session?.name,
           fee.Class?.class_name,
           fee.FeeHeading?.fee_heading,
+          getAdmissionDisplay(fee),
           String(fee.feeDue ?? ""),
         ]
           .filter(Boolean)
@@ -1081,7 +1161,7 @@ const FeeStructure = () => {
       fineAmountPerSlab,
       fineSlabDuration,
       fineStartDate,
-      admissionType,
+      admission_type_id,
       concessionApplicable,
       transportApplicable,
     } = bulkValues;
@@ -1106,7 +1186,20 @@ const FeeStructure = () => {
     }
 
     if (fineStartDate !== "") payload.fineStartDate = safeDateOrNull(fineStartDate);
-    if (admissionType !== "") payload.admissionType = admissionType;
+
+    if (admission_type_id !== "") {
+      if (admission_type_id === "__ALL__") {
+        payload.admission_type_id = null;
+        payload.admissionType = "All";
+      } else {
+        const selectedAdmissionType = findAdmissionTypeById(
+          admissionTypes,
+          admission_type_id
+        );
+        payload.admission_type_id = Number(admission_type_id);
+        payload.admissionType = selectedAdmissionType?.name || "";
+      }
+    }
 
     if (concessionApplicable !== "") {
       payload.concessionApplicable = concessionApplicable === "true";
@@ -1215,7 +1308,12 @@ const FeeStructure = () => {
   // ---------------------------- Mount ----------------------------
   useEffect(() => {
     (async () => {
-      await Promise.all([fetchSessions(), fetchClasses(), fetchFeeHeadings()]);
+      await Promise.all([
+        fetchSessions(),
+        fetchClasses(),
+        fetchFeeHeadings(),
+        fetchAdmissionTypes(),
+      ]);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -1489,15 +1587,21 @@ const FeeStructure = () => {
                 <label className="form-label fs-lbl2">Admission</label>
                 <select
                   className="form-select fs-inp2"
-                  value={bulkValues.admissionType}
+                  value={bulkValues.admission_type_id}
                   onChange={(e) =>
-                    setBulkValues((s) => ({ ...s, admissionType: e.target.value }))
+                    setBulkValues((s) => ({
+                      ...s,
+                      admission_type_id: e.target.value,
+                    }))
                   }
                 >
                   <option value="">(No change)</option>
-                  <option value="New">New</option>
-                  <option value="Old">Old</option>
-                  <option value="All">All</option>
+                  <option value="__ALL__">All / Common</option>
+                  {admissionTypes.map((type) => (
+                    <option key={type.id} value={String(type.id)}>
+                      {type.name} {type.is_default ? "(Default)" : ""}
+                    </option>
+                  ))}
                 </select>
               </div>
 
@@ -1596,7 +1700,7 @@ const FeeStructure = () => {
                     <td className="text-nowrap">{fee.feeDue ?? "-"}</td>
                     <td className="text-nowrap">{formatFineCell(fee)}</td>
                     <td className="text-nowrap">{fee.fineStartDate || "-"}</td>
-                    <td className="text-nowrap">{fee.admissionType || "-"}</td>
+                    <td className="text-nowrap">{getAdmissionDisplay(fee)}</td>
 
                     <td className="fs-wrap">
                       {flags.length ? flags.join(", ") : <span className="text-muted">None</span>}

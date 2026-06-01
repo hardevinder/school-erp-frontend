@@ -354,8 +354,15 @@ const getSectionLabelById = (sectionId, sections = []) => {
   );
 };
 
-const formatINR = (n) =>
-  `₹${Number(n || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
+const formatINR = (n) => {
+  const value = Number(n || 0);
+  const safeValue = Number.isFinite(value) ? value : 0;
+
+  return `₹${safeValue.toLocaleString("en-IN", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  })}`;
+};
 
 const getAcademicDueWithConcession = (row = {}) =>
   Math.max(
@@ -659,7 +666,25 @@ const formatTransactionDateOnly = (value) => formatDisplayDate(value);
 
 const zeroAsBlank = (value) => (Number(value || 0) === 0 ? "" : value);
 
-const parseNumberInput = (value) => (value === "" ? 0 : parseFloat(value) || 0);
+const roundMoney = (value) =>
+  Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
+
+const parseNumberInput = (value) => {
+  if (value === "" || value === null || value === undefined) return 0;
+
+  const cleaned = String(value).replace(/,/g, "").trim();
+  const parsed = Number.parseFloat(cleaned);
+
+  if (!Number.isFinite(parsed)) return 0;
+
+  return roundMoney(Math.max(0, parsed));
+};
+
+const MONEY_INPUT_PROPS = {
+  step: "0.01",
+  min: "0",
+  inputMode: "decimal",
+};
 
 const validateModePopupInfo = (details, mode) => {
   if (
@@ -2712,7 +2737,7 @@ const Transactions = () => {
   };
 
   const autoAllocateQuickAmount = () => {
-    const amt = parseInt(quickAmount, 10);
+    const amt = parseNumberInput(quickAmount);
     if (isNaN(amt) || amt <= 0) {
       Swal.fire("Enter amount", "Please enter a positive amount to auto-fill.", "info");
       return;
@@ -4478,6 +4503,7 @@ const Transactions = () => {
                     <div className="d-flex align-items-center gap-2 flex-wrap">
                       <Form.Control
                         type="number"
+                        {...MONEY_INPUT_PROPS}
                         placeholder="Quick Fill ₹"
                         value={quickAmount}
                         onChange={(e) => setQuickAmount(e.target.value)}
@@ -4875,11 +4901,12 @@ const Transactions = () => {
                             <td>
                               <Form.Control
                                 type="number"
+                        {...MONEY_INPUT_PROPS}
                                 value={feeDetail.Concession || ""}
                                 onChange={(e) => {
                                   const updated = [...newTransactionDetails];
                                   const row = { ...updated[index] };
-                                  row.Concession = parseInt(e.target.value, 10) || 0;
+                                  row.Concession = parseNumberInput(e.target.value);
                                   updated[index] = row;
                                   setNewTransactionDetails(updated);
                                 }}
@@ -4893,11 +4920,12 @@ const Transactions = () => {
                             <td>
                               <Form.Control
                                 type="number"
+                        {...MONEY_INPUT_PROPS}
                                 value={feeDetail.Fee_Recieved || ""}
                                 onChange={(e) => {
                                   const updated = [...newTransactionDetails];
                                   const row = { ...updated[index] };
-                                  const val = parseInt(e.target.value, 10) || 0;
+                                  const val = parseNumberInput(e.target.value);
                                   const maxAllowed = Math.max(
                                     0,
                                     (row.Fee_Due || 0) - (row.Concession || 0)
@@ -4935,6 +4963,7 @@ const Transactions = () => {
                               {feeDetail.ShowVanFeeInput ? (
                                 <Form.Control
                                   type="number"
+                        {...MONEY_INPUT_PROPS}
                                   value={
                                     feeDetail.Van_Fee_Concession === 0
                                       ? ""
@@ -4943,7 +4972,7 @@ const Transactions = () => {
                                   onChange={(e) => {
                                     const updated = [...newTransactionDetails];
                                     const row = { ...updated[index] };
-                                    const cons = parseInt(e.target.value, 10) || 0;
+                                    const cons = parseNumberInput(e.target.value);
                                     row.Van_Fee_Concession = cons;
                                     row._vanFeeConcession = cons;
 
@@ -4985,14 +5014,14 @@ const Transactions = () => {
                                   />
                                   <Form.Control
                                     type="number"
+                        {...MONEY_INPUT_PROPS}
                                     size="sm"
                                     value={feeDetail.VanFee === 0 ? "" : feeDetail.VanFee}
                                     style={{ minWidth: 0, width: 78 }}
                                     onChange={(e) => {
                                       const updated = [...newTransactionDetails];
                                       const row = { ...updated[index] };
-                                      const parsed = parseInt(e.target.value, 10);
-                                      const enteredValue = Number.isNaN(parsed) ? 0 : Math.max(0, parsed);
+                                      const enteredValue = parseNumberInput(e.target.value);
                                       const key = String(row.Fee_Head);
 
                                       row.VanFee = enteredValue;
@@ -5041,6 +5070,7 @@ const Transactions = () => {
                                   />
                                   <Form.Control
                                     type="number"
+                        {...MONEY_INPUT_PROPS}
                                     size="sm"
                                     value={
                                       feeDetail.Fine_Amount === 0 && !feeDetail.isFineEdited
@@ -5051,10 +5081,11 @@ const Transactions = () => {
                                     onChange={(e) => {
                                       const updated = [...newTransactionDetails];
                                       const row = { ...updated[index] };
-                                      const value = parseInt(e.target.value, 10);
-                                      const enteredValue = isNaN(value)
-                                        ? 0
-                                        : Math.max(0, Math.min(value, row.fineAmount || 0));
+                                      const value = parseNumberInput(e.target.value);
+                                      const enteredValue = Math.max(
+                                        0,
+                                        Math.min(value, Number(row.fineAmount || 0))
+                                      );
                                       const key = String(row.Fee_Head);
 
                                       row.Fine_Amount = enteredValue;
@@ -5205,6 +5236,7 @@ const Transactions = () => {
                         <Form.Label>Fee Received</Form.Label>
                         <Form.Control
                           type="number"
+                        {...MONEY_INPUT_PROPS}
                           value={zeroAsBlank(editingTransaction?.Fee_Recieved)}
                           onChange={(e) =>
                             setEditingTransaction((prev) => ({
@@ -5221,6 +5253,7 @@ const Transactions = () => {
                         <Form.Label>Concession</Form.Label>
                         <Form.Control
                           type="number"
+                        {...MONEY_INPUT_PROPS}
                           value={zeroAsBlank(editingTransaction?.Concession)}
                           onChange={(e) =>
                             setEditingTransaction((prev) => ({
@@ -5237,6 +5270,7 @@ const Transactions = () => {
                         <Form.Label>Van Fee</Form.Label>
                         <Form.Control
                           type="number"
+                        {...MONEY_INPUT_PROPS}
                           value={zeroAsBlank(editingTransaction?.VanFee)}
                           onChange={(e) =>
                             setEditingTransaction((prev) => ({
@@ -5253,6 +5287,7 @@ const Transactions = () => {
                         <Form.Label>Van Fee Concession</Form.Label>
                         <Form.Control
                           type="number"
+                        {...MONEY_INPUT_PROPS}
                           value={zeroAsBlank(editingTransaction?.Van_Fee_Concession)}
                           onChange={(e) =>
                             setEditingTransaction((prev) => ({
@@ -5269,6 +5304,7 @@ const Transactions = () => {
                         <Form.Label>Fine</Form.Label>
                         <Form.Control
                           type="number"
+                        {...MONEY_INPUT_PROPS}
                           value={zeroAsBlank(editingTransaction?.Fine_Amount)}
                           onChange={(e) =>
                             setEditingTransaction((prev) => ({

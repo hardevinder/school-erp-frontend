@@ -191,6 +191,68 @@ const siblingDisplayToken = (token) => {
 };
 
 
+
+const extractAdmissionTypes = (data) => {
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.admissionTypes)) return data.admissionTypes;
+  if (Array.isArray(data?.data)) return data.data;
+  return [];
+};
+
+const escapeHtmlAttr = (value = "") =>
+  String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+
+const normalizeAdmissionMasterCode = (type = {}) =>
+  String(type?.code || type?.name || "")
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, "_");
+
+const getLegacyAdmissionTypeValue = (type = {}) => {
+  const code = normalizeAdmissionMasterCode(type);
+  const name = String(type?.name || "").trim().toLowerCase();
+
+  // Keep legacy DB enum safe: only New / Old are allowed in old column.
+  if (code === "OLD" || name.includes("old") || name.includes("continuing")) {
+    return "Old";
+  }
+
+  return "New";
+};
+
+const getAdmissionTypeLabel = (student = {}, admissionTypes = []) => {
+  const direct =
+    student?.AdmissionType?.name ||
+    student?.admissionTypeName ||
+    student?.admission_type_name ||
+    student?.admission_type_label ||
+    student?.admissionType?.name ||
+    "";
+
+  if (direct) return direct;
+
+  const id = student?.admission_type_id;
+  if (id !== undefined && id !== null && String(id).trim() !== "") {
+    const matched = admissionTypes.find((type) => String(type.id) === String(id));
+    if (matched?.name) return matched.name;
+  }
+
+  return student?.admission_type || "-";
+};
+
+const getAdmissionTypeBadgeClass = (label = "") => {
+  const value = String(label || "").toLowerCase();
+  if (value.includes("new") || value.includes("late")) return "bg-success";
+  if (value.includes("old") || value.includes("continuing")) return "bg-warning text-dark";
+  if (value.includes("transfer")) return "bg-primary";
+  if (value.includes("rte")) return "bg-info text-dark";
+  return "bg-secondary";
+};
+
 const EXPORT_COLUMN_OPTIONS = [
   { key: "admission_number", label: "Admission Number" },
   { key: "name", label: "Student Name" },
@@ -259,6 +321,7 @@ const Students = () => {
   const [sessions, setSessions] = useState([]);
   const [transportations, setTransportations] = useState([]);
   const [houses, setHouses] = useState([]);
+  const [admissionTypes, setAdmissionTypes] = useState([]);
 
   // transport helpers
   const transportById = useMemo(() => {
@@ -287,6 +350,19 @@ const Students = () => {
     } catch (err) {
       console.error("fetchHouses:", err);
       setHouses([]);
+    }
+  };
+
+  const fetchAdmissionTypes = async () => {
+    try {
+      const { data } = await api.get("/admission-types/active");
+      const list = extractAdmissionTypes(data).filter((type) => type?.is_active !== false);
+      setAdmissionTypes(list);
+      return list;
+    } catch (err) {
+      console.error("fetchAdmissionTypes:", err);
+      setAdmissionTypes([]);
+      return [];
     }
   };
 
@@ -405,6 +481,7 @@ const Students = () => {
     fetchSessions();
     fetchTransportations();
     fetchHouses();
+    fetchAdmissionTypes();
     if (canManageStudents) fetchConcessions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canManageStudents]);
@@ -580,6 +657,7 @@ const Students = () => {
     await fetchSessions();
     await fetchTransportations();
     await fetchHouses();
+    const admissionTypesData = admissionTypes.length ? admissionTypes : await fetchAdmissionTypes();
     await fetchStudents();
     if (canManageStudents) await fetchConcessions();
 
@@ -682,6 +760,27 @@ const Students = () => {
       ...GENDERS.map((g) => {
         const sel = existingBusGender && g.toLowerCase() === existingBusGender.toLowerCase();
         return `<option value="${g}" ${sel ? "selected" : ""}>${g}</option>`;
+      }),
+    ].join("");
+
+    // ✅ Dynamic admission type options
+    const admissionTypeList = Array.isArray(admissionTypesData) ? admissionTypesData : [];
+    const currentAdmissionTypeId =
+      s.admission_type_id ||
+      s.AdmissionType?.id ||
+      admissionTypeList.find((type) =>
+        String(type.name || "").trim().toLowerCase() ===
+        String(s.admission_type || "").trim().toLowerCase()
+      )?.id ||
+      admissionTypeList.find((type) => String(type.code || "").toUpperCase() === "NEW")?.id ||
+      admissionTypeList[0]?.id ||
+      "";
+
+    const admissionTypeOptionsHtml = [
+      `<option value="">Select Admission Type</option>`,
+      ...admissionTypeList.map((type) => {
+        const selected = String(type.id) === String(currentAdmissionTypeId);
+        return `<option value="${type.id}" data-name="${escapeHtmlAttr(type.name)}" data-code="${escapeHtmlAttr(type.code || "")}" ${selected ? "selected" : ""}>${escapeHtmlAttr(type.name)}</option>`;
       }),
     ].join("");
 
@@ -917,10 +1016,10 @@ const Students = () => {
 
             <div>
               <label class="form-label">Admission Type</label>
-              <select id="f_admission_type" class="form-field">
-                <option value="New" ${s.admission_type === "New" ? "selected" : ""}>New Admission</option>
-                <option value="Old" ${s.admission_type === "Old" ? "selected" : ""}>Transfer/Old</option>
+              <select id="f_admission_type_id" class="form-field">
+                ${admissionTypeOptionsHtml}
               </select>
+              <div class="hint">Dynamic from Admission Types master.</div>
             </div>
 
             <div>
@@ -1178,6 +1277,13 @@ const Students = () => {
         const rawRouteVal = document.getElementById("f_route_id")?.value;
         const routeVal = rawRouteVal === "" ? null : Number(rawRouteVal);
 
+        const admissionTypeIdRaw = document.getElementById("f_admission_type_id")?.value || "";
+        const selectedAdmissionType =
+          admissionTypeList.find((type) => String(type.id) === String(admissionTypeIdRaw)) || null;
+        const legacyAdmissionType = selectedAdmissionType
+          ? getLegacyAdmissionTypeValue(selectedAdmissionType)
+          : "New";
+
         const payload = {
           // Mandatory
           name: document.getElementById("f_name").value.trim(),
@@ -1187,7 +1293,8 @@ const Students = () => {
           session_id: document.getElementById("f_session_id").value || null,
           house_id: document.getElementById("f_house_id")?.value || null,
           concession_id: document.getElementById("f_concession_id")?.value || null,
-          admission_type: document.getElementById("f_admission_type").value,
+          admission_type_id: admissionTypeIdRaw ? Number(admissionTypeIdRaw) : null,
+          admission_type: legacyAdmissionType,
           roll_number: document.getElementById("f_roll_number").value
             ? parseInt(document.getElementById("f_roll_number").value, 10)
             : null,
@@ -1243,9 +1350,22 @@ const Students = () => {
           payload[`sibling_name_${slot}`] = cleanedName || null;
         });
 
-        if (!payload.name) Swal.showValidationMessage("Full name is required");
-        if (!payload.class_id) Swal.showValidationMessage("Class selection is required");
-        if (!payload.section_id) Swal.showValidationMessage("Section selection is required");
+        if (!payload.name) {
+          Swal.showValidationMessage("Full name is required");
+          return false;
+        }
+        if (!payload.class_id) {
+          Swal.showValidationMessage("Class selection is required");
+          return false;
+        }
+        if (!payload.section_id) {
+          Swal.showValidationMessage("Section selection is required");
+          return false;
+        }
+        if (admissionTypeList.length && !payload.admission_type_id) {
+          Swal.showValidationMessage("Admission Type is required");
+          return false;
+        }
 
         return payload;
       },
@@ -1904,6 +2024,7 @@ const Students = () => {
           stu.class_name,
           stu.section_name,
           stu.roll_number,
+          getAdmissionTypeLabel(stu, admissionTypes),
         ];
 
         const textMatch =
@@ -1920,7 +2041,7 @@ const Students = () => {
       })
       .slice()
       .sort(compareAdmissionNumberAsc);
-  }, [students, search, selectedClass, selectedStatus, hasSiblingFilter]);
+  }, [students, search, selectedClass, selectedStatus, hasSiblingFilter, admissionTypes]);
 
   const totalCount = filteredStudents.length;
   const enabledCount = filteredStudents.filter((s) => s.status === "enabled").length;
@@ -2067,7 +2188,7 @@ const Students = () => {
           ? student.aadhaar_number.replace(/(\d{4})(\d{4})(\d{4})/, "$1-$2-$3")
           : "-",
       },
-      { label: "Admission Type", value: student.admission_type || "-" },
+      { label: "Admission Type", value: getAdmissionTypeLabel(student, admissionTypes) || "-" },
     ];
 
     if (canManageStudents) {
@@ -2483,6 +2604,9 @@ const Students = () => {
                         .filter(Boolean)
                         .join(" • ");
 
+                      const admissionTypeLabel = getAdmissionTypeLabel(stu, admissionTypes);
+                      const admissionTypeBadgeClass = getAdmissionTypeBadgeClass(admissionTypeLabel);
+
                       const compactBadges = (
                         <div className="d-flex flex-wrap gap-1 mt-1">
                           {stu.session_name && (
@@ -2490,15 +2614,9 @@ const Students = () => {
                               {stu.session_name}
                             </span>
                           )}
-                          {stu.admission_type && (
-                            <span
-                              className={`badge students-badge ${
-                                stu.admission_type === "New"
-                                  ? "bg-success"
-                                  : "bg-warning text-dark"
-                              }`}
-                            >
-                              {stu.admission_type}
+                          {admissionTypeLabel && admissionTypeLabel !== "-" && (
+                            <span className={`badge students-badge ${admissionTypeBadgeClass}`}>
+                              {admissionTypeLabel}
                             </span>
                           )}
                           {!!stu.house_name && (
@@ -2651,14 +2769,8 @@ const Students = () => {
                               </td>
 
                               <td className="py-2 d-none d-lg-table-cell">
-                                <span
-                                  className={`badge students-badge ${
-                                    stu.admission_type === "New"
-                                      ? "bg-success"
-                                      : "bg-warning text-dark"
-                                  }`}
-                                >
-                                  {stu.admission_type}
+                                <span className={`badge students-badge ${admissionTypeBadgeClass}`}>
+                                  {admissionTypeLabel || "-"}
                                 </span>
                               </td>
 
