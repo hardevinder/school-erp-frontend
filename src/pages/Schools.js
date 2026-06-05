@@ -39,7 +39,7 @@ const extractSchools = (data) => {
 };
 
 // escape helper for inline HTML values
-const esc = (v = "") => String(v).replace(/"/g, "&quot;");
+const esc = (v = "") => String(v ?? "").replace(/"/g, "&quot;");
 
 const Schools = () => {
   const { isAdmin, isSuperadmin } = useMemo(getRoleFlags, []);
@@ -117,6 +117,17 @@ const Schools = () => {
         <input id="swal-website" class="form-field" placeholder="https://example.com" value="${esc(school.website)}">
       </div>
 
+      <div>
+        <label for="swal-transport-label" class="form-label">Transport Display Label</label>
+        <input
+          id="swal-transport-label"
+          class="form-field"
+          placeholder="e.g. Bus Fee / Conveyance Fee / Route Fee"
+          value="${esc(school.transport_display_label)}"
+        >
+        <div class="hint">Leave blank to show default “Transport”.</div>
+      </div>
+
       <div class="full">
         <label for="swal-address" class="form-label">Address Line</label>
         <input id="swal-address" class="form-field" placeholder="Address Line" value="${esc(school.address_line)}">
@@ -191,10 +202,12 @@ const Schools = () => {
       preConfirm: () => {
         const p = Swal.getPopup();
         const name = p.querySelector("#swal-name").value.trim();
+
         if (!name) {
           Swal.showValidationMessage("School Name is required");
           return false;
         }
+
         return {
           name,
           description: p.querySelector("#swal-description").value.trim(),
@@ -205,6 +218,7 @@ const Schools = () => {
           school_code: p.querySelector("#swal-school-code").value.trim(),
           tele_fax: p.querySelector("#swal-telefax").value.trim(),
           website: p.querySelector("#swal-website").value.trim(),
+          transport_display_label: p.querySelector("#swal-transport-label").value.trim(),
           address_line: p.querySelector("#swal-address").value.trim(),
         };
       },
@@ -213,6 +227,7 @@ const Schools = () => {
         try {
           const v = res.value;
           const formData = new FormData();
+
           formData.append("name", v.name);
           formData.append("description", v.description || "");
           formData.append("phone", v.phone || "");
@@ -222,18 +237,25 @@ const Schools = () => {
           formData.append("school_code", v.school_code || "");
           formData.append("website", v.website || "");
           formData.append("tele_fax", v.tele_fax || "");
+          formData.append("transport_display_label", v.transport_display_label || "");
           formData.append("address_line", v.address_line || "");
+
           if (fileLogo) formData.append("logo", fileLogo);
           if (fileBoardLogo) formData.append("board_logo", fileBoardLogo);
 
           await api.post("/schools", formData, {
             headers: { "Content-Type": "multipart/form-data" },
           });
+
           Swal.fire("Added!", "School has been added successfully.", "success");
           fetchSchools();
         } catch (err) {
           console.error("Add school error:", err);
-          Swal.fire("Error", err?.response?.data?.message || "Failed to add the school.", "error");
+          Swal.fire(
+            "Error",
+            err?.response?.data?.message || "Failed to add the school.",
+            "error"
+          );
         }
       }
     });
@@ -286,10 +308,12 @@ const Schools = () => {
       preConfirm: () => {
         const p = Swal.getPopup();
         const name = p.querySelector("#swal-name").value.trim();
+
         if (!name) {
           Swal.showValidationMessage("School Name is required");
           return false;
         }
+
         return {
           name,
           description: p.querySelector("#swal-description").value.trim(),
@@ -300,6 +324,7 @@ const Schools = () => {
           school_code: p.querySelector("#swal-school-code").value.trim(),
           tele_fax: p.querySelector("#swal-telefax").value.trim(),
           website: p.querySelector("#swal-website").value.trim(),
+          transport_display_label: p.querySelector("#swal-transport-label").value.trim(),
           address_line: p.querySelector("#swal-address").value.trim(),
         };
       },
@@ -308,6 +333,7 @@ const Schools = () => {
         try {
           const v = res.value;
           const formData = new FormData();
+
           formData.append("name", v.name);
           formData.append("description", v.description || "");
           formData.append("phone", v.phone || "");
@@ -317,6 +343,7 @@ const Schools = () => {
           formData.append("school_code", v.school_code || "");
           formData.append("website", v.website || "");
           formData.append("tele_fax", v.tele_fax || "");
+          formData.append("transport_display_label", v.transport_display_label || "");
           formData.append("address_line", v.address_line || "");
 
           if (fileLogo) formData.append("logo", fileLogo);
@@ -325,11 +352,16 @@ const Schools = () => {
           await api.put(`/schools/${school.id}`, formData, {
             headers: { "Content-Type": "multipart/form-data" },
           });
+
           Swal.fire("Updated!", "School has been updated successfully.", "success");
           fetchSchools();
         } catch (err) {
           console.error("Update school error:", err);
-          Swal.fire("Error", err?.response?.data?.message || "Failed to update the school.", "error");
+          Swal.fire(
+            "Error",
+            err?.response?.data?.message || "Failed to update the school.",
+            "error"
+          );
         }
       }
     });
@@ -357,7 +389,11 @@ const Schools = () => {
           fetchSchools();
         } catch (err) {
           console.error("Delete school error:", err);
-          Swal.fire("Error", err?.response?.data?.message || "Failed to delete the school.", "error");
+          Swal.fire(
+            "Error",
+            err?.response?.data?.message || "Failed to delete the school.",
+            "error"
+          );
         }
       }
     });
@@ -369,6 +405,7 @@ const Schools = () => {
 
   const filtered = schools.filter((s) => {
     const q = search.toLowerCase();
+
     return (
       (s.name || "").toLowerCase().includes(q) ||
       (s.affiliation_number || "").toLowerCase().includes(q) ||
@@ -377,6 +414,7 @@ const Schools = () => {
       (s.website || "").toLowerCase().includes(q) ||
       (s.tele_fax || "").toLowerCase().includes(q) ||
       (s.address_line || "").toLowerCase().includes(q) ||
+      (s.transport_display_label || "").toLowerCase().includes(q) ||
       (s.phone || "").toLowerCase().includes(q) ||
       (s.email || "").toLowerCase().includes(q)
     );
@@ -386,6 +424,7 @@ const Schools = () => {
     <div className="container mt-4">
       <div className="d-flex justify-content-between align-items-center mb-3">
         <h1>Schools Management</h1>
+
         {canEdit && (
           <button className="btn btn-success" onClick={handleAdd}>
             Add School
@@ -397,7 +436,7 @@ const Schools = () => {
         <input
           type="text"
           className="form-control w-50"
-          placeholder="Search by name, affiliation no, UDISE, school code, website, phone, address..."
+          placeholder="Search by name, affiliation no, UDISE, school code, transport label, website, phone, address..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
@@ -414,6 +453,7 @@ const Schools = () => {
               <th>Affiliation Number</th>
               <th>UDISE Number</th>
               <th>School Code</th>
+              <th>Transport Label</th>
               <th>Phone</th>
               <th>Email</th>
               <th>Website</th>
@@ -422,6 +462,7 @@ const Schools = () => {
               {canEdit && <th style={{ minWidth: 150 }}>Actions</th>}
             </tr>
           </thead>
+
           <tbody>
             {filtered.map((school, index) => (
               <tr key={school.id}>
@@ -465,13 +506,18 @@ const Schools = () => {
 
                 <td>
                   <div className="fw-semibold">{school.name}</div>
-                  <div className="text-muted small">{school.description || "—"}</div>
+                  <div className="text-muted small">
+                    {school.description || "—"}
+                  </div>
                 </td>
+
                 <td>{school.affiliation_number || "—"}</td>
                 <td>{school.udise_number || "—"}</td>
                 <td>{school.school_code || "—"}</td>
+                <td>{school.transport_display_label || "Transport"}</td>
                 <td>{school.phone || "—"}</td>
                 <td>{school.email || "—"}</td>
+
                 <td>
                   {school.website ? (
                     <a
@@ -489,7 +535,9 @@ const Schools = () => {
                     "—"
                   )}
                 </td>
+
                 <td>{school.tele_fax || "—"}</td>
+
                 <td
                   style={{
                     maxWidth: 240,
@@ -510,6 +558,7 @@ const Schools = () => {
                     >
                       Edit
                     </button>
+
                     {isSuperadmin && (
                       <button
                         className="btn btn-danger btn-sm"
@@ -522,9 +571,10 @@ const Schools = () => {
                 )}
               </tr>
             ))}
+
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={canEdit ? 13 : 12} className="text-center">
+                <td colSpan={canEdit ? 14 : 13} className="text-center">
                   No schools found
                 </td>
               </tr>

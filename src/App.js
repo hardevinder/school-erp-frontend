@@ -38,6 +38,7 @@ import StudentTransportAssignments from "./pages/StudentTransportAssignments";
 import StudentTransportFeeHeadAmounts from "./pages/StudentTransportFeeHeadAmounts";
 import ModeOfTransactions from "./pages/ModeOfTransactions";
 import SchoolBankAccounts from "./pages/SchoolBankAccounts";
+import PaymentGatewaySettings from "./pages/PaymentGatewaySettings";  
 
 import Transactions from "./pages/Transactions/Transactions";
 import CancelledTransactions from "./pages/Transactions/CancelledTransactions";
@@ -775,6 +776,15 @@ function App() {
               element={
                 <RequireRole roles={["accounts", "admin", "superadmin"]}>
                   <SchoolBankAccounts />
+                </RequireRole>
+              }
+            />
+
+            <Route
+              path="/payment-gateway-settings"
+              element={
+                <RequireRole roles={["accounts", "admin", "superadmin"]}>
+                  <PaymentGatewaySettings />
                 </RequireRole>
               }
             />

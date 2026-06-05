@@ -106,7 +106,8 @@ const StudentFeePage = () => {
   // ------------- Admission source: prefer activeStudentAdmission -------------
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const username = useMemo(() => {
-    const storedActive = localStorage.getItem("activeStudentAdmission");
+    const storedActive =
+      activeStudentAdmission || localStorage.getItem("activeStudentAdmission");
     if (storedActive) return normalizeAdmission(storedActive);
     const stored = localStorage.getItem("username");
     if (stored) return normalizeAdmission(stored);
@@ -128,8 +129,8 @@ const StudentFeePage = () => {
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState("details");
 
-  // ✅ Payment gateway (Razorpay removed completely)
-  const [paymentGateway] = useState("hdfc"); // only option now
+  // ✅ Payment gateway is backend-driven now.
+  // Backend active gateway setting decides HDFC/PayU, so frontend must not force one provider.
 
   // Popup state (kept for HDFC payment page)
   const popupRef = useRef(null);
@@ -449,7 +450,7 @@ const StudentFeePage = () => {
         height = 720;
       const left = window.screenX + (window.innerWidth - width) / 2;
       const top = window.screenY + (window.innerHeight - height) / 2;
-      const features = `width=${width},height=${height},left=${left},top=${top},noopener`;
+      const features = `width=${width},height=${height},left=${left},top=${top}`;
       const w = window.open("", "_blank", features);
       if (w) {
         try {
@@ -530,7 +531,7 @@ const StudentFeePage = () => {
         height = 720;
       const left = window.screenX + (window.innerWidth - width) / 2;
       const top = window.screenY + (window.innerHeight - height) / 2;
-      const features = `width=${width},height=${height},left=${left},top=${top},noopener`;
+      const features = `width=${width},height=${height},left=${left},top=${top}`;
       const w = window.open(url, "_blank", features);
       if (!w) {
         Swal.fire({
@@ -556,70 +557,154 @@ const StudentFeePage = () => {
     }
   };
 
-  const handleGatewayResponse = (data, sessionHint = null) => {
-    const url =
+  const getHdfcPaymentPageUrl = (data, sessionHint = null) => {
+    return (
       data?.paymentPageUrl ||
       data?.payment_page_url ||
       data?.paymentUrl ||
       data?.redirectUrl ||
       data?.paymentUrlForClient ||
-      (data && data.session && data.session.paymentPageUrl) ||
-      (data &&
-        data.vendorOrderId &&
+      data?.session?.paymentPageUrl ||
+      (data?.vendorOrderId &&
         (process.env.REACT_APP_HDFC_PAYMENT_PAGE_BASE
           ? `${process.env.REACT_APP_HDFC_PAYMENT_PAGE_BASE.replace(/\/$/, "")}/${data.vendorOrderId}`
           : null)) ||
-      (sessionHint &&
-        sessionHint.vendorOrderId &&
+      (data?.session?.vendorOrderId &&
+        (process.env.REACT_APP_HDFC_PAYMENT_PAGE_BASE
+          ? `${process.env.REACT_APP_HDFC_PAYMENT_PAGE_BASE.replace(/\/$/, "")}/${data.session.vendorOrderId}`
+          : null)) ||
+      (sessionHint?.vendorOrderId &&
         (process.env.REACT_APP_HDFC_PAYMENT_PAGE_BASE
           ? `${process.env.REACT_APP_HDFC_PAYMENT_PAGE_BASE.replace(/\/$/, "")}/${sessionHint.vendorOrderId}`
-          : null));
+          : null)) ||
+      null
+    );
+  };
 
+  const escapeHtmlAttr = (value) =>
+    String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/"/g, "&quot;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+
+  const submitHostedFormInWindow = (targetWindow, action, params = {}) => {
+    if (!targetWindow || targetWindow.closed) return false;
+    if (!action || !params || typeof params !== "object") return false;
+
+    const inputs = Object.entries(params)
+      .map(
+        ([key, value]) =>
+          `<input type="hidden" name="${escapeHtmlAttr(key)}" value="${escapeHtmlAttr(
+            value
+          )}" />`
+      )
+      .join("\n");
+
+    const formHtml = `
+      <!doctype html>
+      <html>
+        <head>
+          <title>Redirecting to payment…</title>
+          <meta name="viewport" content="width=device-width, initial-scale=1" />
+        </head>
+        <body style="font-family:system-ui;padding:24px">
+          <p>Redirecting to secure payment page…</p>
+          <form id="payForm" method="POST" action="${escapeHtmlAttr(action)}">
+            ${inputs}
+          </form>
+          <script>
+            document.getElementById('payForm').submit();
+          </script>
+        </body>
+      </html>
+    `;
+
+    try {
+      targetWindow.document.open();
+      targetWindow.document.write(formHtml);
+      targetWindow.document.close();
+
+      popupRef.current = targetWindow;
+      installMessageListener();
+      pollPopupClosed(targetWindow);
+      return true;
+    } catch (e) {
+      console.error("Unable to submit hosted payment form:", e);
+      return false;
+    }
+  };
+
+  const handleGatewayResponse = (data, sessionHint = null, existingWindow = null) => {
+    const url = getHdfcPaymentPageUrl(data, sessionHint);
+
+    // ✅ Existing HDFC flow remains safe: backend returns paymentPageUrl/paymentUrl/redirectUrl.
     if (url) {
-      openPaymentPopup(url);
+      try {
+        if (existingWindow && !existingWindow.closed) {
+          existingWindow.location.href = url;
+          popupRef.current = existingWindow;
+          installMessageListener();
+          pollPopupClosed(existingWindow);
+        } else {
+          openPaymentPopup(url);
+        }
+
+        Swal.fire({
+          icon: "info",
+          title: "Payment page opened",
+          text: "Complete the payment in the opened window.",
+        });
+
+        return true;
+      } catch (e) {
+        console.error("Unable to open HDFC payment page:", e);
+        return false;
+      }
+    }
+
+    // ✅ PayU hosted checkout flow: backend returns action + params; browser must POST a form.
+    if (data?.action && data?.params) {
+      let w = existingWindow;
+
+      if (!w || w.closed) {
+        w = openBlankWindowForPayment();
+      }
+
+      if (!w || w.closed) {
+        Swal.fire({
+          icon: "error",
+          title: "Popup blocked",
+          text: "Please allow popups for this site to complete payment.",
+        });
+        return false;
+      }
+
+      const submitted = submitHostedFormInWindow(w, data.action, data.params);
+
+      if (!submitted) {
+        try {
+          if (w && !w.closed) w.close();
+        } catch {}
+
+        Swal.fire({
+          icon: "error",
+          title: "Payment initialization failed",
+          text: "Could not redirect to the payment page. Please try again.",
+        });
+        return false;
+      }
+
       Swal.fire({
         icon: "info",
         title: "Payment page opened",
         text: "Complete the payment in the opened window.",
       });
+
       return true;
     }
 
-    if (data && data.action && data.params) {
-      const w = window.open("", "_blank", "noopener");
-      if (!w) {
-        Swal.fire({
-          icon: "error",
-          title: "Popup blocked",
-          text: "Allow popups to complete payment.",
-        });
-        return false;
-      }
-      const formHtml = `
-        <form id="payForm" method="POST" action="${data.action}">
-          ${Object.entries(data.params)
-            .map(
-              ([k, v]) =>
-                `<input type="hidden" name="${k}" value="${String(
-                  v == null ? "" : v
-                )}" />`
-            )
-            .join("\n")}
-        </form>
-        <script>document.getElementById('payForm').submit();</script>
-      `;
-      w.document.write(formHtml);
-      installMessageListener();
-      pollPopupClosed(w);
-      Swal.fire({
-        icon: "info",
-        title: "Payment page opened",
-        text: "A new tab was opened to complete your payment.",
-      });
-      return true;
-    }
-
-    if (data && data._createOrderError) {
+    if (data?._createOrderError) {
       Swal.fire({
         icon: "error",
         title: "Payment link creation failed",
@@ -631,8 +716,9 @@ const StudentFeePage = () => {
     Swal.fire({
       icon: "error",
       title: "Payment initialization failed",
-      text: "Please contact support or try again.",
+      text: "No payment URL or hosted checkout form returned. Try again.",
     });
+
     return false;
   };
 
@@ -918,7 +1004,7 @@ const StudentFeePage = () => {
         amount: dueAmount, // required by backend
         clientComputedDueAmount: dueAmount,
         feeHeadId,
-        gateway: "hdfc", // ✅ force HDFC
+        // gateway intentionally omitted: backend active gateway setting decides HDFC/PayU
 
         fineAmount: fineDue,
         vanFeeAmount: vanDueHead,
@@ -948,52 +1034,17 @@ const StudentFeePage = () => {
       const orderData = orderRes.data || {};
       saveLastOrderId(orderData);
 
-      const paymentPageUrl =
-        orderData.paymentPageUrl ||
-        orderData.payment_page_url ||
-        orderData.redirectUrl ||
-        orderData.paymentUrl ||
-        (orderData.vendorOrderId &&
-          (process.env.REACT_APP_HDFC_PAYMENT_PAGE_BASE
-            ? `${process.env.REACT_APP_HDFC_PAYMENT_PAGE_BASE.replace(/\/$/, "")}/${orderData.vendorOrderId}`
-            : null)) ||
-        (orderData.session?.vendorOrderId &&
-          (process.env.REACT_APP_HDFC_PAYMENT_PAGE_BASE
-            ? `${process.env.REACT_APP_HDFC_PAYMENT_PAGE_BASE.replace(/\/$/, "")}/${orderData.session.vendorOrderId}`
-            : null)) ||
-        null;
+      const handled = handleGatewayResponse(
+        orderData,
+        orderData.session || null,
+        paymentWindow
+      );
 
-      if (!paymentPageUrl) {
-        if (paymentWindow && !paymentWindow.closed) paymentWindow.close();
-        const handled = handleGatewayResponse(orderData, orderData.session || null);
-        if (!handled) {
-          Swal.fire({
-            icon: "error",
-            title: "Payment initialization failed",
-            text: "No payment URL returned. Try again.",
-          });
-        }
-        return;
+      if (!handled) {
+        try {
+          if (paymentWindow && !paymentWindow.closed) paymentWindow.close();
+        } catch {}
       }
-
-      try {
-        if (paymentWindow && !paymentWindow.closed) {
-          paymentWindow.location.href = paymentPageUrl;
-          popupRef.current = paymentWindow;
-          installMessageListener();
-          pollPopupClosed(paymentWindow);
-        } else {
-          openPaymentPopup(paymentPageUrl);
-        }
-      } catch {
-        openPaymentPopup(paymentPageUrl);
-      }
-
-      Swal.fire({
-        icon: "info",
-        title: "Payment page opened",
-        text: "Complete the payment in the opened window.",
-      });
     } catch (e) {
       console.error("Error initiating payment:", e);
       if (paymentWindow && !paymentWindow.closed) paymentWindow.close();
@@ -1062,7 +1113,7 @@ const StudentFeePage = () => {
         amount: totalToPay,
         clientComputedDueAmount: totalToPay,
         feeHeadId: "VAN_FEE",
-        gateway: "hdfc", // ✅ force HDFC
+        // gateway intentionally omitted: backend active gateway setting decides HDFC/PayU
         openingBalanceAmount: openingBalanceDue,
         openingBalanceHeadId: prevBalanceHeadId || undefined,
         breakdown: { vanDue: vanDueOnly, openingBalanceDue },
@@ -1071,48 +1122,17 @@ const StudentFeePage = () => {
       const orderData = orderRes.data || {};
       saveLastOrderId(orderData);
 
-      const paymentPageUrl =
-        orderData.paymentPageUrl ||
-        orderData.payment_page_url ||
-        orderData.redirectUrl ||
-        orderData.paymentUrl ||
-        (orderData.vendorOrderId &&
-          (process.env.REACT_APP_HDFC_PAYMENT_PAGE_BASE
-            ? `${process.env.REACT_APP_HDFC_PAYMENT_PAGE_BASE.replace(/\/$/, "")}/${orderData.vendorOrderId}`
-            : null)) ||
-        null;
+      const handled = handleGatewayResponse(
+        orderData,
+        orderData.session || null,
+        paymentWindow
+      );
 
-      if (!paymentPageUrl) {
-        if (paymentWindow && !paymentWindow.closed) paymentWindow.close();
-        const handled = handleGatewayResponse(orderData, orderData.session || null);
-        if (!handled) {
-          Swal.fire({
-            icon: "error",
-            title: "Payment init failed",
-            text: "No payment URL returned. Try again.",
-          });
-        }
-        return;
+      if (!handled) {
+        try {
+          if (paymentWindow && !paymentWindow.closed) paymentWindow.close();
+        } catch {}
       }
-
-      try {
-        if (paymentWindow && !paymentWindow.closed) {
-          paymentWindow.location.href = paymentPageUrl;
-          popupRef.current = paymentWindow;
-          installMessageListener();
-          pollPopupClosed(paymentWindow);
-        } else {
-          openPaymentPopup(paymentPageUrl);
-        }
-      } catch {
-        openPaymentPopup(paymentPageUrl);
-      }
-
-      Swal.fire({
-        icon: "info",
-        title: "Payment page opened",
-        text: "Complete the payment in the opened window.",
-      });
     } catch (e) {
       console.error("Error initiating van fee payment:", e);
       if (paymentWindow && !paymentWindow.closed) paymentWindow.close();
@@ -1174,7 +1194,7 @@ const StudentFeePage = () => {
             <div className="ms-auto d-flex gap-2 align-items-center">
               <div className="d-flex align-items-center">
                 <span className="badge text-bg-light">
-                  Gateway: <strong className="ms-1">SmartHDFC</strong>
+                  Gateway: <strong className="ms-1">Backend Active</strong>
                 </span>
               </div>
 
