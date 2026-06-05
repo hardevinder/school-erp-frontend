@@ -364,6 +364,28 @@ const formatINR = (n) => {
   })}`;
 };
 
+const getTransportDisplayLabelFromSchoolPayload = (payload) => {
+  const rows = asArray(payload);
+
+  const school =
+    rows[0] ||
+    payload?.school ||
+    payload?.data?.school ||
+    payload?.School ||
+    (payload && typeof payload === "object" && !Array.isArray(payload) ? payload : null);
+
+  return (
+    firstNonEmpty(
+      school?.transport_display_label,
+      school?.transportDisplayLabel,
+      school?.labels?.transport,
+      payload?.transport_display_label,
+      payload?.transportDisplayLabel,
+      payload?.labels?.transport
+    ) || "Transport"
+  );
+};
+
 const getAcademicDueWithConcession = (row = {}) =>
   Math.max(
     0,
@@ -857,6 +879,18 @@ const Transactions = () => {
   const [siblingDetailsMap, setSiblingDetailsMap] = useState({});
   const [loadingSiblingSummary, setLoadingSiblingSummary] = useState(false);
   const [showDueWithoutConcession, setShowDueWithoutConcession] = useState(false);
+  const [transportDisplayLabel, setTransportDisplayLabel] = useState(() => {
+    try {
+      return localStorage.getItem("transport_display_label") || "Transport";
+    } catch {
+      return "Transport";
+    }
+  });
+
+  const transportLabel = useMemo(
+    () => firstNonEmpty(transportDisplayLabel, "Transport") || "Transport",
+    [transportDisplayLabel]
+  );
 
   const selectedSessionMeta = useMemo(() => {
     if (!Array.isArray(sessions) || !sessions.length || !selectedSession) return null;
@@ -1091,6 +1125,14 @@ const Transactions = () => {
         }
       }
 
+      const receiptTransportLabel = school
+        ? getTransportDisplayLabelFromSchoolPayload(school)
+        : transportLabel;
+
+      if (receiptTransportLabel) {
+        setTransportDisplayLabel(receiptTransportLabel);
+      }
+
       if (!school) {
         school = {
           name: "Your School",
@@ -1098,6 +1140,7 @@ const Transactions = () => {
           logo: null,
           phone: "",
           email: "",
+          transport_display_label: receiptTransportLabel,
         };
       }
 
@@ -1200,7 +1243,17 @@ const Transactions = () => {
 
       const payload = {
         receipt: cleanedReceipt,
-        school,
+        school: {
+          ...school,
+          transport_display_label: firstNonEmpty(
+            school?.transport_display_label,
+            receiptTransportLabel
+          ),
+        },
+        labels: {
+          transport: receiptTransportLabel,
+        },
+        transportDisplayLabel: receiptTransportLabel,
         fileName: `Receipt-${slipId}`,
         sessionLabel,
         session_id: sessionId,
@@ -1712,6 +1765,21 @@ const Transactions = () => {
       setBankAccounts([]);
     }
   };
+
+  const fetchTransportDisplayLabel = useCallback(async () => {
+    try {
+      const response = await api.get("/schools");
+      const label = getTransportDisplayLabelFromSchoolPayload(response.data);
+      setTransportDisplayLabel(label);
+
+      try {
+        localStorage.setItem("transport_display_label", label);
+      } catch {}
+    } catch (error) {
+      console.warn("Error fetching transport display label:", error?.message || error);
+      setTransportDisplayLabel((prev) => firstNonEmpty(prev, "Transport") || "Transport");
+    }
+  }, []);
 
   const syncVanRemaining = (row) => {
     if (!row?.ShowVanFeeInput) return row;
@@ -2808,7 +2876,7 @@ const Transactions = () => {
     if (remaining > 0) {
       Swal.fire(
         "Amount left",
-        `₹${remaining.toLocaleString("en-IN")} could not be allocated (no remaining dues/fines/van fees).`,
+        `₹${remaining.toLocaleString("en-IN")} could not be allocated (no remaining dues/fines/${transportLabel.toLowerCase()} dues).`,
         "info"
       );
     }
@@ -3131,7 +3199,8 @@ const Transactions = () => {
     fetchSessions();
     fetchTransactionModes();
     fetchSchoolBankAccounts();
-  }, []);
+    fetchTransportDisplayLabel();
+  }, [fetchTransportDisplayLabel]);
 
   useEffect(() => {
     if (showModal) {
@@ -3326,7 +3395,7 @@ const Transactions = () => {
           <Col md={2}>
             <Card className="shadow-sm border-0 h-100">
               <Card.Body className="text-center">
-                <div className="small text-uppercase text-muted mb-1">Van Fee</div>
+                <div className="small text-uppercase text-muted mb-1">{transportLabel}</div>
                 <div className="fs-4 fw-bold">
                   {formatINR(
                     (daySummary.data || []).reduce(
@@ -3358,7 +3427,7 @@ const Transactions = () => {
           <Col md={2}>
             <Card className="shadow-sm border-0 h-100">
               <Card.Body className="text-center">
-                <div className="small text-uppercase text-muted mb-1">Van Fee Cons.</div>
+                <div className="small text-uppercase text-muted mb-1">{transportLabel} Cons.</div>
                 <div className="fs-4 fw-bold">{formatINR(totalVanConcessionDay)}</div>
               </Card.Body>
             </Card>
@@ -3467,8 +3536,8 @@ const Transactions = () => {
               <th>Head</th>
               <th>Concession</th>
               <th>Fee Received</th>
-              <th>Van Fee</th>
-              <th>Van Fee Cons.</th>
+              <th>{transportLabel}</th>
+              <th>{transportLabel} Cons.</th>
               <th>Fine</th>
               <th>Mode</th>
               <th>Status</th>
@@ -4599,13 +4668,13 @@ const Transactions = () => {
                           <th style={{ minWidth: 95 }}>Due</th>
                           <th style={{ minWidth: 90 }}>Cons</th>
                           <th style={{ minWidth: 92 }}>Recv</th>
-                          <th style={{ minWidth: 95 }}>Van Due</th>
-                          <th style={{ minWidth: 95 }}>Van Cons.</th>
+                          <th style={{ minWidth: 95 }}>{transportLabel} Due</th>
+                          <th style={{ minWidth: 95 }}>{transportLabel} Cons.</th>
                           <th style={{ minWidth: 116 }}>
                             <div className="d-flex align-items-center justify-content-center gap-1">
                               <Form.Check
                                 type="checkbox"
-                                aria-label="Select all transport fees"
+                                aria-label={`Select all ${transportLabel} fees`}
                                 checked={
                                   newTransactionDetails.some(
                                     (row) => row.ShowVanFeeInput && !row.isOpeningBalance
@@ -4642,7 +4711,7 @@ const Transactions = () => {
                                   }
                                 }}
                               />
-                              <span>Van Pay</span>
+                              <span>{transportLabel} Pay</span>
                             </div>
                           </th>
                           <th style={{ minWidth: 104 }}>
@@ -4777,7 +4846,7 @@ const Transactions = () => {
                                 }
                               }}
                               style={{ cursor: "pointer", userSelect: "none" }}
-                              title="Click to auto-fill fee, fine and van. Fine or van can be unticked separately."
+                              title={`Click to auto-fill fee, fine and ${transportLabel}. Fine or ${transportLabel} can be unticked separately.`}
                               className="fw-semibold"
                             >
                               {feeDetail.Fee_Heading_Name}
@@ -4836,7 +4905,7 @@ const Transactions = () => {
                                             </span>
                                           </div>
                                           <div>
-                                            <strong>Van Received:</strong>
+                                            <strong>{transportLabel} Received:</strong>
                                             <span className="ms-1">
                                               {formatINR(feeDetail._receivedVanFee)}
                                             </span>
@@ -4854,13 +4923,13 @@ const Transactions = () => {
                                             </span>
                                           </div>
                                           <div>
-                                            <strong>Van Fine:</strong>
+                                            <strong>{transportLabel} Fine:</strong>
                                             <span className="ms-1">
                                               {formatINR(feeDetail.Van_Fine_Amount)}
                                             </span>
                                           </div>
                                           <div>
-                                            <strong>Total Van Due (after fine):</strong>
+                                            <strong>Total {transportLabel} Due (after fine):</strong>
                                             <span className="ms-1">
                                               {formatINR(feeDetail.Van_Fee_Due)}
                                             </span>
@@ -4995,7 +5064,7 @@ const Transactions = () => {
                                   <Form.Check
                                     type="checkbox"
                                     className="m-0 flex-shrink-0"
-                                    aria-label={`Select transport for ${feeDetail.Fee_Heading_Name}`}
+                                    aria-label={`Select ${transportLabel} for ${feeDetail.Fee_Heading_Name}`}
                                     checked={selectedTransportHeads.has(String(feeDetail.Fee_Head))}
                                     onChange={(e) => {
                                       const checked = e.target.checked;
@@ -5267,7 +5336,7 @@ const Transactions = () => {
 
                     <Col lg={3} md={6}>
                       <Form.Group>
-                        <Form.Label>Van Fee</Form.Label>
+                        <Form.Label>{transportLabel}</Form.Label>
                         <Form.Control
                           type="number"
                         {...MONEY_INPUT_PROPS}
@@ -5284,7 +5353,7 @@ const Transactions = () => {
 
                     <Col lg={3} md={6}>
                       <Form.Group>
-                        <Form.Label>Van Fee Concession</Form.Label>
+                        <Form.Label>{transportLabel} Concession</Form.Label>
                         <Form.Control
                           type="number"
                         {...MONEY_INPUT_PROPS}
@@ -5456,7 +5525,7 @@ const Transactions = () => {
                   <strong>Acad:</strong> {formatINR(totalFeeReceived)}
                 </div>
                 <div className="small">
-                  <strong>Van:</strong> {formatINR(totalVanFee)}
+                  <strong>{transportLabel}:</strong> {formatINR(totalVanFee)}
                 </div>
                 <div className="small text-danger">
                   <strong>Fine:</strong> {formatINR(totalFine)}
@@ -5465,7 +5534,7 @@ const Transactions = () => {
                   <strong>Acad Cons:</strong> {formatINR(totalAcademicConcession)}
                 </div>
                 <div className="small text-secondary">
-                  <strong>Van Cons:</strong> {formatINR(totalVanConcession)}
+                  <strong>{transportLabel} Cons:</strong> {formatINR(totalVanConcession)}
                 </div>
               </div>
 

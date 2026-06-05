@@ -14,6 +14,7 @@ const StudentFeePage = () => {
       return null;
     }
   };
+
   const normalizeRole = (r) => String(r || "").toLowerCase();
   const normalizeAdmission = (s) => String(s || "").replace(/\//g, "-").trim();
 
@@ -22,8 +23,10 @@ const StudentFeePage = () => {
       const stored = localStorage.getItem("roles");
       if (stored) return JSON.parse(stored).map(normalizeRole);
     } catch {}
+
     const single = localStorage.getItem("userRole");
     if (single) return [normalizeRole(single)];
+
     const token = localStorage.getItem("token");
     if (token) {
       const payload = parseJwt(token);
@@ -32,6 +35,7 @@ const StudentFeePage = () => {
         if (payload.role) return [normalizeRole(payload.role)];
       }
     }
+
     return [];
   }, []);
 
@@ -43,7 +47,7 @@ const StudentFeePage = () => {
     normalizedRoles.includes("superadmin") ||
     normalizedRoles.includes("accounts");
 
-    const canView = isStudent || isParent || isAdminish;
+  const canView = isStudent || isParent || isAdminish;
 
   // ------------- NEW: family + active student (sibling switcher parity) -------------
   const [family, setFamily] = useState(null);
@@ -55,9 +59,11 @@ const StudentFeePage = () => {
 
   const studentsList = useMemo(() => {
     if (!family) return [];
+
     const list = [];
     if (family.student) list.push({ ...family.student, isSelf: true });
     (family.siblings || []).forEach((s) => list.push({ ...s, isSelf: false }));
+
     return list;
   }, [family]);
 
@@ -66,23 +72,29 @@ const StudentFeePage = () => {
       try {
         const raw = localStorage.getItem("family");
         setFamily(raw ? JSON.parse(raw) : null);
+
         const stored =
           localStorage.getItem("activeStudentAdmission") ||
           localStorage.getItem("username") ||
           "";
+
         setActiveStudentAdmission(stored);
       } catch {
         setFamily(null);
       }
     };
+
     load();
 
     const onFamilyUpdated = () => load();
+
     const onStudentSwitched = () => {
       load();
+
       const adm =
         localStorage.getItem("activeStudentAdmission") ||
         localStorage.getItem("username");
+
       if (adm) {
         const n = normalizeAdmission(adm);
         fetchStudentDetails(n);
@@ -94,6 +106,7 @@ const StudentFeePage = () => {
 
     window.addEventListener("family-updated", onFamilyUpdated);
     window.addEventListener("student-switched", onStudentSwitched);
+
     return () => {
       window.removeEventListener("family-updated", onFamilyUpdated);
       window.removeEventListener("student-switched", onStudentSwitched);
@@ -104,20 +117,24 @@ const StudentFeePage = () => {
   const canSeeStudentSwitcher = isStudent || isParent;
 
   // ------------- Admission source: prefer activeStudentAdmission -------------
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   const username = useMemo(() => {
     const storedActive =
       activeStudentAdmission || localStorage.getItem("activeStudentAdmission");
+
     if (storedActive) return normalizeAdmission(storedActive);
+
     const stored = localStorage.getItem("username");
     if (stored) return normalizeAdmission(stored);
+
     const token = localStorage.getItem("token");
     if (token) {
       const payload = parseJwt(token);
       const adm =
         (payload && (payload.admission_number || payload.username)) || null;
+
       if (adm) return normalizeAdmission(adm);
     }
+
     return null;
   }, [activeStudentAdmission]);
 
@@ -128,6 +145,15 @@ const StudentFeePage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState("details");
+
+  // Dynamic client-wise label.
+  // Internal fields/routes still use van/transport names.
+  const [transportDisplayLabel, setTransportDisplayLabel] = useState("Transport");
+
+  const transportLabel = useMemo(() => {
+    const value = String(transportDisplayLabel || "").trim();
+    return value || "Transport";
+  }, [transportDisplayLabel]);
 
   // ✅ Payment gateway is backend-driven now.
   // Backend active gateway setting decides HDFC/PayU, so frontend must not force one provider.
@@ -155,6 +181,7 @@ const StudentFeePage = () => {
 
   const formatDateTime = (dateString) => {
     const d = new Date(dateString);
+
     return d.toLocaleString("en-IN", {
       day: "2-digit",
       month: "long",
@@ -163,6 +190,81 @@ const StudentFeePage = () => {
       minute: "2-digit",
       second: "2-digit",
     });
+  };
+
+  const cleanLabel = (value) => String(value || "").trim();
+
+  const extractSchools = (data) => {
+    if (Array.isArray(data)) return data;
+    if (Array.isArray(data?.schools)) return data.schools;
+    if (Array.isArray(data?.data)) return data.data;
+    return [];
+  };
+
+  const getTransportLabelFromStudentDetails = (details) => {
+    return (
+      cleanLabel(details?.transport_display_label) ||
+      cleanLabel(details?.school_transport_display_label) ||
+      cleanLabel(details?.schoolTransportDisplayLabel) ||
+      cleanLabel(details?.school?.transport_display_label) ||
+      cleanLabel(details?.School?.transport_display_label)
+    );
+  };
+
+  const fetchTransportDisplayLabel = async (details = null) => {
+    try {
+      const directLabel = getTransportLabelFromStudentDetails(details);
+
+      if (directLabel) {
+        setTransportDisplayLabel(directLabel);
+        return directLabel;
+      }
+
+      const localLabel =
+        cleanLabel(localStorage.getItem("transport_display_label")) ||
+        cleanLabel(localStorage.getItem("transportDisplayLabel"));
+
+      if (localLabel) {
+        setTransportDisplayLabel(localLabel);
+        return localLabel;
+      }
+
+      const res = await api.get("/schools");
+      const list = extractSchools(res.data);
+
+      const schoolId = Number(
+        details?.school_id ||
+          details?.schoolId ||
+          details?.School_ID ||
+          details?.school?.id ||
+          details?.School?.id ||
+          0
+      );
+
+      const matchedSchool = schoolId
+        ? list.find((s) => Number(s.id) === schoolId)
+        : null;
+
+      // Safe fallback:
+      // - If student has schoolId, use matched school.
+      // - If only one school exists in this DB, use that.
+      // - If multiple schools and no match, keep default Transport.
+      const selectedSchool = matchedSchool || (list.length === 1 ? list[0] : null);
+
+      const label = cleanLabel(selectedSchool?.transport_display_label) || "Transport";
+
+      setTransportDisplayLabel(label);
+
+      try {
+        localStorage.setItem("transport_display_label", label);
+      } catch {}
+
+      return label;
+    } catch (e) {
+      console.warn("fetchTransportDisplayLabel failed:", e?.message || e);
+      setTransportDisplayLabel("Transport");
+      return "Transport";
+    }
   };
 
   // Fine totals from server (any shape)
@@ -176,6 +278,7 @@ const StudentFeePage = () => {
         fee?.FineAmount ??
         0
     );
+
   const getFinePaid = (fee) =>
     Number(
       fee?.fineReceived ??
@@ -184,6 +287,7 @@ const StudentFeePage = () => {
         fee?.FineReceived ??
         0
     );
+
   const getFineDue = (fee) => Math.max(0, getFineTotal(fee) - getFinePaid(fee));
 
   // --------- NEW: Session + OB helpers (parity with Transactions.js) ----------
@@ -191,7 +295,8 @@ const StudentFeePage = () => {
     try {
       const res = await api.get("/sessions");
       const list = Array.isArray(res.data) ? res.data : res.data?.data || [];
-      let active = list.find((s) => s.is_active === true) || list[0] || null;
+      const active = list.find((s) => s.is_active === true) || list[0] || null;
+
       if (active) setActiveSessionId(Number(active.id));
       else setActiveSessionId(null);
     } catch (e) {
@@ -202,12 +307,15 @@ const StudentFeePage = () => {
 
   const ensurePrevBalanceHeadId = async () => {
     if (prevBalanceHeadId) return prevBalanceHeadId;
+
     try {
       const res = await api.get("/fee-headings");
       const list = Array.isArray(res.data) ? res.data : res.data?.data || [];
+
       const hit = list.find(
         (h) => String(h.fee_heading).toLowerCase() === "previous balance"
       );
+
       if (hit) {
         setPrevBalanceHeadId(hit.id);
         return hit.id;
@@ -215,6 +323,7 @@ const StudentFeePage = () => {
     } catch (e) {
       console.warn("fee-headings fetch failed:", e?.message || e);
     }
+
     return null;
   };
 
@@ -240,6 +349,7 @@ const StudentFeePage = () => {
           Number(studentDetails?.id) ||
           Number(studentDetails?.Student_ID) ||
           null;
+
         if (sid) params.student_id = sid;
       }
 
@@ -253,6 +363,7 @@ const StudentFeePage = () => {
       );
 
       const final = Number.isFinite(val) ? Math.max(0, val) : 0;
+
       setPrevBalanceDue(final);
       return final;
     } catch (e) {
@@ -269,15 +380,20 @@ const StudentFeePage = () => {
       setLoading(false);
       return;
     }
+
     const load = async () => {
       setLoading(true);
+
       await Promise.all([
         fetchStudentDetails(username),
         fetchTransactionHistory(username),
       ]);
+
       await fetchVanFeeByHead();
+
       setLoading(false);
     };
+
     load();
   }, [canView, username]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -287,6 +403,12 @@ const StudentFeePage = () => {
     ensurePrevBalanceHeadId();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Refresh dynamic label when student details change.
+  useEffect(() => {
+    fetchTransportDisplayLabel(studentDetails);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [studentDetails]);
 
   // When basic data loads or keys change, refresh Opening Balance
   useEffect(() => {
@@ -307,8 +429,11 @@ const StudentFeePage = () => {
         fetchVanFeeByHead();
         fetchOpeningBalanceOutstandingForMe();
       }, 15000);
+
       return () => clearInterval(id);
     }
+
+    return undefined;
   }, [username, canView]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchStudentDetails = async (admissionNumber) => {
@@ -325,6 +450,7 @@ const StudentFeePage = () => {
   const fetchTransactionHistory = async (admissionNumber) => {
     try {
       const res = await api.get(`/StudentsApp/feehistory/${admissionNumber}`);
+
       if (res.data && res.data.success) {
         setTransactionHistory(res.data.data || []);
       } else {
@@ -338,21 +464,26 @@ const StudentFeePage = () => {
   const fetchVanFeeByHead = async () => {
     try {
       const res = await api.get(`/transactions/vanfee/me`);
+
       const rows =
         res.data && res.data.data
           ? res.data.data
           : Array.isArray(res.data)
           ? res.data
           : [];
+
       const map = {};
+
       rows.forEach((r) => {
         const id = Number(r.Fee_Head);
+
         map[id] = {
           transportCost: Number(r.TransportCost || 0),
           totalVanFeeReceived: Number(r.TotalVanFeeReceived || 0),
           totalVanFeeConcession: Number(r.TotalVanFeeConcession || 0),
         };
       });
+
       setVanByHead(map);
     } catch (e) {
       console.warn("Failed to fetch per-head van fee:", e?.message || e);
@@ -387,9 +518,11 @@ const StudentFeePage = () => {
       const url = window.URL.createObjectURL(blob);
 
       const w = window.open(url, "_blank", "noopener");
+
       if (!w) {
         Swal.close();
         window.URL.revokeObjectURL(url);
+
         return Swal.fire({
           icon: "error",
           title: "Popup blocked",
@@ -441,17 +574,21 @@ const StudentFeePage = () => {
         text: "Please try again later.",
       });
     }
+
+    return undefined;
   };
 
   // ------------- Payment utilities (popup + gateway) -------------
   const openBlankWindowForPayment = () => {
     try {
-      const width = 980,
-        height = 720;
+      const width = 980;
+      const height = 720;
       const left = window.screenX + (window.innerWidth - width) / 2;
       const top = window.screenY + (window.innerHeight - height) / 2;
       const features = `width=${width},height=${height},left=${left},top=${top}`;
+
       const w = window.open("", "_blank", features);
+
       if (w) {
         try {
           w.document.write(
@@ -459,6 +596,7 @@ const StudentFeePage = () => {
           );
         } catch {}
       }
+
       return w;
     } catch {
       return null;
@@ -467,6 +605,7 @@ const StudentFeePage = () => {
 
   const pollPopupClosed = (w) => {
     if (popupPollRef.current) clearInterval(popupPollRef.current);
+
     popupPollRef.current = setInterval(() => {
       try {
         if (!w || w.closed) {
@@ -484,12 +623,15 @@ const StudentFeePage = () => {
 
   const installMessageListener = () => {
     if (messageListenerRef.current) return;
+
     const handler = (ev) => {
       try {
         const data = ev?.data;
         if (!data) return;
+
         if (data.type === "payment-updated" || data.type === "hdfc.payment.updated") {
           refreshAfterPayment();
+
           Swal.fire({
             icon: data.status === "success" ? "success" : "info",
             title: data.status === "success" ? "Payment Completed" : "Payment Update",
@@ -497,6 +639,7 @@ const StudentFeePage = () => {
             background: "#052e16",
             color: "#dcfce7",
           });
+
           try {
             if (popupRef.current && !popupRef.current.closed) popupRef.current.close();
           } catch {}
@@ -505,6 +648,7 @@ const StudentFeePage = () => {
         console.warn("message handler error:", err);
       }
     };
+
     messageListenerRef.current = handler;
     window.addEventListener("message", handler, false);
   };
@@ -514,42 +658,51 @@ const StudentFeePage = () => {
       window.removeEventListener("message", messageListenerRef.current);
       messageListenerRef.current = null;
     }
+
     if (popupPollRef.current) {
       clearInterval(popupPollRef.current);
       popupPollRef.current = null;
     }
+
     if (popupTimeoutRef.current) {
       clearTimeout(popupTimeoutRef.current);
       popupTimeoutRef.current = null;
     }
+
     popupRef.current = null;
   };
 
   const openPaymentPopup = (url) => {
     try {
-      const width = 980,
-        height = 720;
+      const width = 980;
+      const height = 720;
       const left = window.screenX + (window.innerWidth - width) / 2;
       const top = window.screenY + (window.innerHeight - height) / 2;
       const features = `width=${width},height=${height},left=${left},top=${top}`;
+
       const w = window.open(url, "_blank", features);
+
       if (!w) {
         Swal.fire({
           icon: "error",
           title: "Popup blocked",
           text: "Please allow popups for this site to complete payment.",
         });
+
         return;
       }
+
       popupRef.current = w;
       installMessageListener();
       pollPopupClosed(w);
 
       if (popupTimeoutRef.current) clearTimeout(popupTimeoutRef.current);
+
       popupTimeoutRef.current = setTimeout(() => {
         try {
           if (popupRef.current && !popupRef.current.closed) popupRef.current.close();
         } catch {}
+
         cleanupPopupListeners();
       }, 1000 * 60 * 15);
     } catch (e) {
@@ -628,6 +781,7 @@ const StudentFeePage = () => {
       popupRef.current = targetWindow;
       installMessageListener();
       pollPopupClosed(targetWindow);
+
       return true;
     } catch (e) {
       console.error("Unable to submit hosted payment form:", e);
@@ -677,6 +831,7 @@ const StudentFeePage = () => {
           title: "Popup blocked",
           text: "Please allow popups for this site to complete payment.",
         });
+
         return false;
       }
 
@@ -692,6 +847,7 @@ const StudentFeePage = () => {
           title: "Payment initialization failed",
           text: "Could not redirect to the payment page. Please try again.",
         });
+
         return false;
       }
 
@@ -710,6 +866,7 @@ const StudentFeePage = () => {
         title: "Payment link creation failed",
         text: "Could not create payment link. Try again.",
       });
+
       return false;
     }
 
@@ -724,6 +881,7 @@ const StudentFeePage = () => {
 
   const refreshAfterPayment = () => {
     window.dispatchEvent(new Event("student-fee:refresh"));
+
     setTimeout(() => {
       try {
         if (username) {
@@ -735,6 +893,7 @@ const StudentFeePage = () => {
           window.location.reload();
         }
       } catch {}
+
       cleanupPopupListeners();
     }, 800);
   };
@@ -743,15 +902,18 @@ const StudentFeePage = () => {
     return () => {
       if (popupPollRef.current) clearInterval(popupPollRef.current);
       if (popupTimeoutRef.current) clearTimeout(popupTimeoutRef.current);
-      if (messageListenerRef.current)
+
+      if (messageListenerRef.current) {
         window.removeEventListener("message", messageListenerRef.current);
+      }
+
       try {
         if (popupRef.current && !popupRef.current.closed) popupRef.current.close();
       } catch {}
     };
   }, []);
 
-  // ------------- UI helpers (Transport) -------------
+  // ------------- UI helpers (client-wise conveyance/vehicle facility label) -------------
 
   // NEW: Decide transport applicability strictly (prevents wrong map fallback)
   const isTransportApplicableForFee = (fee) => {
@@ -774,12 +936,21 @@ const StudentFeePage = () => {
 
   const getVanForHeadFromMap = (feeHeadId) => {
     const v = vanByHead[Number(feeHeadId)];
+
     if (!v) return null;
+
     const received = Number(v.totalVanFeeReceived || 0);
     const concession = Number(v.totalVanFeeConcession || 0);
     const cost = Number(v.transportCost || 0);
     const pending = Math.max(cost - (received + concession), 0);
-    return { cost, received, concession, pending, due: cost };
+
+    return {
+      cost,
+      received,
+      concession,
+      pending,
+      due: cost,
+    };
   };
 
   // FIXED: if NOT applicable, return null and DO NOT fallback
@@ -788,6 +959,7 @@ const StudentFeePage = () => {
 
     if (fee?.transport) {
       const t = fee.transport;
+
       return {
         cost:
           Number(t.transportDue || 0) +
@@ -802,10 +974,11 @@ const StudentFeePage = () => {
     }
 
     const fallback = getVanForHeadFromMap(fee?.fee_heading_id);
+
     return fallback ? { ...fallback, source: "map" } : null;
   };
 
-  // OPTIONAL: decide if transport chips should show at top
+  // OPTIONAL: decide if client-wise facility chips should show at top
   const transportEnabled = useMemo(() => {
     if (!studentDetails) return false;
 
@@ -831,23 +1004,29 @@ const StudentFeePage = () => {
   // ======== NEW: Previous slabs auto-inclusion ========
   const computePreviousSlabsTotals = (untilIndex) => {
     const feesList = studentDetails?.feeDetails || [];
-    let prevAcademic = 0,
-      prevFine = 0,
-      prevVan = 0;
+
+    let prevAcademic = 0;
+    let prevFine = 0;
+    let prevVan = 0;
+
     const items = [];
 
-    for (let i = 0; i < untilIndex; i++) {
+    for (let i = 0; i < untilIndex; i += 1) {
       const f = feesList[i];
+
       if (!f) continue;
+
       const acadDue = Number(f?.finalAmountDue || 0);
       const fineDue = getFineDue(f);
       const t = getTransportBreakdown(f);
       const vanDue = Number(t?.pending || 0);
       const headDue = acadDue + fineDue + vanDue;
+
       if (headDue > 0) {
         prevAcademic += acadDue;
         prevFine += fineDue;
         prevVan += vanDue;
+
         items.push({
           feeHeading: f.fee_heading,
           feeHeadId: f.fee_heading_id,
@@ -870,14 +1049,15 @@ const StudentFeePage = () => {
   };
 
   // ------------- Totals for Summary -------------
-  let totalOriginal = 0,
-    totalEffective = 0,
-    totalDue = 0,
-    totalReceived = 0,
-    totalConcession = 0,
-    totalFineRemaining = 0;
+  let totalOriginal = 0;
+  let totalEffective = 0;
+  let totalDue = 0;
+  let totalReceived = 0;
+  let totalConcession = 0;
+  let totalFineRemaining = 0;
 
   const fees = studentDetails?.feeDetails || [];
+
   fees.forEach((f) => {
     totalOriginal += Number(f.originalFeeDue || 0);
     totalEffective += Number(f.effectiveFeeDue || 0);
@@ -887,7 +1067,7 @@ const StudentFeePage = () => {
     totalFineRemaining += getFineDue(f);
   });
 
-  // Van (overall)
+  // Client-wise facility amount fields still come from vanFee internally.
   const van = studentDetails?.vanFee || {
     transportCost: 0,
     totalVanFeeReceived: 0,
@@ -895,6 +1075,7 @@ const StudentFeePage = () => {
     vanFeeBalance: 0,
     perHeadTotalDue: 0,
   };
+
   const vanCost = Number(van.perHeadTotalDue || van.transportCost || 0);
   const vanReceived = Number(van.totalVanFeeReceived || 0);
   const vanConcession = Number(van.totalVanFeeConcession || 0);
@@ -911,12 +1092,13 @@ const StudentFeePage = () => {
         orderData?.merchantOrderId ||
         null;
 
-      if (vendorOrderId)
+      if (vendorOrderId) {
         localStorage.setItem("lastPaymentOrderId", String(vendorOrderId));
+      }
     } catch {}
   };
 
-  // ------------- Payment handlers (HDFC only) -------------
+  // ------------- Payment handlers -------------
   const handlePayFee = async (fee, feeIndex) => {
     const academicDue = Number(fee?.finalAmountDue || 0);
     const fineDue = getFineDue(fee);
@@ -943,7 +1125,7 @@ const StudentFeePage = () => {
         <div><strong>Breakup</strong></div>
         <div>Academic (this head): <strong>${formatINR(academicDue)}</strong></div>
         <div>Fine (remaining, this head): <strong>${formatINR(fineDue)}</strong></div>
-        <div>Transport (this head): <strong>${formatINR(vanDueHead)}</strong></div>
+        <div>${transportLabel} (this head): <strong>${formatINR(vanDueHead)}</strong></div>
         ${
           prev.count > 0
             ? `
@@ -951,7 +1133,7 @@ const StudentFeePage = () => {
           <div><strong>Previous Heads (${prev.count})</strong></div>
           <div>Academic (prev): <strong>${formatINR(prev.totalAcademic)}</strong></div>
           <div>Fine (prev): <strong>${formatINR(prev.totalFine)}</strong></div>
-          <div>Transport (prev): <strong>${formatINR(prev.totalVan)}</strong></div>
+          <div>${transportLabel} (prev): <strong>${formatINR(prev.totalVan)}</strong></div>
         `
             : ""
         }
@@ -974,13 +1156,15 @@ const StudentFeePage = () => {
       cancelButtonText: "Cancel",
       width: 560,
     });
-    if (!isConfirmed) return;
+
+    if (!isConfirmed) return undefined;
 
     const admissionNumberRaw =
       studentDetails?.admissionNumber ||
       studentDetails?.AdmissionNumber ||
       localStorage.getItem("activeStudentAdmission") ||
       localStorage.getItem("username");
+
     const admissionNumber = normalizeAdmission(admissionNumberRaw);
     const feeHeadId = Number(fee?.fee_heading_id) || fee?.fee_heading_id || null;
 
@@ -994,6 +1178,7 @@ const StudentFeePage = () => {
 
     // Open blank window first to avoid popup blockers
     let paymentWindow = null;
+
     try {
       paymentWindow = openBlankWindowForPayment();
     } catch {}
@@ -1047,22 +1232,28 @@ const StudentFeePage = () => {
       }
     } catch (e) {
       console.error("Error initiating payment:", e);
+
       if (paymentWindow && !paymentWindow.closed) paymentWindow.close();
+
       Swal.fire({
         icon: "error",
         title: "Payment Error",
         text: "Please try again later.",
       });
     }
+
+    return undefined;
   };
 
   const handlePayVanFee = async () => {
-    const van = studentDetails?.vanFee;
-    if (!van) return;
-    const vanCost = Number(van.perHeadTotalDue || van.transportCost || 0);
-    const vanReceived = Number(van.totalVanFeeReceived || 0);
-    const vanConcession = Number(van.totalVanFeeConcession || 0);
-    const vanDueOnly = Math.max(vanCost - (vanReceived + vanConcession), 0);
+    const vanInfo = studentDetails?.vanFee;
+
+    if (!vanInfo) return;
+
+    const vanCostOnly = Number(vanInfo.perHeadTotalDue || vanInfo.transportCost || 0);
+    const vanReceivedOnly = Number(vanInfo.totalVanFeeReceived || 0);
+    const vanConcessionOnly = Number(vanInfo.totalVanFeeConcession || 0);
+    const vanDueOnly = Math.max(vanCostOnly - (vanReceivedOnly + vanConcessionOnly), 0);
 
     const openingBalanceDue = Number(prevBalanceDue || 0);
     const totalToPay = vanDueOnly + openingBalanceDue;
@@ -1071,7 +1262,7 @@ const StudentFeePage = () => {
       return Swal.fire({
         icon: "info",
         title: "No Dues",
-        text: "You're all clear on Van Fee and Previous Balance.",
+        text: `You're all clear on ${transportLabel} and Previous Balance.`,
       });
     }
 
@@ -1080,7 +1271,7 @@ const StudentFeePage = () => {
       html: `
         <div style="text-align:left;font-size:.95rem">
           <div><strong>Breakup</strong></div>
-          <div>Van Fee: <strong>${formatINR(vanDueOnly)}</strong></div>
+          <div>${transportLabel}: <strong>${formatINR(vanDueOnly)}</strong></div>
           ${
             openingBalanceDue > 0
               ? `<div>Previous Balance: <strong>${formatINR(openingBalanceDue)}</strong></div>`
@@ -1093,16 +1284,19 @@ const StudentFeePage = () => {
       confirmButtonText: "Pay Now",
       confirmButtonColor: "#16a34a",
     });
-    if (!isConfirmed) return;
+
+    if (!isConfirmed) return undefined;
 
     const admissionNumberRaw =
       studentDetails?.admissionNumber ||
       studentDetails?.AdmissionNumber ||
       localStorage.getItem("activeStudentAdmission") ||
       localStorage.getItem("username");
+
     const admissionNumber = normalizeAdmission(admissionNumberRaw);
 
     let paymentWindow = null;
+
     try {
       paymentWindow = openBlankWindowForPayment();
     } catch {}
@@ -1134,27 +1328,37 @@ const StudentFeePage = () => {
         } catch {}
       }
     } catch (e) {
-      console.error("Error initiating van fee payment:", e);
+      console.error("Error initiating facility payment:", e);
+
       if (paymentWindow && !paymentWindow.closed) paymentWindow.close();
+
       Swal.fire({
         icon: "error",
         title: "Payment Error",
         text: "Please try again later.",
       });
     }
+
+    return undefined;
   };
 
   // ------------- Student switch handler -------------
   const handleStudentSwitch = (admissionNumber) => {
     const norm = normalizeAdmission(admissionNumber);
     const curr = normalizeAdmission(activeStudentAdmission);
+
     if (!norm || norm === curr) return;
+
     try {
       localStorage.setItem("activeStudentAdmission", norm);
       setActiveStudentAdmission(norm);
+
       window.dispatchEvent(
-        new CustomEvent("student-switched", { detail: { admissionNumber: norm } })
+        new CustomEvent("student-switched", {
+          detail: { admissionNumber: norm },
+        })
       );
+
       fetchStudentDetails(norm);
       fetchTransactionHistory(norm);
       fetchVanFeeByHead();
@@ -1174,17 +1378,20 @@ const StudentFeePage = () => {
               Fees for{" "}
               <span className="fw-semibold">{studentDetails?.name || "Student"}</span>
             </div>
+
             <span className="badge badge-soft badge-soft-primary">
               Adm No:{" "}
               <strong className="ms-1">
                 {studentDetails?.admissionNumber || username}
               </strong>
             </span>
+
             {studentDetails?.class_name && (
               <span className="badge badge-soft badge-soft-info">
                 Class: <strong className="ms-1">{studentDetails.class_name}</strong>
               </span>
             )}
+
             {studentDetails?.section_name && (
               <span className="badge badge-soft badge-soft-secondary">
                 Section: <strong className="ms-1">{studentDetails.section_name}</strong>
@@ -1204,12 +1411,14 @@ const StudentFeePage = () => {
               >
                 <i className="bi bi-grid me-1" /> Fee Details
               </button>
+
               <button
                 className="btn btn-outline-light btn-sm rounded-pill px-3 action-chip"
                 onClick={() => setActiveTab("summary")}
               >
                 <i className="bi bi-list-check me-1" /> Summary
               </button>
+
               <button
                 className="btn btn-outline-light btn-sm rounded-pill px-3 action-chip"
                 onClick={() => setActiveTab("history")}
@@ -1242,7 +1451,9 @@ const StudentFeePage = () => {
                         isActive ? "btn-warning" : "btn-outline-light"
                       } rounded-pill px-3`}
                       onClick={() => handleStudentSwitch(s.admission_number)}
-                      title={`${s.name} (${s.class?.name || "—"}-${s.section?.name || "—"})`}
+                      title={`${s.name} (${s.class?.name || "—"}-${
+                        s.section?.name || "—"
+                      })`}
                       style={{
                         maxWidth: 200,
                         overflow: "hidden",
@@ -1252,7 +1463,9 @@ const StudentFeePage = () => {
                     >
                       {s.isSelf ? "Me" : s.name}
                       <span className="ms-1" style={{ opacity: 0.8 }}>
-                        {s.class?.name ? ` · ${s.class.name}-${s.section?.name || "—"}` : ""}
+                        {s.class?.name
+                          ? ` · ${s.class.name}-${s.section?.name || "—"}`
+                          : ""}
                       </span>
                     </button>
                   );
@@ -1263,6 +1476,7 @@ const StudentFeePage = () => {
                 <label htmlFor="studentSwitcherMobileFee" className="visually-hidden">
                   Switch student
                 </label>
+
                 <select
                   id="studentSwitcherMobileFee"
                   className="form-select form-select-sm bg-light border-0"
@@ -1272,7 +1486,9 @@ const StudentFeePage = () => {
                   {studentsList.map((s) => (
                     <option key={s.admission_number} value={s.admission_number}>
                       {(s.isSelf ? "Me: " : "") + s.name}{" "}
-                      {s.class?.name ? `(${s.class.name}-${s.section?.name || "—"})` : ""}
+                      {s.class?.name
+                        ? `(${s.class.name}-${s.section?.name || "—"})`
+                        : ""}
                     </option>
                   ))}
                 </select>
@@ -1280,32 +1496,40 @@ const StudentFeePage = () => {
             </>
           )}
 
-          {/* Chips row: Transport chips only if transportEnabled, OB always */}
+          {/* Chips row */}
           <div className="d-flex gap-2 mt-3 overflow-auto pb-1 fancy-chip-row">
             {transportEnabled && (
               <>
                 <div className="chip chip-amber">
                   <i className="bi bi-truck me-1" />
-                  Transport Due: <strong className="ms-1">{formatINR(vanCost)}</strong>
+                  {transportLabel} Due:{" "}
+                  <strong className="ms-1">{formatINR(vanCost)}</strong>
                 </div>
+
                 <div className="chip chip-blue">
                   <i className="bi bi-wallet2 me-1" />
-                  Van Received: <strong className="ms-1">{formatINR(vanReceived)}</strong>
+                  {transportLabel} Received:{" "}
+                  <strong className="ms-1">{formatINR(vanReceived)}</strong>
                 </div>
+
                 <div className="chip chip-orange">
                   <i className="bi bi-ticket-perforated me-1" />
-                  Van Concession: <strong className="ms-1">{formatINR(vanConcession)}</strong>
+                  {transportLabel} Concession:{" "}
+                  <strong className="ms-1">{formatINR(vanConcession)}</strong>
                 </div>
+
                 <div className={`chip ${vanDue > 0 ? "chip-red" : "chip-green"}`}>
                   <i className="bi bi-cash-coin me-1" />
-                  Van Due: <strong className="ms-1">{formatINR(vanDue)}</strong>
+                  {transportLabel} Due:{" "}
+                  <strong className="ms-1">{formatINR(vanDue)}</strong>
                 </div>
               </>
             )}
 
             <div className={`chip ${prevBalanceDue > 0 ? "chip-red" : "chip-green"}`}>
               <i className="bi bi-exclamation-octagon me-1" />
-              Previous Balance: <strong className="ms-1">{formatINR(prevBalanceDue)}</strong>
+              Previous Balance:{" "}
+              <strong className="ms-1">{formatINR(prevBalanceDue)}</strong>
             </div>
 
             {transportEnabled && (
@@ -1314,7 +1538,7 @@ const StudentFeePage = () => {
                 disabled={vanDue + prevBalanceDue <= 0}
                 onClick={handlePayVanFee}
               >
-                <i className="bi bi-credit-card-2-front me-1" /> Pay Van Fee
+                <i className="bi bi-credit-card-2-front me-1" /> Pay {transportLabel}
               </button>
             )}
           </div>
@@ -1343,7 +1567,7 @@ const StudentFeePage = () => {
                 <div className="row g-3">
                   {(studentDetails?.feeDetails || []).length ? (
                     studentDetails.feeDetails.map((fee, idx) => {
-                      const t = getTransportBreakdown(fee); // ✅ fixed
+                      const t = getTransportBreakdown(fee);
                       const academicDue = Number(fee.finalAmountDue || 0);
                       const fineDue = getFineDue(fee);
                       const totalInclVan = academicDue + Number(t?.pending || 0) + fineDue;
@@ -1368,21 +1592,23 @@ const StudentFeePage = () => {
                           <div className="card h-100 border-2 fancy-card">
                             <div className="card-header gradient-soft fw-semibold d-flex justify-content-between align-items-center">
                               <span className="text-center w-100">
-                                <i className="bi bi-receipt-cutoff me-1" /> {fee.fee_heading}
+                                <i className="bi bi-receipt-cutoff me-1" />{" "}
+                                {fee.fee_heading}
                               </span>
+
                               {t ? (
                                 t.pending > 0 ? (
                                   <span className="badge rounded-pill text-bg-warning ms-2">
-                                    TR Pending: {formatINR(t.pending)}
+                                    {transportLabel} Pending: {formatINR(t.pending)}
                                   </span>
                                 ) : (
                                   <span className="badge rounded-pill text-bg-success ms-2">
-                                    TR Clear
+                                    {transportLabel} Clear
                                   </span>
                                 )
                               ) : (
                                 <span className="badge rounded-pill text-bg-secondary ms-2">
-                                  No Transport
+                                  No {transportLabel}
                                 </span>
                               )}
                             </div>
@@ -1390,22 +1616,32 @@ const StudentFeePage = () => {
                             <div className="card-body">
                               <div className="d-flex justify-content-between small mb-1">
                                 <span>Original</span>
-                                <span className="fw-semibold">{formatINR(fee.originalFeeDue)}</span>
+                                <span className="fw-semibold">
+                                  {formatINR(fee.originalFeeDue)}
+                                </span>
                               </div>
+
                               <div className="d-flex justify-content-between small mb-1">
                                 <span>Effective</span>
-                                <span className="fw-semibold">{formatINR(fee.effectiveFeeDue)}</span>
+                                <span className="fw-semibold">
+                                  {formatINR(fee.effectiveFeeDue)}
+                                </span>
                               </div>
+
                               <div className="d-flex justify-content-between small mb-1">
                                 <span>Received</span>
-                                <span className="fw-semibold">{formatINR(fee.totalFeeReceived)}</span>
+                                <span className="fw-semibold">
+                                  {formatINR(fee.totalFeeReceived)}
+                                </span>
                               </div>
+
                               <div className="d-flex justify-content-between small mb-1">
                                 <span>Concession</span>
                                 <span className="fw-semibold">
                                   {formatINR(fee.totalConcessionReceived)}
                                 </span>
                               </div>
+
                               <div className="d-flex justify-content-between small mb-2">
                                 <span>Fine (remaining)</span>
                                 <span className="fw-semibold">{formatINR(fineDue)}</span>
@@ -1413,18 +1649,29 @@ const StudentFeePage = () => {
 
                               {prev.count > 0 && (
                                 <div className="alert alert-warning py-2 px-3 small mb-2">
-                                  <div className="fw-semibold mb-1">Previous heads pending</div>
+                                  <div className="fw-semibold mb-1">
+                                    Previous heads pending
+                                  </div>
+
                                   <div className="d-flex justify-content-between tiny-row">
                                     <span>Prev Academic</span>
-                                    <span className="fw-semibold">{formatINR(prev.totalAcademic)}</span>
+                                    <span className="fw-semibold">
+                                      {formatINR(prev.totalAcademic)}
+                                    </span>
                                   </div>
+
                                   <div className="d-flex justify-content-between tiny-row">
                                     <span>Prev Fine</span>
-                                    <span className="fw-semibold">{formatINR(prev.totalFine)}</span>
+                                    <span className="fw-semibold">
+                                      {formatINR(prev.totalFine)}
+                                    </span>
                                   </div>
+
                                   <div className="d-flex justify-content-between tiny-row">
-                                    <span>Prev Transport</span>
-                                    <span className="fw-semibold">{formatINR(prev.totalVan)}</span>
+                                    <span>Prev {transportLabel}</span>
+                                    <span className="fw-semibold">
+                                      {formatINR(prev.totalVan)}
+                                    </span>
                                   </div>
                                 </div>
                               )}
@@ -1435,13 +1682,16 @@ const StudentFeePage = () => {
                                     className="progress-bar bg-success progress-bar-striped progress-bar-animated"
                                     role="progressbar"
                                     style={{
-                                      width: `${Math.min(100, Math.max(0, paidPct)).toFixed(1)}%`,
+                                      width: `${Math.min(100, Math.max(0, paidPct)).toFixed(
+                                        1
+                                      )}%`,
                                     }}
                                     aria-valuenow={paidPct}
                                     aria-valuemin="0"
                                     aria-valuemax="100"
                                   />
                                 </div>
+
                                 <div className="small text-muted mt-1">
                                   Academic Paid {paidPct.toFixed(1)}%
                                 </div>
@@ -1452,8 +1702,9 @@ const StudentFeePage = () => {
                                   <div className="d-flex align-items-center justify-content-between mb-1">
                                     <div className="badge rounded-pill transport-badge">
                                       <i className="bi bi-truck me-1" />
-                                      Transport ({fee.fee_heading})
+                                      {transportLabel} ({fee.fee_heading})
                                     </div>
+
                                     <div className="small text-muted">
                                       {t.source === "api" ? "from API" : "from Summary"}
                                     </div>
@@ -1463,14 +1714,19 @@ const StudentFeePage = () => {
                                     <span className="label">Due (Head)</span>
                                     <span className="value">{formatINR(t.due)}</span>
                                   </div>
+
                                   <div className="d-flex justify-content-between tiny-row">
                                     <span className="label">Received (Head)</span>
                                     <span className="value">{formatINR(t.received)}</span>
                                   </div>
+
                                   <div className="d-flex justify-content-between tiny-row">
                                     <span className="label">Concession (Head)</span>
-                                    <span className="value">{formatINR(t.concession)}</span>
+                                    <span className="value">
+                                      {formatINR(t.concession)}
+                                    </span>
                                   </div>
+
                                   <div className="d-flex justify-content-between tiny-row">
                                     <span className="label">Pending (Head)</span>
                                     <span
@@ -1489,17 +1745,19 @@ const StudentFeePage = () => {
                                           className="progress-bar bg-info progress-bar-striped progress-bar-animated"
                                           role="progressbar"
                                           style={{
-                                            width: `${Math.min(100, Math.max(0, vanPaidPct)).toFixed(
-                                              1
-                                            )}%`,
+                                            width: `${Math.min(
+                                              100,
+                                              Math.max(0, vanPaidPct)
+                                            ).toFixed(1)}%`,
                                           }}
                                           aria-valuenow={vanPaidPct}
                                           aria-valuemin="0"
                                           aria-valuemax="100"
                                         />
                                       </div>
+
                                       <div className="small text-muted mt-1">
-                                        Transport Paid {vanPaidPct.toFixed(1)}%
+                                        {transportLabel} Paid {vanPaidPct.toFixed(1)}%
                                       </div>
                                     </>
                                   )}
@@ -1507,6 +1765,7 @@ const StudentFeePage = () => {
                               )}
 
                               <hr className="my-2" />
+
                               <div className="d-flex justify-content-between">
                                 <span className="fw-semibold">Academic Due</span>
                                 <span
@@ -1521,7 +1780,9 @@ const StudentFeePage = () => {
                               {t ? (
                                 <>
                                   <div className="d-flex justify-content-between mt-1">
-                                    <span className="fw-semibold">Transport Pending (Head)</span>
+                                    <span className="fw-semibold">
+                                      {transportLabel} Pending (Head)
+                                    </span>
                                     <span
                                       className={`fw-bold ${
                                         t.pending > 0 ? "text-danger" : "text-success"
@@ -1530,8 +1791,11 @@ const StudentFeePage = () => {
                                       {formatINR(t.pending)}
                                     </span>
                                   </div>
+
                                   <div className="d-flex justify-content-between mt-1">
-                                    <span className="fw-semibold">Total Due (incl. Fine + TR)</span>
+                                    <span className="fw-semibold">
+                                      Total Due (incl. Fine + {transportLabel})
+                                    </span>
                                     <span
                                       className={`fw-bold ${
                                         totalInclVan > 0 ? "text-danger" : "text-success"
@@ -1543,7 +1807,9 @@ const StudentFeePage = () => {
                                 </>
                               ) : (
                                 <div className="d-flex justify-content-between mt-1">
-                                  <span className="fw-semibold">Total Due (incl. Fine)</span>
+                                  <span className="fw-semibold">
+                                    Total Due (incl. Fine)
+                                  </span>
                                   <span
                                     className={`fw-bold ${
                                       totalInclVan > 0 ? "text-danger" : "text-success"
@@ -1566,13 +1832,17 @@ const StudentFeePage = () => {
                                   onClick={() => handlePayFee(fee, idx)}
                                 >
                                   <i className="bi bi-currency-rupee me-1" /> Pay
-                                  {t && t.pending > 0 ? " (Acad + Fine + TR" : " (Acad + Fine"}
+                                  {t && t.pending > 0
+                                    ? ` (Acad + Fine + ${transportLabel}`
+                                    : " (Acad + Fine"}
                                   {prev.count > 0 ? " + Prev Heads" : ""}
                                   {prevBalanceDue > 0 ? " + OB" : ""}
                                   )
                                 </button>
                               ) : (
-                                <div className="text-success text-center fw-semibold">Paid</div>
+                                <div className="text-success text-center fw-semibold">
+                                  Paid
+                                </div>
                               )}
                             </div>
                           </div>
@@ -1589,13 +1859,13 @@ const StudentFeePage = () => {
 
               {/* Summary */}
               <Tab eventKey="summary" title="Summary">
-                {/* (unchanged summary tab content) */}
                 <div className="row g-3">
                   <div className="col-12 col-lg-6">
                     <div className="card h-100 shadow-sm rounded-4">
                       <div className="card-header bg-secondary text-white text-center fw-semibold">
                         Breakdown
                       </div>
+
                       <div className="card-body">
                         <div className="table-responsive">
                           <table className="table table-sm align-middle">
@@ -1604,40 +1874,61 @@ const StudentFeePage = () => {
                                 <th>Original Fee</th>
                                 <td className="text-end">{formatINR(totalOriginal)}</td>
                               </tr>
+
                               <tr className="table-light">
                                 <th>Effective Fee</th>
                                 <td className="text-end">{formatINR(totalEffective)}</td>
                               </tr>
+
                               <tr className="table-light">
                                 <th>Total Received</th>
                                 <td className="text-end">{formatINR(totalReceived)}</td>
                               </tr>
+
                               <tr className="table-light">
                                 <th>Total Concession</th>
                                 <td className="text-end">{formatINR(totalConcession)}</td>
                               </tr>
+
                               <tr className="table-light">
                                 <th>Total Fine (remaining)</th>
-                                <td className="text-end">{formatINR(totalFineRemaining)}</td>
+                                <td className="text-end">
+                                  {formatINR(totalFineRemaining)}
+                                </td>
                               </tr>
-                              <tr className={prevBalanceDue > 0 ? "table-danger" : "table-success"}>
+
+                              <tr
+                                className={
+                                  prevBalanceDue > 0 ? "table-danger" : "table-success"
+                                }
+                              >
                                 <th>Previous Balance</th>
-                                <td className="text-end fw-semibold">{formatINR(prevBalanceDue)}</td>
+                                <td className="text-end fw-semibold">
+                                  {formatINR(prevBalanceDue)}
+                                </td>
                               </tr>
+
                               <tr className="table-warning">
                                 <th>Total Due (Academic)</th>
-                                <td className="text-end fw-semibold">{formatINR(totalDue)}</td>
+                                <td className="text-end fw-semibold">
+                                  {formatINR(totalDue)}
+                                </td>
                               </tr>
 
                               {transportEnabled && (
                                 <>
                                   <tr className="table-success">
-                                    <th>Van Received</th>
-                                    <td className="text-end">{formatINR(vanReceived)}</td>
+                                    <th>{transportLabel} Received</th>
+                                    <td className="text-end">
+                                      {formatINR(vanReceived)}
+                                    </td>
                                   </tr>
+
                                   <tr className="table-warning">
-                                    <th>Van Due</th>
-                                    <td className="text-end fw-semibold">{formatINR(vanDue)}</td>
+                                    <th>{transportLabel} Due</th>
+                                    <td className="text-end fw-semibold">
+                                      {formatINR(vanDue)}
+                                    </td>
                                   </tr>
                                 </>
                               )}
@@ -1648,21 +1939,39 @@ const StudentFeePage = () => {
                         {transportEnabled && (
                           <>
                             <hr />
+
                             <div className="alert alert-success d-flex flex-wrap justify-content-between align-items-center mb-0">
                               <div className="me-3">
-                                <div className="small text-muted">Transport Due</div>
-                                <div className="fs-6 fw-semibold">{formatINR(vanCost)}</div>
+                                <div className="small text-muted">
+                                  {transportLabel} Due
+                                </div>
+                                <div className="fs-6 fw-semibold">
+                                  {formatINR(vanCost)}
+                                </div>
                               </div>
+
                               <div className="me-3">
-                                <div className="small text-muted">Van Received</div>
-                                <div className="fs-6 fw-semibold">{formatINR(vanReceived)}</div>
+                                <div className="small text-muted">
+                                  {transportLabel} Received
+                                </div>
+                                <div className="fs-6 fw-semibold">
+                                  {formatINR(vanReceived)}
+                                </div>
                               </div>
+
                               <div className="me-3">
-                                <div className="small text-muted">Van Concession</div>
-                                <div className="fs-6 fw-semibold">{formatINR(vanConcession)}</div>
+                                <div className="small text-muted">
+                                  {transportLabel} Concession
+                                </div>
+                                <div className="fs-6 fw-semibold">
+                                  {formatINR(vanConcession)}
+                                </div>
                               </div>
+
                               <div className="me-3">
-                                <div className="small text-muted">Van Due</div>
+                                <div className="small text-muted">
+                                  {transportLabel} Due
+                                </div>
                                 <div
                                   className={`fs-6 fw-bold ${
                                     vanDue > 0 ? "text-danger" : "text-success"
@@ -1671,13 +1980,15 @@ const StudentFeePage = () => {
                                   {formatINR(vanDue)}
                                 </div>
                               </div>
+
                               <div className="ms-auto">
                                 <button
                                   className="btn btn-success btn-sm"
                                   onClick={handlePayVanFee}
                                   disabled={vanDue + prevBalanceDue <= 0}
                                 >
-                                  Pay Van Fee {prevBalanceDue > 0 ? "(incl. OB)" : ""}
+                                  Pay {transportLabel}{" "}
+                                  {prevBalanceDue > 0 ? "(incl. OB)" : ""}
                                 </button>
                               </div>
                             </div>
@@ -1693,14 +2004,18 @@ const StudentFeePage = () => {
                       <div className="card-header bg-primary text-white text-center fw-semibold">
                         Student
                       </div>
+
                       <div className="card-body">
                         <div className="row g-2">
                           <div className="col-6">
                             <div className="kpi kpi-blue">
                               <div className="kpi-label">Name</div>
-                              <div className="kpi-value">{studentDetails?.name || "—"}</div>
+                              <div className="kpi-value">
+                                {studentDetails?.name || "—"}
+                              </div>
                             </div>
                           </div>
+
                           <div className="col-6">
                             <div className="kpi kpi-amber">
                               <div className="kpi-label">Admission</div>
@@ -1709,16 +2024,22 @@ const StudentFeePage = () => {
                               </div>
                             </div>
                           </div>
+
                           <div className="col-6">
                             <div className="kpi kpi-green">
                               <div className="kpi-label">Class</div>
-                              <div className="kpi-value">{studentDetails?.class_name || "—"}</div>
+                              <div className="kpi-value">
+                                {studentDetails?.class_name || "—"}
+                              </div>
                             </div>
                           </div>
+
                           <div className="col-6">
                             <div className="kpi kpi-red">
                               <div className="kpi-label">Section</div>
-                              <div className="kpi-value">{studentDetails?.section_name || "—"}</div>
+                              <div className="kpi-value">
+                                {studentDetails?.section_name || "—"}
+                              </div>
                             </div>
                           </div>
                         </div>
@@ -1734,6 +2055,7 @@ const StudentFeePage = () => {
                   <div className="card-header bg-dark text-white text-center fw-semibold">
                     Transaction History
                   </div>
+
                   <div className="card-body">
                     {transactionHistory?.length ? (
                       <div className="table-responsive">
@@ -1750,19 +2072,22 @@ const StudentFeePage = () => {
                               <th>Fee Received</th>
                               <th>Concession</th>
                               <th>Fine</th>
-                              <th>Van Fee</th>
+                              <th>{transportLabel}</th>
                               <th style={{ width: 110 }}>Receipt</th>
                             </tr>
                           </thead>
+
                           <tbody>
                             {transactionHistory.map((txn) => (
                               <tr key={txn.Serial}>
                                 <td>
                                   {txn.FeeHeading ? txn.FeeHeading.fee_heading : "N/A"}
                                 </td>
+
                                 <td>{txn.Serial}</td>
                                 <td>{txn.Slip_ID}</td>
                                 <td>{formatDateTime(txn.createdAt)}</td>
+
                                 <td>
                                   <span
                                     className={`badge ${
@@ -1775,14 +2100,27 @@ const StudentFeePage = () => {
                                   </span>
                                 </td>
 
-                                <td>{txn.Order_ID || txn.order_id || txn.vendorOrderId || "—"}</td>
                                 <td>
-                                  {txn.Transaction_ID || txn.transaction_id || txn.txnId || "—"}
+                                  {txn.Order_ID ||
+                                    txn.order_id ||
+                                    txn.vendorOrderId ||
+                                    "—"}
+                                </td>
+
+                                <td>
+                                  {txn.Transaction_ID ||
+                                    txn.transaction_id ||
+                                    txn.txnId ||
+                                    "—"}
                                 </td>
 
                                 <td>{formatINR(txn.Fee_Recieved)}</td>
                                 <td>{formatINR(txn.Concession)}</td>
-                                <td>{formatINR(txn.Fine ?? txn.LateFee ?? txn.FineAmount ?? 0)}</td>
+                                <td>
+                                  {formatINR(
+                                    txn.Fine ?? txn.LateFee ?? txn.FineAmount ?? 0
+                                  )}
+                                </td>
                                 <td>{formatINR(txn.VanFee || 0)}</td>
 
                                 <td className="text-center">
@@ -1823,56 +2161,186 @@ const StudentFeePage = () => {
           --glass-bg: rgba(255,255,255,0.6);
           --glass-brd: rgba(148,163,184,0.25);
         }
-        .hero{ background: var(--hero-bg); color:#e2e8f0; border:1px solid rgba(255,255,255,.25); }
-        .badge-soft{ border:1px solid rgba(255,255,255,.45); color:#fff; backdrop-filter: blur(4px); }
-        .badge-soft-primary{ background: rgba(59,130,246,.25); }
-        .badge-soft-info{ background: rgba(6,182,212,.25); }
-        .badge-soft-secondary{ background: rgba(148,163,184,.25); }
-        .action-chip{ backdrop-filter: blur(6px); }
-        .glass{ background: var(--glass-bg); border:1px solid var(--glass-brd); }
-        .gradient-soft{ background: linear-gradient(90deg, rgba(99,102,241,.15), rgba(6,182,212,.15)); }
-        .fancy-card{ border-radius: 1rem; overflow: hidden; }
-        .soft-shadow{ box-shadow: 0 8px 20px rgba(2,8,23,.12); }
 
-        .fancy-chip-row { scrollbar-width: thin; }
-        .fancy-chip-row::-webkit-scrollbar { height: 8px; }
-        .fancy-chip-row::-webkit-scrollbar-thumb { background: rgba(0,0,0,.15); border-radius: 8px; }
+        .hero{
+          background: var(--hero-bg);
+          color:#e2e8f0;
+          border:1px solid rgba(255,255,255,.25);
+        }
 
-        .chip { border-radius: 999px; padding: 8px 12px; font-size: .9rem; white-space: nowrap; color:#0b1220; border:1px solid rgba(0,0,0,.06); }
-        .chip-amber{ background: linear-gradient(135deg,#fef3c7,#fde68a); }
-        .chip-blue{ background: linear-gradient(135deg,#dbeafe,#bfdbfe); }
-        .chip-green{ background: linear-gradient(135deg,#dcfce7,#bbf7d0); }
-        .chip-red{ background: linear-gradient(135deg,#fee2e2,#fecaca); }
-        .chip-orange{ background: linear-gradient(135deg,#ffedd5,#fed7aa); }
-        .shrink-0 { flex-shrink: 0; }
+        .badge-soft{
+          border:1px solid rgba(255,255,255,.45);
+          color:#fff;
+          backdrop-filter: blur(4px);
+        }
 
-        .kpi{ border-radius: 1rem; padding: .85rem 1rem; color:#0b1220; background: #fff; border:1px solid #e5e7eb; }
-        .kpi .kpi-label{ font-size: .8rem; opacity:.8; }
-        .kpi .kpi-value{ font-size: 1.05rem; font-weight: 700; }
-        .kpi-blue{ background: linear-gradient(135deg,#dbeafe,#bfdbfe); }
-        .kpi-amber{ background: linear-gradient(135deg,#fef3c7,#fde68a); }
-        .kpi-green{ background: linear-gradient(135deg,#dcfce7,#bbf7d0); }
-        .kpi-red{ background: linear-gradient(135deg,#fee2e2,#fecaca); }
+        .badge-soft-primary{
+          background: rgba(59,130,246,.25);
+        }
 
-        .progress-thin{ height: .45rem; border-radius: 999px; }
+        .badge-soft-info{
+          background: rgba(6,182,212,.25);
+        }
+
+        .badge-soft-secondary{
+          background: rgba(148,163,184,.25);
+        }
+
+        .action-chip{
+          backdrop-filter: blur(6px);
+        }
+
+        .glass{
+          background: var(--glass-bg);
+          border:1px solid var(--glass-brd);
+        }
+
+        .gradient-soft{
+          background: linear-gradient(90deg, rgba(99,102,241,.15), rgba(6,182,212,.15));
+        }
+
+        .fancy-card{
+          border-radius: 1rem;
+          overflow: hidden;
+        }
+
+        .soft-shadow{
+          box-shadow: 0 8px 20px rgba(2,8,23,.12);
+        }
+
+        .fancy-chip-row{
+          scrollbar-width: thin;
+        }
+
+        .fancy-chip-row::-webkit-scrollbar{
+          height: 8px;
+        }
+
+        .fancy-chip-row::-webkit-scrollbar-thumb{
+          background: rgba(0,0,0,.15);
+          border-radius: 8px;
+        }
+
+        .chip{
+          border-radius: 999px;
+          padding: 8px 12px;
+          font-size: .9rem;
+          white-space: nowrap;
+          color:#0b1220;
+          border:1px solid rgba(0,0,0,.06);
+        }
+
+        .chip-amber{
+          background: linear-gradient(135deg,#fef3c7,#fde68a);
+        }
+
+        .chip-blue{
+          background: linear-gradient(135deg,#dbeafe,#bfdbfe);
+        }
+
+        .chip-green{
+          background: linear-gradient(135deg,#dcfce7,#bbf7d0);
+        }
+
+        .chip-red{
+          background: linear-gradient(135deg,#fee2e2,#fecaca);
+        }
+
+        .chip-orange{
+          background: linear-gradient(135deg,#ffedd5,#fed7aa);
+        }
+
+        .shrink-0{
+          flex-shrink: 0;
+        }
+
+        .kpi{
+          border-radius: 1rem;
+          padding: .85rem 1rem;
+          color:#0b1220;
+          background: #fff;
+          border:1px solid #e5e7eb;
+        }
+
+        .kpi .kpi-label{
+          font-size: .8rem;
+          opacity:.8;
+        }
+
+        .kpi .kpi-value{
+          font-size: 1.05rem;
+          font-weight: 700;
+        }
+
+        .kpi-blue{
+          background: linear-gradient(135deg,#dbeafe,#bfdbfe);
+        }
+
+        .kpi-amber{
+          background: linear-gradient(135deg,#fef3c7,#fde68a);
+        }
+
+        .kpi-green{
+          background: linear-gradient(135deg,#dcfce7,#bbf7d0);
+        }
+
+        .kpi-red{
+          background: linear-gradient(135deg,#fee2e2,#fecaca);
+        }
+
+        .progress-thin{
+          height: .45rem;
+          border-radius: 999px;
+        }
+
         .transport-panel{
           background: linear-gradient(135deg, rgba(59,130,246,.10), rgba(16,185,129,.10));
-          border: 1 dashed rgba(15,23,42,.15);
+          border: 1px dashed rgba(15,23,42,.15);
           border-radius: 12px;
           padding: .6rem .7rem;
         }
+
         .transport-badge{
           background: rgba(99,102,241,.15);
           color: #111827;
         }
-        .tiny-row .label{ font-size: .86rem; opacity: .85; }
-        .tiny-row .value{ font-size: .95rem; }
 
-        .colorful-tabs .nav-link.active{ background: linear-gradient(90deg,#3b82f6,#10b981); color:#fff; border:0; }
-        .colorful-tabs .nav-link{ border-radius: 999px !important; }
+        .tiny-row .label{
+          font-size: .86rem;
+          opacity: .85;
+        }
 
-        .shimmer .line{ height: 14px; background: linear-gradient(90deg,#e5e7eb 25%,#f3f4f6 37%,#e5e7eb 63%); background-size: 400% 100%; animation: shimmer 1.4s infinite; border-radius: 8px; margin-bottom: 10px; }
-        @keyframes shimmer{ 0%{background-position: 100% 0;} 100%{background-position: -100% 0;} }
+        .tiny-row .value{
+          font-size: .95rem;
+        }
+
+        .colorful-tabs .nav-link.active{
+          background: linear-gradient(90deg,#3b82f6,#10b981);
+          color:#fff;
+          border:0;
+        }
+
+        .colorful-tabs .nav-link{
+          border-radius: 999px !important;
+        }
+
+        .shimmer .line{
+          height: 14px;
+          background: linear-gradient(90deg,#e5e7eb 25%,#f3f4f6 37%,#e5e7eb 63%);
+          background-size: 400% 100%;
+          animation: shimmer 1.4s infinite;
+          border-radius: 8px;
+          margin-bottom: 10px;
+        }
+
+        @keyframes shimmer{
+          0%{
+            background-position: 100% 0;
+          }
+          100%{
+            background-position: -100% 0;
+          }
+        }
       `}</style>
     </div>
   );

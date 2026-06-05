@@ -8,6 +8,7 @@ const getRoleFlags = () => {
   const singleRole = localStorage.getItem("userRole");
   const multiRoles = JSON.parse(localStorage.getItem("roles") || "[]");
   const roles = multiRoles.length ? multiRoles : [singleRole].filter(Boolean);
+
   return {
     roles,
     isAdmin: roles.includes("admin"),
@@ -41,6 +42,26 @@ const extractSchools = (data) => {
 // escape helper for inline HTML values
 const esc = (v = "") => String(v ?? "").replace(/"/g, "&quot;");
 
+const getTransportLabelForInput = (school = {}) => {
+  const value = String(school?.transport_display_label || "").trim();
+  return value || "Transport";
+};
+
+const getPreviewHtml = (src, alt = "Preview") => {
+  if (!src) {
+    return `<span class="text-muted small">No file selected</span>`;
+  }
+
+  return `
+    <img
+      src="${esc(toAbs(src))}"
+      alt="${esc(alt)}"
+      class="rounded border"
+      style="width:64px;height:64px;object-fit:cover;"
+    />
+  `;
+};
+
 const Schools = () => {
   const { isAdmin, isSuperadmin } = useMemo(getRoleFlags, []);
   const canEdit = isAdmin || isSuperadmin;
@@ -59,105 +80,297 @@ const Schools = () => {
     }
   };
 
-  // ---------------- Modal HTML ----------------
+  // ---------------- Modal HTML Bootstrap Only ----------------
   const getModalHtml = (school = {}) => `
-    <style>
-      .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-      .form-grid .full{grid-column:1 / -1}
-      .form-label{font-weight:600;margin-bottom:4px}
-      .form-field{width:100%;padding:8px 10px;border:1px solid #ddd;border-radius:6px}
-      .preview-wrap{display:flex;gap:12px;flex-wrap:wrap;margin-top:10px}
-      .preview-wrap img{width:100px;height:100px;object-fit:cover;border-radius:5px;border:1px solid #e5e7eb}
-      .hint{font-size:12px;color:#6b7280}
-    </style>
+    <div
+      class="text-start"
+      style="max-height:calc(100vh - 190px);overflow-y:auto;overflow-x:hidden;padding:2px 6px;"
+    >
+      <div class="card mb-3">
+        <div class="card-header py-2 fw-semibold">
+          Basic Details
+        </div>
 
-    <div class="form-grid">
-      <div class="full">
-        <label for="swal-name" class="form-label">School Name *</label>
-        <input id="swal-name" class="form-field" placeholder="School Name" value="${esc(school.name)}">
-      </div>
+        <div class="card-body">
+          <div class="row g-3">
+            <div class="col-lg-4 col-md-6">
+              <label for="swal-name" class="form-label fw-semibold">School Name *</label>
+              <input
+                id="swal-name"
+                class="form-control form-control-sm"
+                placeholder="School Name"
+                value="${esc(school.name)}"
+              />
+            </div>
 
-      <div class="full">
-        <label for="swal-description" class="form-label">Description</label>
-        <input id="swal-description" class="form-field" placeholder="Description" value="${esc(school.description)}">
-      </div>
+            <div class="col-lg-4 col-md-6">
+              <label for="swal-phone" class="form-label fw-semibold">Phone</label>
+              <input
+                id="swal-phone"
+                class="form-control form-control-sm"
+                placeholder="Phone Number"
+                value="${esc(school.phone)}"
+              />
+            </div>
 
-      <div>
-        <label for="swal-phone" class="form-label">Phone</label>
-        <input id="swal-phone" class="form-field" placeholder="Phone Number" value="${esc(school.phone)}">
-      </div>
+            <div class="col-lg-4 col-md-6">
+              <label for="swal-email" class="form-label fw-semibold">Email</label>
+              <input
+                id="swal-email"
+                class="form-control form-control-sm"
+                placeholder="Email"
+                value="${esc(school.email)}"
+              />
+            </div>
 
-      <div>
-        <label for="swal-email" class="form-label">Email</label>
-        <input id="swal-email" class="form-field" placeholder="Email" value="${esc(school.email)}">
-      </div>
-
-      <div>
-        <label for="swal-affiliation" class="form-label">Affiliation Number</label>
-        <input id="swal-affiliation" class="form-field" placeholder="e.g. 730108" value="${esc(school.affiliation_number)}">
-      </div>
-
-      <div>
-        <label for="swal-udise" class="form-label">UDISE Number</label>
-        <input id="swal-udise" class="form-field" placeholder="e.g. 12345678901" value="${esc(school.udise_number)}">
-      </div>
-
-      <div>
-        <label for="swal-school-code" class="form-label">School Code</label>
-        <input id="swal-school-code" class="form-field" placeholder="e.g. 23603" value="${esc(school.school_code)}">
-      </div>
-
-      <div>
-        <label for="swal-telefax" class="form-label">Tele/Fax</label>
-        <input id="swal-telefax" class="form-field" placeholder="e.g. 01923-234100" value="${esc(school.tele_fax)}">
-      </div>
-
-      <div>
-        <label for="swal-website" class="form-label">Website</label>
-        <input id="swal-website" class="form-field" placeholder="https://example.com" value="${esc(school.website)}">
-      </div>
-
-      <div>
-        <label for="swal-transport-label" class="form-label">Transport Display Label</label>
-        <input
-          id="swal-transport-label"
-          class="form-field"
-          placeholder="e.g. Bus Fee / Conveyance Fee / Route Fee"
-          value="${esc(school.transport_display_label)}"
-        >
-        <div class="hint">Leave blank to show default “Transport”.</div>
-      </div>
-
-      <div class="full">
-        <label for="swal-address" class="form-label">Address Line</label>
-        <input id="swal-address" class="form-field" placeholder="Address Line" value="${esc(school.address_line)}">
-      </div>
-
-      <div>
-        <label for="swal-logo" class="form-label">School Logo</label>
-        <input type="file" id="swal-logo" class="form-field" accept="image/*">
-        <div id="swal-logo-preview" class="preview-wrap">
-          ${
-            school.logo
-              ? `<img src="${esc(toAbs(school.logo))}" alt="Logo Preview">`
-              : `<span class="hint">No logo selected</span>`
-          }
+            <div class="col-12">
+              <label for="swal-description" class="form-label fw-semibold">Description</label>
+              <input
+                id="swal-description"
+                class="form-control form-control-sm"
+                placeholder="Description"
+                value="${esc(school.description)}"
+              />
+            </div>
+          </div>
         </div>
       </div>
 
-      <div>
-        <label for="swal-board-logo" class="form-label">Board Logo (e.g., CBSE)</label>
-        <input type="file" id="swal-board-logo" class="form-field" accept="image/*">
-        <div id="swal-board-logo-preview" class="preview-wrap">
-          ${
-            school.board_logo
-              ? `<img src="${esc(toAbs(school.board_logo))}" alt="Board Logo Preview">`
-              : `<span class="hint">No board logo selected</span>`
-          }
+      <div class="card mb-3">
+        <div class="card-header py-2 fw-semibold">
+          School Meta
+        </div>
+
+        <div class="card-body">
+          <div class="row g-3">
+            <div class="col-lg-4 col-md-6">
+              <label for="swal-affiliation" class="form-label fw-semibold">Affiliation Number</label>
+              <input
+                id="swal-affiliation"
+                class="form-control form-control-sm"
+                placeholder="e.g. 730108"
+                value="${esc(school.affiliation_number)}"
+              />
+            </div>
+
+            <div class="col-lg-4 col-md-6">
+              <label for="swal-udise" class="form-label fw-semibold">UDISE Number</label>
+              <input
+                id="swal-udise"
+                class="form-control form-control-sm"
+                placeholder="e.g. 12345678901"
+                value="${esc(school.udise_number)}"
+              />
+            </div>
+
+            <div class="col-lg-4 col-md-6">
+              <label for="swal-school-code" class="form-label fw-semibold">School Code</label>
+              <input
+                id="swal-school-code"
+                class="form-control form-control-sm"
+                placeholder="e.g. 23603"
+                value="${esc(school.school_code)}"
+              />
+            </div>
+
+            <div class="col-lg-4 col-md-6">
+              <label for="swal-telefax" class="form-label fw-semibold">Tele/Fax</label>
+              <input
+                id="swal-telefax"
+                class="form-control form-control-sm"
+                placeholder="e.g. 01923-234100"
+                value="${esc(school.tele_fax)}"
+              />
+            </div>
+
+            <div class="col-lg-4 col-md-6">
+              <label for="swal-website" class="form-label fw-semibold">Website</label>
+              <input
+                id="swal-website"
+                class="form-control form-control-sm"
+                placeholder="https://example.com"
+                value="${esc(school.website)}"
+              />
+            </div>
+
+            <div class="col-lg-4 col-md-6">
+              <label for="swal-transport-label" class="form-label fw-semibold">
+                Transport Display Label
+              </label>
+              <input
+                id="swal-transport-label"
+                class="form-control form-control-sm"
+                placeholder="Bus Fee / Conveyance Fee"
+                value="${esc(getTransportLabelForInput(school))}"
+              />
+              <div class="form-text">
+                Blank means default Transport.
+              </div>
+            </div>
+
+            <div class="col-12">
+              <label for="swal-address" class="form-label fw-semibold">Address Line</label>
+              <input
+                id="swal-address"
+                class="form-control form-control-sm"
+                placeholder="Address Line"
+                value="${esc(school.address_line)}"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card mb-1">
+        <div class="card-header py-2 fw-semibold">
+          Logos
+        </div>
+
+        <div class="card-body">
+          <div class="row g-3 align-items-start">
+            <div class="col-lg-6 col-md-6">
+              <label for="swal-logo" class="form-label fw-semibold">School Logo</label>
+              <input
+                type="file"
+                id="swal-logo"
+                class="form-control form-control-sm"
+                accept="image/*"
+              />
+              <div id="swal-logo-preview" class="d-flex align-items-center gap-2 mt-2">
+                ${
+                  school.logo
+                    ? getPreviewHtml(school.logo, "Logo Preview")
+                    : `<span class="text-muted small">No logo selected</span>`
+                }
+              </div>
+            </div>
+
+            <div class="col-lg-6 col-md-6">
+              <label for="swal-board-logo" class="form-label fw-semibold">Board Logo</label>
+              <input
+                type="file"
+                id="swal-board-logo"
+                class="form-control form-control-sm"
+                accept="image/*"
+              />
+              <div id="swal-board-logo-preview" class="d-flex align-items-center gap-2 mt-2">
+                ${
+                  school.board_logo
+                    ? getPreviewHtml(school.board_logo, "Board Logo Preview")
+                    : `<span class="text-muted small">No board logo selected</span>`
+                }
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
   `;
+
+  const bindLogoPreviewEvents = ({ school = {}, setFileLogo, setFileBoardLogo }) => {
+    const popup = Swal.getPopup();
+    if (!popup) return;
+
+    const logoInput = popup.querySelector("#swal-logo");
+    const logoPreview = popup.querySelector("#swal-logo-preview");
+
+    if (logoInput && logoPreview) {
+      logoInput.addEventListener("change", (e) => {
+        const selected = e.target.files?.[0] || null;
+        setFileLogo(selected);
+
+        if (selected) {
+          const previewUrl = URL.createObjectURL(selected);
+          logoPreview.innerHTML = `
+            <img
+              src="${previewUrl}"
+              alt="Logo Preview"
+              class="rounded border"
+              style="width:64px;height:64px;object-fit:cover;"
+            />
+          `;
+        } else {
+          logoPreview.innerHTML = school.logo
+            ? getPreviewHtml(school.logo, "Logo Preview")
+            : `<span class="text-muted small">No logo selected</span>`;
+        }
+      });
+    }
+
+    const boardInput = popup.querySelector("#swal-board-logo");
+    const boardPreview = popup.querySelector("#swal-board-logo-preview");
+
+    if (boardInput && boardPreview) {
+      boardInput.addEventListener("change", (e) => {
+        const selected = e.target.files?.[0] || null;
+        setFileBoardLogo(selected);
+
+        if (selected) {
+          const previewUrl = URL.createObjectURL(selected);
+          boardPreview.innerHTML = `
+            <img
+              src="${previewUrl}"
+              alt="Board Logo Preview"
+              class="rounded border"
+              style="width:64px;height:64px;object-fit:cover;"
+            />
+          `;
+        } else {
+          boardPreview.innerHTML = school.board_logo
+            ? getPreviewHtml(school.board_logo, "Board Logo Preview")
+            : `<span class="text-muted small">No board logo selected</span>`;
+        }
+      });
+    }
+  };
+
+  const readModalValues = () => {
+    const p = Swal.getPopup();
+
+    const name = p.querySelector("#swal-name").value.trim();
+
+    if (!name) {
+      Swal.showValidationMessage("School Name is required");
+      return false;
+    }
+
+    return {
+      name,
+      description: p.querySelector("#swal-description").value.trim(),
+      phone: p.querySelector("#swal-phone").value.trim(),
+      email: p.querySelector("#swal-email").value.trim(),
+      affiliation_number: p.querySelector("#swal-affiliation").value.trim(),
+      udise_number: p.querySelector("#swal-udise").value.trim(),
+      school_code: p.querySelector("#swal-school-code").value.trim(),
+      tele_fax: p.querySelector("#swal-telefax").value.trim(),
+      website: p.querySelector("#swal-website").value.trim(),
+      transport_display_label: p
+        .querySelector("#swal-transport-label")
+        .value.trim(),
+      address_line: p.querySelector("#swal-address").value.trim(),
+    };
+  };
+
+  const appendSchoolFormData = ({ values, fileLogo, fileBoardLogo }) => {
+    const formData = new FormData();
+
+    formData.append("name", values.name);
+    formData.append("description", values.description || "");
+    formData.append("phone", values.phone || "");
+    formData.append("email", values.email || "");
+    formData.append("affiliation_number", values.affiliation_number || "");
+    formData.append("udise_number", values.udise_number || "");
+    formData.append("school_code", values.school_code || "");
+    formData.append("website", values.website || "");
+    formData.append("tele_fax", values.tele_fax || "");
+    formData.append("transport_display_label", values.transport_display_label || "");
+    formData.append("address_line", values.address_line || "");
+
+    if (fileLogo) formData.append("logo", fileLogo);
+    if (fileBoardLogo) formData.append("board_logo", fileBoardLogo);
+
+    return formData;
+  };
 
   // ---------------- Add ----------------
   const handleAdd = async () => {
@@ -166,82 +379,37 @@ const Schools = () => {
 
     Swal.fire({
       title: "Add New School",
-      width: "900px",
+      width: "1050px",
+      heightAuto: false,
       allowOutsideClick: false,
       allowEscapeKey: false,
       html: getModalHtml(),
       showCancelButton: true,
       confirmButtonText: "Add",
+      customClass: {
+        popup: "p-3",
+        htmlContainer: "m-0",
+      },
       didOpen: () => {
-        const popup = Swal.getPopup();
-
-        const logoInput = popup.querySelector("#swal-logo");
-        const logoPreview = popup.querySelector("#swal-logo-preview");
-        logoInput.addEventListener("change", (e) => {
-          fileLogo = e.target.files[0];
-          if (fileLogo) {
-            const previewUrl = URL.createObjectURL(fileLogo);
-            logoPreview.innerHTML = `<img src="${previewUrl}" alt="Logo Preview">`;
-          } else {
-            logoPreview.innerHTML = `<span class="hint">No logo selected</span>`;
-          }
-        });
-
-        const boardInput = popup.querySelector("#swal-board-logo");
-        const boardPreview = popup.querySelector("#swal-board-logo-preview");
-        boardInput.addEventListener("change", (e) => {
-          fileBoardLogo = e.target.files[0];
-          if (fileBoardLogo) {
-            const previewUrl = URL.createObjectURL(fileBoardLogo);
-            boardPreview.innerHTML = `<img src="${previewUrl}" alt="Board Logo Preview">`;
-          } else {
-            boardPreview.innerHTML = `<span class="hint">No board logo selected</span>`;
-          }
+        bindLogoPreviewEvents({
+          school: {},
+          setFileLogo: (file) => {
+            fileLogo = file;
+          },
+          setFileBoardLogo: (file) => {
+            fileBoardLogo = file;
+          },
         });
       },
-      preConfirm: () => {
-        const p = Swal.getPopup();
-        const name = p.querySelector("#swal-name").value.trim();
-
-        if (!name) {
-          Swal.showValidationMessage("School Name is required");
-          return false;
-        }
-
-        return {
-          name,
-          description: p.querySelector("#swal-description").value.trim(),
-          phone: p.querySelector("#swal-phone").value.trim(),
-          email: p.querySelector("#swal-email").value.trim(),
-          affiliation_number: p.querySelector("#swal-affiliation").value.trim(),
-          udise_number: p.querySelector("#swal-udise").value.trim(),
-          school_code: p.querySelector("#swal-school-code").value.trim(),
-          tele_fax: p.querySelector("#swal-telefax").value.trim(),
-          website: p.querySelector("#swal-website").value.trim(),
-          transport_display_label: p.querySelector("#swal-transport-label").value.trim(),
-          address_line: p.querySelector("#swal-address").value.trim(),
-        };
-      },
+      preConfirm: readModalValues,
     }).then(async (res) => {
       if (res.isConfirmed) {
         try {
-          const v = res.value;
-          const formData = new FormData();
-
-          formData.append("name", v.name);
-          formData.append("description", v.description || "");
-          formData.append("phone", v.phone || "");
-          formData.append("email", v.email || "");
-          formData.append("affiliation_number", v.affiliation_number || "");
-          formData.append("udise_number", v.udise_number || "");
-          formData.append("school_code", v.school_code || "");
-          formData.append("website", v.website || "");
-          formData.append("tele_fax", v.tele_fax || "");
-          formData.append("transport_display_label", v.transport_display_label || "");
-          formData.append("address_line", v.address_line || "");
-
-          if (fileLogo) formData.append("logo", fileLogo);
-          if (fileBoardLogo) formData.append("board_logo", fileBoardLogo);
+          const formData = appendSchoolFormData({
+            values: res.value,
+            fileLogo,
+            fileBoardLogo,
+          });
 
           await api.post("/schools", formData, {
             headers: { "Content-Type": "multipart/form-data" },
@@ -268,86 +436,37 @@ const Schools = () => {
 
     Swal.fire({
       title: "Edit School",
-      width: "900px",
+      width: "1050px",
+      heightAuto: false,
       allowOutsideClick: false,
       allowEscapeKey: false,
       html: getModalHtml(school),
       showCancelButton: true,
       confirmButtonText: "Update",
+      customClass: {
+        popup: "p-3",
+        htmlContainer: "m-0",
+      },
       didOpen: () => {
-        const popup = Swal.getPopup();
-
-        const logoInput = popup.querySelector("#swal-logo");
-        const logoPreview = popup.querySelector("#swal-logo-preview");
-        logoInput.addEventListener("change", (e) => {
-          fileLogo = e.target.files[0];
-          if (fileLogo) {
-            const previewUrl = URL.createObjectURL(fileLogo);
-            logoPreview.innerHTML = `<img src="${previewUrl}" alt="Logo Preview">`;
-          } else {
-            logoPreview.innerHTML = school.logo
-              ? `<img src="${esc(toAbs(school.logo))}" alt="Logo Preview">`
-              : `<span class="hint">No logo selected</span>`;
-          }
-        });
-
-        const boardInput = popup.querySelector("#swal-board-logo");
-        const boardPreview = popup.querySelector("#swal-board-logo-preview");
-        boardInput.addEventListener("change", (e) => {
-          fileBoardLogo = e.target.files[0];
-          if (fileBoardLogo) {
-            const previewUrl = URL.createObjectURL(fileBoardLogo);
-            boardPreview.innerHTML = `<img src="${previewUrl}" alt="Board Logo Preview">`;
-          } else {
-            boardPreview.innerHTML = school.board_logo
-              ? `<img src="${esc(toAbs(school.board_logo))}" alt="Board Logo Preview">`
-              : `<span class="hint">No board logo selected</span>`;
-          }
+        bindLogoPreviewEvents({
+          school,
+          setFileLogo: (file) => {
+            fileLogo = file;
+          },
+          setFileBoardLogo: (file) => {
+            fileBoardLogo = file;
+          },
         });
       },
-      preConfirm: () => {
-        const p = Swal.getPopup();
-        const name = p.querySelector("#swal-name").value.trim();
-
-        if (!name) {
-          Swal.showValidationMessage("School Name is required");
-          return false;
-        }
-
-        return {
-          name,
-          description: p.querySelector("#swal-description").value.trim(),
-          phone: p.querySelector("#swal-phone").value.trim(),
-          email: p.querySelector("#swal-email").value.trim(),
-          affiliation_number: p.querySelector("#swal-affiliation").value.trim(),
-          udise_number: p.querySelector("#swal-udise").value.trim(),
-          school_code: p.querySelector("#swal-school-code").value.trim(),
-          tele_fax: p.querySelector("#swal-telefax").value.trim(),
-          website: p.querySelector("#swal-website").value.trim(),
-          transport_display_label: p.querySelector("#swal-transport-label").value.trim(),
-          address_line: p.querySelector("#swal-address").value.trim(),
-        };
-      },
+      preConfirm: readModalValues,
     }).then(async (res) => {
       if (res.isConfirmed) {
         try {
-          const v = res.value;
-          const formData = new FormData();
-
-          formData.append("name", v.name);
-          formData.append("description", v.description || "");
-          formData.append("phone", v.phone || "");
-          formData.append("email", v.email || "");
-          formData.append("affiliation_number", v.affiliation_number || "");
-          formData.append("udise_number", v.udise_number || "");
-          formData.append("school_code", v.school_code || "");
-          formData.append("website", v.website || "");
-          formData.append("tele_fax", v.tele_fax || "");
-          formData.append("transport_display_label", v.transport_display_label || "");
-          formData.append("address_line", v.address_line || "");
-
-          if (fileLogo) formData.append("logo", fileLogo);
-          if (fileBoardLogo) formData.append("board_logo", fileBoardLogo);
+          const formData = appendSchoolFormData({
+            values: res.value,
+            fileLogo,
+            fileBoardLogo,
+          });
 
           await api.put(`/schools/${school.id}`, formData, {
             headers: { "Content-Type": "multipart/form-data" },
@@ -473,12 +592,11 @@ const Schools = () => {
                     <img
                       src={toAbs(school.logo)}
                       alt="School Logo"
+                      className="rounded border"
                       style={{
                         width: "50px",
                         height: "50px",
-                        borderRadius: "5px",
                         objectFit: "cover",
-                        border: "1px solid #e5e7eb",
                       }}
                     />
                   ) : (
@@ -491,12 +609,11 @@ const Schools = () => {
                     <img
                       src={toAbs(school.board_logo)}
                       alt="Board Logo"
+                      className="rounded border"
                       style={{
                         width: "50px",
                         height: "50px",
-                        borderRadius: "5px",
                         objectFit: "cover",
-                        border: "1px solid #e5e7eb",
                       }}
                     />
                   ) : (
