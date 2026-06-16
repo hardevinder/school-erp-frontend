@@ -490,6 +490,16 @@ export default function TeacherDashboard() {
           { label: "Request Leave", icon: "bi-box-arrow-in-down-left", path: "/employee-leave-request", color: "var(--qa-orange)" },
           { label: "My Attendance", icon: "bi-calendar2-week", path: "/my-attendance-calendar", color: "var(--qa-slate)" },
           { label: "Marks Entry", icon: "bi-pencil-square", path: "/marks-entry", color: "var(--qa-lime)" },
+
+          // ✅ NEW: Report Card Health / Extra Details
+          {
+            label: "Health Details",
+            icon: "bi-heart-pulse",
+            path: "/report-card-health",
+            color: "var(--qa-rose)",
+            badge: "NEW",
+          },
+
           { label: "Result Summary", icon: "bi-bar-chart", path: "/reports/classwise-result-summary", color: "var(--qa-rose)" },
           { label: "Report Cards", icon: "bi-printer", path: "/report-card-generator", color: "var(--qa-slate)" },
           { label: "Digital Diary", icon: "bi-journal-bookmark", path: "/digital-diary", color: "var(--qa-indigo)" },
@@ -645,6 +655,12 @@ export default function TeacherDashboard() {
             <button className="btn btn-outline-light btn-sm" onClick={() => go("/teacher-timetable-display")}>
               <i className="bi bi-table me-1" />
               View Timetable
+            </button>
+
+            {/* ✅ NEW: Report Card Health / Extra Details */}
+            <button className="btn btn-outline-light btn-sm" onClick={() => go("/report-card-health")}>
+              <i className="bi bi-heart-pulse me-1" />
+              Health Details
             </button>
 
             <button className="btn btn-outline-light btn-sm" onClick={() => setShowCoScholastic((s) => !s)}>

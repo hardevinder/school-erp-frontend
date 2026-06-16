@@ -35,6 +35,7 @@ const upper = (v) => String(v || "").trim().toUpperCase();
 const safeMode = (m) => (upper(m) === "GRADE" ? "GRADE" : "MARKS");
 
 const attendanceOptions = ["P", "A", "L", "ACT", "LA", "ML", "X"];
+const defaultGradeOptions = ["G", "B", "Y", "R"];
 
 const getApiErrorMessage = (err, fallback = "Something went wrong") => {
   const status = err?.response?.status;
@@ -326,14 +327,9 @@ const MarksEntry = () => {
             prefillMarks[key] = m === null || m === undefined ? "" : m;
             preAttendance[key] = val?.attendance || "P";
 
-            if (preGrades[sid] == null) {
-              const g = val?.grade ?? "";
-              preGrades[sid] = g || "";
-            }
-
-            if (preGradeAtt[sid] == null) {
-              preGradeAtt[sid] = val?.attendance || "P";
-            }
+            const g = val?.grade ?? "";
+            preGrades[key] = g || "";
+            preGradeAtt[key] = val?.attendance || "P";
           }
         }
       });
@@ -360,12 +356,14 @@ const MarksEntry = () => {
     setAttendance((prev) => ({ ...prev, [key]: value }));
   };
 
-  const handleGradeChange = (studentId, value) => {
-    setGradeValues((prev) => ({ ...prev, [studentId]: value }));
+  const handleGradeChange = (studentId, componentId, value) => {
+    const key = `${studentId}_${componentId}`;
+    setGradeValues((prev) => ({ ...prev, [key]: value }));
   };
 
-  const handleGradeAttendanceChange = (studentId, value) => {
-    setGradeAttendance((prev) => ({ ...prev, [studentId]: value }));
+  const handleGradeAttendanceChange = (studentId, componentId, value) => {
+    const key = `${studentId}_${componentId}`;
+    setGradeAttendance((prev) => ({ ...prev, [key]: value }));
   };
 
  const saveMarksEntry = async () => {
@@ -379,12 +377,16 @@ const MarksEntry = () => {
 
     if (evaluationMode === "GRADE") {
       marksData = students.flatMap((student) =>
-        components.map((component) => ({
-          student_id: student.id,
-          component_id: component.component_id,
-          grade: gradeValues[student.id] || "",
-          attendance: gradeAttendance[student.id] || "P",
-        }))
+        components.map((component) => {
+          const key = `${student.id}_${component.component_id}`;
+
+          return {
+            student_id: student.id,
+            component_id: component.component_id,
+            grade: gradeValues[key] || "",
+            attendance: gradeAttendance[key] || "P",
+          };
+        })
       );
     } else {
       marksData = students.flatMap((student) =>
@@ -519,10 +521,26 @@ const MarksEntry = () => {
     }
   };
 
-  const gradeOptionLabels = useMemo(
-    () => gradeOptions.map((g) => getGradeLabel(g)).filter(Boolean),
-    [gradeOptions]
-  );
+  const gradeOptionLabels = useMemo(() => {
+    const labels = gradeOptions.map((g) => getGradeLabel(g)).filter(Boolean);
+    return labels.length > 0 ? labels : defaultGradeOptions;
+  }, [gradeOptions]);
+
+  const renderComponentHeader = (component) => {
+    const abbr = component?.abbreviation || "";
+    const name = component?.name || "";
+
+    return (
+      <div className="text-center">
+        {abbr && <div className="fw-bold">{abbr}</div>}
+        {name && (
+          <div className="small text-muted" style={{ whiteSpace: "normal" }}>
+            {name}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="container-fluid py-3">
@@ -680,52 +698,88 @@ const MarksEntry = () => {
               <table className="table table-bordered table-striped align-middle">
                 <thead className="table-light">
                   <tr>
-                    <th style={{ minWidth: 80 }}>Roll No</th>
-                    <th style={{ minWidth: 220 }}>Student Name</th>
-                    <th style={{ minWidth: 110 }}>Attendance</th>
-                    <th style={{ minWidth: 150 }}>Grade</th>
+                    <th rowSpan="2" style={{ minWidth: 80 }}>
+                      Roll No
+                    </th>
+                    <th rowSpan="2" style={{ minWidth: 220 }}>
+                      Student Name
+                    </th>
+                    {components.map((component) => (
+                      <th
+                        key={component.component_id}
+                        colSpan="2"
+                        className="text-center"
+                      >
+                        {renderComponentHeader(component)}
+                      </th>
+                    ))}
+                  </tr>
+                  <tr>
+                    {components.map((component) => (
+                      <React.Fragment key={component.component_id}>
+                        <th style={{ minWidth: 110 }}>Attendance</th>
+                        <th style={{ minWidth: 150 }}>Grade</th>
+                      </React.Fragment>
+                    ))}
                   </tr>
                 </thead>
+
                 <tbody>
                   {students.map((student) => (
                     <tr key={student.id}>
                       <td>{student.roll_number || "-"}</td>
                       <td>{student.name}</td>
-                      <td>
-                        <select
-                          className="form-select"
-                          value={gradeAttendance[student.id] || "P"}
-                          onChange={(e) =>
-                            handleGradeAttendanceChange(student.id, e.target.value)
-                          }
-                        >
-                          {attendanceOptions.map((a) => (
-                            <option key={a} value={a}>
-                              {a}
-                            </option>
-                          ))}
-                        </select>
-                      </td>
-                      <td>
-                        <select
-                          className="form-select"
-                          value={gradeValues[student.id] || ""}
-                          onChange={(e) =>
-                            handleGradeChange(student.id, e.target.value)
-                          }
-                          disabled={(gradeAttendance[student.id] || "P") !== "P"}
-                        >
-                          <option value="">Select Grade</option>
-                          {gradeOptions.map((g, idx) => {
-                            const label = getGradeLabel(g);
-                            return (
-                              <option key={idx} value={label}>
-                                {label}
-                              </option>
-                            );
-                          })}
-                        </select>
-                      </td>
+
+                      {components.map((component) => {
+                        const key = `${student.id}_${component.component_id}`;
+                        const att = gradeAttendance[key] || "P";
+
+                        return (
+                          <React.Fragment key={key}>
+                            <td>
+                              <select
+                                className="form-select"
+                                value={att}
+                                onChange={(e) =>
+                                  handleGradeAttendanceChange(
+                                    student.id,
+                                    component.component_id,
+                                    e.target.value
+                                  )
+                                }
+                              >
+                                {attendanceOptions.map((a) => (
+                                  <option key={a} value={a}>
+                                    {a}
+                                  </option>
+                                ))}
+                              </select>
+                            </td>
+
+                            <td>
+                              <select
+                                className="form-select"
+                                value={gradeValues[key] || ""}
+                                onChange={(e) =>
+                                  handleGradeChange(
+                                    student.id,
+                                    component.component_id,
+                                    e.target.value
+                                  )
+                                }
+                                disabled={att !== "P"}
+                              >
+                                <option value="">Select Grade</option>
+                                {gradeOptionLabels.map((label, idx) => (
+                                  <option key={idx} value={label}>
+                                    {label}
+                                  </option>
+                                ))}
+                              </select>
+                            </td>
+                          </React.Fragment>
+                        );
+                      })}
                     </tr>
                   ))}
                 </tbody>
@@ -748,10 +802,12 @@ const MarksEntry = () => {
                         colSpan="2"
                         className="text-center"
                       >
-                        {component.abbreviation || component.name}
-                        {component.max_marks != null
-                          ? ` (${component.max_marks})`
-                          : ""}
+                        {renderComponentHeader(component)}
+                        {component.max_marks != null && (
+                          <div className="small text-muted">
+                            Max: {component.max_marks}
+                          </div>
+                        )}
                       </th>
                     ))}
                   </tr>

@@ -103,6 +103,7 @@ import ExamScheduleManagement from "./pages/ExamScheduleManagement";
 import ExamManagement from "./pages/ExamManagement";
 import RollNumberManagement from "./pages/RollNumberManagement";
 import MarksEntry from "./pages/MarksEntry";
+import ReportCardHealthEntry from "./pages/ReportCardHealthEntry";
 import ReportBuilder from "./pages/ReportBuilder";
 import ClasswiseResultSummary from "./pages/ClasswiseResultSummary";
 import ResultReportDesigner from "./pages/ResultReportDesigner";
@@ -943,6 +944,27 @@ function App() {
           <Route path="/exam-schedules" element={<ExamScheduleManagement />} />
           <Route path="/roll-numbers" element={<RollNumberManagement />} />
           <Route path="/marks-entry" element={<MarksEntry />} />
+
+          <Route
+            path="/report-card-health"
+            element={
+              <RequireRole
+                roles={[
+                  "teacher",
+                  "class_incharge",
+                  "academic_coordinator",
+                  "coordinator",
+                  "examination",
+                  "principal",
+                  "admin",
+                  "superadmin",
+                  "super_admin",
+                ]}
+              >
+                <ReportCardHealthEntry />
+              </RequireRole>
+            }
+          />
 
           {/* ✅ NEW: Attendance Entry */}
           <Route

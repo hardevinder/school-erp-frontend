@@ -3,7 +3,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import api from "../api";
 import Swal from "sweetalert2";
 import "bootstrap/dist/css/bootstrap.min.css";
-import { Modal, Button, Badge, Spinner } from "react-bootstrap";
+import { Modal, Button } from "react-bootstrap";
 
 // DnD Kit imports
 import { DndContext, closestCenter } from "@dnd-kit/core";
@@ -33,7 +33,6 @@ function SortableRow({
   onDelete,
   onToggleLock,
   onDuplicate,
-  onClickMode,
 }) {
   const { attributes, listeners, setNodeRef, transform, transition } =
     useSortable({
@@ -41,7 +40,10 @@ function SortableRow({
     });
 
   const style = { transform: CSS.Transform.toString(transform), transition };
-  const mode = safeMode(scheme.evaluation_mode);
+
+  // Grade/Marks now comes from AssessmentComponent.component_type
+  const mode = safeMode(scheme.component?.component_type);
+  const maxMarks = scheme.component?.max_marks ?? 0;
 
   return (
     <tr ref={setNodeRef} style={style}>
@@ -53,32 +55,31 @@ function SortableRow({
       >
         ☰
       </td>
+
       <td>{scheme.session?.name || "-"}</td>
-      <td>{scheme.class?.class_name}</td>
-      <td>{scheme.subject?.name}</td>
-      <td>{scheme.term?.name}</td>
+      <td>{scheme.class?.class_name || "-"}</td>
+      <td>{scheme.subject?.name || "-"}</td>
+      <td>{scheme.term?.name || "-"}</td>
+
       <td>
         {scheme.component?.abbreviation
           ? `${scheme.component.abbreviation} - ${scheme.component.name}`
-          : scheme.component?.name}
+          : scheme.component?.name || "-"}
       </td>
 
-      {/* Eval Mode */}
-      <td style={{ width: 140 }}>
-        <button
-          type="button"
-          className={`btn btn-sm ${
-            mode === "GRADE" ? "btn-info" : "btn-primary"
+      <td style={{ width: 120 }}>
+        <span
+          className={`badge ${
+            mode === "GRADE" ? "bg-info text-dark" : "bg-primary"
           }`}
-          onClick={() => onClickMode(scheme)}
-          title="Click to change evaluation mode"
-          style={{ borderRadius: 999 }}
         >
           {mode}
-        </button>
+        </span>
       </td>
 
-      <td>{scheme.weightage_percent}%</td>
+      <td>{mode === "GRADE" ? "-" : maxMarks}</td>
+
+      <td>{scheme.weightage_percent ?? 0}%</td>
 
       <td>
         {scheme.is_locked ? (
@@ -184,19 +185,6 @@ const ExamSchemeManagement = () => {
     overwrite: false,
   });
 
-  // Eval Mode Modal
-  const [showEvalModal, setShowEvalModal] = useState(false);
-  const [evalLoading, setEvalLoading] = useState(false);
-  const [evalSaving, setEvalSaving] = useState(false);
-  const [evalState, setEvalState] = useState({
-    session_id: "",
-    class_id: "",
-    subject_id: "",
-    use_term: false,
-    term_id: "",
-    evaluation_mode: "MARKS",
-  });
-
   const sessionById = useMemo(() => {
     const map = new Map();
     (sessions || []).forEach((s) => map.set(String(s.id), s));
@@ -276,6 +264,14 @@ const ExamSchemeManagement = () => {
     const subjectId = filters.subject_id ? String(filters.subject_id) : "";
     const isFilteredLocal = !!(sessionId || classId || subjectId);
 
+    if (!isFilteredLocal) {
+      return Swal.fire(
+        "Select Filter",
+        "Please select at least one filter before deleting schemes.",
+        "warning"
+      );
+    }
+
     const sessionName =
       sessionId && sessionById.get(sessionId)
         ? sessionById.get(sessionId).name
@@ -289,26 +285,21 @@ const ExamSchemeManagement = () => {
         ? subjectById.get(subjectId).name
         : "All Subjects";
 
-    const scopeHtml = isFilteredLocal
-      ? `
-        <div style="text-align:left">
-          <div><b>This will delete schemes matching current filters:</b></div>
-          <div><b>Session:</b> ${sessionName}</div>
-          <div><b>Class:</b> ${className}</div>
-          <div><b>Subject:</b> ${subjectName}</div>
+    const scopeHtml = `
+      <div style="text-align:left">
+        <div><b>This will delete schemes matching current filters:</b></div>
+        <div><b>Session:</b> ${sessionName}</div>
+        <div><b>Class:</b> ${className}</div>
+        <div><b>Subject:</b> ${subjectName}</div>
+        <hr/>
+        <div style="font-size:13px;color:#666">
+          Locked schemes will be skipped by the backend.
         </div>
-      `
-      : `
-        <div style="text-align:left">
-          <div><b style="color:#d33">This will delete ALL exam schemes from the system.</b></div>
-          <div>Filters are not selected.</div>
-        </div>
-      `;
+      </div>
+    `;
 
     const c1 = await Swal.fire({
-      title: isFilteredLocal
-        ? "⚠️ Confirm Delete Filtered Schemes"
-        : "🧨 Confirm Delete ALL Schemes",
+      title: "⚠️ Confirm Delete Filtered Schemes",
       html: scopeHtml,
       icon: "warning",
       showCancelButton: true,
@@ -354,7 +345,7 @@ const ExamSchemeManagement = () => {
 
       await Swal.fire(
         "Deleted ✅",
-        `${deleted} scheme(s) removed successfully.`,
+        `${deleted} unlocked scheme(s) removed successfully.`,
         "success"
       );
 
@@ -520,163 +511,6 @@ const ExamSchemeManagement = () => {
     } catch (e) {
       Swal.fire("Error", "Failed to update order.", "error");
       fetchSchemes();
-    }
-  };
-
-  const fetchEvalMode = async ({
-    session_id,
-    class_id,
-    subject_id,
-    term_id = null,
-    silent = false,
-  } = {}) => {
-    if (!session_id || !class_id || !subject_id) return;
-
-    const hasTerm =
-      term_id !== null &&
-      term_id !== undefined &&
-      String(term_id).trim() !== "";
-
-    try {
-      if (!silent) setEvalLoading(true);
-
-      const res = await api.get("/exam-schemes/eval-mode", {
-        params: {
-          session_id: Number(session_id),
-          class_id: Number(class_id),
-          subject_id: Number(subject_id),
-          term_id: hasTerm ? Number(term_id) : undefined,
-        },
-      });
-
-      const mode = safeMode(res?.data?.evaluation_mode);
-
-      setEvalState((prev) => ({
-        ...prev,
-        session_id: String(session_id),
-        class_id: String(class_id),
-        subject_id: String(subject_id),
-        evaluation_mode: mode,
-      }));
-    } catch (e) {
-      if (!silent) {
-        const msg =
-          e?.response?.data?.message || "Failed to load evaluation mode.";
-        Swal.fire("Error", msg, "error");
-      }
-    } finally {
-      if (!silent) setEvalLoading(false);
-    }
-  };
-
-  const openEvalModalForRow = async (scheme) => {
-    const sessId = strId(scheme.session_id);
-    const cId = strId(scheme.class_id);
-    const sId = strId(scheme.subject_id);
-    const rowTermId = strId(scheme.term_id);
-
-    const useTerm = !!rowTermId;
-
-    setEvalState((prev) => ({
-      ...prev,
-      session_id: sessId,
-      class_id: cId,
-      subject_id: sId,
-      use_term: useTerm,
-      term_id: useTerm ? rowTermId : "",
-      evaluation_mode: safeMode(scheme.evaluation_mode),
-    }));
-
-    setShowEvalModal(true);
-    await sleep(80);
-
-    fetchEvalMode({
-      session_id: sessId,
-      class_id: cId,
-      subject_id: sId,
-      term_id: useTerm ? rowTermId : null,
-      silent: false,
-    });
-  };
-
-  const closeEvalModal = () => setShowEvalModal(false);
-
-  const saveEvalMode = async () => {
-    const sessId = strId(evalState.session_id);
-    const cId = strId(evalState.class_id);
-    const sId = strId(evalState.subject_id);
-    const useTerm = !!evalState.use_term;
-    const tId = useTerm ? strId(evalState.term_id) : "";
-    const mode = safeMode(evalState.evaluation_mode);
-
-    if (!sessId || !cId || !sId) {
-      return Swal.fire("Missing", "Session/Class/Subject missing.", "warning");
-    }
-    if (useTerm && !tId) {
-      return Swal.fire(
-        "Missing",
-        "Please select a Term (or disable term-specific mode).",
-        "warning"
-      );
-    }
-
-    const sessionName = sessionById.get(String(sessId))?.name || sessId;
-    const className = classById.get(String(cId))?.class_name || cId;
-    const subjectName = subjectById.get(String(sId))?.name || sId;
-    const termName = useTerm
-      ? termById.get(String(tId))?.name || tId
-      : "Default (All Terms)";
-
-    setShowEvalModal(false);
-    await sleep(120);
-
-    const confirm = await Swal.fire({
-      title: "Confirm Evaluation Mode",
-      html: `
-        <div style="text-align:left">
-          <div><b>Session:</b> ${sessionName}</div>
-          <div><b>Class:</b> ${className}</div>
-          <div><b>Subject:</b> ${subjectName}</div>
-          <div><b>Term Scope:</b> ${termName}</div>
-          <div style="margin-top:6px"><b>Mode:</b> ${mode}</div>
-        </div>
-      `,
-      icon: "warning",
-      showCancelButton: true,
-      confirmButtonText: "Save",
-    });
-
-    if (!confirm.isConfirmed) {
-      setShowEvalModal(true);
-      return;
-    }
-
-    try {
-      setEvalSaving(true);
-
-      await api.post("/exam-schemes/eval-mode", {
-        session_id: Number(sessId),
-        class_id: Number(cId),
-        subject_id: Number(sId),
-        term_id: useTerm ? Number(tId) : null,
-        evaluation_mode: mode,
-        grade_id: null,
-      });
-
-      await Swal.fire(
-        "Saved ✅",
-        "Evaluation mode updated successfully.",
-        "success"
-      );
-
-      fetchSchemes();
-      setShowEvalModal(false);
-    } catch (e) {
-      const msg = e?.response?.data?.message || "Failed to save eval mode.";
-      Swal.fire("Error", msg, "error");
-      setShowEvalModal(true);
-    } finally {
-      setEvalSaving(false);
     }
   };
 
@@ -1067,27 +901,11 @@ const ExamSchemeManagement = () => {
     filters.subject_id
   );
 
-  const currentEvalBadge = useMemo(() => {
-    const mode = safeMode(evalState.evaluation_mode);
-    return mode === "GRADE" ? (
-      <Badge bg="info">GRADE</Badge>
-    ) : (
-      <Badge bg="primary">MARKS</Badge>
-    );
-  }, [evalState.evaluation_mode]);
-
   return (
     <div className="container mt-4">
       <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
         <div className="d-flex align-items-center gap-2 flex-wrap">
           <h2 className="m-0">📘 Exam Scheme Management</h2>
-
-          <div className="d-flex align-items-center gap-2 ms-1">
-            <span className="text-muted" style={{ fontSize: 13 }}>
-              Last selected mode:
-            </span>
-            {currentEvalBadge}
-          </div>
         </div>
 
         <div className="d-flex gap-2 flex-wrap">
@@ -1103,8 +921,12 @@ const ExamSchemeManagement = () => {
             📚 Copy Subject Scheme
           </Button>
 
-          <Button variant="outline-danger" onClick={handleDeleteAllSchemes}>
-            🧨 Delete {isFiltered ? "Filtered" : "All"} Schemes
+          <Button
+            variant="outline-danger"
+            onClick={handleDeleteAllSchemes}
+            disabled={!isFiltered}
+          >
+            🧨 Delete Filtered Schemes
           </Button>
 
           <Button variant="success" onClick={() => openModal()}>
@@ -1164,8 +986,7 @@ const ExamSchemeManagement = () => {
         </div>
 
         <div className="text-muted" style={{ fontSize: 13 }}>
-          Tip: Click <b>MARKS</b>/<b>GRADE</b> button in any row to change the
-          evaluation mode for that Session + Class + Subject.
+          Tip: Grade/Marks type is controlled from the <b>Assessment Components</b> page.
         </div>
       </div>
 
@@ -1189,7 +1010,8 @@ const ExamSchemeManagement = () => {
                     <th>Subject</th>
                     <th>Term</th>
                     <th>Component</th>
-                    <th style={{ width: 140 }}>Mode</th>
+                    <th style={{ width: 120 }}>Type</th>
+                    <th>Max Marks</th>
                     <th>Weightage (%)</th>
                     <th>Status</th>
                     <th style={{ width: 260 }}>Actions</th>
@@ -1205,13 +1027,12 @@ const ExamSchemeManagement = () => {
                       onDelete={handleDelete}
                       onToggleLock={handleToggleLock}
                       onDuplicate={openDuplicateModal}
-                      onClickMode={openEvalModalForRow}
                     />
                   ))}
 
                   {!schemes.length && (
                     <tr>
-                      <td colSpan={10} className="text-center text-muted py-4">
+                      <td colSpan={11} className="text-center text-muted py-4">
                         No schemes found for selected filters.
                       </td>
                     </tr>
@@ -1313,6 +1134,9 @@ const ExamSchemeManagement = () => {
                 {components.map((c) => (
                   <option key={c.id} value={String(c.id)}>
                     {c.abbreviation ? `${c.abbreviation} - ${c.name}` : c.name}
+                    {` (${c.component_type || "MARKS"}${
+                      c.component_type === "MARKS" ? `, ${c.max_marks ?? 0} marks` : ""
+                    })`}
                   </option>
                 ))}
               </select>
@@ -1335,8 +1159,8 @@ const ExamSchemeManagement = () => {
 
             <div className="col-12">
               <div className="alert alert-light border mb-0 mt-2">
-                <b>Tip:</b> To change evaluation mode (MARKS/GRADE), click the{" "}
-                <b>Mode</b> button in the table row.
+                <b>Tip:</b> To change a component between MARKS and GRADE, open the{" "}
+                <b>Assessment Components</b> page and edit that component.
               </div>
             </div>
           </div>
@@ -1348,174 +1172,6 @@ const ExamSchemeManagement = () => {
           </Button>
           <Button variant="primary" onClick={handleSubmit}>
             {isEditing ? "Update" : "Save"}
-          </Button>
-        </Modal.Footer>
-      </Modal>
-
-      {/* Eval Mode Modal */}
-      <Modal show={showEvalModal} onHide={closeEvalModal} centered size="lg">
-        <Modal.Header closeButton>
-          <Modal.Title>⚙️ Subject Evaluation Mode</Modal.Title>
-        </Modal.Header>
-
-        <Modal.Body>
-          <div className="d-flex flex-wrap gap-2 align-items-center mb-2">
-            <Badge bg="secondary">
-              Session:{" "}
-              {sessionById.get(String(evalState.session_id))?.name ||
-                evalState.session_id ||
-                "-"}
-            </Badge>
-            <Badge bg="secondary">
-              Class:{" "}
-              {classById.get(String(evalState.class_id))?.class_name ||
-                evalState.class_id ||
-                "-"}
-            </Badge>
-            <Badge bg="secondary">
-              Subject:{" "}
-              {subjectById.get(String(evalState.subject_id))?.name ||
-                evalState.subject_id ||
-                "-"}
-            </Badge>
-            {evalState.use_term && (
-              <Badge bg="secondary">
-                Term:{" "}
-                {termById.get(String(evalState.term_id))?.name ||
-                  evalState.term_id ||
-                  "-"}
-              </Badge>
-            )}
-          </div>
-
-          {evalLoading ? (
-            <div className="py-4 text-center">
-              <Spinner animation="border" />
-              <div className="text-muted mt-2">Loading evaluation mode...</div>
-            </div>
-          ) : (
-            <div className="row g-3">
-              <div className="col-12">
-                <div className="form-check">
-                  <input
-                    id="use_term_specific"
-                    type="checkbox"
-                    className="form-check-input"
-                    checked={!!evalState.use_term}
-                    onChange={(e) => {
-                      const useTerm = e.target.checked;
-
-                      setEvalState((p) => ({
-                        ...p,
-                        use_term: useTerm,
-                        term_id: useTerm ? p.term_id : "",
-                      }));
-
-                      if (!useTerm) {
-                        fetchEvalMode({
-                          session_id: evalState.session_id,
-                          class_id: evalState.class_id,
-                          subject_id: evalState.subject_id,
-                          term_id: null,
-                          silent: true,
-                        });
-                        return;
-                      }
-
-                      if (useTerm && evalState.term_id) {
-                        fetchEvalMode({
-                          session_id: evalState.session_id,
-                          class_id: evalState.class_id,
-                          subject_id: evalState.subject_id,
-                          term_id: evalState.term_id,
-                          silent: false,
-                        });
-                      }
-                    }}
-                  />
-                  <label
-                    className="form-check-label"
-                    htmlFor="use_term_specific"
-                  >
-                    Set mode for a specific Term (optional)
-                  </label>
-                </div>
-                <small className="text-muted">
-                  If unchecked, mode applies as default for all terms.
-                </small>
-              </div>
-
-              {evalState.use_term && (
-                <div className="col-12 col-md-6">
-                  <label>Term</label>
-                  <select
-                    className="form-control"
-                    value={evalState.term_id}
-                    onChange={async (e) => {
-                      const termId = e.target.value;
-                      setEvalState((p) => ({ ...p, term_id: termId }));
-                      if (termId) {
-                        await fetchEvalMode({
-                          session_id: evalState.session_id,
-                          class_id: evalState.class_id,
-                          subject_id: evalState.subject_id,
-                          term_id: termId,
-                          silent: false,
-                        });
-                      }
-                    }}
-                  >
-                    <option value="">Select Term</option>
-                    {terms.map((t) => (
-                      <option key={t.id} value={String(t.id)}>
-                        {t.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              <div className="col-12 col-md-6">
-                <label>Evaluation Mode</label>
-                <select
-                  className="form-control"
-                  value={evalState.evaluation_mode}
-                  onChange={(e) => {
-                    const mode = safeMode(e.target.value);
-                    setEvalState((p) => ({
-                      ...p,
-                      evaluation_mode: mode,
-                    }));
-                  }}
-                >
-                  <option value="MARKS">MARKS</option>
-                  <option value="GRADE">GRADE</option>
-                </select>
-                <small className="text-muted">
-                  MARKS = numeric marks entry, GRADE = grade-only entry.
-                </small>
-              </div>
-
-              <div className="col-12">
-                <div className="alert alert-info mb-0">
-                  <b>Note:</b> Scheme rows remain the same. Mode only changes
-                  marks entry and report behavior.
-                </div>
-              </div>
-            </div>
-          )}
-        </Modal.Body>
-
-        <Modal.Footer>
-          <Button variant="secondary" onClick={closeEvalModal}>
-            Cancel
-          </Button>
-          <Button
-            variant="primary"
-            onClick={saveEvalMode}
-            disabled={evalLoading || evalSaving}
-          >
-            {evalSaving ? "Saving..." : "Save Mode"}
           </Button>
         </Modal.Footer>
       </Modal>
