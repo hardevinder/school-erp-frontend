@@ -147,6 +147,7 @@ import useActiveStudent from "./hooks/useActiveStudent";
 
 import StudentTotalDueReport from "./pages/StudentTotalDueReport";
 import DirectPayPage from "./pages/DirectPayPage";
+import PaymentSuccessPage from "./pages/PaymentSuccessPage";
 import GatePass from "./pages/GatePass";
 
 // ✅ NEW: Visitors page
@@ -382,6 +383,11 @@ function App() {
         {/* 🔥 PUBLIC DIRECT PAY PAGE (no login required) */}
         <Route path="/direct-pay" element={<DirectPayPage />} />
         <Route path="/student-fee/direct-pay/*" element={<DirectPayPage />} />
+        <Route path="/student-fee/payment-success" element={<PaymentSuccessPage />} />
+        <Route
+          path="/student-fee/direct-pay/payment-success"
+          element={<PaymentSuccessPage />}
+        />
 
         {/* Protected App w/ Layout (TopBar + Sidebar) */}
         <Route element={<AppLayout key={activeAdmission} />}>

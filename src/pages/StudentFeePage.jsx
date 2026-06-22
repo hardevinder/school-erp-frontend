@@ -1098,6 +1098,22 @@ const StudentFeePage = () => {
     } catch {}
   };
 
+  const buildPaymentReturnUrls = (admissionNumberValue) => {
+    const origin = window.location.origin;
+    const adm = admissionNumberValue
+      ? `&adm=${encodeURIComponent(admissionNumberValue)}`
+      : "";
+    const successUrl = `${origin}/student-fee/payment-success?status=success${adm}`;
+
+    return {
+      successUrl,
+      success_url: successUrl,
+      returnUrl: successUrl,
+      return_url: successUrl,
+      surl: successUrl,
+    };
+  };
+
   // ------------- Payment handlers -------------
   const handlePayFee = async (fee, feeIndex) => {
     const academicDue = Number(fee?.finalAmountDue || 0);
@@ -1189,6 +1205,7 @@ const StudentFeePage = () => {
         amount: dueAmount, // required by backend
         clientComputedDueAmount: dueAmount,
         feeHeadId,
+        ...buildPaymentReturnUrls(admissionNumber),
         // gateway intentionally omitted: backend active gateway setting decides HDFC/PayU
 
         fineAmount: fineDue,
@@ -1307,6 +1324,7 @@ const StudentFeePage = () => {
         amount: totalToPay,
         clientComputedDueAmount: totalToPay,
         feeHeadId: "VAN_FEE",
+        ...buildPaymentReturnUrls(admissionNumber),
         // gateway intentionally omitted: backend active gateway setting decides HDFC/PayU
         openingBalanceAmount: openingBalanceDue,
         openingBalanceHeadId: prevBalanceHeadId || undefined,

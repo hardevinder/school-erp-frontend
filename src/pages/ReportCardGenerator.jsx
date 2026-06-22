@@ -2574,6 +2574,21 @@ const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
         }
         section.primary-card::before { right: -38px; top: -38px; background: #22c55e; }
         section.primary-card::after { left: -42px; bottom: -42px; background: #fb7185; }
+        .primary-watermark {
+          position: absolute;
+          left: 50%;
+          top: 50%;
+          transform: translate(-50%, -50%);
+          width: 128mm;
+          max-height: 128mm;
+          object-fit: contain;
+          opacity: 0.105;
+          z-index: 20;
+          pointer-events: none;
+          mix-blend-mode: multiply;
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
+        }
         .primary-header {
           position: relative;
           z-index: 1;
@@ -2815,6 +2830,11 @@ const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
 
       return `
         <section class="primary-card">
+          ${
+            effectiveSchoolLogoUrl
+              ? `<img src="${escapePrimaryHtml(effectiveSchoolLogoUrl)}" class="primary-watermark" alt="School Logo Watermark" onerror="this.style.display='none';" />`
+              : ""
+          }
           <div class="primary-header">
             <div>
               ${
@@ -2868,12 +2888,11 @@ const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
             <div class="small-box">
               <div class="box-title">Health Details</div>
               <div class="box-body health-chip-row">
-                <span class="health-chip"><b>Height:</b> ${escapePrimaryHtml(health.height)}</span>
-                <span class="health-chip"><b>Weight:</b> ${escapePrimaryHtml(health.weight)}</span>
+                <span class="health-chip"><b>Height (cm):</b> ${escapePrimaryHtml(health.height)}</span>
+                <span class="health-chip"><b>Weight (kg):</b> ${escapePrimaryHtml(health.weight)}</span>
                 <span class="health-chip"><b>Dental Check-up:</b> ${escapePrimaryHtml(health.dental)}</span>
                 <span class="health-chip"><b>Vision:</b> ${escapePrimaryHtml(health.vision)}</span>
                 <span class="health-chip"><b>Blood Group:</b> ${escapePrimaryHtml(health.blood_group)}</span>
-                <span class="health-chip"><b>Age at Assessment:</b> ${escapePrimaryHtml(ageAtAssessment)}</span>
               </div>
             </div>
             <div class="small-box">
@@ -2926,7 +2945,32 @@ const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
       section { page-break-after: always; }
       section:last-child { page-break-after: auto; }
 
-      .card { margin-bottom: 0px; }
+      .card {
+        margin-bottom: 0px;
+        position: relative;
+        overflow: hidden;
+      }
+
+      .card > *:not(.watermark-logo) {
+        position: relative;
+        z-index: 1;
+      }
+
+      .watermark-logo {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        width: 340px;
+        max-height: 340px;
+        object-fit: contain;
+        opacity: 0.095;
+        z-index: 20;
+        pointer-events: none;
+        mix-blend-mode: multiply;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
 
       .panel {
         border: 1px solid rgba(199,210,254,0.85);
@@ -3394,18 +3438,22 @@ const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
       </div>
       <div class="health-panel">
         <div class="health-metric"><span class="health-label">Attendance</span><span class="health-value">${escapePrimaryHtml(healthAttendanceText)}</span></div>
-        <div class="health-metric"><span class="health-label">Height</span><span class="health-value">${escapePrimaryHtml(health.height)}</span></div>
-        <div class="health-metric"><span class="health-label">Weight</span><span class="health-value">${escapePrimaryHtml(health.weight)}</span></div>
+        <div class="health-metric"><span class="health-label">Height (cm)</span><span class="health-value">${escapePrimaryHtml(health.height)}</span></div>
+        <div class="health-metric"><span class="health-label">Weight (kg)</span><span class="health-value">${escapePrimaryHtml(health.weight)}</span></div>
         <div class="health-metric"><span class="health-label">Dental Check-up</span><span class="health-value">${escapePrimaryHtml(health.dental)}</span></div>
         <div class="health-metric"><span class="health-label">Vision</span><span class="health-value">${escapePrimaryHtml(health.vision)}</span></div>
         <div class="health-metric"><span class="health-label">Blood Group</span><span class="health-value">${escapePrimaryHtml(health.blood_group)}</span></div>
-        <div class="health-metric"><span class="health-label">Age at the Time of Assessment</span><span class="health-value">${escapePrimaryHtml(ageAtAssessment)}</span></div>
         <div class="health-metric"><span class="health-label">Assessment Date</span><span class="health-value">${escapePrimaryHtml(health.assessment_date ? formatDisplayDate(health.assessment_date) : "-")}</span></div>
       </div>
     `;
 
       return `
       <section class="card">
+        ${
+          effectiveSchoolLogoUrl
+            ? `<img src="${escapePrimaryHtml(effectiveSchoolLogoUrl)}" class="watermark-logo" alt="School Logo Watermark" onerror="this.style.display='none';" />`
+            : ""
+        }
         ${headerHtml}
         ${studentInfoBlock}
         ${scholasticTable}

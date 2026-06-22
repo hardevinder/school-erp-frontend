@@ -375,7 +375,7 @@ const StudentFeePublicPage = () => {
         height = 720;
       const left = window.screenX + (window.innerWidth - width) / 2;
       const top = window.screenY + (window.innerHeight - height) / 2;
-      const features = `width=${width},height=${height},left=${left},top=${top},noopener`;
+      const features = `width=${width},height=${height},left=${left},top=${top}`;
       const w = window.open(url, "_blank", features);
       if (!w) {
         Swal.fire({
@@ -445,7 +445,7 @@ const StudentFeePublicPage = () => {
     }
 
     if (data && data.action && data.params) {
-      const w = window.open("", "_blank", "noopener");
+      const w = window.open("", "_blank");
       if (!w) {
         Swal.fire({
           icon: "error",
@@ -468,6 +468,7 @@ const StudentFeePublicPage = () => {
         <script>document.getElementById('payForm').submit();</script>
       `;
       w.document.write(formHtml);
+      popupRef.current = w;
       installMessageListener();
       pollPopupClosed(w);
       Swal.fire({
@@ -514,6 +515,22 @@ const StudentFeePublicPage = () => {
     },
     []
   );
+
+  const buildPaymentReturnUrls = () => {
+    const origin = window.location.origin;
+    const adm = admissionNumber
+      ? `&adm=${encodeURIComponent(admissionNumber)}`
+      : "";
+    const successUrl = `${origin}/student-fee/direct-pay/payment-success?status=success${adm}`;
+
+    return {
+      successUrl,
+      success_url: successUrl,
+      returnUrl: successUrl,
+      return_url: successUrl,
+      surl: successUrl,
+    };
+  };
 
   // ------------- Totals for Summary -------------
   let totalOriginal = 0,
@@ -635,6 +652,7 @@ const StudentFeePublicPage = () => {
         clientComputedDueAmount: dueAmount,
         feeHeadId,
         gateway: paymentGateway,
+        ...buildPaymentReturnUrls(),
 
         fineAmount: fineDue,
         vanFeeAmount: vanDueHead,
@@ -787,6 +805,7 @@ const StudentFeePublicPage = () => {
         clientComputedDueAmount: totalToPay,
         feeHeadId: "VAN_FEE",
         gateway: paymentGateway,
+        ...buildPaymentReturnUrls(),
         openingBalanceAmount: openingBalanceDue,
         openingBalanceHeadId: prevBalanceHeadId || undefined,
         breakdown: { vanDue: vanDueOnly, openingBalanceDue },

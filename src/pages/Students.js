@@ -190,6 +190,11 @@ const siblingDisplayToken = (token) => {
   return normalized ? `AN:${normalized}` : "Sibling";
 };
 
+const buildDirectPaymentPath = (student = {}) => {
+  const admission = String(student.admission_number || "").trim();
+  return admission ? `/direct-pay?adm=${encodeURIComponent(admission)}` : "";
+};
+
 
 
 const extractAdmissionTypes = (data) => {
@@ -2843,6 +2848,19 @@ const Students = () => {
                               >
                                 <i className="bi bi-printer"></i>
                               </button>
+                              )}
+
+                              {stu.admission_number && (
+                                <button
+                                  className="btn btn-outline-info btn-sm"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    window.open(buildDirectPaymentPath(stu), "_blank", "noopener,noreferrer");
+                                  }}
+                                  title="Open Direct Payment Link"
+                                >
+                                  <i className="bi bi-credit-card"></i>
+                                </button>
                               )}
 
                               {canDeleteStudents && (

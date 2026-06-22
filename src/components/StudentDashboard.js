@@ -4,6 +4,7 @@
 // ✅ NEW: Academic Calendar card/link added
 // ✅ NEW: Entrance Exam card/link added
 // ✅ Chat + Notifications unchanged
+// ✅ FIX: Stable card hover (no shaking / wrong link click)
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { ToastContainer } from "react-toastify";
@@ -426,7 +427,7 @@ export default function StudentDashboard() {
 
   const QuickLink = ({ to, icon, label, desc, badge }) => (
     <div className="col-6 col-md-4 col-lg-3">
-      <Link to={to} className="text-decoration-none">
+      <Link to={to} className="student-quick-link text-decoration-none d-block h-100">
         <div className="card h-100 border-0 shadow-lg rounded-4 hover-rise glow-on-hover">
           <div className="card-body d-flex flex-column p-3">
             <div className="d-flex align-items-center justify-content-between mb-2">
@@ -853,7 +854,7 @@ export default function StudentDashboard() {
           font-size: .875rem;
           transition: all .2s ease;
         }
-        .chip:hover { background: rgba(255,255,255,.3); transform: scale(1.02); }
+        .chip:hover { background: rgba(255,255,255,.3); }
         .icon-badge{
           width: 44px; height: 44px; border-radius: 12px;
           display:flex; align-items:center; justify-content:center;
@@ -862,17 +863,42 @@ export default function StudentDashboard() {
           color: #2563eb;
           transition: all .2s ease;
         }
-        .card { transition: all .3s cubic-bezier(0.4, 0, 0.2, 1); }
-        .hover-rise:hover{
-          transform: translateY(-8px) scale(1.02);
-          box-shadow: 0 20px 40px rgba(0,0,0,.15) !important;
+        /* ✅ Stable quick cards
+           Earlier hover was using transform: translateY(-2px).
+           That can move the card under the cursor and cause hover flicker / wrong link clicks.
+        */
+        .student-quick-link {
+          border-radius: 1rem;
+          position: relative;
+          z-index: 1;
+          outline: none;
+        }
+        .student-quick-link:focus-visible .card {
+          box-shadow: 0 0 0 .2rem rgba(13,110,253,.25), 0 12px 24px rgba(0,0,0,.10) !important;
+        }
+        .student-quick-link .card {
+          position: relative;
+          transform: none !important;
+          transition: box-shadow .18s ease, border-color .18s ease, background-color .18s ease;
+          will-change: auto;
+        }
+        @media (hover: hover) and (pointer: fine) {
+          .student-quick-link:hover {
+            z-index: 5;
+          }
+          .hover-rise:hover{
+            transform: none !important;
+            border: 1px solid rgba(13,110,253,.22) !important;
+            box-shadow: 0 14px 28px rgba(0,0,0,.12) !important;
+          }
         }
         .glow-on-hover{ position:relative; overflow:hidden; }
         .glow-on-hover::before{
           content:'';
           position:absolute; top:0; left:-100%; width:100%; height:100%;
-          background: linear-gradient(90deg, transparent, rgba(255,255,255,.4), transparent);
-          transition: left .5s;
+          pointer-events: none;
+          background: linear-gradient(90deg, transparent, rgba(255,255,255,.35), transparent);
+          transition: left .45s ease;
         }
         .glow-on-hover:hover::before{ left:100%; }
 
@@ -913,6 +939,26 @@ export default function StudentDashboard() {
           .icon-badge{ width: 40px; height: 40px; font-size: 1rem; }
           .chip{ font-size: .8rem; padding: 6px 10px; }
           .hero { margin: 0 -1rem 1.5rem; border-radius: 0; }
+          .hero::before,
+          .animate-pulse,
+          .animate-bounce,
+          .pulse {
+            animation: none !important;
+          }
+          .glow-on-hover::before {
+            display: none;
+          }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          *,
+          *::before,
+          *::after {
+            animation-duration: .01ms !important;
+            animation-iteration-count: 1 !important;
+            scroll-behavior: auto !important;
+            transition-duration: .01ms !important;
+          }
         }
       `}</style>
     </div>

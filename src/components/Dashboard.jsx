@@ -763,14 +763,28 @@ const Dashboard = () => {
     0
   );
 
-  // ✅ UPDATED: quick links include new route
+  // ✅ UPDATED: quick links include student list and payment routes
   const quickLinks = [
     {
+      label: "Student List",
+      sub: "Select students",
+      icon: "bi-people",
+      href: "/students",
+      gradient: "linear-gradient(135deg, #a855f7, #7c3aed)",
+    },
+    {
       label: "Collect Fee",
-      sub: "Transactions",
+      sub: "Student fee collection",
       icon: "bi-cash-stack",
       href: "/transactions",
       gradient: "linear-gradient(135deg, #22c55e, #16a34a)",
+    },
+    {
+      label: "Direct Payment",
+      sub: "Payment link page",
+      icon: "bi-credit-card",
+      href: "/direct-pay",
+      gradient: "linear-gradient(135deg, #0ea5e9, #0369a1)",
     },
     {
       label: "Fee Due Report",
@@ -807,13 +821,6 @@ const Dashboard = () => {
       icon: "bi-truck",
       href: "/reports/van-fee",
       gradient: "linear-gradient(135deg, #06b6d4, #0891b2)",
-    },
-    {
-      label: "Students",
-      sub: "Master list",
-      icon: "bi-people",
-      href: "/students",
-      gradient: "linear-gradient(135deg, #a855f7, #7c3aed)",
     },
     {
       label: "Student I-Cards",
