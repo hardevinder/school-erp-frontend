@@ -429,6 +429,9 @@ const FinalResultSummary = () => {
   const [reportTemplates, setReportTemplates] = useState([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [loadingTemplates, setLoadingTemplates] = useState(false);
+  const [reportFormats, setReportFormats] = useState([]);
+  const [selectedReportFormatId, setSelectedReportFormatId] = useState("");
+  const [loadingReportFormats, setLoadingReportFormats] = useState(false);
 
   const [numberFormat] = useState({
     decimalPoints: 2,
@@ -448,6 +451,10 @@ const FinalResultSummary = () => {
   const selectedReportTemplate = useMemo(() => {
     return (reportTemplates || []).find((t) => String(t.id) === String(selectedTemplateId)) || null;
   }, [reportTemplates, selectedTemplateId]);
+
+  const selectedReportFormat = useMemo(() => {
+    return (reportFormats || []).find((f) => String(f.id) === String(selectedReportFormatId)) || null;
+  }, [reportFormats, selectedReportFormatId]);
 
   // ✅ Header/footer/logo priority: class-wise ReportCardFormat first, then template fallback.
   // This makes the format configured from ReportCardFormats print at the top of the report card.
@@ -516,6 +523,49 @@ const FinalResultSummary = () => {
     }
 
     return null;
+  };
+
+  const pickDefaultReportFormat = (formats = [], class_id) => {
+    const classId = Number(class_id);
+    const preferredOrientation = Number.isFinite(classId) && classId <= 8 ? "landscape" : "portrait";
+    return (
+      formats.find((f) => String(f.orientation || "").toLowerCase() === preferredOrientation) ||
+      formats[0] ||
+      null
+    );
+  };
+
+  const loadReportCardFormats = async (class_id) => {
+    try {
+      setLoadingReportFormats(true);
+      const res = await api.get("/report-card-formats");
+      const list = Array.isArray(res.data)
+        ? res.data
+        : Array.isArray(res.data?.formats)
+        ? res.data.formats
+        : [];
+      setReportFormats(list);
+
+      const defaultFormat = pickDefaultReportFormat(list, class_id);
+      setSelectedReportFormatId(defaultFormat?.id ? String(defaultFormat.id) : "");
+      setReportFormat(defaultFormat || null);
+      return defaultFormat;
+    } catch (error) {
+      console.error("Failed to load report card formats:", error);
+      setReportFormats([]);
+      setSelectedReportFormatId("");
+      setReportFormat(null);
+      Swal.fire("Error", "Failed to load report card formats", "error");
+      return null;
+    } finally {
+      setLoadingReportFormats(false);
+    }
+  };
+
+  const handleReportFormatChange = (formatId) => {
+    setSelectedReportFormatId(formatId);
+    const selected = (reportFormats || []).find((f) => String(f.id) === String(formatId)) || null;
+    setReportFormat(selected);
   };
 
   const loadReportFormatForClass = async (class_id, session_id) => {
@@ -923,6 +973,8 @@ const FinalResultSummary = () => {
     setAttendanceByTerm({});
     setPromotionDecisionByTerm({});
     setReportFormat(null);
+    setReportFormats([]);
+    setSelectedReportFormatId("");
     setReportTemplates([]);
     setSelectedTemplateId("");
 
@@ -950,6 +1002,9 @@ const FinalResultSummary = () => {
     setRemarksByTerm({});
     setAttendanceByTerm({});
     setPromotionDecisionByTerm({});
+    setReportFormat(null);
+    setReportFormats([]);
+    setSelectedReportFormatId("");
     setReportTemplates([]);
     setSelectedTemplateId("");
 
@@ -970,7 +1025,7 @@ const FinalResultSummary = () => {
 
       setFilters((prev) => ({ ...prev, class_id, subjectComponents }));
 
-      await loadReportFormatForClass(class_id, sessionId);
+      await loadReportCardFormats(class_id);
       await loadReportCardTemplates(class_id, sessionId);
     } catch (err) {
       console.error(err);
@@ -1118,9 +1173,21 @@ const FinalResultSummary = () => {
 
       comps.forEach((c) => {
         if (!compMap.has(c.component_id)) {
+          const shortLabel =
+            c.abbreviation ||
+            c.abbr ||
+            c.short_name ||
+            c.shortName ||
+            c.code ||
+            c.component?.abbreviation ||
+            c.component?.abbr ||
+            c.component?.short_name ||
+            c.component?.shortName ||
+            c.component?.code;
+
           compMap.set(c.component_id, {
             component_id: c.component_id,
-            label: c.name || c.component_name || c.componentName || c.abbreviation || "-",
+            label: shortLabel || c.name || c.component_name || c.componentName || "-",
           });
         }
       });
@@ -1168,6 +1235,93 @@ const FinalResultSummary = () => {
   const g = items.find((x) => x?.grade != null && String(x.grade).trim() !== "");
   return g?.grade || "-";
 };
+
+  const getSubjectComponentCount = (student, subjectName) => {
+    const ids = new Set();
+    (student?.components || []).forEach((c) => {
+      if (c.subject_name !== subjectName) return;
+      if (term1Id && isCompInTerm(c, term1Id)) ids.add(Number(c.component_id));
+      if (term2Id && isCompInTerm(c, term2Id)) ids.add(Number(c.component_id));
+    });
+    return ids.size;
+  };
+
+  const getSubjectTermCompactComponents = (student, subjectName, termId) => {
+    const map = new Map();
+    (student?.components || [])
+      .filter((c) => c.subject_name === subjectName && isCompInTerm(c, termId))
+      .forEach((c) => {
+        if (!map.has(Number(c.component_id))) {
+          const label =
+            c.abbreviation ||
+            c.abbr ||
+            c.short_name ||
+            c.shortName ||
+            c.code ||
+            c.component?.abbreviation ||
+            c.component?.abbr ||
+            c.component?.short_name ||
+            c.component?.shortName ||
+            c.component?.code ||
+            c.name ||
+            c.component_name ||
+            c.componentName ||
+            "-";
+          map.set(Number(c.component_id), {
+            component_id: c.component_id,
+            label,
+          });
+        }
+      });
+    return Array.from(map.values()).slice(0, 2);
+  };
+
+  const buildCompactScholasticPdfHtml = (student, subjects = []) => {
+    const rows = [];
+    subjects.forEach((subjectName) => {
+      [term1Id, term2Id].filter(Boolean).forEach((termId) => {
+        const comps = getSubjectTermCompactComponents(student, subjectName, termId);
+        if (!comps.length) return;
+        const stats = getSubjectTermStats(student, subjectName, termId);
+        rows.push(`
+          <tr>
+            <td class="td-subject">${subjectName}</td>
+            <td>${termLabel(termId)}</td>
+            <td>${
+              comps[0]
+                ? `<div style="font-weight:800">${comps[0].label}</div><div>${getSubjectTermCompDisplay(student, subjectName, termId, comps[0].component_id)}</div>`
+                : "-"
+            }</td>
+            <td>${
+              comps[1]
+                ? `<div style="font-weight:800">${comps[1].label}</div><div>${getSubjectTermCompDisplay(student, subjectName, termId, comps[1].component_id)}</div>`
+                : "-"
+            }</td>
+            <td class="td-strong">${stats?.marksTotal != null ? stats.marksTotal : "-"}</td>
+            <td class="td-strong">${stats?.grade || "-"}</td>
+          </tr>
+        `);
+      });
+    });
+
+    if (!rows.length) return "";
+
+    return `
+      <table class="tbl compact-scholastic-table" style="margin-top:6px">
+        <thead>
+          <tr>
+            <th class="th-subject">Subject</th>
+            <th class="th-term">Term</th>
+            <th class="th-comp">Component 1</th>
+            <th class="th-comp">Component 2</th>
+            <th class="th-comp strong">Marks Obtained</th>
+            <th class="th-comp strong">Grade</th>
+          </tr>
+        </thead>
+        <tbody>${rows.join("")}</tbody>
+      </table>
+    `;
+  };
 
   const getSubjectTermStats = (student, subjectName, termId) => {
     const items = (student.components || []).filter(
@@ -1641,12 +1795,31 @@ const FinalResultSummary = () => {
   const t1 = term1Id ? coScholasticByTerm[String(term1Id)] || {} : {};
   const t2 = term2Id ? coScholasticByTerm[String(term2Id)] || {} : {};
 
+    const areasMap = new Map();
+    const mappedAreas = [
+      ...Object.values(t1._areas || {}),
+      ...Object.values(t2._areas || {}),
+    ];
+
+    mappedAreas.forEach((area) => {
+      if (!area?.area_id) return;
+      areasMap.set(area.area_id, {
+        area_name: area.area_name,
+        t1: null,
+        t2: null,
+        serial_order: area.serial_order || 0,
+      });
+    });
+
   const s1 = Object.values(t1[String(studentId)] || {});
   const s2 = Object.values(t2[String(studentId)] || {});
 
-    const areasMap = new Map();
     s1.forEach((g) =>
-      areasMap.set(g.area_id, { area_name: g.area_name, t1: g, t2: null })
+      areasMap.set(g.area_id, {
+        ...(areasMap.get(g.area_id) || {}),
+        area_name: g.area_name || areasMap.get(g.area_id)?.area_name,
+        t1: g,
+      })
     );
 
     s2.forEach((g) => {
@@ -1666,13 +1839,15 @@ const FinalResultSummary = () => {
       });
     }
 
-    const rows = Array.from(areasMap.values());
+    const rows = Array.from(areasMap.values()).sort(
+      (a, b) => (a.serial_order || 0) - (b.serial_order || 0)
+    );
 
     return `
       <div class="section-title">
         <div class="section-title-left">
           <div class="section-pill">Co-Scholastic</div>
-          <h5 style="margin:0;color:#0b1b3a;font-size:15px">Co-Scholastic Area</h5>
+          <h5 style="margin:0;color:#0b1b3a;font-size:10px">Co-Scholastic Area</h5>
         </div>
       </div>
       <table class="tbl">
@@ -1718,7 +1893,7 @@ const FinalResultSummary = () => {
       <div class="section-title">
         <div class="section-title-left">
           <div class="section-pill">Attendance</div>
-          <h5 style="margin:0;color:#0b1b3a;font-size:15px">Attendance</h5>
+          <h5 style="margin:0;color:#0b1b3a;font-size:10px">Attendance</h5>
         </div>
       </div>
       <table class="tbl">
@@ -1764,7 +1939,7 @@ const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
     <div class="section-title">
       <div class="section-title-left">
         <div class="section-pill">Remarks</div>
-        <h5 style="margin:0;color:#0b1b3a;font-size:15px">Teacher's Remarks</h5>
+        <h5 style="margin:0;color:#0b1b3a;font-size:10px">Teacher's Remarks</h5>
       </div>
     </div>
 
@@ -1829,6 +2004,13 @@ const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
   };
 
   const isPrimarySectionTemplateActive = () => {
+    const selectedFormatOrientation = String(
+      selectedReportFormat?.orientation || reportFormatRef.current?.orientation || reportFormat?.orientation || ""
+    ).toLowerCase();
+
+    if (selectedFormatOrientation === "landscape") return true;
+    if (selectedFormatOrientation === "portrait") return false;
+
     const isPrimaryClass = ["0", "1", "2", "3"].includes(String(filters.class_id));
     const selectedIsPrimary = selectedReportTemplate?.template_key === "primary_section_report_card";
     const classHasPrimaryTemplate = (reportTemplates || []).some(
@@ -1896,6 +2078,12 @@ const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
       CR: "Creativity",
       DC: "Drawing and Colouring",
       HOWK: "Handwork",
+      WRT: "Writing",
+      READ: "Reading",
+      ACT: "Activity",
+      DR: "Drawing",
+      SCTI: "Subject Conceptual Thinking and Interpretation",
+      PROJ: "Project",
     },
     default: {
       OA: "Oral Assessment",
@@ -1931,6 +2119,12 @@ const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
       CR: "Creativity",
       DC: "Drawing and Colouring",
       HOWK: "Handwork",
+      WRT: "Writing",
+      READ: "Reading",
+      ACT: "Activity",
+      DR: "Drawing",
+      SCTI: "Subject Conceptual Thinking and Interpretation",
+      PROJ: "Project",
     },
   };
 
@@ -2026,10 +2220,7 @@ const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
     const fallbackFullName = getPrimaryFallbackComponentFullName(abbr, subjectName);
     const fullName = isOnlyAbbreviation ? fallbackFullName || cleanedName : cleanedName;
 
-    if (!abbr || fullName.toUpperCase() === abbr.toUpperCase()) return fullName || "Assessment";
-    if (new RegExp(`\\(${escapeRegExp(abbr)}\\)`, "i").test(fullName)) return fullName;
-
-    return `${fullName} (${abbr})`;
+    return fullName || "Assessment";
   };
 
   const getAllSubjectsForPrimary = (student) =>
@@ -2463,7 +2654,7 @@ const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
           linear-gradient(180deg, #eef5ff 0%, #fbfdff 100%);
       }
 
-      @page { margin: 12px 10px; }
+      @page { margin: 4px 4px; }
 
       section { page-break-after: always; }
       section:last-child { page-break-after: auto; }
@@ -2472,27 +2663,27 @@ const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
 
       .panel {
         border: 1px solid rgba(199,210,254,0.85);
-        border-radius: 14px;
-        padding: 9px;
+        border-radius: 8px;
+        padding: 5px;
         background: linear-gradient(180deg, rgba(255,255,255,0.96) 0%, rgba(248,251,255,0.96) 100%);
-        box-shadow: 0 8px 18px rgba(10, 30, 80, 0.09);
+        box-shadow: none;
         position: relative;
         overflow: hidden;
       }
 
       .header-flex {
         display: grid;
-        grid-template-columns: 120px 1fr 120px;
+        grid-template-columns: 96px 1fr 96px;
         align-items: center;
-        gap: 10px;
+        gap: 6px;
       }
 
       .header-left {
         display: flex;
         justify-content: flex-start;
         align-items: flex-start;
-        padding-top: 18px;
-        padding-left: 8px;
+        padding-top: 4px;
+        padding-left: 4px;
       }
 
       .header-center {
@@ -2500,17 +2691,17 @@ const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
         display: flex;
         align-items: center;
         justify-content: center;
-        min-height: 126px;
-        padding: 0 10px;
-        font-size: 14px;
-        line-height: 1.15;
+        min-height: 92px;
+        padding: 0 5px;
+        font-size: 12px;
+        line-height: 1.08;
         color: #0b1b3a;
       }
 
       .header-center .rc-header {
         text-align: center;
-        padding: 10px 8px 8px;
-        line-height: 1.15;
+        padding: 4px 5px 3px;
+        line-height: 1.08;
         background: transparent;
       }
 
@@ -2519,8 +2710,8 @@ const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
       }
 
       .header-center .rc-session {
-        margin-top: 6px !important;
-        font-size: 17px !important;
+        margin-top: 3px !important;
+        font-size: 13px !important;
         line-height: 1.1 !important;
         letter-spacing: 0.6px !important;
       }
@@ -2533,22 +2724,22 @@ const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
         display: flex;
         justify-content: flex-end;
         align-items: flex-start;
-        gap: 8px;
+        gap: 4px;
       }
 
       .header-logo {
-        height: 95px;
+        height: 74px;
         width: auto;
         object-fit: contain;
         display: block;
         flex-shrink: 0;
-        margin-left: 8px;
+        margin-left: 4px;
       }
 
       .header-board-logo {
-        height: 74px;
+        height: 54px;
         width: auto;
-        max-width: 82px;
+        max-width: 60px;
         object-fit: contain;
         display: block;
         background: transparent;
@@ -2557,29 +2748,29 @@ const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
       }
 
       .student-photo {
-        width: 104px;
-        height: 126px;
-        border-radius: 12px;
+        width: 74px;
+        height: 88px;
+        border-radius: 7px;
         object-fit: cover;
-        border: 2px solid rgba(191,219,254,1);
-        box-shadow: 0 6px 14px rgba(0,0,0,0.14);
+        border: 1px solid rgba(191,219,254,1);
+        box-shadow: none;
         background:#fff;
       }
 
       .grid-info{
         display:grid;
         grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 6px 8px;
-        font-size: 13px;
-        margin-top: 2px;
+        gap: 3px 4px;
+        font-size: 9.5px;
+        margin-top: 0;
       }
 
       .kv{
-        padding: 6px 8px;
-        border-radius: 10px;
+        padding: 3px 4px;
+        border-radius: 5px;
         background: rgba(255,255,255,0.8);
         border:1px solid rgba(226,232,240,0.9);
-        line-height: 1.25;
+        line-height: 1.12;
       }
 
       .kv b{ color:#0b1b3a; }
@@ -2588,20 +2779,20 @@ const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
         display:flex;
         align-items:center;
         justify-content:space-between;
-        margin-top: 8px;
-        margin-bottom: 4px;
+        margin-top: 3px;
+        margin-bottom: 2px;
       }
 
       .section-title-left{
         display:flex;
         align-items:center;
-        gap:8px;
+        gap:5px;
       }
 
       .section-pill{
-        font-size: 9px;
+        font-size: 7px;
         font-weight: 900;
-        padding: 3px 8px;
+        padding: 2px 5px;
         border-radius: 999px;
         background: rgba(59,130,246,0.12);
         border: 1px solid rgba(59,130,246,0.22);
@@ -2619,11 +2810,11 @@ const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
       .tbl th,
       .tbl td {
         border: 1px solid rgba(148,163,184,0.9);
-        padding: 7px 9px;
+        padding: 3px 4px;
         text-align: center;
         vertical-align: middle;
-        line-height: 1.25;
-        font-size: 9.4px;
+        line-height: 1.08;
+        font-size: 7.6px;
         white-space: nowrap;
       }
 
@@ -2653,26 +2844,26 @@ const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
         background: linear-gradient(180deg,#1e3a8a,#1e40af);
         color:#ffffff;
         text-align:left;
-        font-size: 9.4px;
+        font-size: 7.8px;
       }
 
       .th-term{
         background: linear-gradient(180deg,#1e3a8a,#1e40af);
         color:#ffffff;
-        font-size: 9.4px;
+        font-size: 7.8px;
       }
 
       .th-grand{
         background: linear-gradient(180deg,#172554,#1e3a8a);
         color:#ffffff;
-        font-size: 9.4px;
+        font-size: 7.8px;
       }
 
       .th-comp{
         background: linear-gradient(180deg,#1e40af,#2563eb);
         color:#ffffff;
         font-weight:700;
-        font-size:12px;
+        font-size:8px;
       }
 
       .th-comp.strong{
@@ -2685,7 +2876,7 @@ const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
         font-weight: 900;
         text-align:left;
         white-space: normal;
-        font-size: 9.4px;
+        font-size: 7.8px;
       }
 
       .td-strong{
@@ -2699,7 +2890,7 @@ const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
         font-weight: 900;
         text-align:left;
         color:#ffffff !important;
-        font-size: 9.4px;
+        font-size: 7.8px;
       }
 
       .td-total{
@@ -2718,31 +2909,31 @@ const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
         background: #fff7cc !important;
         font-weight: 900;
         text-align: right !important;
-        padding-right: 12px !important;
+        padding-right: 6px !important;
         color:#0b1b3a !important;
-        font-size: 9.4px;
+        font-size: 7.8px;
       }
 
       .grand-total-small{
         font-weight: 900;
-        font-size: 11px;
+        font-size: 8px;
         letter-spacing: 0.1px;
         color:#0b1b3a !important;
       }
 
       .grand-grade-big{
         font-weight: 900;
-        font-size: 9.4px;
+        font-size: 7.8px;
         color:#0b1b3a !important;
       }
 
       .grand-percent-highlight{
         margin-top: 1px;
-        font-size: 11px;
+        font-size: 8px;
         font-weight: 900;
         display: inline-block;
-        padding: 1px 7px;
-        border-radius: 8px;
+        padding: 1px 4px;
+        border-radius: 5px;
         background: rgba(255, 243, 199, 0.95);
         border: 1px solid rgba(251, 191, 36, 0.55);
         color: #0b1b3a !important;
@@ -2750,12 +2941,12 @@ const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
 
       .rank-highlight{
         display: inline-block;
-        padding: 1px 7px;
-        border-radius: 8px;
+        padding: 1px 4px;
+        border-radius: 5px;
         background: rgba(255, 243, 199, 0.95);
         border: 1px solid rgba(251, 191, 36, 0.55);
         color: #0b1b3a !important;
-        font-size: 11px;
+        font-size: 8px;
         font-weight: 900;
         line-height: 1.1;
       }
@@ -2766,34 +2957,34 @@ const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
 
       .remarks-card{
         border:1px solid rgba(226,232,240,0.9);
-        border-radius: 12px;
+        border-radius: 7px;
         background: rgba(255,255,255,0.86);
         overflow:hidden;
       }
 
       .remarks-body{
-        padding: 7px 9px;
-        min-height: 32px;
-        line-height: 1.35;
-        font-size: 13px;
+        padding: 4px 5px;
+        min-height: 18px;
+        line-height: 1.15;
+        font-size: 9px;
         color:#0f172a;
       }
 
       .two-col{
         display:grid;
         grid-template-columns: 1fr;
-        gap: 8px;
-        margin-top: 6px;
+        gap: 4px;
+        margin-top: 3px;
       }
 
       .grade-footer-note{
-        margin-top: 6px;
-        margin-bottom: 6px;
-        font-size: 11px;
+        margin-top: 3px;
+        margin-bottom: 3px;
+        font-size: 8px;
         color: #334155;
         border-top: 1px dashed rgba(148,163,184,0.7);
-        padding-top: 5px;
-        line-height: 1.2;
+        padding-top: 3px;
+        line-height: 1.08;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -2809,25 +3000,37 @@ const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
       const studentPhotoSrc = info?.__pdfPhotoSrc || getStudentPhotoURL(mergedInfoForPhoto);
 
       const subjectsForStudent = getNonDrawingSubjects(student);
+      const regularSubjectsForStudent = subjectsForStudent.filter(
+        (subjectName) => getSubjectComponentCount(student, subjectName) > 2
+      );
+      const compactSubjectsForStudent = subjectsForStudent.filter(
+        (subjectName) => getSubjectComponentCount(student, subjectName) <= 2
+      );
 
       const scholasticTable = `
       <div class="section-title">
         <div class="section-title-left">
           <div class="section-pill">Scholastic</div>
-          <h5 style="margin:0;color:#0b1b3a;font-size:15px">Scholastic Areas (Term-wise)</h5>
+          <h5 style="margin:0;color:#0b1b3a;font-size:10px">Scholastic Areas (Term-wise)</h5>
         </div>
       </div>
-      <table class="tbl">
-        <thead>${buildScholasticHeaderHtml_TermWise()}</thead>
-        <tbody>
-          ${subjectsForStudent.map((sub) => buildScholasticBodyRowHtml_TermWise(student, sub)).join("")}
-          ${buildTotalsFooterRowHtml(student)}
-        </tbody>
-      </table>
+      ${
+        regularSubjectsForStudent.length
+          ? `<table class="tbl">
+              <thead>${buildScholasticHeaderHtml_TermWise()}</thead>
+              <tbody>
+                ${regularSubjectsForStudent.map((sub) => buildScholasticBodyRowHtml_TermWise(student, sub)).join("")}
+                ${buildTotalsFooterRowHtml(student)}
+              </tbody>
+            </table>`
+          : ""
+      }
+      ${buildCompactScholasticPdfHtml(student, compactSubjectsForStudent)}
     `;
 
       const attendanceTable = buildAttendancePdfHtml_TermWise(student.id);
       const remarksBlock = buildTeacherRemarksPdfHtml_TermWise(student.id);
+      const coScholasticBlock = buildCoScholasticPdfHtml_TwoTerms(student);
 
       const effectiveHeaderHtml = getReportCardHeaderHtml();
       const effectiveFooterHtml = getReportCardFooterHtml();
@@ -2900,6 +3103,8 @@ const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
             : ""
         }
 
+        ${coScholasticBlock}
+
         <div class="two-col">
           <div>${attendanceTable}</div>
         </div>
@@ -2956,6 +3161,16 @@ const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
       );
     }
 
+    const activeReportFormat = selectedReportFormat || reportFormatRef.current || reportFormat;
+
+    if (!activeReportFormat?.id) {
+      return Swal.fire(
+        "Select Format",
+        "Please select the report card print format before generating PDF.",
+        "warning"
+      );
+    }
+
     const suffix =
       pdfMode === "single"
         ? `Student_${pdfSingleId || "X"}`
@@ -2973,8 +3188,8 @@ const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
     abortGenRef.current = controller;
 
     try {
-      setPdfMessage("Refreshing report format…");
-      await loadReportFormatForClass(filters.class_id, filters.session_id);
+      setPdfMessage("Preparing selected report format…");
+      setReportFormat(activeReportFormat);
 
       const [pdfInfoMap, pdfFormatAssets] = await Promise.all([
         prepareStudentPhotoDataUrlsForPdf(selected),
@@ -2989,6 +3204,7 @@ const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
         PDF_ENDPOINT,
         {
           html,
+          format_id: activeReportFormat.id,
           fileName,
           orientation: isPrimarySectionTemplateActive() ? "landscape" : selectedReportTemplate?.orientation || "portrait",
           session_id: Number(filters.session_id),
@@ -3571,6 +3787,27 @@ const renderTeacherRemarksTermWise = (studentId) => {
                     <option value="range">Range (Roll No.)</option>
                   </select>
                   <div className="text-muted small mt-1">Faster PDF for printing</div>
+                </div>
+
+                <div className="col-md-3">
+                  <label className="form-label fw-bold">Print Format</label>
+                  <select
+                    className="form-select"
+                    value={selectedReportFormatId}
+                    onChange={(e) => handleReportFormatChange(e.target.value)}
+                    disabled={loadingReportFormats || !reportFormats.length}
+                  >
+                    <option value="">
+                      {loadingReportFormats ? "Loading formats…" : "Select Format"}
+                    </option>
+                    {reportFormats.map((format) => (
+                      <option key={format.id} value={format.id}>
+                        {format.title || format.format_key || `Format #${format.id}`}
+                        {format.orientation ? ` (${format.orientation})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="text-muted small mt-1">Selected format controls PDF layout</div>
                 </div>
 
                 <div className="col-md-3">
