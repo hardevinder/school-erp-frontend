@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import api from "../api";
 import Swal from "sweetalert2";
 import { Form, Button, Table, Modal, Row, Col, Badge, Card } from "react-bootstrap";
+import "./SyllabusBreakdownCRUD.css";
 
 /* ---------------- Helpers ---------------- */
 
@@ -825,13 +826,14 @@ const SyllabusBreakdownCRUD = () => {
           size="xl"
           centered
           fullscreen="sm-down"
-          dialogClassName="modal-fullscreen-sm-down"
+          dialogClassName="modal-fullscreen-sm-down syllabus-breakdown-modal-dialog"
+          contentClassName="syllabus-breakdown-modal-content"
         >
           <Modal.Header closeButton>
             <Modal.Title>{editing ? "Edit Syllabus Breakdown" : "Create Syllabus Breakdown"}</Modal.Title>
           </Modal.Header>
 
-          <Modal.Body>
+          <Modal.Body className="syllabus-breakdown-modal-body">
             <Form onSubmit={handleSave}>
               <Row className="g-2">
                 <Col xs={12} md={3}>
@@ -920,7 +922,7 @@ const SyllabusBreakdownCRUD = () => {
               </div>
 
               {/* Desktop table */}
-              <div className="d-none d-lg-block table-responsive mt-2">
+              <div className="d-none d-lg-block mt-2 syllabus-breakdown-row-scroller">
                 <Table bordered hover className="align-middle mb-0">
                   <thead className="table-light">
                     <tr>

@@ -3,6 +3,7 @@
 // ✅ FIX: No page reload on dashboard links (uses react-router Link instead of <a href>)
 // ✅ NEW: Academic Calendar card/link added
 // ✅ NEW: Entrance Exam card/link added
+// ✅ NEW: Student Lesson Plans card/link added (student-safe)
 // ✅ Chat + Notifications unchanged
 // ✅ FIX: Stable card hover (no shaking / wrong link click)
 
@@ -561,6 +562,13 @@ export default function StudentDashboard() {
           label="Diary"
           desc="Class notes & announcements"
           badge={<span className="badge rounded-pill text-bg-info fs-6">{diarySummary.unack} pending</span>}
+        />
+        <QuickLink
+          to="/student-lesson-plans"
+          icon={<i className="bi bi-journal-bookmark text-primary"></i>}
+          label="Student Lesson Plans"
+          desc="View published lesson plans, homework and evaluations"
+          badge={<span className="badge rounded-pill text-bg-primary fs-6">Open</span>}
         />
         <QuickLink
           to="/student-circulars"

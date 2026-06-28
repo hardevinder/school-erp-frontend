@@ -15,6 +15,7 @@ import {
   Spinner,
   Table,
 } from "react-bootstrap";
+import "./LessonPlan.css";
 
 /* ---------------- helpers ---------------- */
 
@@ -157,14 +158,20 @@ const LessonPlanCRUD = () => {
   /* ---------------- SweetAlert (force on top) ---------------- */
 
   const fireTop = (opts) => {
+    const incomingClass = opts?.customClass || {};
+
     return Swal.fire({
       target: document.body,
       ...opts,
+      customClass: {
+        ...incomingClass,
+        container: `lesson-plan-swal-container ${incomingClass.container || ""}`.trim(),
+      },
       didOpen: (el) => {
         try {
-          el.style.zIndex = "3000";
           const container = Swal.getContainer();
-          if (container) container.style.zIndex = "3000";
+          el.style.setProperty("z-index", "20001", "important");
+          if (container) container.style.setProperty("z-index", "20000", "important");
         } catch {}
         if (typeof opts?.didOpen === "function") opts.didOpen(el);
       },
@@ -1310,7 +1317,8 @@ const LessonPlanCRUD = () => {
         backdrop="static"
         keyboard={false}
         fullscreen="md-down"
-        contentClassName="border-0"
+        dialogClassName="lesson-plan-modal-dialog"
+        contentClassName="border-0 lesson-plan-modal-content"
       >
         <Modal.Header closeButton className="bg-white">
           <div className="w-100">
@@ -1801,7 +1809,7 @@ const LessonPlanCRUD = () => {
             </Row>
           </Modal.Body>
 
-          <Modal.Footer className="bg-white" style={{ position: "sticky", bottom: 0, zIndex: 2 }}>
+          <Modal.Footer className="bg-white lesson-plan-modal-footer">
             <div className="text-muted small me-auto d-none d-md-block">
               Tip: Select Unit → then Topic/Subtopic dropdown auto loads. Use ✨ Generate with AI for fast draft.
             </div>

@@ -1,4 +1,5 @@
 // File: src/components/Dashboard.jsx
+// Improved organized dashboard: grouped actions + classId enrollment ordering
 import React, {
   useEffect,
   useMemo,
@@ -178,6 +179,77 @@ const getStoredPermissions = () => {
     return [];
   }
 };
+
+
+// ---------- CLASS ORDER HELPERS ----------
+// Prefer backend classId/class_id. Fallback keeps PG/Nursery/LKG/UKG/1st/2nd... in school order.
+const classOrderFallback = {
+  pg: 0,
+  playgroup: 0,
+  "play group": 0,
+  nursery: 1,
+  nsy: 1,
+  lkg: 2,
+  ukg: 3,
+};
+
+const normalizeClassLabel = (value) =>
+  String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\./g, "")
+    .replace(/\s+/g, " ");
+
+const getClassRankFromName = (className) => {
+  const clean = normalizeClassLabel(className);
+  if (Object.prototype.hasOwnProperty.call(classOrderFallback, clean)) {
+    return classOrderFallback[clean];
+  }
+
+  const compact = clean.replace(/[-_\s]/g, "");
+  if (Object.prototype.hasOwnProperty.call(classOrderFallback, compact)) {
+    return classOrderFallback[compact];
+  }
+
+  const numberMatch = clean.match(/\d+/);
+  if (numberMatch) {
+    // After UKG, class 1 should come next.
+    return 3 + Number(numberMatch[0]);
+  }
+
+  return 9999;
+};
+
+const getClassSortId = (item = {}) => {
+  const candidates = [
+    item.classId,
+    item.class_id,
+    item.ClassId,
+    item.ClassID,
+    item.classID,
+    item?.class?.id,
+    item?.Class?.id,
+  ];
+
+  for (const candidate of candidates) {
+    const numeric = Number(candidate);
+    if (Number.isFinite(numeric)) return numeric;
+  }
+
+  return getClassRankFromName(item.className || item.class_name || item.name);
+};
+
+const compareClassRows = (a, b) => {
+  const byId = getClassSortId(a) - getClassSortId(b);
+  if (byId !== 0) return byId;
+  return String(a?.className || "").localeCompare(String(b?.className || ""), undefined, {
+    numeric: true,
+    sensitivity: "base",
+  });
+};
+
+const isAdmissionType = (item, type) =>
+  String(item?.admissionType || "").trim().toLowerCase() === type.toLowerCase();
 
 // ---------- COMPONENT ----------
 const Dashboard = () => {
@@ -441,27 +513,50 @@ const Dashboard = () => {
     0
   );
 
-  // Enrollments (class-wise count)
-  const newEnrollments = classWiseCount
-    .filter((i) => i.admissionType === "New")
+  // Enrollments (class-wise count) — always display by classId/order, not alphabetically
+  const sortedClassWiseCount = useMemo(
+    () => [...(classWiseCount || [])].sort(compareClassRows),
+    [classWiseCount]
+  );
+
+  const newEnrollments = sortedClassWiseCount
+    .filter((i) => isAdmissionType(i, "New"))
     .reduce((acc, i) => acc + Number(i.studentCount || 0), 0);
-  const oldEnrollments = classWiseCount
-    .filter((i) => i.admissionType === "Old")
+  const oldEnrollments = sortedClassWiseCount
+    .filter((i) => isAdmissionType(i, "Old"))
     .reduce((acc, i) => acc + Number(i.studentCount || 0), 0);
   const totalEnrollments = newEnrollments + oldEnrollments;
 
-  const classWiseEnrollments = {};
-  classWiseCount.forEach((item) => {
-    const cls = item.className;
-    if (!cls) return;
-    if (!classWiseEnrollments[cls])
-      classWiseEnrollments[cls] = { new: 0, old: 0 };
-    if (item.admissionType === "New")
-      classWiseEnrollments[cls].new += Number(item.studentCount || 0);
-    if (item.admissionType === "Old")
-      classWiseEnrollments[cls].old += Number(item.studentCount || 0);
-  });
-  const classColumns = Object.keys(classWiseEnrollments).sort();
+  const classWiseEnrollments = useMemo(() => {
+    const map = {};
+    sortedClassWiseCount.forEach((item) => {
+      const cls = item.className || item.class_name;
+      if (!cls) return;
+      if (!map[cls]) {
+        map[cls] = {
+          new: 0,
+          old: 0,
+          classId: getClassSortId(item),
+        };
+      }
+      if (isAdmissionType(item, "New")) {
+        map[cls].new += Number(item.studentCount || 0);
+      }
+      if (isAdmissionType(item, "Old")) {
+        map[cls].old += Number(item.studentCount || 0);
+      }
+    });
+    return map;
+  }, [sortedClassWiseCount]);
+
+  const classColumns = useMemo(
+    () =>
+      Object.entries(classWiseEnrollments)
+        .sort(([, a], [, b]) => a.classId - b.classId)
+        .map(([className]) => className),
+    [classWiseEnrollments]
+  );
+
   const overallNew = classColumns.reduce(
     (s, c) => s + classWiseEnrollments[c].new,
     0
@@ -640,26 +735,30 @@ const Dashboard = () => {
     [showLegends.line]
   );
 
-  // Bar (enrollments)
-  const uniqueClasses = useMemo(
-    () =>
-      Array.from(new Set((classWiseCount || []).map((r) => r.className))).sort(),
-    [classWiseCount]
-  );
-  const uniqueAdmissionTypes = useMemo(
-    () =>
-      Array.from(
-        new Set((classWiseCount || []).map((r) => r.admissionType))
-      ),
-    [classWiseCount]
-  );
+  // Bar (enrollments) — labels follow the same classId/class-order as the table
+  const uniqueClasses = useMemo(() => classColumns, [classColumns]);
+  const uniqueAdmissionTypes = useMemo(() => {
+    const preferred = ["New", "Old"];
+    const available = Array.from(
+      new Set(
+        (sortedClassWiseCount || [])
+          .map((r) => String(r.admissionType || "").trim())
+          .filter(Boolean)
+      )
+    );
+    return [
+      ...preferred.filter((type) => available.includes(type)),
+      ...available.filter((type) => !preferred.includes(type)),
+    ];
+  }, [sortedClassWiseCount]);
+
   const barDatasets = useMemo(
     () =>
       uniqueAdmissionTypes.map((type, idx) => ({
         label: type,
         data: uniqueClasses.map((cls) => {
-          const rec = classWiseCount.find(
-            (r) => r.className === cls && r.admissionType === type
+          const rec = sortedClassWiseCount.find(
+            (r) => (r.className || r.class_name) === cls && String(r.admissionType || "").trim() === type
           );
           return rec ? Number(rec.studentCount || 0) : 0;
         }),
@@ -668,7 +767,7 @@ const Dashboard = () => {
         borderWidth: 2,
         borderRadius: 8,
       })),
-    [uniqueAdmissionTypes, uniqueClasses, classWiseCount]
+    [uniqueAdmissionTypes, uniqueClasses, sortedClassWiseCount]
   );
   const barChartData = useMemo(
     () => ({ labels: uniqueClasses, datasets: barDatasets }),
@@ -763,15 +862,8 @@ const Dashboard = () => {
     0
   );
 
-  // ✅ UPDATED: quick links include student list and payment routes
-  const quickLinks = [
-    {
-      label: "Student List",
-      sub: "Select students",
-      icon: "bi-people",
-      href: "/students",
-      gradient: "linear-gradient(135deg, #a855f7, #7c3aed)",
-    },
+  // ✅ Organized quick actions by dashboard section
+  const feeLinks = [
     {
       label: "Collect Fee",
       sub: "Student fee collection",
@@ -788,39 +880,49 @@ const Dashboard = () => {
     },
     {
       label: "Fee Due Report",
-      sub: "Student Due",
+      sub: "Student due list",
       icon: "bi-receipt",
       href: "/student-due",
-      gradient: "linear-gradient(135deg, #22c55e, #16a34a)",
+      gradient: "linear-gradient(135deg, #22c55e, #15803d)",
+    },
+    {
+      label: "Pending Due",
+      sub: "School fee summary",
+      icon: "bi-list-check",
+      href: "/reports/school-fee-summary",
+      gradient: "linear-gradient(135deg, #3b82f6, #2563eb)",
     },
     {
       label: "Fee Head Collection",
-      sub: "Student collection matrix",
+      sub: "Collection matrix",
       icon: "bi-table",
       href: "/student-fee-head-collection",
       gradient: "linear-gradient(135deg, #7c3aed, #4f46e5)",
       tag: "NEW",
     },
     {
-      label: "Pending Due",
-      sub: "School Summary",
-      icon: "bi-list-check",
-      href: "/reports/school-fee-summary",
-      gradient: "linear-gradient(135deg, #3b82f6, #2563eb)",
-    },
-    {
       label: "Day Summary",
-      sub: "Day-wise report",
+      sub: "Day-wise fee report",
       icon: "bi-calendar2-check",
       href: "/reports/day-wise",
       gradient: "linear-gradient(135deg, #f59e0b, #d97706)",
     },
     {
-      label: "Transport",
+      label: "Transport / Van Fee",
       sub: "Van fee report",
       icon: "bi-truck",
       href: "/reports/van-fee",
       gradient: "linear-gradient(135deg, #06b6d4, #0891b2)",
+    },
+  ];
+
+  const studentLinks = [
+    {
+      label: "Student List",
+      sub: "Search and manage students",
+      icon: "bi-people",
+      href: "/students",
+      gradient: "linear-gradient(135deg, #a855f7, #7c3aed)",
     },
     {
       label: "Student I-Cards",
@@ -831,14 +933,6 @@ const Dashboard = () => {
       tag: "NEW",
     },
     {
-      label: "Messages",
-      sub: "Fee reminders & chat",
-      icon: "bi-chat-dots",
-      href: "/messages",
-      gradient: "linear-gradient(135deg, #2563eb, #7c3aed)",
-      tag: "NEW",
-    },
-    {
       label: "Bulk Concessions",
       sub: "Apply concession",
       icon: "bi-tags",
@@ -846,8 +940,6 @@ const Dashboard = () => {
       gradient: "linear-gradient(135deg, #8b5cf6, #6d28d9)",
       tag: "NEW",
     },
-
-    // ✅ NEW: Student Summary (House)
     {
       label: "House Summary",
       sub: "House-wise stats",
@@ -856,7 +948,9 @@ const Dashboard = () => {
       gradient: "linear-gradient(135deg, #0ea5e9, #0369a1)",
       tag: "NEW",
     },
+  ];
 
+  const reportLinks = [
     {
       label: "Caste & Gender",
       sub: "Demographics",
@@ -867,9 +961,27 @@ const Dashboard = () => {
     {
       label: "Religion & Gender",
       sub: "Demographics",
-      icon: "bi-people-fill",
+      icon: "bi-diagram-3",
       href: "/reports/religion-gender",
       gradient: "linear-gradient(135deg, #0ea5e9, #0369a1)",
+    },
+  ];
+
+  const adminLinks = [
+    {
+      label: "Enquiries",
+      sub: "Admission enquiries",
+      icon: "bi-person-lines-fill",
+      href: "/enquiries",
+      gradient: "linear-gradient(135deg, #f97316, #ea580c)",
+    },
+    {
+      label: "Messages",
+      sub: "Fee reminders & chat",
+      icon: "bi-chat-dots",
+      href: "/messages",
+      gradient: "linear-gradient(135deg, #2563eb, #7c3aed)",
+      tag: "NEW",
     },
     ...(canManagePermissions
       ? [
@@ -884,6 +996,37 @@ const Dashboard = () => {
         ]
       : []),
   ];
+
+  const quickLinkSections = [
+    {
+      title: "Fee Section",
+      subtitle: "Collection, dues, transport fee and fee reports",
+      icon: "bi-wallet2",
+      tone: "fee",
+      links: feeLinks,
+    },
+    {
+      title: "Students",
+      subtitle: "Student count, IDs, concessions and summaries",
+      icon: "bi-mortarboard",
+      tone: "students",
+      links: studentLinks,
+    },
+    {
+      title: "Reports",
+      subtitle: "Demographic reports and analytics",
+      icon: "bi-graph-up-arrow",
+      tone: "reports",
+      links: reportLinks,
+    },
+    {
+      title: "Communication & Admin",
+      subtitle: "Enquiries, messages and access control",
+      icon: "bi-broadcast",
+      tone: "admin",
+      links: adminLinks,
+    },
+  ].filter((section) => section.links.length > 0);
 
   // ✅ UPDATED: premium LinkCard (better UI)
   const LinkCard = ({ href, icon, label, sub, gradient, tag }) => (
@@ -910,6 +1053,38 @@ const Dashboard = () => {
         <i className="bi bi-arrow-right" />
       </span>
     </Link>
+  );
+
+
+  const LinkSection = ({ section }) => (
+    <div className={`quick-link-section quick-link-section-${section.tone}`}>
+      <div className="quick-section-heading">
+        <div className="quick-section-icon">
+          <i className={`bi ${section.icon}`} />
+        </div>
+        <div>
+          <div className="quick-section-title">{section.title}</div>
+          <div className="quick-section-subtitle">{section.subtitle}</div>
+        </div>
+      </div>
+
+      <div className="quick-links-grid compact">
+        {section.links.map((q) => (
+          <LinkCard key={`${section.title}-${q.label}`} {...q} />
+        ))}
+      </div>
+    </div>
+  );
+
+  const SectionHeader = ({ badge, title, subtitle, action }) => (
+    <div className="section-title-row d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+      <div>
+        {badge ? <span className="section-badge">{badge}</span> : null}
+        <h4 className="section-title mb-1">{title}</h4>
+        {subtitle ? <p className="section-subtitle mb-0">{subtitle}</p> : null}
+      </div>
+      {action || null}
+    </div>
   );
 
   /* -------------------------------- RENDER ------------------------------- */
@@ -1033,84 +1208,63 @@ const Dashboard = () => {
           </div>
         ) : null}
 
-        {/* Quick Links (sticky) */}
-        <div className="quick-links sticky-top mb-4">
+        {/* Organized Quick Actions */}
+        <div className="quick-links mb-4">
           <div className="quick-links-inner px-4 py-3 rounded shadow-lg bg-white bg-opacity-95">
-            <div className="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
-              <div className="d-flex align-items-center gap-2">
-                <span className="badge bg-primary-subtle text-primary border">
-                  Quick Actions
-                </span>
-                <span className="small text-muted">
-                  Jump to key reports fast
-                </span>
+            <div className="d-flex align-items-center justify-content-between flex-wrap gap-3 mb-3">
+              <div>
+                <div className="d-flex align-items-center gap-2 mb-1">
+                  <span className="badge bg-primary-subtle text-primary border">
+                    Organized Dashboard
+                  </span>
+                  <span className="small text-muted">
+                    Fee, students, reports and admin links grouped properly
+                  </span>
+                </div>
+                <h5 className="mb-0 fw-bold">Quick Actions</h5>
               </div>
 
               <div className="quick-links-header-actions d-flex flex-wrap gap-2">
                 <button
                   className="btn btn-sm btn-primary"
-                  onClick={() => navigate("/students/bulk-concession")}
-                  title="Open Bulk Concessions"
+                  onClick={() => navigate("/transactions")}
+                  title="Open Collect Fee"
                 >
-                  <i className="bi bi-tags me-1" />
-                  Bulk Concessions
+                  <i className="bi bi-cash-stack me-1" />
+                  Collect Fee
                 </button>
                 <button
                   className="btn btn-sm btn-outline-secondary"
-                  onClick={() => navigate("/student-fee-head-collection")}
-                  title="Open Fee Head Collection Report"
+                  onClick={() => navigate("/student-due")}
+                  title="Open Fee Due Report"
                 >
-                  <i className="bi bi-table me-1" />
-                  Fee Head Collection
+                  <i className="bi bi-receipt me-1" />
+                  Fee Due
                 </button>
                 <button
                   className="btn btn-sm btn-outline-primary"
-                  onClick={() => navigate("/reports/student-summary")}
-                  title="Open House Summary"
+                  onClick={() => navigate("/students")}
+                  title="Open Student List"
                 >
-                  <i className="bi bi-bar-chart-line me-1" />
-                  House Summary
+                  <i className="bi bi-people me-1" />
+                  Students
                 </button>
-                <button
-                  className="btn btn-sm btn-outline-success"
-                  onClick={() => navigate("/student-id-cards")}
-                  title="Open Student I-Card Generator"
-                >
-                  <i className="bi bi-person-vcard me-1" />
-                  Student I-Cards
-                </button>
-
-                <button
-                  className="btn btn-sm btn-outline-primary"
-                  onClick={() => navigate("/messages")}
-                  title="Open Messages"
-                >
-                  <i className="bi bi-chat-dots me-1" />
-                  Messages
-                </button>
-
-                {canManagePermissions && (
-                  <button
-                    className="btn btn-sm btn-outline-dark"
-                    onClick={() => navigate("/role-permissions")}
-                    title="Open Role Permissions"
-                  >
-                    <i className="bi bi-shield-lock me-1" />
-                    Role Permissions
-                  </button>
-                )}
               </div>
             </div>
 
-            <div className="quick-links-grid">
-              {quickLinks.map((q) => (
-                <LinkCard key={q.label} {...q} />
+            <div className="quick-section-grid">
+              {quickLinkSections.map((section) => (
+                <LinkSection key={section.title} section={section} />
               ))}
             </div>
           </div>
         </div>
 
-        {/* NEW: Recent Enquiries + KPI */}
+        <SectionHeader
+          badge="Overview"
+          title="Session Snapshot"
+          subtitle="Important fee and enrollment numbers first, followed by latest enquiries."
+        />
         <div className="row g-4 mb-4">
           {/* Recent Enquiries */}
           <div className="col-12 col-lg-4">
@@ -1225,7 +1379,11 @@ const Dashboard = () => {
           </div>
         </div>
 
-        {/* Category cards */}
+        <SectionHeader
+          badge="Fee Section"
+          title="Fee Category Summary"
+          subtitle="Category-wise collection, concession, van fee and total share."
+        />
         <div className="row g-4 mb-4">
           {Object.entries(summary).map(([category, totals], index) => {
             const share =
@@ -1305,7 +1463,11 @@ const Dashboard = () => {
           })}
         </div>
 
-        {/* Charts Row */}
+        <SectionHeader
+          badge="Analytics"
+          title="Fee Analytics"
+          subtitle="Collection distribution and session trend by fee category."
+        />
         <div className="row g-4 mb-4">
           {/* PIE (fees) */}
           <div className="col-12 col-xl-6">
@@ -1412,7 +1574,11 @@ const Dashboard = () => {
           </div>
         </div>
 
-        {/* Gender/Caste/Religion row */}
+        <SectionHeader
+          badge="Students"
+          title="Student Demographics"
+          subtitle="Gender, caste and religion summaries in one clean section."
+        />
         <div className="row g-4 mb-4">
           {/* Gender Pie */}
           <div className="col-12 col-xl-4">
@@ -1614,7 +1780,11 @@ const Dashboard = () => {
           </div>
         </div>
 
-        {/* Enrollment table */}
+        <SectionHeader
+          badge="Enrollments"
+          title="Class-wise Enrollment Order"
+          subtitle="Classes are ordered by classId/class order, so display stays correct for PG to senior classes."
+        />
         <div className="row g-4 mb-4">
           <div className="col-12">
             <div className="card shadow-lg hover-lift">
@@ -1724,7 +1894,11 @@ const Dashboard = () => {
           </div>
         </div>
 
-        {/* Bar chart */}
+        <SectionHeader
+          badge="Students"
+          title="Student Count by Class"
+          subtitle="Bar chart follows the same classId order as the enrollment table."
+        />
         <div className="row g-4 mb-5">
           <div className="col-12">
             <div className="card shadow-lg hover-lift">
@@ -1800,13 +1974,84 @@ const Dashboard = () => {
             border-radius: 1.2rem; border: 1px solid rgba(255, 255, 255, 0.2);
             box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
           }
+          .quick-section-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 1rem;
+          }
+          .quick-link-section {
+            padding: 1rem;
+            border-radius: 1.1rem;
+            background: linear-gradient(135deg, rgba(248,250,252,.96), rgba(255,255,255,.9));
+            border: 1px solid rgba(148,163,184,.25);
+            box-shadow: inset 0 1px 0 rgba(255,255,255,.7), 0 8px 24px rgba(15,23,42,.06);
+          }
+          .quick-section-heading {
+            display: flex;
+            align-items: center;
+            gap: .8rem;
+            margin-bottom: .85rem;
+          }
+          .quick-section-icon {
+            width: 2.45rem;
+            height: 2.45rem;
+            display: grid;
+            place-items: center;
+            border-radius: .95rem;
+            color: #fff;
+            background: linear-gradient(135deg, #3b82f6, #4f46e5);
+            box-shadow: 0 8px 18px rgba(59,130,246,.25);
+          }
+          .quick-link-section-students .quick-section-icon { background: linear-gradient(135deg, #a855f7, #7c3aed); }
+          .quick-link-section-fee .quick-section-icon { background: linear-gradient(135deg, #22c55e, #16a34a); }
+          .quick-link-section-reports .quick-section-icon { background: linear-gradient(135deg, #f59e0b, #d97706); }
+          .quick-link-section-admin .quick-section-icon { background: linear-gradient(135deg, #0ea5e9, #0369a1); }
+          .quick-section-title {
+            font-weight: 800;
+            color: #0f172a;
+            line-height: 1.15;
+          }
+          .quick-section-subtitle {
+            font-size: .8rem;
+            color: #64748b;
+          }
           .quick-links-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
             gap: .9rem;
           }
+          .quick-links-grid.compact {
+            grid-template-columns: repeat(auto-fit, minmax(185px, 1fr));
+            gap: .75rem;
+          }
           .quick-links-header-actions .btn {
             white-space: nowrap;
+          }
+          .section-title-row {
+            padding: 0 .25rem;
+          }
+          .section-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: .35rem;
+            padding: .28rem .65rem;
+            border-radius: 999px;
+            font-size: .72rem;
+            font-weight: 800;
+            letter-spacing: .02em;
+            color: #1d4ed8;
+            background: rgba(219,234,254,.9);
+            border: 1px solid rgba(59,130,246,.22);
+            margin-bottom: .35rem;
+          }
+          .section-title {
+            font-weight: 850;
+            color: #0f172a;
+            letter-spacing: -.02em;
+          }
+          .section-subtitle {
+            color: #64748b;
+            font-size: .92rem;
           }
 
           /* ✅ Upgraded quick link cards */
@@ -1903,6 +2148,7 @@ const Dashboard = () => {
           @media (max-width: 1200px) {
             .quick-links { top: 4.5rem; }
             .dashboard-header-card { padding: .9rem 1rem; }
+            .quick-section-grid { grid-template-columns: 1fr; }
             .quick-links-grid { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
             .card-header { padding: .85rem 1rem; }
             .table th, .table td { padding: .6rem; font-size: .9rem; }
@@ -1916,6 +2162,9 @@ const Dashboard = () => {
           @media (max-width: 768px) {
             .quick-links { top: 4rem; }
             .quick-links-inner { padding: 1rem; }
+            .quick-link-section { padding: .85rem; }
+            .quick-section-heading { align-items: flex-start; }
+            .quick-links-grid.compact { grid-template-columns: 1fr; }
             .link-card-ex { padding: .85rem .95rem; gap: .8rem; }
             .link-card-ex .icon-wrap { width: 2.35rem; height: 2.35rem; border-radius: .95rem; }
             .link-card-ex .label { font-size: .92rem; }

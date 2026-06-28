@@ -1,10 +1,18 @@
-// File: src/components/Navbar.jsx
+// src/components/Navbar.js
+
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate, Link, useLocation } from "react-router-dom";
 import axios from "axios";
 import "bootstrap/dist/css/bootstrap.min.css";
 import { FaBell } from "react-icons/fa";
 import { useRoles } from "../hooks/useRoles";
+
+/* ================= BRANDING ================= */
+
+const BRAND_NAME = "SIRHIND PUBLIC SCHOOL";
+const BRAND_LOGO = `${process.env.PUBLIC_URL}/images/SPS.jpeg`;
+
+/* ========================================== */
 
 const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
   const navigate = useNavigate();
@@ -16,22 +24,16 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
     "https://via.placeholder.com/40"
   );
   const [userName, setUserName] = useState("");
-
-  // NEW: Pendings dropdown state
   const [pendingOpen, setPendingOpen] = useState(false);
-
-  // NEW: family + active student admission for switcher
   const [family, setFamily] = useState(null);
-  const [activeStudentAdmission, setActiveStudentAdmission] = useState(
-    () =>
-      localStorage.getItem("activeStudentAdmission") ||
-      localStorage.getItem("username") ||
-      ""
+  const [activeStudentAdmission, setActiveStudentAdmission] = useState(() =>
+    localStorage.getItem("activeStudentAdmission") ||
+    localStorage.getItem("username") ||
+    ""
   );
 
   const { roles = [], activeRole, changeRole } = useRoles();
 
-  // --- role helpers ---
   const roleLower = (activeRole || "").toLowerCase();
   const isSuperAdmin =
     roleLower === "superadmin" || roleLower === "super_admin";
@@ -39,10 +41,8 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
   const isStudent = roleLower === "student";
   const isParent = roleLower === "parent";
 
-  // show switcher for student or parent roles
   const canSeeStudentSwitcher = isStudent || isParent;
 
-  // --- api base + helpers ---
   const API_BASE = (process.env.REACT_APP_API_URL || "").replace(/\/+$/, "");
   const buildStudentPhotoURL = (fileName) =>
     fileName
@@ -59,7 +59,6 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
        </svg>`
     );
 
-  // Build list: current student first, then siblings
   const studentsList = useMemo(() => {
     if (!family) return [];
     const list = [];
@@ -68,7 +67,6 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
     return list;
   }, [family]);
 
-  // Try to resolve the student's photo (prefer active student's photo)
   const trySetStudentPhoto = async () => {
     try {
       const token = localStorage.getItem("token");
@@ -122,7 +120,6 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
     }
   };
 
-  // Load family from storage, keep active admission in sync
   useEffect(() => {
     const load = () => {
       try {
@@ -137,6 +134,7 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
         setFamily(null);
       }
     };
+
     load();
 
     const onFamilyUpdated = () => load();
@@ -144,13 +142,13 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
 
     window.addEventListener("family-updated", onFamilyUpdated);
     window.addEventListener("student-switched", onStudentSwitched);
+
     return () => {
       window.removeEventListener("family-updated", onFamilyUpdated);
       window.removeEventListener("student-switched", onStudentSwitched);
     };
   }, []);
 
-  // Fetch profile (name/photo). If student/parent, prefer active student's photo.
   useEffect(() => {
     const fetchProfile = async () => {
       try {
@@ -174,7 +172,7 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
             ? user.profilePhoto
             : `${API_BASE}${user.profilePhoto}`;
           setProfilePhoto(full);
-        } else if (isStudent) {
+        } else if (isStudent || isParent) {
           await trySetStudentPhoto();
         } else {
           setProfilePhoto(NO_STUDENT_PHOTO_SVG);
@@ -188,6 +186,7 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
         }
       }
     };
+
     fetchProfile();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isStudent, isParent, activeStudentAdmission]);
@@ -196,23 +195,29 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
     localStorage.removeItem("token");
     localStorage.removeItem("roles");
     localStorage.removeItem("activeRole");
-    localStorage.removeItem("family"); // ensure cleanup
-    localStorage.removeItem("activeStudentAdmission"); // ensure cleanup
+    localStorage.removeItem("family");
+    localStorage.removeItem("activeStudentAdmission");
     navigate("/");
   };
 
-  // Close profile dropdown on outside click + on Escape
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
         setDropdownOpen(false);
+        setPendingOpen(false);
       }
     };
+
     const handleEsc = (e) => {
-      if (e.key === "Escape") setDropdownOpen(false);
+      if (e.key === "Escape") {
+        setDropdownOpen(false);
+        setPendingOpen(false);
+      }
     };
+
     document.addEventListener("mousedown", handleClickOutside);
     document.addEventListener("keydown", handleEsc);
+
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
       document.removeEventListener("keydown", handleEsc);
@@ -228,12 +233,6 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
     navigate("/dashboard", { replace: true });
   };
 
-  const closeDropdownAnd = (fn) => () => {
-    setDropdownOpen(false);
-    if (typeof fn === "function") fn();
-  };
-
-  // Open chat widget when bell is clicked
   const handleBellClick = () => {
     window.dispatchEvent(new Event("chat:open-request"));
     onBellClick();
@@ -242,22 +241,17 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
   const isActive = (path) =>
     location.pathname === path || location.pathname.startsWith(path + "/");
 
-  // Handle student switch (admission number)
   const handleStudentSwitch = (admissionNumber) => {
     if (!admissionNumber || admissionNumber === activeStudentAdmission) return;
     try {
       localStorage.setItem("activeStudentAdmission", admissionNumber);
       setActiveStudentAdmission(admissionNumber);
-
-      // Update header photo to the selected student's
       trySetStudentPhoto();
 
-      // Notify app to refetch student-bound data (attendance, fees, diary, etc.)
       window.dispatchEvent(
         new CustomEvent("student-switched", { detail: { admissionNumber } })
       );
 
-      // Optional UX: navigate to dashboard
       if (isStudent || isParent) {
         navigate("/dashboard", { replace: true });
       }
@@ -268,7 +262,6 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
 
   // ---------- ROLE-BASED QUICK LINKS ----------
   const QUICK_LINKS_BY_ROLE = {
-    // Admin & Superadmin
     admin: [
       { label: "Collect", href: "/transactions", icon: "bi-cash-stack" },
       { label: "Fee Due", href: "/student-due", icon: "bi-receipt" },
@@ -291,7 +284,6 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
         icon: "bi-file-earmark-text",
       },
       { label: "Enquiries", href: "/enquiries", icon: "bi-inbox" },
-      { label: "Tracking", href: "/users-tracking", icon: "bi-activity" },
     ],
     superadmin: [
       { label: "Collect", href: "/transactions", icon: "bi-cash-stack" },
@@ -315,20 +307,17 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
         icon: "bi-file-earmark-text",
       },
       { label: "Enquiries", href: "/enquiries", icon: "bi-inbox" },
-      { label: "Tracking", href: "/users-tracking", icon: "bi-activity" },
     ],
-    // Accounts
     accounts: [
       { label: "Collect", href: "/transactions", icon: "bi-cash-stack" },
       { label: "Fee Due", href: "/student-due", icon: "bi-receipt" },
-      { label: "Day", href: "/reports/day-wise", icon: "bi-calendar2-check" },
       {
         label: "Pendings",
         href: "/reports/school-fee-summary",
         icon: "bi-list-check",
         isPendingDropdown: true,
       },
-      // ✅ Students added for accounts
+      { label: "Day", href: "/reports/day-wise", icon: "bi-calendar2-check" },
       { label: "Students", href: "/students", icon: "bi-people" },
       {
         label: "Fee Cert",
@@ -344,14 +333,13 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
     account: [
       { label: "Collect", href: "/transactions", icon: "bi-cash-stack" },
       { label: "Fee Due", href: "/student-due", icon: "bi-receipt" },
-      { label: "Day", href: "/reports/day-wise", icon: "bi-calendar2-check" },
       {
         label: "Pendings",
         href: "/reports/school-fee-summary",
         icon: "bi-list-check",
         isPendingDropdown: true,
       },
-      // ✅ Students added for account
+      { label: "Day", href: "/reports/day-wise", icon: "bi-calendar2-check" },
       { label: "Students", href: "/students", icon: "bi-people" },
       {
         label: "Fee Cert",
@@ -367,14 +355,13 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
     fee_manager: [
       { label: "Collect", href: "/transactions", icon: "bi-cash-stack" },
       { label: "Fee Due", href: "/student-due", icon: "bi-receipt" },
-      { label: "Day", href: "/reports/day-wise", icon: "bi-calendar2-check" },
       {
         label: "Pendings",
         href: "/reports/school-fee-summary",
         icon: "bi-list-check",
         isPendingDropdown: true,
       },
-      // ✅ Students added for fee_manager
+      { label: "Day", href: "/reports/day-wise", icon: "bi-calendar2-check" },
       { label: "Students", href: "/students", icon: "bi-people" },
       {
         label: "Fee Cert",
@@ -387,7 +374,6 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
         icon: "bi-trash3",
       },
     ],
-    // Academic Coordinator
     academic_coordinator: [
       { label: "TT", href: "/combined-timetable", icon: "bi-table" },
       { label: "Students", href: "/students", icon: "bi-people" },
@@ -395,7 +381,6 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
       { label: "Subs", href: "/substitution", icon: "bi-arrow-repeat" },
       { label: "Exams", href: "/exams", icon: "bi-journal-bookmark" },
     ],
-    // Teacher
     teacher: [
       { label: "Mark Att.", href: "/mark-attendance", icon: "bi-check2-square" },
       {
@@ -411,7 +396,6 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
       },
       { label: "Assign", href: "/assignments", icon: "bi-clipboard" },
     ],
-    // HR
     hr: [
       { label: "Employees", href: "/employees", icon: "bi-person-badge" },
       {
@@ -435,7 +419,6 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
         icon: "bi-calendar-check",
       },
     ],
-    // Student
     student: [
       { label: "Home", href: "/dashboard", icon: "bi-house" },
       {
@@ -451,7 +434,6 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
       },
       { label: "Fees", href: "/student-fee", icon: "bi-cash-coin" },
     ],
-    // Parent
     parent: [
       { label: "Home", href: "/dashboard", icon: "bi-house" },
       {
@@ -465,38 +447,38 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
   };
 
   const quickLinks = QUICK_LINKS_BY_ROLE[roleLower] || [];
-  const brandLogo = `${process.env.PUBLIC_URL}/images/pts_logo.png`;
 
   return (
     <>
       <nav
-        className="navbar fixed-top navbar-expand-lg navbar-light bg-white border-bottom app-header shadow-sm"
+        className="navbar fixed-top navbar-expand-lg navbar-light border-bottom app-header shadow-sm"
         role="navigation"
-        style={{ zIndex: 3000 }}
+        style={{
+          zIndex: 3000,
+          background:
+            "linear-gradient(90deg, #ffffff 0%, #f7faff 55%, #eef4ff 100%)",
+          backdropFilter: "blur(10px)",
+        }}
       >
         <div className="container-fluid px-3">
-          {/* Brand */}
           <Link
             to="/dashboard"
             className="navbar-brand d-flex align-items-center gap-2 ms-2"
           >
             <img
-              src={brandLogo}
-              alt="Pathseekers International School"
-              width={34}
-              height={34}
+              src={BRAND_LOGO}
+              alt={BRAND_NAME}
+              width={36}
+              height={36}
               className="rounded"
               style={{ objectFit: "contain" }}
               onError={(e) => {
                 e.currentTarget.style.display = "none";
               }}
             />
-            <span className="fw-semibold">
-              Pathseekers International School
-            </span>
+            <span className="fw-bold">{BRAND_NAME}</span>
           </Link>
 
-          {/* Student switcher (desktop pills) */}
           {canSeeStudentSwitcher && studentsList.length > 0 && (
             <div
               className="ms-3 d-none d-lg-flex align-items-center gap-1"
@@ -506,6 +488,7 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
               {studentsList.map((s) => {
                 const isActiveStu =
                   s.admission_number === activeStudentAdmission;
+
                 return (
                   <button
                     key={s.admission_number}
@@ -516,9 +499,9 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
                       isActiveStu ? "btn-primary" : "btn-outline-primary"
                     } rounded-pill px-3`}
                     onClick={() => handleStudentSwitch(s.admission_number)}
-                    title={`${s.name} (${
-                      s.class?.name || "—"
-                    }-${s.section?.name || "—"})`}
+                    title={`${s.name} (${s.class?.name || "—"}-${
+                      s.section?.name || "—"
+                    })`}
                     style={{
                       maxWidth: 180,
                       overflow: "hidden",
@@ -538,7 +521,6 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
             </div>
           )}
 
-          {/* Role switcher (desktop) */}
           {roles.length > 0 && (
             <div className="ms-2 d-none d-md-block">
               <label htmlFor="roleSwitcherDesktop" className="visually-hidden">
@@ -547,8 +529,8 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
               <select
                 id="roleSwitcherDesktop"
                 aria-label="Switch role"
-                className="form-select form-select-sm bg-light border-0"
-                style={{ width: 200 }}
+                className="form-select form-select-sm bg-light border-0 shadow-sm"
+                style={{ width: 200, borderRadius: 12 }}
                 value={activeRole}
                 onChange={(e) => handleRoleChange(e.target.value)}
               >
@@ -561,16 +543,13 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
             </div>
           )}
 
-          {/* Right cluster */}
           <div
             className="ms-auto d-flex align-items-center gap-2 me-3"
             ref={dropdownRef}
           >
-            {/* Quick links strip */}
             {quickLinks.length > 0 && (
               <div className="d-flex align-items-center gap-2 gap-sm-3 me-2 quick-links-strip">
                 {quickLinks.map((q) => {
-                  // Special case: Pendings dropdown (two pending pages)
                   if (q.isPendingDropdown) {
                     const pendingActive =
                       isActive("/reports/school-fee-summary") ||
@@ -591,13 +570,11 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
                           onClick={() => setPendingOpen((v) => !v)}
                         >
                           <span className="ql-icon-wrap">
-                            <i
-                              className={`bi ${q.icon}`}
-                              aria-hidden="true"
-                            />
+                            <i className={`bi ${q.icon}`} aria-hidden="true" />
                           </span>
                           <span className="qlabel">{q.label}</span>
                         </button>
+
                         <ul
                           className={`dropdown-menu dropdown-menu-end shadow-sm ${
                             pendingOpen ? "show" : ""
@@ -626,8 +603,8 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
                     );
                   }
 
-                  // Default quick-link card
                   const active = isActive(q.href);
+
                   return (
                     <Link
                       key={q.href}
@@ -648,10 +625,9 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
               </div>
             )}
 
-            {/* Notifications */}
             <button
               type="button"
-              className="btn btn-outline-secondary position-relative"
+              className="btn btn-outline-secondary position-relative shadow-sm nav-icon-btn"
               onClick={handleBellClick}
               aria-label="Notifications"
               title="Notifications"
@@ -667,10 +643,9 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
               )}
             </button>
 
-            {/* Profile dropdown */}
             <div className="dropdown">
               <button
-                className="btn btn-light d-flex align-items-center gap-2 border"
+                className="btn btn-light d-flex align-items-center gap-2 border shadow-sm profile-btn"
                 type="button"
                 id="profileDropdown"
                 aria-expanded={dropdownOpen}
@@ -681,13 +656,13 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
                   src={profilePhoto}
                   alt="Profile"
                   className="rounded-circle"
-                  style={{ width: 30, height: 30, objectFit: "cover" }}
+                  style={{ width: 32, height: 32, objectFit: "cover" }}
                   onError={(e) => {
                     e.currentTarget.src = NO_STUDENT_PHOTO_SVG;
                   }}
                   referrerPolicy="no-referrer"
                 />
-                <span className="d-none d-sm-inline">
+                <span className="d-none d-sm-inline fw-semibold">
                   {userName || "User"}
                 </span>
                 <i
@@ -727,7 +702,10 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
                 <li>
                   <button
                     className="dropdown-item"
-                    onClick={closeDropdownAnd(handleLogout)}
+                    onClick={() => {
+                      setDropdownOpen(false);
+                      handleLogout();
+                    }}
                   >
                     Logout
                   </button>
@@ -735,7 +713,6 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
               </ul>
             </div>
 
-            {/* Mobile role + student switchers */}
             <div className="ms-2 d-md-none d-flex align-items-center gap-2">
               {roles.length > 0 && (
                 <div>
@@ -794,14 +771,23 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
         </div>
       </nav>
 
-      {/* Little CSS helpers */}
       <style>{`
-        /* Keep quick links in one line and compact */
-        .quick-links-strip { white-space: nowrap; }
+        .app-header {
+          background-color: #ffffff !important;
+        }
+
+        .navbar-brand span {
+          color: #102a56;
+          letter-spacing: 0.2px;
+        }
+
+        .quick-links-strip {
+          white-space: nowrap;
+        }
 
         .quick-link-icon {
-          min-width: 60px;
-          color: #343a40 !important;
+          min-width: 62px;
+          color: #24324a !important;
           transition: color .2s ease, transform .15s ease;
           display: inline-flex;
           flex-direction: column;
@@ -812,17 +798,17 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          width: 44px;
-          height: 44px;
-          border-radius: 12px;
-          background: linear-gradient(145deg, #f8f9fa, #e9ecef);
-          border: 1px solid #dee2e6;
-          box-shadow: 0 2px 4px rgba(0,0,0,.08);
+          width: 46px;
+          height: 46px;
+          border-radius: 14px;
+          background: linear-gradient(145deg, #ffffff, #edf4ff);
+          border: 1px solid #d8e6ff;
+          box-shadow: 0 8px 18px rgba(16, 42, 86, 0.08);
           transition: all .2s ease;
         }
 
         .quick-link-icon i {
-          font-size: 1.25rem;
+          font-size: 1.2rem;
           font-weight: 600;
           line-height: 1;
         }
@@ -830,64 +816,103 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
         .quick-link-icon .qlabel {
           display: block;
           font-size: 0.75rem;
-          font-weight: 500;
-          margin-top: 4px;
-          letter-spacing: .3px;
+          font-weight: 600;
+          margin-top: 5px;
+          letter-spacing: .2px;
         }
 
-        /* Hover state */
         .quick-link-icon:hover {
           color: #0d6efd !important;
           transform: translateY(-2px) scale(1.05);
         }
+
         .quick-link-icon:hover .ql-icon-wrap {
-          background: linear-gradient(145deg, #eaf3ff, #dbe7ff);
-          border-color: #cfe2ff;
-          box-shadow: 0 4px 8px rgba(13,110,253,.2);
+          background: linear-gradient(145deg, #eef5ff, #dce9ff);
+          border-color: #bfd8ff;
+          box-shadow: 0 10px 22px rgba(13, 110, 253, 0.18);
         }
 
-        /* Active route state */
         .quick-link-icon.ql-active {
           color: #0b5ed7 !important;
         }
+
         .quick-link-icon.ql-active .ql-icon-wrap {
-          background: linear-gradient(145deg, #e0edff, #cfe2ff);
+          background: linear-gradient(145deg, #dfeeff, #cfe2ff);
           border-color: #91c3ff;
-          box-shadow: 0 0 0 3px rgba(13,110,253,.2), 0 4px 10px rgba(13,110,253,.25);
+          box-shadow: 0 0 0 3px rgba(13,110,253,.15), 0 8px 18px rgba(13,110,253,.18);
         }
 
-        /* Pendings dropdown behaviour */
         .quick-link-dropdown .dropdown-menu {
           min-width: 260px;
-          padding: 0.25rem 0;
+          padding: 0.3rem 0;
+          border-radius: 14px;
+          border: 1px solid #e5edff;
+          overflow: hidden;
         }
+
         .quick-link-dropdown .dropdown-item {
-          font-size: 0.8rem;
-          padding: 0.35rem 0.8rem;
+          font-size: 0.82rem;
+          padding: 0.45rem 0.9rem;
         }
 
-        /* Tighten pill buttons a bit */
-        @media (min-width: 992px) {
-          .btn.rounded-pill { line-height: 1.1; }
+        .profile-btn,
+        .nav-icon-btn {
+          border-radius: 14px !important;
         }
 
-        /* Dark mode tweaks */
-        @media (prefers-color-scheme: dark) {
-          .quick-link-icon { color: #e9ecef !important; }
+        @media (max-width: 1199px) {
+          .quick-links-strip {
+            gap: 0.6rem !important;
+          }
+
+          .quick-link-icon {
+            min-width: 56px;
+          }
+
           .quick-link-icon .ql-icon-wrap {
-            background: linear-gradient(145deg, #2a2f36, #23272e);
-            border-color: #3a3f47;
-            box-shadow: 0 2px 4px rgba(0,0,0,.4);
+            width: 42px;
+            height: 42px;
           }
+
+          .quick-link-icon .qlabel {
+            font-size: 0.7rem;
+          }
+        }
+
+        @media (max-width: 991px) {
+          .quick-links-strip {
+            display: none !important;
+          }
+        }
+
+        @media (prefers-color-scheme: dark) {
+          .app-header {
+            background: linear-gradient(90deg, #111827 0%, #0f172a 100%) !important;
+          }
+
+          .navbar-brand span {
+            color: #f8fafc;
+          }
+
+          .quick-link-icon {
+            color: #e5e7eb !important;
+          }
+
+          .quick-link-icon .ql-icon-wrap {
+            background: linear-gradient(145deg, #1f2937, #111827);
+            border-color: #374151;
+            box-shadow: 0 2px 8px rgba(0,0,0,.35);
+          }
+
           .quick-link-icon:hover .ql-icon-wrap {
-            background: linear-gradient(145deg, #1e2d44, #24344f);
-            border-color: #2f4b6a;
-            box-shadow: 0 4px 10px rgba(0,0,0,.55);
+            background: linear-gradient(145deg, #1d4ed8, #1e3a8a);
+            border-color: #3b82f6;
           }
+
           .quick-link-icon.ql-active .ql-icon-wrap {
-            background: linear-gradient(145deg, #23406a, #1e3557);
-            border-color: #3a6db8;
-            box-shadow: 0 0 0 3px rgba(13,110,253,.35), 0 4px 12px rgba(13,110,253,.35);
+            background: linear-gradient(145deg, #2563eb, #1d4ed8);
+            border-color: #60a5fa;
+            box-shadow: 0 0 0 3px rgba(96,165,250,.2), 0 4px 12px rgba(37,99,235,.28);
           }
         }
       `}</style>

@@ -3725,7 +3725,6 @@ const Transactions = () => {
           setEditingTransaction(null);
           setShowModal(false);
         }}
-        centered
         size="xl"
         fullscreen="md-down"
         scrollable
@@ -3737,14 +3736,17 @@ const Transactions = () => {
 
         <Modal.Body>
           <style>{`
-            .collection-modal .modal-dialog {
+            .modal-dialog.collection-modal {
               max-width: min(99vw, 1680px);
-              margin: 0.5rem auto;
+              width: 99vw;
+              margin: 0.35rem auto;
+              height: calc(100dvh - 0.7rem);
             }
-            .collection-modal .modal-content {
+            .modal-dialog.collection-modal .modal-content {
               border: 0;
               border-radius: 18px;
               overflow: hidden;
+              max-height: calc(100dvh - 0.7rem);
             }
             .collection-modal .modal-header {
               background: linear-gradient(135deg, #0d6efd 0%, #0b5ed7 100%);
@@ -3754,9 +3756,10 @@ const Transactions = () => {
             .collection-modal .modal-header .btn-close {
               filter: invert(1);
             }
-            .collection-modal .modal-body {
+            .modal-dialog.collection-modal .modal-body {
               background: #f8fbff;
-              padding: 0.75rem;
+              padding: 0.65rem;
+              overflow-y: auto;
             }
             .collection-panel {
               background: #fff;
@@ -3767,13 +3770,14 @@ const Transactions = () => {
             .collection-table-wrap {
               width: 100%;
               overflow: auto;
-              max-height: 72vh;
+              max-height: calc(100dvh - 330px);
+              min-height: 260px;
               border: 1px solid #dee2e6;
               border-radius: 12px;
               background: #fff;
             }
             .collection-table-wrap table {
-              min-width: 980px;
+              min-width: 1180px;
             }
             .edit-grid .form-label,
             .collection-details-grid .form-label {
@@ -3835,12 +3839,49 @@ const Transactions = () => {
             .fee-toolbar-card .card-body {
               padding: 0.6rem 0.9rem;
             }
+            @media (max-height: 820px) {
+              .modal-dialog.collection-modal {
+                margin: 0.2rem auto;
+                height: calc(100dvh - 0.4rem);
+              }
+              .modal-dialog.collection-modal .modal-content {
+                max-height: calc(100dvh - 0.4rem);
+              }
+              .modal-dialog.collection-modal .modal-body {
+                padding: 0.5rem;
+              }
+              .selected-student-strip {
+                padding: 0.45rem 0.65rem;
+                margin-bottom: 0.4rem;
+              }
+              .selected-student-name {
+                font-size: 0.9rem;
+              }
+              .selected-student-meta {
+                font-size: 0.78rem;
+                gap: 0.25rem 0.55rem;
+              }
+              .compact-card .card-body,
+              .fee-toolbar-card .card-body {
+                padding: 0.5rem 0.65rem;
+              }
+              .collection-table-wrap {
+                max-height: calc(100dvh - 300px);
+                min-height: 240px;
+              }
+              .collection-details-grid .form-control,
+              .collection-details-grid .form-select {
+                min-height: 32px;
+                padding: 0.25rem 0.5rem;
+                font-size: 0.85rem;
+              }
+            }
             @media (max-width: 768px) {
-              .collection-modal .modal-body {
+              .modal-dialog.collection-modal .modal-body {
                 padding: 0.65rem;
               }
               .collection-table-wrap {
-                max-height: 65vh;
+                max-height: 65dvh;
               }
               .collection-modal .modal-footer {
                 padding: 0.75rem;

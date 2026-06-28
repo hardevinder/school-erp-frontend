@@ -39,6 +39,7 @@ import StudentTransportFeeHeadAmounts from "./pages/StudentTransportFeeHeadAmoun
 import ModeOfTransactions from "./pages/ModeOfTransactions";
 import SchoolBankAccounts from "./pages/SchoolBankAccounts";
 import PaymentGatewaySettings from "./pages/PaymentGatewaySettings";  
+import AISettings from "./pages/AISettings";
 
 import Transactions from "./pages/Transactions/Transactions";
 import CancelledTransactions from "./pages/Transactions/CancelledTransactions";
@@ -126,6 +127,7 @@ import ReligionGenderReport from "./pages/ReligionGenderReport";
 import DigitalDiary from "./pages/DigitalDiary";
 import StudentDiary from "./pages/StudentDiary";
 import DiaryDetail from "./pages/DiaryDetail";
+import CoordinatorDigitalDiaryMonitor from "./pages/CoordinatorDigitalDiaryMonitor";
 import AccountsDashboard from "./components/AccountsDashboard";
 import TransportSummary from "./pages/TransportSummary";
 import UserTracking from "./pages/UserTracking";
@@ -184,6 +186,8 @@ import AdmissionSyllabusCRUD from "./pages/AdmissionSyllabusCRUD";
 import SyllabusApprovalCoordinator from "./pages/SyllabusApprovalCoordinator";
 
 import LessonPlanEvaluations from "./pages/LessonPlanEvaluations";
+import StudentLessonPlanEvaluationResultSheet from "./pages/StudentLessonPlanEvaluationResultSheet";
+import StudentLessonPlans from "./pages/StudentLessonPlans";
 import AdmissionAssessments from "./pages/AdmissionAssessments";
 import EntranceExamPortal from "./pages/EntranceExamPortal";
 import InventoryDashboard from "./components/InventoryDashboard";
@@ -796,6 +800,15 @@ function App() {
               }
             />
 
+            <Route
+              path="/ai-settings"
+              element={
+                <RequireRole roles={["admin", "superadmin"]}>
+                  <AISettings />
+                </RequireRole>
+              }
+            />
+
           <Route path="/student-due" element={<StudentDueTable />} />
           <Route
                 path="/student-fee-head-collection"
@@ -929,6 +942,24 @@ function App() {
               </RequireRole>
             }
           />
+
+          <Route
+            path="/lesson-plans/:lessonPlanId/student-evaluations/:evaluationId/results"
+            element={
+              <RequireRole
+                roles={[
+                  "teacher",
+                  "academic_coordinator",
+                  "admin",
+                  "superadmin",
+                  "principal",
+                  "coordinator",
+                ]}
+              >
+                <StudentLessonPlanEvaluationResultSheet />
+              </RequireRole>
+            }
+          />
           <Route path="/mark-attendance" element={<MarkAttendance />} />
           <Route path="/attendance-calendar" element={<AttendanceCalendar />} />
           <Route path="/leave-requests" element={<TeacherLeaveRequests />} />
@@ -943,6 +974,15 @@ function App() {
           {/* Student self-service */}
           <Route path="/student-fee" element={<StudentFeePage />} />
           <Route path="/student-attendance" element={<StudentAttendance />} />
+
+          <Route
+            path="/student-lesson-plans"
+            element={
+              <RequireRole roles={["student", "parent", "admin", "superadmin"]}>
+                <StudentLessonPlans />
+              </RequireRole>
+            }
+          />
 
           {/* Exam / Results */}
           <Route path="/exam-schemes" element={<ExamSchemeManagement />} />
@@ -1016,6 +1056,19 @@ function App() {
           {/* Digital Diary */}
           <Route path="/digital-diary" element={<DigitalDiary />} />
           <Route path="/diary-feed" element={<DigitalDiary />} />
+
+          {/* ✅ Coordinator Digital Diary Monitor */}
+          <Route
+            path="/coordinator-digital-diaries"
+            element={
+              <RequireRole roles={["superadmin", "admin", "academic_coordinator", "coordinator", "principal"]}>
+                <CoordinatorDigitalDiaryMonitor />
+              </RequireRole>
+            }
+          />
+          <Route path="/digital-diary-monitor" element={<Navigate to="/coordinator-digital-diaries" replace />} />
+          <Route path="/coordinator/diaries" element={<Navigate to="/coordinator-digital-diaries" replace />} />
+
           <Route path="/student-diary" element={<StudentDiary />} />
           <Route path="/diary/:id" element={<DiaryDetail />} />
 

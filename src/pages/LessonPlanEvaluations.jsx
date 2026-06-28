@@ -1,4 +1,5 @@
   // src/pages/LessonPlanEvaluations.jsx
+// ✅ UPDATED: clearer Student Marks & Remarks Entry, manual remarks, no overlapping accordion/table layout
   import React, { useEffect, useMemo, useState } from "react";
   import { useNavigate, useParams } from "react-router-dom";
   import api from "../api";
@@ -234,6 +235,33 @@
     return Number.isFinite(n) ? n : null;
   };
 
+  // ✅ Answer-key visibility helper
+  const getAnswersVisibleToStudents = (evaluation) => {
+    if (!evaluation) return false;
+
+    const cfg =
+      evaluation?.config ||
+      safeJsonParse(evaluation?.configJson, null) ||
+      safeJsonParse(evaluation?.configurationJson, null) ||
+      {};
+
+    return Boolean(
+      evaluation?.answersVisibleToStudents === true ||
+        evaluation?.answerKeyVisibleToStudents === true ||
+        evaluation?.showAnswersToStudents === true ||
+        evaluation?.answersPublishedAt ||
+        cfg?.answersVisibleToStudents === true ||
+        cfg?.answerKeyVisibleToStudents === true ||
+        cfg?.showAnswersToStudents === true ||
+        cfg?.answersPublishedAt
+    );
+  };
+
+  const isMissingEndpoint = (err) => {
+    const status = Number(err?.response?.status);
+    return status === 404 || status === 405;
+  };
+
   // ✅ helper: clamp percent safely
   const clampPercent = (p) => {
     const n = Number(p);
@@ -271,6 +299,7 @@
     const [activeEvalId, setActiveEvalId] = useState(null);
     const [activeEval, setActiveEval] = useState(null);
     const [activeLoading, setActiveLoading] = useState(false);
+    const [answersVisibilityBusy, setAnswersVisibilityBusy] = useState(false);
     // ADD HERE
     const [leftCollapsed, setLeftCollapsed] = useState(false);
 
@@ -300,7 +329,7 @@
     const [analytics, setAnalytics] = useState(null);
 
     // ✅ Analytics UI control
-    const [openKeys, setOpenKeys] = useState(["0"]); // which accordion items open
+    const [openKeys, setOpenKeys] = useState(["1"]); // marks entry open by default
     const [analyticsTab, setAnalyticsTab] = useState("dashboard"); // dashboard | students | raw
 
     // ✅ AI (Questions generator)
@@ -363,6 +392,10 @@
 
     const canEditActive = useMemo(() => {
       return asUpper(activeEval?.status || "DRAFT") === "DRAFT";
+    }, [activeEval]);
+
+    const activeAnswersVisibleToStudents = useMemo(() => {
+      return getAnswersVisibleToStudents(activeEval);
     }, [activeEval]);
 
     const computedTotalMarks = useMemo(() => {
@@ -796,9 +829,15 @@
       if (!id) return;
       try {
         const qs = withAnswers ? "?answers=1" : "";
-        const endpoint = `/lesson-plan-evaluations/${id}/pdf${qs}`;
 
-        const res = await api.get(endpoint, { responseType: "blob" });
+        // ✅ Keep old route first, fallback to new lesson-plans route added in backend update.
+        let res;
+        try {
+          res = await api.get(`/lesson-plan-evaluations/${id}/pdf${qs}`, { responseType: "blob" });
+        } catch (e1) {
+          if (!isMissingEndpoint(e1)) throw e1;
+          res = await api.get(`/lesson-plans/evaluations/${id}/pdf${qs}`, { responseType: "blob" });
+        }
 
         const blob = new Blob([res.data], { type: "application/pdf" });
         const blobUrl = window.URL.createObjectURL(blob);
@@ -1250,7 +1289,16 @@
     const publishEvaluation = async (id) => {
       if (!id) return;
       try {
-        const res = await api.post(`/lesson-plan-evaluations/${id}/publish`);
+        let res;
+
+        // ✅ Keep old endpoint first, fallback to backend route inside /lesson-plans.
+        try {
+          res = await api.post(`/lesson-plan-evaluations/${id}/publish`);
+        } catch (e1) {
+          if (!isMissingEndpoint(e1)) throw e1;
+          res = await api.patch(`/lesson-plans/evaluations/${id}/publish`);
+        }
+
         fireTop({ icon: "success", title: "Success", text: "Evaluation published" });
         await fetchEvaluations();
 
@@ -1261,6 +1309,94 @@
       } catch (e) {
         const msg = e?.response?.data?.message || e?.response?.data?.error || "Publish failed";
         fireTop({ icon: "error", title: "Error", text: msg });
+      }
+    };
+
+    const setAnswerVisibilityForStudents = async (id, visible) => {
+      if (!id) return;
+
+      const actionText = visible ? "show answer key to students" : "hide answer key from students";
+
+      const r = await fireTop({
+        icon: visible ? "question" : "warning",
+        title: visible ? "Show answers to students?" : "Hide answers from students?",
+        text: visible
+          ? "Students will be able to view/download this same evaluation with the answer key."
+          : "Students will only see the question paper again. Teacher answer PDF will still work.",
+        showCancelButton: true,
+        confirmButtonText: visible ? "Yes, show" : "Yes, hide",
+      });
+
+      if (!r.isConfirmed) return;
+
+      setAnswersVisibilityBusy(true);
+      try {
+        let res;
+
+        // ✅ New backend route from lesson-plans router, fallback to separate evaluation router if mounted.
+        try {
+          res = await api.patch(`/lesson-plans/evaluations/${id}/answers-visibility`, { visible });
+        } catch (e1) {
+          if (!isMissingEndpoint(e1)) throw e1;
+          res = await api.patch(`/lesson-plan-evaluations/${id}/answers-visibility`, { visible });
+        }
+
+        const ev = normalizeEvalFromApi(res?.data);
+        if (ev) setActiveEval(ev);
+        else {
+          setActiveEval((prev) => {
+            if (!prev) return prev;
+            const cfg = { ...(prev.config || {}) };
+            cfg.answersVisibleToStudents = visible;
+            cfg.showAnswersToStudents = visible;
+            cfg.answersPublishedAt = visible ? new Date().toISOString() : null;
+            return {
+              ...prev,
+              config: cfg,
+              answersVisibleToStudents: visible,
+              showAnswersToStudents: visible,
+              answersPublishedAt: cfg.answersPublishedAt,
+            };
+          });
+        }
+
+        setEvals((prev) =>
+          (prev || []).map((x) => {
+            if (Number(x?.id) !== Number(id)) return x;
+            const cfg = { ...(x.config || safeJsonParse(x.configJson, {}) || {}) };
+            cfg.answersVisibleToStudents = visible;
+            cfg.showAnswersToStudents = visible;
+            cfg.answersPublishedAt = visible ? new Date().toISOString() : null;
+            return {
+              ...x,
+              config: cfg,
+              answersVisibleToStudents: visible,
+              showAnswersToStudents: visible,
+              answersPublishedAt: cfg.answersPublishedAt,
+            };
+          })
+        );
+
+        await fetchEvaluations();
+        await fetchEvaluationById(id);
+
+        fireTop({
+          icon: "success",
+          title: "Updated",
+          text: visible
+            ? "Answer key is now visible to students."
+            : "Answer key is now hidden from students.",
+          timer: 1600,
+          showConfirmButton: false,
+        });
+      } catch (e) {
+        const msg =
+          e?.response?.data?.message ||
+          e?.response?.data?.error ||
+          `Failed to ${actionText}.`;
+        fireTop({ icon: "error", title: "Answer Key", text: msg });
+      } finally {
+        setAnswersVisibilityBusy(false);
       }
     };
 
@@ -1583,11 +1719,11 @@
     }, [selectedStudentRow, activeEval, passMarks]);
 
     return (
-      <div className="container-fluid py-3">
+      <div className="container-fluid py-3 lesson-eval-page">
         <Row className="g-3 align-items-center mb-2">
           <Col xs={12} md={7}>
             <div className="d-flex align-items-center gap-2">
-              <Button variant="outline-secondary" size="sm" onClick={() => navigate("/lesson-plans")}>
+              <Button variant="outline-secondary" size="sm" onClick={() => navigate("/lesson-plan")}>
                 ← Back
               </Button>
               <div>
@@ -1672,6 +1808,11 @@
                           <div className="d-flex gap-2">
                             <Badge bg={typeBadge(ev.type)}>{asUpper(ev.type || "-")}</Badge>
                             <Badge bg={statusBadge(ev.status)}>{asUpper(ev.status || "DRAFT")}</Badge>
+                            {getAnswersVisibleToStudents(ev) ? (
+                              <Badge bg="warning" text="dark">
+                                Ans ON
+                              </Badge>
+                            ) : null}
                           </div>
                         </div>
                         <div className="text-muted small mt-1">
@@ -1734,6 +1875,18 @@
 
           <Button
             size="sm"
+            variant="outline-info"
+            disabled={!activeEvalId}
+            onClick={() =>
+              navigate(`/lesson-plans/${lessonPlanId}/student-evaluations/${activeEvalId}/results`)
+            }
+            title="Open full student marks/result sheet page"
+          >
+            👨‍🎓 Student Result Sheet
+          </Button>
+
+          <Button
+            size="sm"
             variant="outline-dark"
             disabled={!activeEvalId}
             onClick={() => downloadEvaluationPdf(activeEvalId, false)}
@@ -1750,6 +1903,28 @@
             title="Open PDF with answers"
           >
             📄 Answers
+          </Button>
+
+          <Button
+            size="sm"
+            variant={activeAnswersVisibleToStudents ? "warning" : "outline-warning"}
+            disabled={!activeEvalId || asUpper(activeEval?.status) !== "PUBLISHED" || answersVisibilityBusy}
+            onClick={() =>
+              setAnswerVisibilityForStudents(activeEvalId, !activeAnswersVisibleToStudents)
+            }
+            title={
+              asUpper(activeEval?.status) === "PUBLISHED"
+                ? activeAnswersVisibleToStudents
+                  ? "Hide answer key from students"
+                  : "Show answer key to students"
+                : "Publish evaluation before showing answers to students"
+            }
+          >
+            {answersVisibilityBusy
+              ? "Updating..."
+              : activeAnswersVisibleToStudents
+              ? "🔐 Hide Student Answers"
+              : "🔓 Show Student Answers"}
           </Button>
 
           <Button size="sm" variant="primary" disabled={!activeEvalId || !canEditActive} onClick={openEdit}>
@@ -1809,8 +1984,55 @@
                 <Badge bg="light" text="dark" className="px-3 py-2">
                   Time: {activeEval.timeMinutes ?? "-"} min
                 </Badge>
+                <Badge
+                  bg={activeAnswersVisibleToStudents ? "warning" : "light"}
+                  text="dark"
+                  className="px-3 py-2"
+                >
+                  Student Answers: {activeAnswersVisibleToStudents ? "ON" : "OFF"}
+                </Badge>
               </Col>
             </Row>
+
+            <Card className={`border-0 mb-3 ${activeAnswersVisibleToStudents ? "bg-warning bg-opacity-10" : "bg-light"}`}>
+              <Card.Body className="py-2">
+                <div className="d-flex justify-content-between align-items-center gap-2 flex-wrap">
+                  <div>
+                    <div className="fw-semibold small">Student Answer Key Visibility</div>
+                    <div className="text-muted small">
+                      {activeAnswersVisibleToStudents
+                        ? "Students can now view/download this evaluation with the answer key."
+                        : "Students can view/download only the question paper. Answer key is hidden."}
+                    </div>
+                  </div>
+
+                  <Button
+                    size="sm"
+                    variant={activeAnswersVisibleToStudents ? "outline-dark" : "warning"}
+                    disabled={
+                      !activeEvalId ||
+                      asUpper(activeEval?.status) !== "PUBLISHED" ||
+                      answersVisibilityBusy
+                    }
+                    onClick={() =>
+                      setAnswerVisibilityForStudents(activeEvalId, !activeAnswersVisibleToStudents)
+                    }
+                  >
+                    {answersVisibilityBusy
+                      ? "Updating..."
+                      : activeAnswersVisibleToStudents
+                      ? "Hide from Students"
+                      : "Show Answers to Students"}
+                  </Button>
+                </div>
+
+                {asUpper(activeEval?.status) !== "PUBLISHED" ? (
+                  <div className="text-muted small mt-1">
+                    Publish this evaluation first, then answer key visibility can be enabled for students.
+                  </div>
+                ) : null}
+              </Card.Body>
+            </Card>
 
             {/* Instructions */}
             {safeStr(activeEval?.config?.instructions || activeEval?.instructions).trim() ? (
@@ -1840,7 +2062,7 @@
                   {!activeItems.length ? (
                     <div className="text-muted">No items found for this evaluation.</div>
                   ) : (
-                    <div className="table-responsive">
+                    <div className="table-responsive lesson-eval-questions-scroll">
                       <Table className="mb-0 align-middle" hover>
                         <thead className="table-light">
                           <tr>
@@ -1911,7 +2133,7 @@
                     )
                   }
                 >
-                  Marks Entry (Students Auto List)
+                  Student Marks & Remarks Entry
                 </Accordion.Header>
                 <Accordion.Body>
                   {!lessonPlan?.classId ? (
@@ -2060,7 +2282,7 @@
                                 disabled={resultsSaving || !activeEvalId}
                                 onClick={saveResults}
                               >
-                                {resultsSaving ? "Saving..." : "Save Marks"}
+                                {resultsSaving ? "Saving..." : "Save Student Marks"}
                               </Button>
                             </div>
                           </div>
@@ -2071,8 +2293,21 @@
                         </Card.Body>
                       </Card>
 
-                      <div className="table-responsive">
-                        <Table className="mb-0 align-middle" hover size="sm">
+                      <Card className="border-0 mb-2 lesson-eval-help-card">
+                        <Card.Body className="py-2">
+                          <div className="d-flex flex-wrap gap-2 align-items-center justify-content-between">
+                            <div className="small">
+                              <b>How to fill:</b> 1) Enter marks in the <b>Marks</b> box. 2) Type remark manually or click <b>AI Remarks</b>. 3) Click <b>Save Student Marks</b>.
+                            </div>
+                            <div className="small text-muted">
+                              Blank students are skipped. Use <b>Absent</b> to set 0 + ABSENT remark.
+                            </div>
+                          </div>
+                        </Card.Body>
+                      </Card>
+
+                      <div className="table-responsive lesson-eval-marks-scroll">
+                        <Table className="mb-0 align-middle lesson-eval-marks-table" hover size="sm">
                           <thead className="table-light">
                             <tr>
                               <th style={{ width: 60 }}>#</th>
@@ -2081,7 +2316,7 @@
                               <th style={{ width: 90 }}>Roll</th>
                               <th style={{ width: 140 }}>Section</th>
                               <th style={{ width: 160 }}>Marks</th>
-                              <th style={{ width: 260, minWidth: 220 }}>AI Remark</th>
+                              <th style={{ width: 340, minWidth: 280 }}>Marks Remark</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -2179,43 +2414,74 @@
                                         </Button>
                                       ) : null}
                                     </InputGroup>
+                                    <div className="d-flex gap-1 flex-wrap mt-1">
+                                      <Button
+                                        size="sm"
+                                        variant="outline-warning"
+                                        className="lesson-eval-mini-btn"
+                                        onClick={() => {
+                                          patchMark(ref, "0");
+                                          setRemarksMap((prev) => ({ ...(prev || {}), [ref]: "ABSENT" }));
+                                        }}
+                                      >
+                                        Absent
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="outline-secondary"
+                                        className="lesson-eval-mini-btn"
+                                        onClick={() => {
+                                          patchMark(ref, "");
+                                          setRemarksMap((prev) => ({ ...(prev || {}), [ref]: "" }));
+                                        }}
+                                      >
+                                        Clear Row
+                                      </Button>
+                                    </div>
                                     {bad ? (
                                       <div className="text-danger small mt-1">
                                         {Number.isFinite(total) ? `Enter 0 to ${total}` : "Enter valid number"}
                                       </div>
                                     ) : null}
                                   </td>
-                                  <td style={{ maxWidth: 260, whiteSpace: "normal", wordBreak: "break-word" }}>
-                                        {remark ? (
-                                          <div className="small" style={{ whiteSpace: "normal", wordBreak: "break-word", lineHeight: 1.4 }}>
-                                            <span className="me-2">📝</span>
-                                            {truncateText(remark)}
-                                            {remark.length > REMARK_PREVIEW ? (
-                                              <Button
-                                                variant="link"
-                                                size="sm"
-                                                className="p-0 ms-2 align-baseline"
-                                                onClick={() =>
-                                                  openStudentDetail({
-                                                    ref,
-                                                    name,
-                                                    section: secName,
-                                                    marks: validMarks ? marksNum : null,
-                                                    percent,
-                                                    status,
-                                                    remark: remark || null,
-                                                    photoUrl: pickStudentPhoto(s),
-                                                  })
-                                                }
-                                              >
-                                                View
-                                              </Button>
-                                            ) : null}
-                                          </div>
-                                        ) : (
-                                          <span className="text-muted small">—</span>
-                                        )}
-                                    </td>
+                                  <td style={{ minWidth: 280 }}>
+                                    <Form.Control
+                                      as="textarea"
+                                      rows={2}
+                                      value={remark}
+                                      onChange={(e) =>
+                                        setRemarksMap((prev) => ({ ...(prev || {}), [ref]: e.target.value }))
+                                      }
+                                      placeholder="Type remark here or use AI Remarks"
+                                      className="lesson-eval-remark-input"
+                                    />
+                                    {remark ? (
+                                      <div className="small text-muted mt-1" style={{ whiteSpace: "normal", wordBreak: "break-word", lineHeight: 1.35 }}>
+                                        Preview: {truncateText(remark, 70)}
+                                        {remark.length > 70 ? (
+                                          <Button
+                                            variant="link"
+                                            size="sm"
+                                            className="p-0 ms-2 align-baseline"
+                                            onClick={() =>
+                                              openStudentDetail({
+                                                ref,
+                                                name,
+                                                section: secName,
+                                                marks: validMarks ? marksNum : null,
+                                                percent,
+                                                status,
+                                                remark: remark || null,
+                                                photoUrl: photoMap?.[ref] || pickStudentPhoto(s),
+                                              })
+                                            }
+                                          >
+                                            View full
+                                          </Button>
+                                        ) : null}
+                                      </div>
+                                    ) : null}
+                                  </td>
                                 </tr>
                               );
                             })}
@@ -2241,12 +2507,12 @@
                           disabled={resultsSaving || !activeEvalId}
                           onClick={saveResults}
                         >
-                          {resultsSaving ? "Saving..." : "Save Marks"}
+                          {resultsSaving ? "Saving..." : "Save Student Marks"}
                         </Button>
                       </div>
 
                       <div className="text-muted small mt-2">
-                        Note: Only filled marks are sent to server. Blank students are skipped.
+                        Note: Enter marks and optional remarks. Only students with marks are saved. Blank students are skipped.
                       </div>
                     </>
                   )}
@@ -2418,7 +2684,7 @@
                                 <th style={{ width: 120 }}>Marks</th>
                                 <th style={{ minWidth: 240 }}>Progress</th>
                                 <th style={{ width: 120 }}>Status</th>
-                                <th style={{ width: 260, minWidth: 220 }}>AI Remark</th>
+                                <th style={{ width: 340, minWidth: 280 }}>Marks Remark</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -3039,6 +3305,96 @@
             </Button>
           </Modal.Footer>
         </Modal>
+
+        <style>{`
+          .lesson-eval-page .accordion {
+            position: relative;
+            z-index: 1;
+          }
+
+          .lesson-eval-page .accordion-item {
+            position: relative;
+            z-index: 1;
+            overflow: visible;
+            border: 1px solid #e5e7eb !important;
+            border-radius: 14px !important;
+            margin-bottom: 10px;
+            background: #fff;
+          }
+
+          .lesson-eval-page .accordion-button {
+            font-weight: 800;
+            box-shadow: none !important;
+            border-radius: 14px !important;
+            background: #fff;
+          }
+
+          .lesson-eval-page .accordion-button:not(.collapsed) {
+            color: #1f2937;
+            background: #f8faff;
+            border-bottom: 1px solid #e5e7eb;
+          }
+
+          .lesson-eval-page .accordion-collapse,
+          .lesson-eval-page .accordion-body {
+            position: static !important;
+            z-index: auto !important;
+            overflow: visible !important;
+          }
+
+          .lesson-eval-questions-scroll {
+            max-height: 430px;
+            overflow: auto !important;
+            border: 1px solid #edf0f7;
+            border-radius: 12px;
+            background: #fff;
+          }
+
+          .lesson-eval-marks-scroll {
+            max-height: 72vh;
+            overflow: auto !important;
+            border: 1px solid #edf0f7;
+            border-radius: 14px;
+            background: #fff;
+          }
+
+          .lesson-eval-marks-scroll table {
+            min-width: 1080px;
+          }
+
+          .lesson-eval-marks-scroll thead th,
+          .lesson-eval-questions-scroll thead th {
+            position: sticky;
+            top: 0;
+            z-index: 3;
+            background: #f8f9fa !important;
+          }
+
+          .lesson-eval-help-card {
+            background: #eff6ff !important;
+            border: 1px solid #bfdbfe !important;
+            color: #1e3a8a;
+          }
+
+          .lesson-eval-remark-input {
+            min-height: 62px;
+            resize: vertical;
+            font-size: 0.875rem;
+          }
+
+          .lesson-eval-mini-btn {
+            padding: 0.15rem 0.45rem !important;
+            font-size: 0.72rem !important;
+          }
+
+          @media (max-width: 768px) {
+            .lesson-eval-marks-scroll,
+            .lesson-eval-questions-scroll {
+              max-height: none;
+            }
+          }
+        `}</style>
+
       </div>
     );
   };
