@@ -39,6 +39,7 @@ import StudentTransportFeeHeadAmounts from "./pages/StudentTransportFeeHeadAmoun
 import ModeOfTransactions from "./pages/ModeOfTransactions";
 import SchoolBankAccounts from "./pages/SchoolBankAccounts";
 import PaymentGatewaySettings from "./pages/PaymentGatewaySettings";  
+import WhatsAppApiSettings from "./pages/WhatsAppApiSettings";
 import AISettings from "./pages/AISettings";
 
 import Transactions from "./pages/Transactions/Transactions";
@@ -796,6 +797,15 @@ function App() {
               element={
                 <RequireRole roles={["accounts", "admin", "superadmin"]}>
                   <PaymentGatewaySettings />
+                </RequireRole>
+              }
+            />
+
+            <Route
+              path="/whatsapp-api-settings"
+              element={
+                <RequireRole roles={["accounts", "account", "admin", "superadmin"]}>
+                  <WhatsAppApiSettings />
                 </RequireRole>
               }
             />

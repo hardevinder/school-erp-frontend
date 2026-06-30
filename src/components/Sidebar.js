@@ -744,6 +744,13 @@ export default function Sidebar({ headerHeight = 56 }) {
             roles: ["accounts", "account", "admin", "superadmin"],
           },
           {
+            key: "whatsapp-api-settings-accounts",
+            label: "WhatsApp API",
+            icon: "bi-whatsapp",
+            path: "/whatsapp-api-settings",
+            roles: ["accounts", "account", "admin", "superadmin"],
+          },
+          {
             key: "feeCategory",
             label: "Fee Category",
             icon: "bi-tags",
@@ -942,6 +949,7 @@ export default function Sidebar({ headerHeight = 56 }) {
           { key: "mode-of-transactions", label: "Mode of Transactions", icon: "bi-credit-card-2-front", path: "/mode-of-transactions", roles: ["accounts", "admin", "superadmin"] },
           { key: "school-bank-accounts", label: "School Bank Accounts", icon: "bi-bank", path: "/school-bank-accounts", roles: ["accounts", "account", "admin", "superadmin"] },
           { key: "payment-gateway-settings-admin", label: "Payment Gateway", icon: "bi-credit-card-2-front", path: "/payment-gateway-settings", roles: ["accounts", "account", "admin", "superadmin"] },
+          { key: "whatsapp-api-settings-admin", label: "WhatsApp API", icon: "bi-whatsapp", path: "/whatsapp-api-settings", roles: ["accounts", "account", "admin", "superadmin"] },
           { key: "ai-settings-admin", label: "AI Settings", icon: "bi-cpu", path: "/ai-settings", roles: ["admin", "superadmin"] },
           { key: "feeCategory", label: "Fee Category", icon: "bi-tags", path: "/fee-category" },
           { key: "concessions", label: "Concessions", icon: "bi-percent", path: "/concessions" },

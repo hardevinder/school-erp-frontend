@@ -68,8 +68,20 @@ export default async function sendCombinedWhatsApp({
   try {
     Swal.showLoading();
 
+    const schoolId = school.id ?? school.schoolId ?? school.school_id ?? null;
+
     const payload = {
+      schoolId,
       students: mergedStudents.map((s) => {
+        const phone =
+          s.phone ||
+          s.mobile ||
+          s.mobileNumber ||
+          s.fatherPhone ||
+          s.motherPhone ||
+          s.parentPhone ||
+          "";
+
         const academicLines = (s.academicHeads || []).map(
           (h) => `• ${h.head} — Amount: ${currencyPlain(h.amount)} | Fine: ${currencyPlain(h.fine || 0)}`
         );
@@ -110,7 +122,8 @@ export default async function sendCombinedWhatsApp({
         return {
           id: s.id ?? s.admissionNumber,
           name: s.name,
-          phone: s.phone || "919417873297", // test number
+          phone,
+          schoolId,
           admissionNumber: s.admissionNumber,
           message: messageLines.join("\n"),
           breakdown: {
@@ -135,7 +148,7 @@ export default async function sendCombinedWhatsApp({
       await Swal.fire({
         title: failedCount ? "Partial Success" : "Success",
         html: failedCount
-          ? `Sent: <b>${successCount}</b> | Failed: <b>${failedCount}</b>.<br/>Tested to <b>9417873297</b>.`
+          ? `Sent: <b>${successCount}</b> | Failed: <b>${failedCount}</b>.`
           : `All <b>${sent.length}</b> messages sent successfully.`,
         icon: failedCount ? "warning" : "success",
       });
