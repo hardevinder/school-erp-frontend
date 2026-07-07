@@ -96,6 +96,8 @@ import HRLeaveRequests from "./pages/HRLeaveRequests";
 import EmployeeAttendance from "./pages/EmployeeAttendance";
 import EmployeeAttendanceCalendar from "./pages/EmployeeAttendanceCalendar";
 import EmployeeAttendanceSummary from "./pages/EmployeeAttendanceSummary";
+import PayrollManagement from "./pages/PayrollManagement";
+import MyPayslips from "./pages/MyPayslips";
 import ExamSchemeManagement from "./pages/ExamSchemeManagement";
 import TermManagement from "./pages/TermManagement";
 import AssessmentComponentManagement from "./pages/AssessmentComponentManagement";
@@ -1016,6 +1018,16 @@ function App() {
           <Route path="/employee-attendance" element={<EmployeeAttendance />} />
           <Route path="/my-attendance-calendar" element={<EmployeeAttendanceCalendar />} />
           <Route path="/employee-attendance-summary" element={<EmployeeAttendanceSummary />} />
+          <Route
+            path="/payroll"
+            element={
+              <RequireRole roles={["hr", "admin", "superadmin"]}>
+                <PayrollManagement />
+              </RequireRole>
+            }
+          />
+          <Route path="/my-payslips" element={<MyPayslips />} />
+          <Route path="/employee-payslips" element={<MyPayslips />} />
 
           {/* Academic */}
           <Route path="/teacher-assignment" element={<TeacherAssignment />} />

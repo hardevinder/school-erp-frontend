@@ -6,7 +6,6 @@ import "react-toastify/dist/ReactToastify.css";
 import { useNavigate } from "react-router-dom";
 
 // Inline pages (keep real if you already have them)
-import StudentRemarksEntry from "../pages/StudentRemarksEntry";
 import CoScholasticEntry from "../pages/CoScholasticEntry";
 
 // API + sockets
@@ -26,7 +25,7 @@ import ChatContainer from "./chat/ChatContainer";
  * - My Substitutions (today)
  * - Recent Circulars
  * - Recent Digital Diaries (scrollable)
- * - Collapsible Co-Scholastic & Student Remarks
+ * - Collapsible Co-Scholastic Entry
  * - Floating Chat + Notifications Drawer
  *
  * ✅ NEW:
@@ -59,7 +58,6 @@ export default function TeacherDashboard() {
   const lastNonZeroUnreadRef = useRef(0);
   const zeroTimerRef = useRef(null);
 
-  const [showRemarks, setShowRemarks] = useState(true);
   const [showCoScholastic, setShowCoScholastic] = useState(false);
 
   // Quick Actions search
@@ -621,16 +619,6 @@ export default function TeacherDashboard() {
                   <i className="bi bi-journal-check me-1" />
                   Admission Syllabus
                 </button>
-
-                <button
-                  type="button"
-                  className="btn btn-primary btn-sm"
-                  onClick={() => setShowRemarks((s) => !s)}
-                  title="Toggle Student Remarks (inline)"
-                >
-                  <i className="bi bi-pencil-square me-1" />
-                  {showRemarks ? "Hide" : "Show"} Remarks
-                </button>
               </div>
             </div>
           </div>
@@ -792,8 +780,7 @@ export default function TeacherDashboard() {
 
             {todayClasses.length > 0 && !loading && (
               <div className="card-footer bg-white small text-muted">
-                Tip: Use <span className="fw-semibold">Marks Entry</span> / <span className="fw-semibold">Remarks</span>{" "}
-                from Quick Actions.
+                Tip: Use <span className="fw-semibold">Marks Entry</span> from Quick Actions.
               </div>
             )}
           </div>
@@ -964,7 +951,7 @@ export default function TeacherDashboard() {
         </div>
       </div>
 
-      {/* Co-Scholastic & Remarks (collapsible) */}
+      {/* Co-Scholastic (collapsible) */}
       {showCoScholastic && (
         <section className="mb-4 mt-3">
           <div className="card shadow-sm border-0 rounded-4 overflow-hidden">
@@ -981,22 +968,6 @@ export default function TeacherDashboard() {
             </div>
             <div className="card-body">
               <CoScholasticEntry />
-            </div>
-          </div>
-        </section>
-      )}
-
-      {showRemarks && (
-        <section className="mb-4">
-          <div className="card shadow-sm border-0 rounded-4 overflow-hidden">
-            <div className="card-header bg-white d-flex align-items-center">
-              <h6 className="mb-0">📝 Student Remarks Entry</h6>
-              <button className="btn btn-sm btn-outline-secondary ms-auto" onClick={() => setShowRemarks(false)}>
-                ×
-              </button>
-            </div>
-            <div className="card-body">
-              <StudentRemarksEntry />
             </div>
           </div>
         </section>

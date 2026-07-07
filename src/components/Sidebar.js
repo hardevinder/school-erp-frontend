@@ -1166,6 +1166,8 @@ export default function Sidebar({ headerHeight = 56 }) {
           { key: "employee-attendance", label: "Employee Attendance", icon: "bi-person-check-fill", path: "/employee-attendance" },
           { key: "my-attendance-calendar", label: "My Attendance", icon: "bi-calendar2-week", path: "/my-attendance-calendar" },
           { key: "employee-attendance-summary", label: "Employee Attendance Summary", icon: "bi-calendar-range", path: "/employee-attendance-summary" },
+          { key: "payroll", label: "Payroll", icon: "bi-cash-coin", path: "/payroll" },
+          { key: "my-payslips", label: "My Payslips", icon: "bi-receipt-cutoff", path: "/my-payslips" },
         ],
       });
     }
@@ -1220,6 +1222,7 @@ export default function Sidebar({ headerHeight = 56 }) {
           { key: "employee-leave-request", label: "Request Leave", icon: "bi-box-arrow-in-down-left", path: "/employee-leave-request" },
           { key: "leave-requests", label: "Leave Requests", icon: "bi-envelope", path: "/leave-requests" },
           { key: "my-attendance-calendar", label: "My Attendance", icon: "bi-calendar2-week", path: "/my-attendance-calendar" },
+          { key: "my-payslips", label: "My Payslips", icon: "bi-receipt-cutoff", path: "/my-payslips" },
         ],
       });
     }
@@ -1322,7 +1325,7 @@ export default function Sidebar({ headerHeight = 56 }) {
     academic_coordinator: ["dashboard", "combined-timetable", "students", "exam-schemes"],
     teacher: ["dashboard", "mark-attendance", "teacher-timetable-display", "my-library"],
     student: ["student-home", "student-diary", "student-attendance", "my-library"],
-    hr: ["dashboard", "employees", "employee-attendance", "hr-leave-requests"],
+    hr: ["dashboard", "employees", "employee-attendance", "payroll"],
     superadmin: ["dashboard", "users", "transactions", "inventory-dashboard-admin", "opening-balances"],
     accounts: ["accounts-dashboard", "transactions", "inventory-dashboard-accounts", "studentDue", "dayWiseReport"],
     account: ["accounts-dashboard", "transactions", "inventory-dashboard-accounts", "studentDue", "dayWiseReport"],
