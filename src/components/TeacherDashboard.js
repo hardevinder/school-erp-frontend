@@ -467,6 +467,7 @@ export default function TeacherDashboard() {
           { label: "My Substitutions", icon: "bi-arrow-repeat", path: "/combined-teacher-substitution", color: "var(--qa-teal)" },
           { label: "Assignments", icon: "bi-clipboard", path: "/assignments", color: "var(--qa-green)" },
           { label: "Assignment Marking", icon: "bi-pencil-square", path: "/assignment-marking", color: "var(--qa-amber)" },
+          { label: "My Library", icon: "bi-journal-bookmark", path: "/my-library", color: "var(--qa-green)" },
           { label: "Circulars", icon: "bi-megaphone", path: "/view-circulars", color: "var(--qa-pink)" },
           { label: "Lesson Plan", icon: "bi-journal-text", path: "/lesson-plan", color: "var(--qa-indigo)" },
 

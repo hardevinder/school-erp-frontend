@@ -1,0 +1,11 @@
+export { default as InventoryDashboard } from "./InventoryDashboard";
+export { default as InventoryCategories } from "./InventoryCategories";
+export { default as InventoryItems } from "./InventoryItems";
+export { default as InventoryLocations } from "./InventoryLocations";
+export { default as InventoryOpeningStock } from "./InventoryOpeningStock";
+export { default as InventoryReceiveStock } from "./InventoryReceiveStock";
+export { default as InventoryIssueStock } from "./InventoryIssueStock";
+export { default as InventoryTransferStock } from "./InventoryTransferStock";
+export { default as InventoryAdjustStock } from "./InventoryAdjustStock";
+export { default as InventoryTransactions } from "./InventoryTransactions";
+export { default as InventoryStockReport } from "./InventoryStockReport";

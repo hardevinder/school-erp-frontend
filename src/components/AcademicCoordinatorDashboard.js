@@ -67,6 +67,13 @@ export default function Dashboard() {
   const [syllPendingCount, setSyllPendingCount] = useState(null);
   const [syllPendingErr, setSyllPendingErr] = useState(null);
   const [loadingSyllPending, setLoadingSyllPending] = useState(false);
+  const [attendanceDetail, setAttendanceDetail] = useState({
+    open: false,
+    loading: false,
+    error: "",
+    section: null,
+    students: [],
+  });
 
   const formatTime = (ts) =>
     new Intl.DateTimeFormat(undefined, {
@@ -92,6 +99,52 @@ export default function Dashboard() {
   const openTeacherAssignment = () => navigate("/teacher-assignment");
   const openSyllabusApproval = () => navigate("/syllabus-approval");
   const openAdmissionSyllabusAssignee = () => navigate("/admission-syllabus-assignee");
+
+  const closeAttendanceDetail = () =>
+    setAttendanceDetail({
+      open: false,
+      loading: false,
+      error: "",
+      section: null,
+      students: [],
+    });
+
+  const openAttendanceDetail = async (section) => {
+    setAttendanceDetail({
+      open: true,
+      loading: true,
+      error: "",
+      section,
+      students: [],
+    });
+
+    try {
+      const params = new URLSearchParams({
+        class_id: String(section.class_id ?? ""),
+        section_id: String(section.section_id ?? ""),
+        dateFrom: selectedDate,
+        dateTo: selectedDate,
+        limit: "500",
+      });
+
+      const res = await api.get(`/attendance/students/daily?${params.toString()}`);
+      setAttendanceDetail({
+        open: true,
+        loading: false,
+        error: "",
+        section,
+        students: Array.isArray(res.data?.students) ? res.data.students : [],
+      });
+    } catch (err) {
+      setAttendanceDetail({
+        open: true,
+        loading: false,
+        error: err?.response?.data?.message || err.message || "Failed to load attendance details",
+        section,
+        students: [],
+      });
+    }
+  };
 
   // Fetch attendance summary
   useEffect(() => {
@@ -663,6 +716,14 @@ export default function Dashboard() {
                           percent={pLev}
                           barClass="bg-warning"
                         />
+                        <button
+                          type="button"
+                          className="btn btn-outline-primary btn-sm w-100 mt-2"
+                          onClick={() => openAttendanceDetail(item)}
+                        >
+                          <i className="bi bi-list-check me-1" />
+                          View Details
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -820,6 +881,14 @@ export default function Dashboard() {
           }
         }
       `}</style>
+
+      {attendanceDetail.open && (
+        <AttendanceDetailModal
+          detail={attendanceDetail}
+          date={selectedDate}
+          onClose={closeAttendanceDetail}
+        />
+      )}
     </div>
   );
 }
@@ -980,6 +1049,121 @@ function ProgressStat({ label, value, percent, barClass }) {
           style={{ width: `${percent}%` }}
           aria-label={label}
         />
+      </div>
+    </div>
+  );
+}
+
+function AttendanceDetailModal({ detail, date, onClose }) {
+  const section = detail.section || {};
+  const rows = Array.isArray(detail.students) ? detail.students : [];
+  const getStatus = (student) =>
+    String(student.attendance?.[0]?.status || "not_marked").toLowerCase();
+
+  const groups = [
+    {
+      key: "present",
+      label: "Present",
+      badge: "text-bg-success",
+      rows: rows.filter((student) => getStatus(student) === "present"),
+    },
+    {
+      key: "absent",
+      label: "Absent",
+      badge: "text-bg-danger",
+      rows: rows.filter((student) => getStatus(student) === "absent"),
+    },
+    {
+      key: "leave",
+      label: "Leave",
+      badge: "text-bg-warning text-dark",
+      rows: rows.filter((student) => getStatus(student) === "leave"),
+    },
+    {
+      key: "not_marked",
+      label: "Not Marked",
+      badge: "text-bg-secondary",
+      rows: rows.filter((student) => getStatus(student) === "not_marked"),
+    },
+  ];
+
+  return (
+    <div
+      className="modal d-block"
+      tabIndex="-1"
+      role="dialog"
+      style={{ background: "rgba(15, 23, 42, 0.55)" }}
+    >
+      <div className="modal-dialog modal-xl modal-dialog-scrollable" role="document">
+        <div className="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+          <div className="modal-header bg-light border-0">
+            <div>
+              <h5 className="modal-title mb-1">
+                Class {section.class_name} - Section {section.section_name}
+              </h5>
+              <div className="text-muted small">Attendance details for {date}</div>
+            </div>
+            <button type="button" className="btn-close" aria-label="Close" onClick={onClose} />
+          </div>
+
+          <div className="modal-body">
+            {detail.loading && <div className="text-center py-5">Loading attendance details...</div>}
+
+            {!detail.loading && detail.error && (
+              <div className="alert alert-danger rounded-3 mb-0">{detail.error}</div>
+            )}
+
+            {!detail.loading && !detail.error && (
+              <div className="row g-3">
+                {groups.map((group) => (
+                  <div className="col-12 col-lg-6" key={group.key}>
+                    <div className="card h-100 border-0 shadow-sm rounded-4">
+                      <div className="card-header bg-white border-0 d-flex justify-content-between align-items-center">
+                        <span className={`badge rounded-pill ${group.badge}`}>{group.label}</span>
+                        <span className="fw-semibold">{group.rows.length}</span>
+                      </div>
+                      <div className="card-body p-0">
+                        {group.rows.length ? (
+                          <div className="table-responsive">
+                            <table className="table table-sm align-middle mb-0">
+                              <thead className="table-light">
+                                <tr>
+                                  <th>Adm. #</th>
+                                  <th>Name</th>
+                                  <th>Remarks</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {group.rows.map((student) => {
+                                  const record = student.attendance?.[0] || {};
+                                  return (
+                                    <tr key={student.id}>
+                                      <td className="fw-semibold">{student.admission_number || "-"}</td>
+                                      <td>{student.name || "-"}</td>
+                                      <td className="text-muted small">{record.remarks || "-"}</td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        ) : (
+                          <div className="text-muted small p-3">No students in this group.</div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="modal-footer bg-light border-0">
+            <button type="button" className="btn btn-secondary" onClick={onClose}>
+              Close
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );

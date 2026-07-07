@@ -1,0 +1,125 @@
+/* Heading scale */
+.container h1 {
+  font-size: clamp(1.125rem, 1.2vw + 1rem, 1.75rem);
+  line-height: 1.2;
+  margin-bottom: 1rem;
+}
+
+/* ===== Desktop table (md+) ===== */
+.table-responsive {
+  overflow: auto;
+  max-height: 70vh;
+  border: 1px solid #e5e7eb;
+  border-radius: .5rem;
+}
+
+.table thead th {
+  position: sticky;
+  top: 0;
+  background: #ffffff;
+  z-index: 2;
+  box-shadow: 0 1px 0 rgba(0,0,0,0.06);
+}
+
+.table td, .table th {
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.table td.wrap,
+.table th.wrap {
+  white-space: normal;
+}
+
+.actions-cell { min-width: 180px; }
+
+.actions-stack {
+  display: inline-flex;
+  gap: .5rem;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 420px) {
+  .actions-stack { flex-direction: column; width: 100%; }
+  .actions-stack .btn { width: 100%; }
+}
+
+.btn.btn-sm {
+  padding: .375rem .6rem;
+  font-size: .9rem;
+  border-radius: .45rem;
+}
+
+/* Truncate utility for long names (with title tooltip) */
+.truncate {
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: inline-block;
+  vertical-align: bottom;
+}
+
+/* ===== SweetAlert form layout ===== */
+.ia-form {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: .75rem .75rem;
+  text-align: left;
+}
+
+.ia-form label {
+  align-self: center;
+  font-weight: 600;
+  font-size: .95rem;
+}
+
+.ia-form .form-field,
+.ia-form select {
+  width: 100%;
+  padding: .5rem .6rem;
+  border: 1px solid #d1d5db;
+  border-radius: .5rem;
+}
+
+@media (max-width: 640px) {
+  .swal2-popup { width: min(92vw, 560px) !important; }
+  .ia-form { grid-template-columns: 1fr; }
+  .ia-form label { margin-top: .25rem; }
+}
+
+/* ===== Mobile cards (< md) ===== */
+.ia-card {
+  border: 1px solid #e5e7eb;
+  border-radius: .5rem;
+  padding: 1rem;
+  margin-bottom: 1rem;
+  background: #fff;
+  box-shadow: 0 2px 4px rgba(0,0,0,.05);
+}
+
+.ia-card .index-line {
+  font-weight: 700;
+  margin: 0 0 .5rem 0;
+}
+
+.ia-card .kv {
+  display: grid;
+  grid-template-columns: 96px 1fr;
+  gap: .25rem .5rem;
+  align-items: start;
+  margin: .35rem 0;
+}
+
+.ia-card .k {
+  color: #6b7280;
+  font-weight: 600;
+}
+
+.ia-card .v {
+  color: #111827;
+  word-break: break-word;
+}
+
+@media (max-width: 380px) {
+  .ia-card .kv { grid-template-columns: 84px 1fr; }
+}

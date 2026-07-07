@@ -1,0 +1,64 @@
+.syllabus-breakdown-modal-dialog {
+  width: min(92vw, 1240px);
+  max-width: min(92vw, 1240px);
+  max-height: calc(100vh - 2rem);
+}
+
+.syllabus-breakdown-modal-content {
+  max-height: calc(100vh - 2rem);
+  overflow: hidden;
+}
+
+.syllabus-breakdown-modal-body {
+  max-height: calc(100vh - 8.5rem);
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.syllabus-breakdown-row-scroller {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border: 1px solid var(--bs-border-color);
+  border-radius: 0.375rem;
+  background: var(--bs-body-bg);
+  scrollbar-gutter: stable;
+}
+
+.syllabus-breakdown-row-scroller .table {
+  min-width: 1480px;
+}
+
+.syllabus-breakdown-row-scroller::-webkit-scrollbar {
+  height: 10px;
+}
+
+.syllabus-breakdown-row-scroller::-webkit-scrollbar-thumb {
+  background: #adb5bd;
+  border-radius: 999px;
+}
+
+.syllabus-breakdown-row-scroller::-webkit-scrollbar-track {
+  background: #f1f3f5;
+}
+
+.sb-sticky-actions {
+  position: sticky;
+  bottom: -1rem;
+  z-index: 2;
+  margin: 1rem -1rem -1rem;
+  padding: 0.75rem 1rem 1rem;
+  background: var(--bs-body-bg);
+  border-top: 1px solid var(--bs-border-color);
+}
+
+@media (max-width: 575.98px) {
+  .syllabus-breakdown-modal-content,
+  .syllabus-breakdown-modal-body {
+    max-height: 100vh;
+  }
+
+  .sb-sticky-actions {
+    bottom: 0;
+  }
+}

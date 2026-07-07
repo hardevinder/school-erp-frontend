@@ -76,6 +76,29 @@ const GROUP_ORDER = {
   Student: 25,
 };
 
+const MY_LIBRARY_ROLES = [
+  "superadmin",
+  "admin",
+  "principal",
+  "academic_coordinator",
+  "teacher",
+  "student",
+  "hr",
+  "accounts",
+  "account",
+  "frontoffice",
+  "admission",
+  "examination",
+  "transport",
+  "transporter",
+  "librarian",
+  "library",
+  "libraryadmin",
+  "inventoryadmin",
+  "storeincharge",
+  "labincharge",
+];
+
 function cleanGroups(groups = []) {
   return groups
     .map((g) => ({
@@ -1213,7 +1236,23 @@ export default function Sidebar({ headerHeight = 56 }) {
           { key: "student-circulars", label: "Circulars", icon: "bi-megaphone", path: "/student-circulars", roles: ["student"] },
           { key: "student-timetable-display", label: "Timetable", icon: "bi-clock-history", path: "/student-timetable-display", roles: ["student"] },
           { key: "student-fee", label: "Fees", icon: "bi-cash-coin", path: "/student-fee", roles: ["student"] },
+          { key: "my-library", label: "My Library", icon: "bi-journal-bookmark", path: "/my-library", roles: MY_LIBRARY_ROLES },
           { key: "chat", label: "Chat", icon: "bi-chat-dots", path: "/chat", roles: ["student"] },
+        ],
+      });
+    }
+
+    if (!isStudent) {
+      groups.push({
+        heading: "Quick",
+        items: [
+          {
+            key: "my-library",
+            label: "My Library",
+            icon: "bi-journal-bookmark",
+            path: "/my-library",
+            roles: MY_LIBRARY_ROLES,
+          },
         ],
       });
     }
@@ -1281,8 +1320,8 @@ export default function Sidebar({ headerHeight = 56 }) {
   const PRIMARY_BY_ROLE = {
     admin: ["dashboard", "transactions", "studentDue", "inventory-dashboard-admin", "opening-balances"],
     academic_coordinator: ["dashboard", "combined-timetable", "students", "exam-schemes"],
-    teacher: ["dashboard", "mark-attendance", "teacher-timetable-display", "marks-entry"],
-    student: ["student-home", "student-diary", "student-attendance", "student-timetable-display"],
+    teacher: ["dashboard", "mark-attendance", "teacher-timetable-display", "my-library"],
+    student: ["student-home", "student-diary", "student-attendance", "my-library"],
     hr: ["dashboard", "employees", "employee-attendance", "hr-leave-requests"],
     superadmin: ["dashboard", "users", "transactions", "inventory-dashboard-admin", "opening-balances"],
     accounts: ["accounts-dashboard", "transactions", "inventory-dashboard-accounts", "studentDue", "dayWiseReport"],

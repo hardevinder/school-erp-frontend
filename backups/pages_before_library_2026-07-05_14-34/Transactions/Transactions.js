@@ -1,0 +1,5772 @@
+// src/pages/Transactions/Transactions.js
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { pdf } from "@react-pdf/renderer";
+import PdfReceiptDocument from "./PdfReceiptDocument";
+import api from "../../api";
+import Swal from "sweetalert2";
+import {
+  Modal,
+  Button,
+  Tabs,
+  Tab,
+  Form,
+  Row,
+  Col,
+  Card,
+  OverlayTrigger,
+  Tooltip,
+  Badge,
+  Alert,
+} from "react-bootstrap";
+import ReceiptModal from "./ReceiptModal";
+import "bootstrap/dist/css/bootstrap.min.css";
+
+/* ---------------- Helpers ---------------- */
+const asArray = (d) => {
+  if (Array.isArray(d)) return d;
+  if (d == null) return [];
+  const keys = [
+    "data",
+    "rows",
+    "results",
+    "items",
+    "list",
+    "records",
+    "classes",
+    "sections",
+    "students",
+  ];
+  for (const k of keys) {
+    if (Array.isArray(d?.[k])) return d[k];
+    if (Array.isArray(d?.data?.[k])) return d.data[k];
+  }
+  if (typeof d === "string") {
+    try {
+      const p = JSON.parse(d);
+      return Array.isArray(p) ? p : [];
+    } catch {
+      return [];
+    }
+  }
+  if (typeof d === "object") {
+    const stack = [d];
+    while (stack.length) {
+      const cur = stack.pop();
+      if (!cur || typeof cur !== "object") continue;
+      for (const v of Object.values(cur)) {
+        if (Array.isArray(v)) return v;
+        if (v && typeof v === "object") stack.push(v);
+      }
+    }
+  }
+  return [];
+};
+
+const firstNonEmpty = (...vals) => {
+  for (const v of vals) {
+    const s = (v ?? "").toString().trim();
+    if (
+      s &&
+      s !== "—" &&
+      s !== "-" &&
+      s.toLowerCase() !== "null" &&
+      s.toLowerCase() !== "undefined"
+    ) {
+      return s;
+    }
+  }
+  return "";
+};
+
+const hasValue = (value) =>
+  value !== "" && value !== null && value !== undefined;
+
+const isValidId = (value) =>
+  hasValue(value) && !Number.isNaN(Number(value));
+
+const firstValidId = (...values) => {
+  for (const value of values) {
+    if (isValidId(value)) return Number(value);
+  }
+  return null;
+};
+
+const normalizeClassRow = (x) => {
+  const id = firstValidId(
+    x?.id,
+    x?.class_id,
+    x?.Class_ID,
+    x?.classId,
+    x?.Class?.id
+  );
+  const name = firstNonEmpty(
+    x?.class_name,
+    x?.Class_Name,
+    x?.name,
+    x?.class,
+    x?.title,
+    x?.label,
+    x?.Class?.class_name,
+    x?.Class?.name,
+    x?.ClassTitle,
+    x?.classTitle
+  );
+  return {
+    id,
+    class_name: name || (isValidId(id) ? `Class ${id}` : "—"),
+  };
+};
+
+const normalizeSectionRow = (x) => {
+  const id = Number(
+    x?.id ??
+      x?.section_id ??
+      x?.Section_ID ??
+      x?.sectionId ??
+      x?.Section?.id ??
+      0
+  );
+  const name =
+    firstNonEmpty(
+      x?.section_name,
+      x?.Section_Name,
+      x?.SectionName,
+      x?.sectionname,
+      x?.name,
+      x?.label,
+      x?.title,
+      x?.section,
+      x?.Section,
+      x?.Section?.section_name,
+      x?.Section?.Section_Name,
+      x?.Section?.SectionName,
+      x?.Section?.name,
+      x?.Section?.label,
+      x?.Section?.title
+    ) || "";
+  return { id, section_name: name || "" };
+};
+
+const normalizeCustomFields = (s) => {
+  const direct =
+    s?.custom_fields ||
+    s?.customFields ||
+    s?.custom_field_values ||
+    s?.student_custom_fields ||
+    s?.studentCustomFields;
+
+  if (direct && typeof direct === "object" && !Array.isArray(direct)) {
+    return direct;
+  }
+
+  const arr =
+    s?.StudentCustomFields ||
+    s?.studentCustomFieldsList ||
+    s?.customFieldRows ||
+    s?.custom_fields_array;
+
+  if (Array.isArray(arr)) {
+    const obj = {};
+    arr.forEach((item) => {
+      const key =
+        item?.field_name ||
+        item?.name ||
+        item?.label ||
+        item?.custom_field_name ||
+        item?.title;
+      const value =
+        item?.field_value ??
+        item?.value ??
+        item?.custom_field_value ??
+        item?.answer ??
+        "";
+      if (key) obj[String(key)] = value;
+    });
+    return obj;
+  }
+
+  return {};
+};
+
+const getStudentStatusInfo = (s = {}) => {
+  const rawStatus = firstNonEmpty(
+    s?.status,
+    s?.student_status,
+    s?.studentStatus,
+    s?.Student_Status,
+    s?.active_status,
+    s?.activeStatus
+  );
+
+  const normalizedStatus = String(rawStatus || "enabled").trim().toLowerCase();
+  const inactiveStatuses = [
+    "disabled",
+    "inactive",
+    "left",
+    "withdrawn",
+    "deactivated",
+    "deleted",
+  ];
+
+  const isInactive =
+    inactiveStatuses.includes(normalizedStatus) ||
+    s?.is_active === false ||
+    s?.isActive === false ||
+    s?.active === false ||
+    s?.enabled === false;
+
+  return {
+    status: isInactive ? "disabled" : normalizedStatus || "enabled",
+    isInactive,
+    label: isInactive ? "Inactive / Disabled" : "Active",
+  };
+};
+
+const normalizeStudentRow = (s) => {
+  const id = Number(s?.id ?? s?.student_id ?? s?.Student_ID ?? 0);
+
+  const name = firstNonEmpty(
+    s?.name,
+    s?.student_name,
+    s?.Student_Name,
+    s?.full_name
+  ) || "—";
+
+  const admission_number = firstNonEmpty(
+    s?.admission_number,
+    s?.AdmissionNumber,
+    s?.adm_no,
+    s?.admissionNo
+  ) || "—";
+
+  const classId = Number(
+    s?.Class?.id ??
+      s?.class?.id ??
+      s?.class_id ??
+      s?.Class_ID ??
+      s?.classId ??
+      0
+  );
+
+  const className = firstNonEmpty(
+    s?.Class?.class_name,
+    s?.Class?.Class_Name,
+    s?.Class?.name,
+    s?.class?.class_name,
+    s?.class?.Class_Name,
+    s?.class?.name,
+    s?.class_name,
+    s?.Class_Name,
+    s?.className,
+    s?.classname,
+    s?.class_title
+  );
+
+  const sectionId = Number(
+    s?.Section?.id ??
+      s?.sectionObj?.id ??
+      s?.section?.id ??
+      s?.section_id ??
+      s?.Section_ID ??
+      s?.sectionId ??
+      0
+  );
+
+  const sectionName = firstNonEmpty(
+    s?.Section?.section_name,
+    s?.Section?.Section_Name,
+    s?.Section?.name,
+    s?.sectionObj?.section_name,
+    s?.sectionObj?.Section_Name,
+    s?.sectionObj?.name,
+    s?.section?.section_name,
+    s?.section?.Section_Name,
+    s?.section?.name,
+    s?.section_name,
+    s?.Section_Name,
+    s?.sectionName,
+    s?.sectionname
+  );
+
+  const custom_fields = normalizeCustomFields(s);
+  const statusInfo = getStudentStatusInfo(s);
+
+  return {
+    ...s,
+    id,
+    name,
+    admission_number,
+    status: statusInfo.status,
+    student_status: statusInfo.status,
+    student_status_label: statusInfo.label,
+    is_student_inactive: statusInfo.isInactive,
+    isStudentInactive: statusInfo.isInactive,
+    father_name: firstNonEmpty(
+      s?.father_name,
+      s?.Father_Name,
+      s?.fatherName
+    ),
+    Class: {
+      ...(s?.Class || s?.class || {}),
+      id: classId,
+      class_name: className,
+    },
+    Section: {
+      ...(s?.Section || s?.sectionObj || s?.section || {}),
+      id: sectionId,
+      section_name: sectionName,
+    },
+    class_id: classId,
+    section_id: sectionId,
+    class_name: className,
+    section_name: sectionName,
+    custom_fields,
+  };
+};
+
+const getClassLabelById = (classId, classes = []) => {
+  if (!isValidId(classId)) return "";
+  const id = Number(classId);
+  const row = (Array.isArray(classes) ? classes : []).find(
+    (cls) => isValidId(cls?.id) && Number(cls.id) === id
+  );
+  return firstNonEmpty(
+    row?.class_name,
+    row?.Class_Name,
+    row?.name,
+    row?.label,
+    row?.title
+  );
+};
+
+const getSectionLabelById = (sectionId, sections = []) => {
+  if (!isValidId(sectionId)) return "";
+  const id = Number(sectionId);
+  const row = (Array.isArray(sections) ? sections : []).find(
+    (sec) => isValidId(sec?.id) && Number(sec.id) === id
+  );
+  return firstNonEmpty(
+    row?.section_name,
+    row?.Section_Name,
+    row?.name,
+    row?.label,
+    row?.title
+  );
+};
+
+const formatINR = (n) => {
+  const value = Number(n || 0);
+  const safeValue = Number.isFinite(value) ? value : 0;
+
+  return `₹${safeValue.toLocaleString("en-IN", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  })}`;
+};
+
+const getTransportDisplayLabelFromSchoolPayload = (payload) => {
+  const rows = asArray(payload);
+
+  const school =
+    rows[0] ||
+    payload?.school ||
+    payload?.data?.school ||
+    payload?.School ||
+    (payload && typeof payload === "object" && !Array.isArray(payload) ? payload : null);
+
+  return (
+    firstNonEmpty(
+      school?.transport_display_label,
+      school?.transportDisplayLabel,
+      school?.labels?.transport,
+      payload?.transport_display_label,
+      payload?.transportDisplayLabel,
+      payload?.labels?.transport
+    ) || "Transport"
+  );
+};
+
+const getAcademicDueWithConcession = (row = {}) =>
+  Math.max(
+    0,
+    Number(row?.Fee_Due || 0) -
+      Number(row?.Fee_Recieved || 0) -
+      Number(row?.Concession || 0)
+  );
+
+const getAcademicDueWithoutConcession = (row = {}) => {
+  const originalDue =
+    row?.Original_Fee_Due !== undefined && row?.Original_Fee_Due !== null
+      ? Number(row.Original_Fee_Due || 0)
+      : Number(row?.Fee_Due || 0) + Number(row?.defaultConcessionAmount || 0);
+
+  return Math.max(0, originalDue - Number(row?.Fee_Recieved || 0));
+};
+
+const getAcademicDisplayDue = (row = {}, showWithoutConcession = false) =>
+  showWithoutConcession
+    ? getAcademicDueWithoutConcession(row)
+    : getAcademicDueWithConcession(row);
+
+const pickNum = (...vals) => {
+  for (const v of vals) {
+    const n = Number(v);
+    if (!Number.isNaN(n) && n > 0) return n;
+  }
+  return 0;
+};
+
+const normalizeBankAccountRow = (row, index = 0) => ({
+  id: Number(row?.id ?? row?.bank_account_id ?? row?.bankAccountId ?? 0) || 0,
+  bank_name: firstNonEmpty(row?.bank_name, row?.bankName, row?.name),
+  account_name: firstNonEmpty(
+    row?.account_name,
+    row?.accountName,
+    row?.title,
+    row?.label
+  ),
+  account_number: firstNonEmpty(row?.account_number, row?.accountNumber),
+  ifsc_code: firstNonEmpty(row?.ifsc_code, row?.ifscCode),
+  upi_id: firstNonEmpty(row?.upi_id, row?.upiId),
+  active: row?.active !== false,
+  sort_order: Number(row?.sort_order ?? index + 1) || 0,
+});
+
+const formatBankAccountLabel = (row) => {
+  if (!row) return "";
+  const left = firstNonEmpty(row.bank_name);
+  const right = firstNonEmpty(row.account_name);
+  return [left, right].filter(Boolean).join(" - ");
+};
+
+const sortBankAccounts = (rows = []) =>
+  [...rows].sort(
+    (a, b) =>
+      Number(a?.sort_order ?? 0) - Number(b?.sort_order ?? 0) ||
+      String(formatBankAccountLabel(a) || "").localeCompare(
+        String(formatBankAccountLabel(b) || "")
+      )
+  );
+
+const EMPTY_PAYMENT_DETAILS = {
+  reference_no: "",
+  bank_account_id: "",
+  bank_name: "",
+  cheque_no: "",
+  cheque_date: "",
+  Transaction_ID: "",
+  BankName: "",
+  ChequeNumber: "",
+  ChequeDate: "",
+};
+
+const DEFAULT_TRANSACTION_MODES = [
+  {
+    id: "cash",
+    name: "Cash",
+    code: "CASH",
+    requires_bank: false,
+    requires_reference_no: false,
+    requires_cheque_no: false,
+    requires_cheque_date: false,
+    sort_order: 1,
+    active: true,
+  },
+  {
+    id: "upi",
+    name: "UPI",
+    code: "UPI",
+    requires_bank: true,
+    requires_reference_no: true,
+    requires_cheque_no: false,
+    requires_cheque_date: false,
+    sort_order: 2,
+    active: true,
+  },
+  {
+    id: "cheque",
+    name: "Cheque",
+    code: "CHEQUE",
+    requires_bank: true,
+    requires_reference_no: false,
+    requires_cheque_no: true,
+    requires_cheque_date: true,
+    sort_order: 3,
+    active: true,
+  },
+  {
+    id: "card",
+    name: "Card",
+    code: "CARD",
+    requires_bank: true,
+    requires_reference_no: true,
+    requires_cheque_no: false,
+    requires_cheque_date: false,
+    sort_order: 4,
+    active: true,
+  },
+  {
+    id: "netbanking",
+    name: "Net Banking",
+    code: "NETBANKING",
+    requires_bank: true,
+    requires_reference_no: true,
+    requires_cheque_no: false,
+    requires_cheque_date: false,
+    sort_order: 5,
+    active: true,
+  },
+  {
+    id: "online",
+    name: "Online",
+    code: "ONLINE",
+    requires_bank: false,
+    requires_reference_no: true,
+    requires_cheque_no: false,
+    requires_cheque_date: false,
+    sort_order: 6,
+    active: true,
+  },
+];
+
+const normalizeModeRow = (row, index = 0) => ({
+  id: row?.id ?? row?.code ?? row?.name ?? `mode-${index}`,
+  name:
+    firstNonEmpty(row?.name, row?.label, row?.title, row?.code) ||
+    `Mode ${index + 1}`,
+  code: firstNonEmpty(row?.code, row?.short_code, row?.slug),
+  description: firstNonEmpty(row?.description),
+  requires_bank: Boolean(row?.requires_bank),
+  requires_reference_no: Boolean(row?.requires_reference_no),
+  requires_cheque_no: Boolean(row?.requires_cheque_no),
+  requires_cheque_date: Boolean(row?.requires_cheque_date),
+  sort_order: Number(row?.sort_order ?? index + 1) || 0,
+  active: row?.active !== false,
+});
+
+const sortTransactionModes = (rows = []) =>
+  [...rows].sort(
+    (a, b) =>
+      Number(a?.sort_order ?? 0) - Number(b?.sort_order ?? 0) ||
+      String(a?.name || "").localeCompare(String(b?.name || ""))
+  );
+
+const getActiveTransactionModes = (rows = []) => {
+  const source = Array.isArray(rows) && rows.length ? rows : DEFAULT_TRANSACTION_MODES;
+  const active = source.filter((row) => row?.active !== false);
+  return sortTransactionModes(active.length ? active : source);
+};
+
+const findModeByValue = (value, rows = []) => {
+  const source = Array.isArray(rows) && rows.length ? rows : DEFAULT_TRANSACTION_MODES;
+  const raw = String(value || "").trim();
+  const needle = raw.toLowerCase();
+  if (!needle) return null;
+
+  const exact = source.find(
+    (row) =>
+      String(row?.name || "").trim().toLowerCase() === needle ||
+      String(row?.code || "").trim().toLowerCase() === needle ||
+      String(row?.id || "").trim().toLowerCase() === needle
+  );
+  if (exact) return exact;
+
+  const aliases = {
+    cash: ["cash"],
+    cheque: ["cheque", "check"],
+    upi: ["upi"],
+    card: ["card"],
+    netbanking: ["netbanking", "net_banking", "net banking"],
+    online: ["online", "hdfc", "smart_hdfc", "smartgateway"],
+  };
+
+  for (const [canonical, values] of Object.entries(aliases)) {
+    if (!values.includes(needle)) continue;
+    const aliased = source.find(
+      (row) =>
+        String(row?.name || "").trim().toLowerCase() === canonical ||
+        String(row?.code || "").trim().toLowerCase() === canonical ||
+        String(row?.id || "").trim().toLowerCase() === canonical
+    );
+    if (aliased) return aliased;
+  }
+
+  return null;
+};
+
+const getDefaultPaymentModeName = (rows = []) => {
+  const source = getActiveTransactionModes(rows);
+  const cash = findModeByValue("cash", source);
+  return cash?.name || source[0]?.name || "Cash";
+};
+
+const normalizePaymentModeValue = (value, rows = []) => {
+  const hit = findModeByValue(value, rows);
+  if (hit?.name) return hit.name;
+  const raw = String(value || "").trim();
+  return raw || getDefaultPaymentModeName(rows);
+};
+
+const getPaymentModeLabel = (value, rows = []) => {
+  const hit = findModeByValue(value, rows);
+  return hit?.name || String(value || "").trim() || getDefaultPaymentModeName(rows);
+};
+
+const modeUsesChequeFields = (mode) =>
+  Boolean(mode?.requires_cheque_no || mode?.requires_cheque_date);
+
+const modeUsesPopupDetails = (mode) => Boolean(modeUsesChequeFields(mode));
+
+const hasModeExtraInfo = (details, mode) =>
+  Boolean(
+    (mode?.requires_cheque_no &&
+      String(details?.cheque_no || details?.ChequeNumber || "").trim()) ||
+      (mode?.requires_cheque_date &&
+        String(details?.cheque_date || details?.ChequeDate || "").trim()) ||
+      String(details?.bank_name || details?.BankName || "").trim()
+  );
+
+const pad2 = (n) => String(n).padStart(2, "0");
+
+const normalizeDateInput = (value) => {
+  if (!value) return "";
+
+  const raw = String(value).trim();
+  if (!raw) return "";
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+
+  const dmy = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (dmy) return `${dmy[3]}-${dmy[2]}-${dmy[1]}`;
+
+  const parsed = new Date(raw);
+  if (!Number.isNaN(parsed.getTime())) {
+    return `${parsed.getFullYear()}-${pad2(parsed.getMonth() + 1)}-${pad2(parsed.getDate())}`;
+  }
+
+  const ymd = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (ymd) return `${ymd[1]}-${ymd[2]}-${ymd[3]}`;
+
+  return "";
+};
+
+const formatDisplayDate = (value) => {
+  if (!value) return "—";
+  const raw = String(value).trim();
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(raw)) return raw;
+
+  const normalized = normalizeDateInput(value);
+  if (!normalized) return "—";
+
+  const [yyyy, mm, dd] = normalized.split("-");
+  return `${dd}/${mm}/${yyyy}`;
+};
+
+const toDisplayDateInput = (value) => {
+  if (!value) return "";
+  const raw = String(value).trim();
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(raw)) return raw;
+  const normalized = normalizeDateInput(value);
+  if (!normalized) return raw;
+  const [yyyy, mm, dd] = normalized.split("-");
+  return `${dd}/${mm}/${yyyy}`;
+};
+
+const getTodayDateInput = () => {
+  const now = new Date();
+  return `${pad2(now.getDate())}/${pad2(now.getMonth() + 1)}/${now.getFullYear()}`;
+};
+
+const toTransactionDatePayload = (value) => {
+  const normalized = normalizeDateInput(value);
+  return normalized ? `${normalized}T12:00:00` : new Date().toISOString();
+};
+
+const formatTransactionDateTime = (value) => formatDisplayDate(value);
+
+const formatTransactionDateOnly = (value) => formatDisplayDate(value);
+
+const zeroAsBlank = (value) => (Number(value || 0) === 0 ? "" : value);
+
+const roundMoney = (value) =>
+  Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
+
+const parseNumberInput = (value) => {
+  if (value === "" || value === null || value === undefined) return 0;
+
+  const cleaned = String(value).replace(/,/g, "").trim();
+  const parsed = Number.parseFloat(cleaned);
+
+  if (!Number.isFinite(parsed)) return 0;
+
+  return roundMoney(Math.max(0, parsed));
+};
+
+const MONEY_INPUT_PROPS = {
+  step: "0.01",
+  min: "0",
+  inputMode: "decimal",
+};
+
+const validateModePopupInfo = (details, mode) => {
+  if (
+    mode?.requires_cheque_no &&
+    !String(details?.cheque_no || details?.ChequeNumber || "").trim()
+  ) {
+    return "Cheque number is required.";
+  }
+  if (
+    mode?.requires_cheque_date &&
+    !String(details?.cheque_date || details?.ChequeDate || "").trim()
+  ) {
+    return "Cheque date is required.";
+  }
+  return null;
+};
+
+const validateModeInfo = (details, mode) => {
+  if (
+    mode?.requires_reference_no &&
+    !String(details?.reference_no || details?.Transaction_ID || "").trim()
+  ) {
+    return "Reference / Transaction ID is required.";
+  }
+  return validateModePopupInfo(details, mode);
+};
+
+const buildPaymentDetailsState = (details, mode) => ({
+  reference_no: mode?.requires_reference_no
+    ? String(details?.reference_no || details?.Transaction_ID || "").trim()
+    : "",
+  bank_account_id: mode?.requires_bank
+    ? String(details?.bank_account_id || "")
+    : "",
+  bank_name:
+    mode?.requires_bank || mode?.requires_cheque_no || mode?.requires_cheque_date
+      ? String(details?.bank_name || details?.BankName || "").trim()
+      : "",
+  cheque_no: mode?.requires_cheque_no
+    ? String(details?.cheque_no || details?.ChequeNumber || "").trim()
+    : "",
+  cheque_date: mode?.requires_cheque_date
+    ? toDisplayDateInput(details?.cheque_date || details?.ChequeDate)
+    : "",
+  Transaction_ID: mode?.requires_reference_no
+    ? String(details?.Transaction_ID || details?.reference_no || "").trim()
+    : "",
+  BankName:
+    mode?.requires_bank || mode?.requires_cheque_no || mode?.requires_cheque_date
+      ? String(details?.BankName || details?.bank_name || "").trim()
+      : "",
+  ChequeNumber: mode?.requires_cheque_no
+    ? String(details?.ChequeNumber || details?.cheque_no || "").trim()
+    : "",
+  ChequeDate: mode?.requires_cheque_date
+    ? toDisplayDateInput(details?.ChequeDate || details?.cheque_date)
+    : "",
+});
+
+const formatModeDetailsSummary = (details, mode, bankAccounts = []) => {
+  const parts = [];
+
+  if (mode?.requires_cheque_no && String(details?.cheque_no || details?.ChequeNumber || "").trim()) {
+    parts.push(String(details?.cheque_no || details?.ChequeNumber || "").trim());
+  }
+
+  if (mode?.requires_cheque_date && String(details?.cheque_date || details?.ChequeDate || "").trim()) {
+    parts.push(formatDisplayDate(details?.cheque_date || details?.ChequeDate));
+  }
+
+  if (String(details?.bank_name || details?.BankName || "").trim()) {
+    parts.push(String(details?.bank_name || details?.BankName || "").trim());
+  }
+
+  return parts.join(" • ");
+};
+
+/**
+ * Convert an image URL to a base64 data URL usable by @react-pdf/renderer.
+ * Returns the original URL on failure (so caller can fallback).
+ */
+async function fetchImageAsDataURL(url) {
+  if (!url) return url;
+  try {
+    const resp = await fetch(url, { mode: "cors" });
+    if (!resp.ok) return url;
+    const blob = await resp.blob();
+    return await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result);
+      reader.onerror = () =>
+        reject(new Error("Failed to read blob as data URL"));
+      reader.readAsDataURL(blob);
+    });
+  } catch (err) {
+    console.warn("fetchImageAsDataURL failed for", url, err?.message || err);
+    return url;
+  }
+}
+
+
+/* ----- Print Receipt (robust for new /schools shape) ----- */
+
+const Transactions = () => {
+
+  const [userRole, setUserRole] = useState(
+    localStorage.getItem("activeRole") || ""
+  );
+  useEffect(() => {
+    const handler = () =>
+      setUserRole(localStorage.getItem("activeRole") || "");
+    window.addEventListener("role-changed", handler);
+    return () => window.removeEventListener("role-changed", handler);
+  }, []);
+
+  const isCancelled = (txn) => txn.status === "cancelled";
+
+  const canCancel = () => {
+    const role = (userRole || "").toLowerCase();
+    return ["admin", "superadmin", "account", "accounts", "accountant"].includes(
+      role
+    );
+  };
+
+  const canDelete = (txn) => {
+    const role = (userRole || "").toLowerCase();
+    return role === "superadmin" && isCancelled(txn);
+  };
+
+  const [transactions, setTransactions] = useState([]);
+  const [classes, setClasses] = useState([]);
+  const [sections, setSections] = useState([]);
+  const [students, setStudents] = useState([]);
+  const [feeHeads, setFeeHeads] = useState([]);
+  const [selectedClass, setSelectedClass] = useState("");
+  const [selectedSection, setSelectedSection] = useState("");
+  const [selectedStudentInfo, setSelectedStudentInfo] = useState(null);
+  const [newTransactionDetails, setNewTransactionDetails] = useState([]);
+  const [editingTransaction, setEditingTransaction] = useState(null);
+  const [showModal, setShowModal] = useState(false);
+  const [activeTab, setActiveTab] = useState("admissionNumber");
+  const [transactionModes, setTransactionModes] = useState(DEFAULT_TRANSACTION_MODES);
+  const [bankAccounts, setBankAccounts] = useState([]);
+  const [paymentMode, setPaymentMode] = useState(
+    getDefaultPaymentModeName(DEFAULT_TRANSACTION_MODES)
+  );
+  const [paymentDetails, setPaymentDetails] = useState(EMPTY_PAYMENT_DETAILS);
+  const [showChequePopup, setShowChequePopup] = useState(false);
+  const [remarks, setRemarks] = useState("");
+  const [transactionDate, setTransactionDate] = useState(getTodayDateInput());
+  const [daySummary, setDaySummary] = useState({ data: [], grandTotal: 0 });
+  const [searchAdmissionNumber, setSearchAdmissionNumber] = useState("");
+  const [selectedAdmissionStudent, setSelectedAdmissionStudent] = useState(null);
+  const [showReceiptModal, setShowReceiptModal] = useState(false);
+  const [selectedSlipId, setSelectedSlipId] = useState(null);
+  const [transportRoutes, setTransportRoutes] = useState([]);
+  const [sessions, setSessions] = useState([]);
+  const [selectedSession, setSelectedSession] = useState(null);
+  const [modalError, setModalError] = useState(null);
+  const [quickAmount, setQuickAmount] = useState("");
+  const [selectedHeads, setSelectedHeads] = useState(new Set());
+  const [selectedFineHeads, setSelectedFineHeads] = useState(new Set());
+  const [selectedTransportHeads, setSelectedTransportHeads] = useState(new Set());
+  const [prevBalanceHeadId, setPrevBalanceHeadId] = useState(null);
+  const [openingBalanceDue, setOpeningBalanceDue] = useState(0);
+  const [showSearchPanel, setShowSearchPanel] = useState(true);
+  const [showStudentExtra, setShowStudentExtra] = useState(false);
+  const [showCollectionDetails, setShowCollectionDetails] = useState(true);
+  const [loadingSibling, setLoadingSibling] = useState(false);
+  const [siblingDetailsMap, setSiblingDetailsMap] = useState({});
+  const [loadingSiblingSummary, setLoadingSiblingSummary] = useState(false);
+  const [showDueWithoutConcession, setShowDueWithoutConcession] = useState(false);
+  const [transportDisplayLabel, setTransportDisplayLabel] = useState(() => {
+    try {
+      return localStorage.getItem("transport_display_label") || "Transport";
+    } catch {
+      return "Transport";
+    }
+  });
+
+  const transportLabel = useMemo(
+    () => firstNonEmpty(transportDisplayLabel, "Transport") || "Transport",
+    [transportDisplayLabel]
+  );
+
+  const selectedSessionMeta = useMemo(() => {
+    if (!Array.isArray(sessions) || !sessions.length || !selectedSession) return null;
+    return (
+      sessions.find((s) => Number(s?.id || 0) === Number(selectedSession || 0)) ||
+      null
+    );
+  }, [sessions, selectedSession]);
+
+  const isSelectedSessionActive = useMemo(() => {
+    if (!selectedSessionMeta) return false;
+
+    if (
+      selectedSessionMeta?.is_active === true ||
+      selectedSessionMeta?.isActive === true
+    ) {
+      return true;
+    }
+
+    const activeSession = Array.isArray(sessions)
+      ? sessions.find((s) => s?.is_active === true || s?.isActive === true)
+      : null;
+
+    return Number(activeSession?.id || 0) === Number(selectedSessionMeta?.id || 0);
+  }, [selectedSessionMeta, sessions]);
+
+  const activeTransactionModes = useMemo(
+    () => getActiveTransactionModes(transactionModes),
+    [transactionModes]
+  );
+
+  const defaultPaymentMode = useMemo(
+    () => getDefaultPaymentModeName(activeTransactionModes),
+    [activeTransactionModes]
+  );
+
+  const selectedPaymentModeMeta = useMemo(
+    () =>
+      findModeByValue(paymentMode, activeTransactionModes) ||
+      findModeByValue(defaultPaymentMode, activeTransactionModes) ||
+      null,
+    [paymentMode, activeTransactionModes, defaultPaymentMode]
+  );
+
+  const editingPaymentModeMeta = useMemo(
+    () =>
+      editingTransaction
+        ? findModeByValue(editingTransaction?.PaymentMode, transactionModes) ||
+          findModeByValue(editingTransaction?.PaymentMode, activeTransactionModes) ||
+          null
+        : null,
+    [editingTransaction, transactionModes, activeTransactionModes]
+  );
+
+  const popupModeMeta = editingTransaction ? editingPaymentModeMeta : selectedPaymentModeMeta;
+
+  const applyCreatePaymentMode = useCallback(
+    (rawMode) => {
+      const normalizedMode = normalizePaymentModeValue(
+        rawMode,
+        activeTransactionModes
+      );
+      const modeMeta = findModeByValue(normalizedMode, activeTransactionModes);
+
+      setPaymentMode(normalizedMode);
+      setPaymentDetails((prev) => buildPaymentDetailsState(prev, modeMeta));
+      setShowChequePopup(Boolean(modeUsesPopupDetails(modeMeta)));
+    },
+    [activeTransactionModes]
+  );
+
+  const applyEditPaymentMode = useCallback(
+    (rawMode) => {
+      const normalizedMode = normalizePaymentModeValue(rawMode, transactionModes);
+      const modeMeta =
+        findModeByValue(normalizedMode, transactionModes) ||
+        findModeByValue(normalizedMode, activeTransactionModes);
+
+      setEditingTransaction((prev) => {
+        if (!prev) return prev;
+        const nextPaymentDetails = buildPaymentDetailsState(prev, modeMeta);
+        return {
+          ...prev,
+          PaymentMode: normalizedMode,
+          reference_no: nextPaymentDetails.reference_no,
+          bank_account_id: nextPaymentDetails.bank_account_id,
+          bank_name: nextPaymentDetails.bank_name,
+          cheque_no: nextPaymentDetails.cheque_no,
+          cheque_date: nextPaymentDetails.cheque_date,
+          Transaction_ID: nextPaymentDetails.Transaction_ID,
+          BankName: nextPaymentDetails.BankName,
+          ChequeNumber: nextPaymentDetails.ChequeNumber,
+          ChequeDate: nextPaymentDetails.ChequeDate,
+        };
+      });
+      setShowChequePopup(Boolean(modeUsesPopupDetails(modeMeta)));
+    },
+    [transactionModes, activeTransactionModes]
+  );
+
+  const selectedStudentSiblings = useMemo(() => {
+    const stu = selectedStudentInfo || selectedAdmissionStudent || null;
+    if (!stu) return [];
+
+    const rows = [];
+    for (let i = 1; i <= 4; i++) {
+      const id = stu[`sibling_id_${i}`];
+      const name = stu[`sibling_name_${i}`];
+      if (id || name) {
+        rows.push({
+          slot: i,
+          id: id || "",
+          name: name || (id ? `ID:${id}` : `Sibling ${i}`),
+        });
+      }
+    }
+    return rows;
+  }, [selectedStudentInfo, selectedAdmissionStudent]);
+
+  const selectedStudentClassLabel = useMemo(() => {
+    const activeStudent = selectedStudentInfo || selectedAdmissionStudent || null;
+
+    return (
+      firstNonEmpty(
+        activeStudent?.Class?.class_name,
+        activeStudent?.class_name,
+        getClassLabelById(
+          activeStudent?.Class?.id ?? activeStudent?.class_id ?? selectedClass,
+          classes
+        )
+      ) || "—"
+    );
+  }, [selectedStudentInfo, selectedAdmissionStudent, selectedClass, classes]);
+
+  const selectedStudentSectionLabel = useMemo(() => {
+    const activeStudent = selectedStudentInfo || selectedAdmissionStudent || null;
+
+    return (
+      firstNonEmpty(
+        activeStudent?.Section?.section_name,
+        activeStudent?.section_name,
+        getSectionLabelById(
+          activeStudent?.Section?.id || activeStudent?.section_id || selectedSection,
+          sections
+        )
+      ) || "—"
+    );
+  }, [selectedStudentInfo, selectedAdmissionStudent, selectedSection, sections]);
+
+  const siblingSummaryRows = useMemo(() => {
+    return selectedStudentSiblings.map((sib) => {
+      const key = String(sib.id || sib.name || sib.slot);
+      const resolved = siblingDetailsMap[key];
+
+      return {
+        ...sib,
+        display_name: resolved?.name || sib.name || "—",
+        class_name:
+          resolved?.Class?.class_name ||
+          resolved?.class_name ||
+          sib?.class_name ||
+          sib?.sibling_class_name ||
+          "—",
+        section_name:
+          resolved?.Section?.section_name ||
+          resolved?.section_name ||
+          sib?.section_name ||
+          sib?.sibling_section_name ||
+          "—",
+        admission_number: resolved?.admission_number || sib?.admission_number || "—",
+      };
+    });
+  }, [selectedStudentSiblings, siblingDetailsMap]);
+
+
+  const handlePrintReceipt = async (slipId) => {
+    try {
+      Swal.fire({
+        title: "Preparing receipt PDF…",
+        didOpen: () => Swal.showLoading(),
+        allowOutsideClick: false,
+        showConfirmButton: false,
+      });
+
+      const [schoolResp, receiptResp] = await Promise.allSettled([
+        api.get("/schools"),
+        api.get(`/transactions/slip/${slipId}`),
+      ]);
+
+      let receipt = null;
+      if (receiptResp.status === "fulfilled") {
+        const r = receiptResp.value?.data;
+        if (r && Array.isArray(r.data)) receipt = r.data;
+        else if (Array.isArray(r)) receipt = r;
+        else if (r && typeof r === "object") {
+          if (r.data && Array.isArray(r.data)) receipt = r.data;
+          else if (r.data && typeof r.data === "object") receipt = [r.data];
+          else if (r.receipt && Array.isArray(r.receipt)) receipt = r.receipt;
+          else receipt = [r];
+        } else {
+          receipt = receiptResp.value?.data ?? null;
+          if (receipt && !Array.isArray(receipt)) receipt = [receipt];
+        }
+      }
+
+      if (!receipt || receipt.length === 0) {
+        Swal.close();
+        Swal.fire("No receipt", "Server returned no receipt data.", "error");
+        return;
+      }
+
+      let school = null;
+      if (schoolResp.status === "fulfilled") {
+        const d = schoolResp.value?.data;
+        if (d && Array.isArray(d.schools) && d.schools.length) school = d.schools[0];
+        else if (Array.isArray(d)) school = d[0];
+        else if (d && Array.isArray(d.data) && d.data.length) school = d.data[0];
+        else if (d && d.school) school = d.school;
+        else if (d && typeof d === "object" && Object.keys(d).length) school = d;
+      }
+
+      if (!school && receipt[0]) {
+        const item = receipt[0];
+        if (item.School || item.school) {
+          school = item.School || item.school;
+        } else if (item.schoolName || item.institute_name) {
+          school = {
+            name: item.schoolName || item.institute_name,
+            address: item.schoolAddress || item.address || "",
+            logo: item.logo || null,
+          };
+        }
+      }
+
+      const receiptTransportLabel = school
+        ? getTransportDisplayLabelFromSchoolPayload(school)
+        : transportLabel;
+
+      if (receiptTransportLabel) {
+        setTransportDisplayLabel(receiptTransportLabel);
+      }
+
+      if (!school) {
+        school = {
+          name: "Your School",
+          address: "",
+          logo: null,
+          phone: "",
+          email: "",
+          transport_display_label: receiptTransportLabel,
+        };
+      }
+
+      const isNeg = (v) => typeof v === "number" && !Number.isNaN(v) && v < 0;
+      const stripNeg = (v) => (isNeg(v) ? undefined : v);
+
+      const fieldsToClean = [
+        "feeBalance",
+        "vanFeeBalance",
+        "FinalDue",
+        "finalDue",
+        "Remaining",
+        "remaining",
+        "RemainingBeforeFine",
+        "remainingBeforeFine",
+      ];
+
+      const cleanedReceipt = receipt.map((row) => {
+        const out = { ...row };
+
+        fieldsToClean.forEach((k) => {
+          if (k in out) out[k] = stripNeg(Number(out[k]));
+        });
+
+        if (out.Student && typeof out.Student === "object") {
+          out.Student = { ...out.Student };
+          fieldsToClean.forEach((k) => {
+            if (k in out.Student) out.Student[k] = stripNeg(Number(out.Student[k]));
+          });
+        }
+
+        if (out.Transport || out.Transportation) {
+          const T = { ...(out.Transport || out.Transportation) };
+          fieldsToClean.forEach((k) => {
+            if (k in T) T[k] = stripNeg(Number(T[k]));
+          });
+          out.Transport = T;
+          out.Transportation = T;
+        }
+
+        return out;
+      });
+
+      const firstReceipt = cleanedReceipt[0] || {};
+
+      const selectedSessionObj =
+        Array.isArray(sessions) && sessions.length
+          ? sessions.find((s) => Number(s.id) === Number(selectedSession))
+          : null;
+
+      const buildSessionLabelFromDates = (obj) => {
+        if (!obj) return "";
+
+        const start =
+          obj.start_year ||
+          obj.startYear ||
+          obj.from_year ||
+          obj.fromYear ||
+          obj.year_from ||
+          obj.session_from;
+
+        const end =
+          obj.end_year ||
+          obj.endYear ||
+          obj.to_year ||
+          obj.toYear ||
+          obj.year_to ||
+          obj.session_to;
+
+        if (start && end) {
+          return `${start}-${String(end).slice(-2)}`;
+        }
+
+        return "";
+      };
+
+      const sessionLabel =
+        selectedSessionObj?.name ||
+        selectedSessionObj?.label ||
+        selectedSessionObj?.title ||
+        selectedSessionObj?.session_name ||
+        selectedSessionObj?.sessionLabel ||
+        buildSessionLabelFromDates(selectedSessionObj) ||
+        firstReceipt?.session_name ||
+        firstReceipt?.Session_Name ||
+        firstReceipt?.academic_session ||
+        firstReceipt?.session ||
+        firstReceipt?.Session ||
+        firstReceipt?.Student?.session_name ||
+        firstReceipt?.Student?.academic_session ||
+        firstReceipt?.Student?.session ||
+        "";
+
+      const sessionId =
+        firstReceipt?.session_id ||
+        firstReceipt?.Session_ID ||
+        selectedSessionObj?.id ||
+        selectedSession ||
+        null;
+
+      const payload = {
+        receipt: cleanedReceipt,
+        school: {
+          ...school,
+          transport_display_label: firstNonEmpty(
+            school?.transport_display_label,
+            receiptTransportLabel
+          ),
+        },
+        labels: {
+          transport: receiptTransportLabel,
+        },
+        transportDisplayLabel: receiptTransportLabel,
+        fileName: `Receipt-${slipId}`,
+        sessionLabel,
+        session_id: sessionId,
+        options: { hideNegativeBalances: true },
+      };
+
+      console.log("Receipt PDF payload session =>", {
+        slipId,
+        sessionLabel,
+        sessionId,
+        selectedSession,
+        selectedSessionObj,
+        firstReceipt,
+      });
+
+      const res = await api.post("/receipt-pdf/receipt/generate-pdf", payload, {
+        responseType: "blob",
+      });
+
+      const blob = new Blob([res.data], { type: "application/pdf" });
+      const url = window.URL.createObjectURL(blob);
+      window.open(url, "_blank");
+      setTimeout(() => window.URL.revokeObjectURL(url), 60 * 1000);
+
+      Swal.close();
+    } catch (err) {
+      Swal.close();
+      console.error("Error preparing receipt PDF:", err);
+      Swal.fire("Error", err?.message || "Failed to prepare receipt PDF", "error");
+    }
+  };
+
+
+  const [sbQuery, setSbQuery] = useState("");
+  const [sbResults, setSbResults] = useState([]);
+  const [sbOpen, setSbOpen] = useState(false);
+  const [sbActive, setSbActive] = useState(-1);
+  const sbWrapRef = useRef(null);
+  const debounceRef = useRef(null);
+
+  const escapeHtml = (s) =>
+    String(s ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+
+  const debounce = (fn, ms = 250) => {
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(fn, ms);
+  };
+
+  const openChequePopup = () => setShowChequePopup(true);
+
+  const closeChequePopup = () => setShowChequePopup(false);
+
+  const saveChequePopup = () => {
+    const source = editingTransaction || paymentDetails;
+    const msg = validateModePopupInfo(source, popupModeMeta);
+    if (msg) {
+      Swal.fire("Incomplete payment details", msg, "warning");
+      return;
+    }
+    setShowChequePopup(false);
+  };
+
+  const asStudentsArray = (data) =>
+    Array.isArray(data)
+      ? data
+      : Array.isArray(data?.rows)
+      ? data.rows
+      : Array.isArray(data?.data)
+      ? data.data
+      : [];
+
+  const renderCustomFieldsBlock = (studentObj) => {
+    const fields = normalizeCustomFields(studentObj);
+    const entries = Object.entries(fields || {}).filter(
+      ([key, value]) =>
+        String(key || "").trim() !== "" &&
+        String(value ?? "").trim() !== "" &&
+        String(value ?? "").toLowerCase() !== "null" &&
+        String(value ?? "").toLowerCase() !== "undefined"
+    );
+
+    if (!entries.length) return null;
+
+    return (
+      <Card
+        className="mb-3 shadow-sm border-0"
+        style={{
+          background: "linear-gradient(135deg, #eef7ff 0%, #dff1ff 100%)",
+          borderLeft: "6px solid #0d6efd",
+        }}
+      >
+        <Card.Body>
+          <div className="fw-bold text-primary mb-3" style={{ fontSize: "1rem" }}>
+            Student Important Details
+          </div>
+
+          <Row className="g-2">
+            {entries.map(([key, value]) => (
+              <Col md={6} key={key}>
+                <div
+                  className="h-100"
+                  style={{
+                    background: "#fff",
+                    border: "1px solid #cfe2ff",
+                    borderRadius: "10px",
+                    padding: "0.65rem 0.8rem",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: "0.78rem",
+                      color: "#6c757d",
+                      fontWeight: 600,
+                      textTransform: "uppercase",
+                      marginBottom: "2px",
+                    }}
+                  >
+                    {key}
+                  </div>
+                  <div
+                    style={{
+                      fontSize: "0.95rem",
+                      fontWeight: 700,
+                      color: "#0b3d91",
+                    }}
+                  >
+                    {String(value)}
+                  </div>
+                </div>
+              </Col>
+            ))}
+          </Row>
+        </Card.Body>
+      </Card>
+    );
+  };
+
+  const fetchStudentsInline = async (term) => {
+    if (!term || term.trim().length < 1) {
+      setSbResults([]);
+      setSbOpen(false);
+      return;
+    }
+    try {
+      const params = { q: term.trim(), limit: 25 };
+      if (selectedSession) params.session_id = selectedSession;
+      const { data } = await api.get("/students/search", { params });
+      const list = asStudentsArray(data)
+        .map(normalizeStudentRow)
+        .filter((s) => s.id);
+      setSbResults(list);
+      setSbOpen(true);
+      setSbActive(list.length ? 0 : -1);
+    } catch (e) {
+      console.error("students search failed", e);
+      setSbResults([]);
+      setSbOpen(false);
+    }
+  };
+
+  const handlePickStudent = (s) => {
+    if (!s) return;
+    setModalError(null);
+    setSelectedClass(s.class_id ?? s.Class?.id ?? "");
+    setSelectedSection(s.section_id ?? s.Section?.id ?? "");
+    setSelectedAdmissionStudent(s);
+    setSelectedStudentInfo(s);
+    setSbQuery(`${s.name} (${s.admission_number || "—"})`);
+    setSbOpen(false);
+    if (!selectedSession) {
+      setModalError("Please select an academic session before loading fee details.");
+      return;
+    }
+    fetchFeeHeadsForStudent(s.class_id ?? s.Class?.id, s.id, s);
+  };
+
+  const resolveStudentByToken = async (token) => {
+    if (!token) return null;
+
+    const raw = String(token).trim().replace(/^ID:\s*/i, "").trim();
+    if (!raw) return null;
+
+    const normalizeResolvedStudent = (payload) => {
+      if (!payload) return null;
+      const row = Array.isArray(payload) ? payload[0] || null : payload;
+      return row ? normalizeStudentRow(row) : null;
+    };
+
+    try {
+      const resp = await api.get(`/students/admission/${encodeURIComponent(raw)}`);
+      const resolved = normalizeResolvedStudent(resp.data);
+      if (resolved?.id) return resolved;
+    } catch (_) {}
+
+    try {
+      const resp = await api.get(`/students`, {
+        params: { admission_number: raw },
+      });
+      const arr = asStudentsArray(resp.data).map(normalizeStudentRow);
+      const exact = arr.find(
+        (stu) => String(stu.admission_number || "").trim() === raw
+      );
+      if (exact?.id) return exact;
+    } catch (_) {}
+
+    if (/^\d+$/.test(raw)) {
+      try {
+        const resp = await api.get(`/students/${parseInt(raw, 10)}`);
+        const resolved = normalizeResolvedStudent(resp.data);
+        if (resolved?.id) return resolved;
+      } catch (_) {}
+    }
+
+    return null;
+  };
+
+  const handlePickSibling = async (token) => {
+    if (!token) return;
+
+    setLoadingSibling(true);
+    setModalError(null);
+
+    try {
+      const sibling = await resolveStudentByToken(token);
+
+      if (!sibling) {
+        Swal.fire("Not Found", "Sibling record not available.", "warning");
+        return;
+      }
+
+      setSelectedClass(sibling.class_id ?? sibling.Class?.id ?? "");
+      setSelectedSection(sibling.section_id ?? sibling.Section?.id ?? "");
+      setSelectedAdmissionStudent(sibling);
+      setSelectedStudentInfo(sibling);
+      setSbQuery(`${sibling.name} (${sibling.admission_number || "—"})`);
+      setSbOpen(false);
+
+      if (!selectedSession) {
+        setModalError("Please select an academic session before loading fee details.");
+        return;
+      }
+
+      fetchFeeHeadsForStudent(sibling.class_id, sibling.id, sibling);
+    } catch (err) {
+      console.error("handlePickSibling failed", err);
+      Swal.fire("Error", "Failed to load sibling details.", "error");
+    } finally {
+      setLoadingSibling(false);
+    }
+  };
+
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadSiblingSummaries = async () => {
+      if (!selectedStudentSiblings.length) {
+        setSiblingDetailsMap({});
+        return;
+      }
+
+      setLoadingSiblingSummary(true);
+
+      try {
+        const entries = await Promise.all(
+          selectedStudentSiblings.map(async (sib) => {
+            const key = String(sib.id || sib.name || sib.slot);
+            try {
+              const resolved = await resolveStudentByToken(sib.id || sib.name);
+              return [key, resolved ? normalizeStudentRow(resolved) : null];
+            } catch {
+              return [key, null];
+            }
+          })
+        );
+
+        if (!cancelled) {
+          setSiblingDetailsMap(Object.fromEntries(entries));
+        }
+      } finally {
+        if (!cancelled) setLoadingSiblingSummary(false);
+      }
+    };
+
+    loadSiblingSummaries();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedStudentSiblings]);
+
+  const openStudentFeePage = () => {
+    const stu = selectedStudentInfo || selectedAdmissionStudent;
+    if (!stu) {
+      Swal.fire("Select student", "Please select a student first.", "warning");
+      return;
+    }
+
+    const admission = String(
+      stu?.admission_number || stu?.AdmissionNumber || ""
+    ).trim();
+
+    if (!admission) {
+      Swal.fire(
+        "Missing admission number",
+        "Student admission number not found.",
+        "warning"
+      );
+      return;
+    }
+
+    localStorage.setItem("activeStudentAdmission", admission);
+    window.dispatchEvent(new Event("student-switched"));
+
+    const feePageUrl = `${window.location.origin}/student-fee`;
+    const opened = window.open(feePageUrl, "_blank", "noopener,noreferrer");
+
+    if (!opened) {
+      Swal.fire(
+        "Popup blocked",
+        "Please allow popups for this site to open the parent fee page in a new tab.",
+        "warning"
+      );
+    }
+  };
+
+  useEffect(() => {
+    const onDocClick = (e) => {
+      if (!sbWrapRef.current) return;
+      if (!sbWrapRef.current.contains(e.target)) setSbOpen(false);
+    };
+    document.addEventListener("click", onDocClick, { capture: true });
+    return () => document.removeEventListener("click", onDocClick);
+  }, []);
+
+  const dueIncludingVanForRow = (row) => {
+    const academicNetDue = Math.max(
+      0,
+      (row.Fee_Due || 0) - (row.Fee_Recieved || 0) - (row.Concession || 0)
+    );
+
+    const fineDue = row.isFineApplicable
+      ? Math.max(0, (row.fineAmount || 0) - (row.Fine_Amount || 0))
+      : 0;
+
+    const vanOutstanding = row.ShowVanFeeInput
+      ? Math.max(0, (row.Van_Fee_Due || 0) - (row.VanFee || 0))
+      : 0;
+
+    return academicNetDue + fineDue + vanOutstanding;
+  };
+
+  const academicDueForRow = (row, showWithoutConcession = false) =>
+    getAcademicDisplayDue(row, showWithoutConcession);
+
+  const fineDueForRow = (row) =>
+    row.isFineApplicable
+      ? Math.max(0, (row.fineAmount || 0) - (row.Fine_Amount || 0))
+      : 0;
+
+  const transportDueForRow = (row) =>
+    row.ShowVanFeeInput
+      ? Math.max(0, (row.Van_Fee_Due || 0) - (row.VanFee || 0))
+      : 0;
+
+  const baseDueForRow = (row, showWithoutConcession = false) =>
+    academicDueForRow(row, showWithoutConcession) +
+    fineDueForRow(row) +
+    transportDueForRow(row);
+
+  const totalDueBase = useMemo(() => {
+    return (newTransactionDetails || []).reduce(
+      (sum, row) => sum + baseDueForRow(row, showDueWithoutConcession),
+      0
+    );
+  }, [newTransactionDetails, showDueWithoutConcession]);
+
+  const selectedDueBase = useMemo(() => {
+    if (!newTransactionDetails?.length) return 0;
+    return newTransactionDetails.reduce((sum, row) => {
+      const key = String(row.Fee_Head);
+      const academicPart = selectedHeads.has(key)
+        ? academicDueForRow(row, showDueWithoutConcession)
+        : 0;
+      const finePart = selectedFineHeads.has(key)
+        ? fineDueForRow(row)
+        : 0;
+      const transportPart = selectedTransportHeads.has(key)
+        ? transportDueForRow(row)
+        : 0;
+      return sum + academicPart + finePart + transportPart;
+    }, 0);
+  }, [
+    newTransactionDetails,
+    selectedHeads,
+    selectedFineHeads,
+    selectedTransportHeads,
+    showDueWithoutConcession,
+  ]);
+
+  useEffect(() => {
+    setSelectedHeads(new Set());
+    setSelectedFineHeads(new Set());
+    setSelectedTransportHeads(new Set());
+  }, [showModal, feeHeads]);
+
+  useEffect(() => {
+    if (selectedStudentInfo?.id && feeHeads.length > 0 && !editingTransaction) {
+      setShowSearchPanel(false);
+      setShowStudentExtra(false);
+      setShowCollectionDetails(true);
+    }
+  }, [selectedStudentInfo, feeHeads, editingTransaction]);
+
+  const POLLING_INTERVAL = 5000;
+
+  const viewReceipt = (slipId) => {
+    setSelectedSlipId(slipId);
+    setShowReceiptModal(true);
+  };
+
+  const totalFeeReceived = useMemo(
+    () => newTransactionDetails.reduce((t, i) => t + (i.Fee_Recieved || 0), 0),
+    [newTransactionDetails]
+  );
+
+  const totalVanFee = useMemo(
+    () => newTransactionDetails.reduce((t, i) => t + (i.VanFee || 0), 0),
+    [newTransactionDetails]
+  );
+
+  const totalAcademicConcession = useMemo(
+    () => newTransactionDetails.reduce((t, i) => t + (i.Concession || 0), 0),
+    [newTransactionDetails]
+  );
+
+  const totalVanConcession = useMemo(
+    () =>
+      newTransactionDetails.reduce(
+        (t, i) => t + (i.Van_Fee_Concession || 0),
+        0
+      ),
+    [newTransactionDetails]
+  );
+
+  const totalConcessions = useMemo(
+    () => totalAcademicConcession + totalVanConcession,
+    [totalAcademicConcession, totalVanConcession]
+  );
+
+  const totalFine = useMemo(
+    () => newTransactionDetails.reduce((t, i) => t + (i.Fine_Amount || 0), 0),
+    [newTransactionDetails]
+  );
+
+  const grandTotal = useMemo(
+    () => totalFeeReceived + totalVanFee + totalFine,
+    [totalFeeReceived, totalVanFee, totalFine]
+  );
+
+  const fetchFineEligibility = async (studentId) => {
+    try {
+      const res = await api.get(`/transactions/fine-eligibility/${studentId}`);
+      return res.data?.data || {};
+    } catch (e) {
+      console.error("Error fetching fine eligibility:", e);
+      return {};
+    }
+  };
+
+  const fetchTransportRoutes = async () => {
+    try {
+      const response = await api.get("/transportations");
+      setTransportRoutes(response.data || []);
+    } catch (error) {
+      console.error("Error fetching transport routes:", error);
+    }
+  };
+
+  const fetchTransactionModes = async () => {
+    try {
+      const response = await api.get("/mode-of-transactions");
+      const rows = asArray(response.data)
+        .map(normalizeModeRow)
+        .filter((row) => row?.name);
+      setTransactionModes(
+        rows.length ? sortTransactionModes(rows) : DEFAULT_TRANSACTION_MODES
+      );
+    } catch (error) {
+      console.error("Error fetching mode of transactions:", error);
+      setTransactionModes(DEFAULT_TRANSACTION_MODES);
+    }
+  };
+
+  const fetchSchoolBankAccounts = async () => {
+    try {
+      const response = await api.get("/school-bank-accounts?active_only=true");
+      const rows = asArray(response.data)
+        .map(normalizeBankAccountRow)
+        .filter((row) => row?.id);
+      setBankAccounts(sortBankAccounts(rows));
+    } catch (error) {
+      console.error("Error fetching school bank accounts:", error);
+      setBankAccounts([]);
+    }
+  };
+
+  const fetchTransportDisplayLabel = useCallback(async () => {
+    try {
+      const response = await api.get("/schools");
+      const label = getTransportDisplayLabelFromSchoolPayload(response.data);
+      setTransportDisplayLabel(label);
+
+      try {
+        localStorage.setItem("transport_display_label", label);
+      } catch {}
+    } catch (error) {
+      console.warn("Error fetching transport display label:", error?.message || error);
+      setTransportDisplayLabel((prev) => firstNonEmpty(prev, "Transport") || "Transport");
+    }
+  }, []);
+
+  const syncVanRemaining = (row) => {
+    if (!row?.ShowVanFeeInput) return row;
+
+    const routeFee = Number(row._routeFee || 0);
+    const prevRec = Number(row._receivedVanFee || 0);
+    const cons = Number(row.Van_Fee_Concession || 0);
+    const fine = Number(row.Van_Fine_Amount || 0);
+    const baseWithoutFine = Math.max(0, routeFee - prevRec - cons);
+
+    row.VanFee = Math.max(0, Number(row.VanFee || 0));
+    row.Van_Fee_Remaining = Math.max(0, baseWithoutFine - (row.VanFee || 0));
+    row.Van_Fee_Due = Math.max(0, baseWithoutFine + fine);
+    return row;
+  };
+
+  const fillRowAuto = (index) => {
+    setNewTransactionDetails((prev) => {
+      if (!prev?.length) return prev;
+
+      const updated = [...prev];
+      const row = { ...updated[index] };
+
+      const acadNeed = Math.max(
+        0,
+        (row.Fee_Due || 0) - (row.Concession || 0) - (row.Fee_Recieved || 0)
+      );
+      const maxAllowed = Math.max(
+        0,
+        (row.Fee_Due || 0) - (row.Concession || 0)
+      );
+
+      row.Fee_Recieved = Math.min(
+        (row.Fee_Recieved || 0) + acadNeed,
+        maxAllowed
+      );
+
+      if (row.isOpeningBalance) {
+        row.Fine_Amount = 0;
+      } else if (row.isFineApplicable) {
+        const fineNeed = Math.max(0, (row.fineAmount || 0) - (row.Fine_Amount || 0));
+        row.Fine_Amount = Math.min(
+          (row.Fine_Amount || 0) + fineNeed,
+          row.fineAmount || 0
+        );
+        row.isFineEdited = true;
+      }
+
+      updated[index] = row;
+      return updated;
+    });
+  };
+
+  const clearRowAuto = (index) => {
+    setNewTransactionDetails((prev) => {
+      if (!prev?.length) return prev;
+      const updated = [...prev];
+      const row = { ...updated[index] };
+
+      row.Fee_Recieved = 0;
+      row.Fine_Amount = 0;
+      row.isFineEdited = false;
+
+      updated[index] = row;
+      return updated;
+    });
+  };
+
+  const fillFineAuto = (index) => {
+    setNewTransactionDetails((prev) => {
+      if (!prev?.length) return prev;
+
+      const updated = [...prev];
+      const row = { ...updated[index] };
+
+      if (!row.isFineApplicable || row.isOpeningBalance) return prev;
+
+      const fineNeed = Math.max(0, (row.fineAmount || 0) - (row.Fine_Amount || 0));
+      row.Fine_Amount = Math.min(
+        (row.Fine_Amount || 0) + fineNeed,
+        row.fineAmount || 0
+      );
+      row.isFineEdited = true;
+
+      updated[index] = row;
+      return updated;
+    });
+  };
+
+  const clearFineAuto = (index) => {
+    setNewTransactionDetails((prev) => {
+      if (!prev?.length) return prev;
+
+      const updated = [...prev];
+      const row = { ...updated[index] };
+
+      row.Fine_Amount = 0;
+      row.isFineEdited = false;
+
+      updated[index] = row;
+      return updated;
+    });
+  };
+
+  const fillTransportAuto = (index) => {
+    setNewTransactionDetails((prev) => {
+      if (!prev?.length) return prev;
+
+      const updated = [...prev];
+      const row = { ...updated[index] };
+
+      if (!row.ShowVanFeeInput || row.isOpeningBalance) return prev;
+
+      const vanNeed = Math.max(0, (row.Van_Fee_Due || 0) - (row.VanFee || 0));
+      row.VanFee = Math.max(0, (row.VanFee || 0) + vanNeed);
+      syncVanRemaining(row);
+
+      updated[index] = row;
+      return updated;
+    });
+  };
+
+  const clearTransportAuto = (index) => {
+    setNewTransactionDetails((prev) => {
+      if (!prev?.length) return prev;
+
+      const updated = [...prev];
+      const row = { ...updated[index] };
+
+      if (!row.ShowVanFeeInput || row.isOpeningBalance) return prev;
+
+      row.VanFee = 0;
+      syncVanRemaining(row);
+
+      updated[index] = row;
+      return updated;
+    });
+  };
+
+  const fetchSessions = async () => {
+    try {
+      const res = await api.get("/sessions");
+      const sessionList = res.data || [];
+      setSessions(sessionList);
+      if (!selectedSession) {
+        let active = sessionList.find((s) => s.is_active === true);
+        if (!active && sessionList.length > 0) active = sessionList[0];
+        if (active) setSelectedSession(Number(active.id));
+      }
+    } catch (error) {
+      console.error("Error fetching sessions:", error);
+    }
+  };
+
+  const fetchTransactions = async () => {
+    try {
+      const response = await api.get(
+        selectedSession
+          ? `/transactions?session_id=${selectedSession}`
+          : "/transactions"
+      );
+      setTransactions(response.data.data || []);
+    } catch (error) {
+      console.error("Error fetching transactions:", error);
+    }
+  };
+
+  const fetchDaySummary = async () => {
+    try {
+      const response = await api.get(
+        selectedSession
+          ? `/transactions/summary/day-summary?session_id=${selectedSession}`
+          : "/transactions/summary/day-summary"
+      );
+      setDaySummary(response.data || { data: [], grandTotal: 0 });
+    } catch (error) {
+      console.error("Error fetching day summary:", error);
+    }
+  };
+
+  const fetchClasses = async () => {
+    try {
+      const response = await api.get("/classes");
+      const raw = asArray(response.data);
+      setClasses(raw.map(normalizeClassRow).filter((c) => isValidId(c.id)));
+    } catch (error) {
+      console.error("Error fetching classes:", error);
+    }
+  };
+
+  const fetchSections = async (classId = "") => {
+    try {
+      const url = hasValue(classId) ? `/sections?class_id=${classId}` : `/sections`;
+      const res = await api.get(url);
+      const raw = Array.isArray(res.data)
+        ? res.data
+        : Array.isArray(res.data?.data)
+        ? res.data.data
+        : Array.isArray(res.data?.sections)
+        ? res.data.sections
+        : [];
+      const list = raw.map(normalizeSectionRow).filter((s) => isValidId(s.id));
+      setSections(list);
+    } catch (error) {
+      console.error("Error fetching sections:", error);
+      setSections([]);
+    }
+  };
+
+  const fetchStudentsByClassAndSection = useCallback(async () => {
+    if (!hasValue(selectedClass) || !hasValue(selectedSection)) {
+      setStudents([]);
+      return;
+    }
+    try {
+      const params = new URLSearchParams();
+      params.append("class_id", selectedClass);
+      params.append("section_id", selectedSection);
+      if (selectedSession) params.append("session_id", selectedSession);
+      const url = `/students/searchByClassAndSection?${params.toString()}`;
+      const res = await api.get(url);
+      const raw = asArray(res.data);
+      setStudents(raw.map(normalizeStudentRow).filter((s) => s.id));
+    } catch (error) {
+      console.error("Error fetching students:", error);
+      setStudents([]);
+    }
+  }, [selectedClass, selectedSection, selectedSession]);
+
+  const ensurePrevBalanceHeadId = async () => {
+    if (prevBalanceHeadId) return prevBalanceHeadId;
+    try {
+      const res = await api.get("/fee-headings");
+      const list = Array.isArray(res.data) ? res.data : res.data?.data || [];
+      const hit = list.find((h) => {
+        const label = String(
+          h?.fee_heading ??
+            h?.Fee_Heading_Name ??
+            h?.name ??
+            h?.label ??
+            ""
+        )
+          .trim()
+          .toLowerCase();
+
+        return label === "previous balance" || label === "opening balance";
+      });
+      if (hit) {
+        setPrevBalanceHeadId(hit.id);
+        return hit.id;
+      }
+    } catch (e) {
+      console.warn("fee-headings fetch failed:", e?.message || e);
+    }
+    return null;
+  };
+
+  const fetchOpeningBalanceOutstanding = async (studentId, sessionId) => {
+    try {
+      const try1 = await api.get(`/opening-balances/outstanding`, {
+        params: { student_id: studentId, session_id: sessionId },
+      });
+      const val1 = Number(
+        try1?.data?.outstanding ??
+          try1?.data?.data?.outstanding ??
+          try1?.data?.totalOutstanding
+      );
+      if (!Number.isNaN(val1) && val1 > 0) return val1;
+    } catch (_) {}
+
+    try {
+      const res = await api.get(`/opening-balances`, {
+        params: { student_id: studentId, session_id: sessionId },
+      });
+      const rows = Array.isArray(res.data?.rows)
+        ? res.data.rows
+        : Array.isArray(res.data)
+        ? res.data
+        : [];
+      if (!rows.length) return 0;
+
+      const providedTotal = Number(
+        res.data?.outstanding ||
+          res.data?.totalOutstanding ||
+          res.data?.totals?.outstanding
+      );
+      if (!Number.isNaN(providedTotal)) return Math.max(0, providedTotal);
+
+      const total = rows.reduce((sum, r) => sum + Number(r.amount || 0), 0);
+      return Math.max(0, total);
+    } catch (e) {
+      console.warn("opening balance fetch failed:", e?.message || e);
+      return 0;
+    }
+  };
+
+  const fetchFeeHeadsForStudent = async (
+    _classId,
+    studentId,
+    baseStudentFromAdmission = null
+  ) => {
+    try {
+      setModalError(null);
+      if (!selectedSession) {
+        setModalError(
+          "Please select an academic session before loading fee details."
+        );
+        return;
+      }
+
+      const feeResponse = await api.get(
+        `/students/${studentId}/fee-details?session_id=${selectedSession}`
+      );
+
+      const feeDetailsData = feeResponse.data.feeDetails || [];
+      const baseStudent = normalizeStudentRow(
+        feeResponse?.data?.student || baseStudentFromAdmission || {}
+      );
+      const studentRouteFromFeeDetails = baseStudent?.route || null;
+      const selectedSessionIsActive = Boolean(isSelectedSessionActive);
+
+      const [
+        receivedVanFeeResponse,
+        lastRouteResponse,
+        routeDetailsResponse,
+        fineEligibilityMap,
+      ] = await Promise.all([
+        api.get(`/transactions/vanfee/${studentId}?session_id=${selectedSession}`),
+        api.get(`/transactions/last-route/${studentId}?session_id=${selectedSession}`),
+        api.get(`/transportations`),
+        fetchFineEligibility(studentId),
+      ]);
+
+      let transportDueMap = {};
+      let firstTransportItem = null;
+      try {
+        const dueResp = await api.get(
+          `/student-transport/due/${studentId}?session_id=${selectedSession}`
+        );
+        const dueData = dueResp.data?.data || {};
+        const items = Array.isArray(dueData.items) ? dueData.items : [];
+        items.forEach((it) => {
+          if (it.Fee_Head !== undefined && it.Fee_Head !== null) {
+            transportDueMap[String(it.Fee_Head)] = it;
+          }
+        });
+        firstTransportItem = items.length ? items[0] : null;
+      } catch (err) {
+        console.warn(
+          "student-transport/due endpoint not available or failed:",
+          err?.message || err
+        );
+      }
+
+      let serverTransportCostGlobal = null;
+      const serverTransportCostByHead = {};
+
+      const receivedVanData =
+        receivedVanFeeResponse.data && receivedVanFeeResponse.data.data
+          ? receivedVanFeeResponse.data.data
+          : Array.isArray(receivedVanFeeResponse.data)
+          ? receivedVanFeeResponse.data
+          : [];
+
+      if (Array.isArray(receivedVanData)) {
+        if (
+          receivedVanData.length > 0 &&
+          typeof receivedVanData[0].TransportCost !== "undefined"
+        ) {
+          serverTransportCostGlobal = Number(receivedVanData[0].TransportCost) || null;
+        }
+        receivedVanData.forEach((it) => {
+          if (it.Fee_Head !== undefined && it.TransportCost !== undefined) {
+            serverTransportCostByHead[String(it.Fee_Head)] =
+              Number(it.TransportCost) || 0;
+          }
+        });
+      }
+
+      const receivedVanFeeMap = {};
+      const vanFeeConcessionMap = {};
+      (receivedVanData || []).forEach((item) => {
+        receivedVanFeeMap[item.Fee_Head] =
+          parseFloat(item.TotalVanFeeReceived) || 0;
+        vanFeeConcessionMap[item.Fee_Head] =
+          parseFloat(item.TotalVanFeeConcession) || 0;
+      });
+
+      const lastRouteMap = {};
+      (lastRouteResponse.data.data || []).forEach((item) => {
+        lastRouteMap[item.Fee_Head] = item.Route_Number || "";
+      });
+
+      const transportRoutesData = Array.isArray(routeDetailsResponse.data)
+        ? routeDetailsResponse.data
+        : Array.isArray(routeDetailsResponse.data?.data)
+        ? routeDetailsResponse.data.data
+        : [];
+
+      const studentAssignedRouteId =
+        baseStudent?.transport_id ??
+        baseStudent?.route_id ??
+        baseStudent?.Route_Number ??
+        baseStudent?.Transportation?.id ??
+        studentRouteFromFeeDetails?.route_id ??
+        null;
+
+      const hasExistingTxnForStudent =
+        Array.isArray(receivedVanData) && receivedVanData.length > 0;
+
+      const feeDetails = feeDetailsData.map((detail) => {
+        const headId = detail.fee_heading_id;
+
+        const transportApplicable =
+          /^(yes|true|1)$/i.test(String(detail.transportApplicable ?? "")) ||
+          /transport|van/i.test(
+            String(detail.fee_heading || detail.Fee_Heading_Name || "")
+          );
+
+        const baseFeeDue = detail.feeDue || 0;
+        const extraConcession = 0;
+        const academicDue = Math.max(0, baseFeeDue - extraConcession);
+
+        const key = String(headId);
+        let eligible;
+        if (
+          fineEligibilityMap &&
+          Object.prototype.hasOwnProperty.call(fineEligibilityMap, key)
+        ) {
+          const val = fineEligibilityMap[key];
+          eligible = val === true || val === "true" || val === 1 || val === "1";
+        } else {
+          eligible = true;
+        }
+
+        const originalFine = eligible ? detail.fineAmount || 0 : 0;
+
+        const transportItem = transportDueMap[String(headId)] ?? null;
+        const serverCostPerHead = serverTransportCostByHead[String(headId)];
+        const serverCost =
+          typeof serverCostPerHead !== "undefined" && serverCostPerHead !== null
+            ? serverCostPerHead
+            : serverTransportCostGlobal !== null
+            ? serverTransportCostGlobal
+            : null;
+
+        const rawStudentAssignedRouteId =
+          baseStudent?.transport_id ??
+          baseStudent?.route_id ??
+          baseStudent?.Route_Number ??
+          baseStudent?.Transportation?.id ??
+          studentRouteFromFeeDetails?.route_id ??
+          null;
+
+        const normalizeRouteId = (maybeId) => {
+          if (
+            maybeId === undefined ||
+            maybeId === null ||
+            String(maybeId).trim() === ""
+          )
+            return null;
+          const routes = Array.isArray(transportRoutesData)
+            ? transportRoutesData
+            : [];
+          const hit = routes.find(
+            (r) =>
+              String(r?.id ?? "") === String(maybeId) ||
+              String(r?.Route_Number ?? "") === String(maybeId) ||
+              String(r?.route_id ?? "") === String(maybeId)
+          );
+          return hit ? String(hit.id) : null;
+        };
+
+        const inferredRouteIdForHead = (hid) => {
+          const historicalRouteId = normalizeRouteId(lastRouteMap[hid]);
+          const currentRouteId = normalizeRouteId(rawStudentAssignedRouteId);
+
+          return selectedSessionIsActive
+            ? currentRouteId ?? historicalRouteId ?? null
+            : historicalRouteId ?? currentRouteId ?? null;
+        };
+
+        // IMPORTANT: Only use fields that are clearly transport/route fee fields.
+        // Do NOT use generic amount/price/fare here because those can be the
+        // normal academic fee amount and can wrongly appear as transport due.
+        const feeDetailCost = pickNum(
+          detail.transportCost,
+          detail.TransportCost,
+          detail.routeFee,
+          detail.route_fee,
+          detail.route_cost,
+          detail.monthly_fee,
+          detail.van_fee,
+          detail.vanFee,
+          detail.transport_amount
+        );
+
+        const routeId = inferredRouteIdForHead(headId);
+
+        const selectedRouteObj = routeId
+          ? (Array.isArray(transportRoutesData) ? transportRoutesData : []).find(
+              (r) => String(r?.id ?? "") === String(routeId)
+            ) || null
+          : null;
+
+        const routeObjCost = selectedRouteObj
+          ? pickNum(
+              selectedRouteObj.Cost,
+              selectedRouteObj.cost,
+              selectedRouteObj.TransportCost,
+              selectedRouteObj.transport_cost,
+              selectedRouteObj.route_cost,
+              selectedRouteObj.monthly_fee,
+              selectedRouteObj.per_month,
+              selectedRouteObj.perMonth,
+              selectedRouteObj.fare,
+              selectedRouteObj.Fare,
+              selectedRouteObj.amount,
+              selectedRouteObj.price,
+              selectedRouteObj.rate,
+              selectedRouteObj.Rate
+            )
+          : 0;
+
+        const transportItemCost = transportItem
+          ? pickNum(
+              transportItem.transportCost,
+              transportItem.TransportCost,
+              transportItem.cost,
+              transportItem.Cost,
+              transportItem.routeCost,
+              transportItem.monthly_fee,
+              transportItem.MonthlyFee,
+              transportItem.per_month,
+              transportItem.perMonth,
+              transportItem.amount,
+              transportItem.price,
+              transportItem.fare
+            )
+          : 0;
+
+        const studentTransportCost = Number(
+          baseStudent?.Transportation?.Cost ??
+            baseStudent?.transport_cost ??
+            baseStudent?.TransportCost ??
+            studentRouteFromFeeDetails?.route_cost ??
+            0
+        );
+
+        const serverCostVal = pickNum(serverCostPerHead, serverTransportCostGlobal);
+
+        const selectedRouteFee = selectedSessionIsActive
+          ? pickNum(
+              studentTransportCost,
+              routeObjCost,
+              feeDetailCost,
+              transportItemCost,
+              serverCostVal,
+              studentRouteFromFeeDetails?.route_cost
+            )
+          : pickNum(
+              transportItemCost,
+              serverCostVal,
+              feeDetailCost,
+              routeObjCost,
+              studentTransportCost,
+              studentRouteFromFeeDetails?.route_cost
+            );
+
+        const receivedVanFeeFromMap = receivedVanFeeMap[headId] || 0;
+        const vanFeeConcessionFromMap = vanFeeConcessionMap[headId] || 0;
+
+        const receivedFromServer =
+          transportItem &&
+          (transportItem.received !== undefined ||
+            transportItem.TotalVanFeeReceived !== undefined)
+            ? Number(
+                transportItem.received !== undefined
+                  ? transportItem.received
+                  : transportItem.TotalVanFeeReceived || 0
+              )
+            : receivedVanFeeFromMap;
+
+        const concessionFromServer =
+          transportItem &&
+          (transportItem.concession !== undefined ||
+            transportItem.TotalVanFeeConcession !== undefined)
+            ? Number(
+                transportItem.concession !== undefined
+                  ? transportItem.concession
+                  : transportItem.TotalVanFeeConcession || 0
+              )
+            : vanFeeConcessionFromMap;
+
+        const fallbackRemainingBeforeFine = Math.max(
+          0,
+          selectedRouteFee - (receivedFromServer || 0) - (concessionFromServer || 0)
+        );
+
+        const remainingBeforeFineFromServer =
+          !selectedSessionIsActive &&
+          transportItem &&
+          (transportItem.remainingBeforeFine !== undefined ||
+            transportItem.RemainingBeforeFine !== undefined)
+            ? Number(
+                transportItem.remainingBeforeFine !== undefined
+                  ? transportItem.remainingBeforeFine
+                  : transportItem.RemainingBeforeFine || 0
+              )
+            : fallbackRemainingBeforeFine;
+
+        const vanFineFromServer = Number(
+          transportItem?.vanFine ??
+            transportItem?.vanFineAmount ??
+            transportItem?.VanFineAmount ??
+            0
+        );
+
+        const finalDue =
+          !selectedSessionIsActive &&
+          transportItem &&
+          (transportItem.due !== undefined || transportItem.FinalDue !== undefined)
+            ? Number(transportItem.due ?? transportItem.FinalDue ?? 0)
+            : Math.max(0, remainingBeforeFineFromServer + vanFineFromServer);
+
+        const isRealRouteValue = (value) => {
+          const str = String(value ?? "").trim();
+          return (
+            str !== "" &&
+            str !== "0" &&
+            str.toLowerCase() !== "null" &&
+            str.toLowerCase() !== "undefined"
+          );
+        };
+
+        const currentRouteIdForStudent = normalizeRouteId(rawStudentAssignedRouteId);
+        const historicalRouteIdForHead = normalizeRouteId(lastRouteMap[headId]);
+
+        const hasCurrentTransportOptIn = Boolean(
+          currentRouteIdForStudent ||
+            isRealRouteValue(rawStudentAssignedRouteId) ||
+            isRealRouteValue(baseStudent?.transport_id) ||
+            isRealRouteValue(baseStudent?.route_id) ||
+            isRealRouteValue(baseStudent?.Route_Number) ||
+            isRealRouteValue(baseStudent?.Transportation?.id) ||
+            isRealRouteValue(studentRouteFromFeeDetails?.route_id)
+        );
+
+        const hasHistoricalTransportEvidence = Boolean(
+          historicalRouteIdForHead ||
+            isRealRouteValue(lastRouteMap[headId]) ||
+            Number(receivedFromServer || 0) > 0 ||
+            Number(concessionFromServer || 0) > 0 ||
+            Number(transportItem?.due || transportItem?.FinalDue || 0) > 0
+        );
+
+        const hasTransportDueItem = Boolean(
+          transportItem &&
+            (Number(transportItemCost || 0) > 0 ||
+              Number(transportItem?.due ?? transportItem?.FinalDue ?? 0) > 0 ||
+              Number(
+                transportItem?.remainingBeforeFine ??
+                  transportItem?.RemainingBeforeFine ??
+                  0
+              ) > 0 ||
+              Number(receivedFromServer || 0) > 0 ||
+              Number(concessionFromServer || 0) > 0 ||
+              Number(vanFineFromServer || 0) > 0 ||
+              isRealRouteValue(transportItem?.route_id) ||
+              isRealRouteValue(transportItem?.transportation_id) ||
+              isRealRouteValue(transportItem?.Route_Number))
+        );
+        const hasTransportPaymentHistory = Boolean(
+          Number(receivedFromServer || 0) > 0 ||
+            Number(concessionFromServer || 0) > 0
+        );
+
+        const hasRouteForSelectedSession = selectedSessionIsActive
+          ? hasCurrentTransportOptIn
+          : Boolean(hasHistoricalTransportEvidence || hasCurrentTransportOptIn);
+
+        const hasPositiveTransportCost =
+          Number(selectedRouteFee || 0) > 0 ||
+          Number(routeObjCost || 0) > 0 ||
+          Number(transportItemCost || 0) > 0 ||
+          Number(studentTransportCost || 0) > 0 ||
+          Number(serverCostVal || 0) > 0 ||
+          Number(feeDetailCost || 0) > 0 ||
+          Number(studentRouteFromFeeDetails?.route_cost || 0) > 0;
+
+        // Head-level rule:
+        // - If this fee head is NOT transport-enabled, hide Van Due / Van Cons / Van Pay.
+        // - If this fee head IS transport-enabled, keep Van Cons / Van Pay open even
+        //   when the student has not opted transport, so manual collection is possible.
+        // - Van Due is calculated only when the student actually has route evidence
+        //   for this session/history. Without route opt-in, Van Due must remain zero.
+        const canEditVanForHead = Boolean(transportApplicable);
+        const shouldShowTransportDue = Boolean(
+          transportApplicable &&
+            (hasTransportPaymentHistory ||
+              (hasRouteForSelectedSession && hasPositiveTransportCost))
+        );
+
+        let showVan = canEditVanForHead;
+
+        const effectiveRouteFee = shouldShowTransportDue ? selectedRouteFee : 0;
+        const effectiveReceivedVan = shouldShowTransportDue ? receivedFromServer : 0;
+        const effectiveVanConcession = shouldShowTransportDue ? concessionFromServer : 0;
+        const effectiveVanFine = shouldShowTransportDue ? vanFineFromServer : 0;
+        const effectiveRemainingBeforeFine = shouldShowTransportDue
+          ? Math.max(
+              0,
+              Number(effectiveRouteFee || 0) -
+                Number(effectiveReceivedVan || 0) -
+                Number(effectiveVanConcession || 0)
+            )
+          : 0;
+        const effectiveFinalDue = shouldShowTransportDue
+          ? Math.max(0, effectiveRemainingBeforeFine + effectiveVanFine)
+          : 0;
+
+        const vanFields = canEditVanForHead
+          ? {
+              VanFee: 0,
+              Van_Fee_Concession: effectiveVanConcession,
+              _vanFeeConcession: effectiveVanConcession,
+              _routeFee: effectiveRouteFee,
+              _receivedVanFee: effectiveReceivedVan,
+              Van_Fee_Remaining: effectiveRemainingBeforeFine,
+              Van_Fee_Due: effectiveFinalDue,
+              Van_Fine_Amount: effectiveVanFine,
+              SelectedRoute: shouldShowTransportDue
+                ? inferredRouteIdForHead(headId)
+                : null,
+              HasTransportRouteDue: shouldShowTransportDue,
+            }
+          : {
+              VanFee: 0,
+              Van_Fee_Concession: 0,
+              _vanFeeConcession: 0,
+              _routeFee: 0,
+              _receivedVanFee: 0,
+              Van_Fee_Remaining: 0,
+              Van_Fee_Due: 0,
+              Van_Fine_Amount: 0,
+              SelectedRoute: null,
+              HasTransportRouteDue: false,
+            };
+
+        const baseRow = {
+          Fee_Head: headId,
+          Fee_Heading_Name: detail.fee_heading,
+          Fee_Due: academicDue,
+          Original_Fee_Due: detail.original_fee_due,
+          fineAmount: originalFine,
+          isFineApplicable: eligible && originalFine > 0,
+          Fine_Amount: 0,
+          defaultConcessionAmount: detail.concession_applied
+            ? detail.concession_amount
+            : 0,
+          Fee_Recieved: 0,
+          Concession: extraConcession,
+          ShowVanFeeInput: showVan,
+          ...vanFields,
+        };
+
+        if (!hasExistingTxnForStudent && transportApplicable && shouldShowTransportDue) {
+          const hasGlobalCostSignal =
+            Number(baseRow._routeFee) > 0 ||
+            Number(serverCostVal || 0) > 0 ||
+            Number(routeObjCost) > 0 ||
+            Number(transportItemCost) > 0 ||
+            Number(feeDetailCost) > 0 ||
+            Number(studentTransportCost) > 0 ||
+            Number(studentRouteFromFeeDetails?.route_cost || 0) > 0;
+
+          const hasHeadSpecificItem = Boolean(transportDueMap[String(headId)]);
+          const hasStudentTransportEvidence = Boolean(
+            hasTransportPaymentHistory ||
+              (hasRouteForSelectedSession && hasPositiveTransportCost)
+          );
+
+          if (hasGlobalCostSignal && hasStudentTransportEvidence && !hasHeadSpecificItem) {
+            const fallbackCost = pickNum(
+              baseRow._routeFee,
+              studentTransportCost,
+              routeObjCost,
+              transportItemCost,
+              serverCostVal,
+              feeDetailCost,
+              selectedRouteFee
+            );
+            const inferredConcession = Number(baseRow.Van_Fee_Concession || 0) || 0;
+            const remaining = Math.max(0, Number(fallbackCost || 0) - inferredConcession);
+            const vanFine = baseRow.Van_Fine_Amount || 0;
+
+            return {
+              ...baseRow,
+              ShowVanFeeInput: true,
+              _routeFee: Number(fallbackCost || 0),
+              _receivedVanFee: 0,
+              _vanFeeConcession: inferredConcession,
+              Van_Fee_Remaining: remaining,
+              Van_Fine_Amount: vanFine,
+              Van_Fee_Due: Math.max(0, remaining + vanFine),
+              HasTransportRouteDue: true,
+            };
+          }
+        }
+
+        return baseRow;
+      });
+
+      try {
+        const headId = await ensurePrevBalanceHeadId();
+        const backendPreviousBalance = Number(
+          feeResponse?.data?.previous_balance_due ?? 0
+        );
+        const resolvedPreviousBalance =
+          backendPreviousBalance > 0
+            ? backendPreviousBalance
+            : await fetchOpeningBalanceOutstanding(studentId, selectedSession);
+
+        setOpeningBalanceDue(resolvedPreviousBalance || 0);
+
+        const alreadyHasOpeningRow = feeDetails.some((row) => {
+          const rowName = String(row?.Fee_Heading_Name || "")
+            .trim()
+            .toLowerCase();
+          return (
+            row?.isOpeningBalance === true ||
+            rowName === "previous balance" ||
+            rowName === "opening balance" ||
+            (headId && Number(row?.Fee_Head || 0) === Number(headId))
+          );
+        });
+
+        if (headId && resolvedPreviousBalance > 0 && !alreadyHasOpeningRow) {
+          const openingRow = {
+            isOpeningBalance: true,
+            Fee_Head: headId,
+            Fee_Heading_Name: "Previous Balance",
+            Original_Fee_Due: resolvedPreviousBalance,
+            Fee_Due: resolvedPreviousBalance,
+            Fee_Recieved: 0,
+            Concession: 0,
+            fineAmount: 0,
+            isFineApplicable: false,
+            Fine_Amount: 0,
+            ShowVanFeeInput: false,
+            VanFee: 0,
+            Van_Fee_Due: 0,
+            Van_Fee_Remaining: 0,
+            Van_Fine_Amount: 0,
+            Van_Fee_Concession: 0,
+            _vanFeeConcession: 0,
+            _routeFee: 0,
+            _receivedVanFee: 0,
+            SelectedRoute: null,
+            defaultConcessionAmount: 0,
+          };
+          feeDetails.unshift(openingRow);
+        }
+      } catch (e) {
+        console.warn("OB injection failed:", e?.message || e);
+        setOpeningBalanceDue(0);
+      }
+
+      setFeeHeads(feeDetails);
+      setNewTransactionDetails(feeDetails);
+
+      if (feeResponse.data.student) {
+        const normalizedFeeStudent = normalizeStudentRow(
+          feeResponse.data.student || {}
+        );
+        const previousStudentData = selectedStudentInfo || selectedAdmissionStudent || {};
+        const previousStudentMatchesCurrent =
+          Number(previousStudentData?.id || previousStudentData?.student_id || previousStudentData?.Student_ID || 0) ===
+            Number(normalizedFeeStudent?.id || studentId || 0) ||
+          (
+            String(previousStudentData?.admission_number || "").trim() !== "" &&
+            String(previousStudentData?.admission_number || "").trim() ===
+              String(normalizedFeeStudent?.admission_number || "").trim()
+          );
+        const safePreviousStudentData = previousStudentMatchesCurrent
+          ? previousStudentData
+          : {};
+
+        const mergedClassId =
+          firstValidId(
+            normalizedFeeStudent?.Class?.id,
+            normalizedFeeStudent?.class_id,
+            baseStudentFromAdmission?.Class?.id,
+            baseStudentFromAdmission?.class_id,
+            safePreviousStudentData?.Class?.id,
+            safePreviousStudentData?.class_id,
+            _classId
+          ) ?? 0;
+
+        const mergedSectionId =
+          firstValidId(
+            normalizedFeeStudent?.Section?.id,
+            normalizedFeeStudent?.section_id,
+            baseStudentFromAdmission?.Section?.id,
+            baseStudentFromAdmission?.section_id,
+            safePreviousStudentData?.Section?.id,
+            safePreviousStudentData?.section_id
+          ) ?? 0;
+
+        const mergedClassName =
+          firstNonEmpty(
+            normalizedFeeStudent?.Class?.class_name,
+            normalizedFeeStudent?.class_name,
+            baseStudentFromAdmission?.Class?.class_name,
+            baseStudentFromAdmission?.class_name,
+            safePreviousStudentData?.Class?.class_name,
+            safePreviousStudentData?.class_name,
+            getClassLabelById(
+              firstValidId(mergedClassId, _classId, selectedClass),
+              classes
+            )
+          ) || "—";
+
+        const mergedSectionName =
+          firstNonEmpty(
+            normalizedFeeStudent?.Section?.section_name,
+            normalizedFeeStudent?.section_name,
+            baseStudentFromAdmission?.Section?.section_name,
+            baseStudentFromAdmission?.section_name,
+            safePreviousStudentData?.Section?.section_name,
+            safePreviousStudentData?.section_name,
+            getSectionLabelById(
+              firstValidId(mergedSectionId, selectedSection),
+              sections
+            )
+          ) || "—";
+
+        const mergedStudent = {
+          ...safePreviousStudentData,
+          ...baseStudentFromAdmission,
+          ...normalizedFeeStudent,
+          father_name:
+            firstNonEmpty(
+              normalizedFeeStudent?.father_name,
+              baseStudentFromAdmission?.father_name,
+              safePreviousStudentData?.father_name
+            ) || "",
+          Class: {
+            ...(safePreviousStudentData?.Class || {}),
+            ...(baseStudentFromAdmission?.Class || {}),
+            ...(normalizedFeeStudent?.Class || {}),
+            id: mergedClassId,
+            class_name: mergedClassName,
+          },
+          Section: {
+            ...(safePreviousStudentData?.Section || {}),
+            ...(baseStudentFromAdmission?.Section || {}),
+            ...(normalizedFeeStudent?.Section || {}),
+            id: mergedSectionId,
+            section_name: mergedSectionName,
+          },
+          class_id: mergedClassId,
+          section_id: mergedSectionId,
+          class_name: mergedClassName,
+          section_name: mergedSectionName,
+          sibling_id_1:
+            normalizedFeeStudent.sibling_id_1 ?? baseStudentFromAdmission?.sibling_id_1 ?? safePreviousStudentData.sibling_id_1 ?? null,
+          sibling_name_1:
+            normalizedFeeStudent.sibling_name_1 ?? baseStudentFromAdmission?.sibling_name_1 ?? safePreviousStudentData.sibling_name_1 ?? null,
+          sibling_id_2:
+            normalizedFeeStudent.sibling_id_2 ?? baseStudentFromAdmission?.sibling_id_2 ?? safePreviousStudentData.sibling_id_2 ?? null,
+          sibling_name_2:
+            normalizedFeeStudent.sibling_name_2 ?? baseStudentFromAdmission?.sibling_name_2 ?? safePreviousStudentData.sibling_name_2 ?? null,
+          sibling_id_3:
+            normalizedFeeStudent.sibling_id_3 ?? baseStudentFromAdmission?.sibling_id_3 ?? safePreviousStudentData.sibling_id_3 ?? null,
+          sibling_name_3:
+            normalizedFeeStudent.sibling_name_3 ?? baseStudentFromAdmission?.sibling_name_3 ?? safePreviousStudentData.sibling_name_3 ?? null,
+          sibling_id_4:
+            normalizedFeeStudent.sibling_id_4 ?? baseStudentFromAdmission?.sibling_id_4 ?? safePreviousStudentData.sibling_id_4 ?? null,
+          sibling_name_4:
+            normalizedFeeStudent.sibling_name_4 ?? baseStudentFromAdmission?.sibling_name_4 ?? safePreviousStudentData.sibling_name_4 ?? null,
+        };
+
+        setSelectedClass(firstValidId(mergedClassId, _classId) ?? "");
+        setSelectedSection(firstValidId(mergedSectionId) ?? "");
+        setSelectedStudentInfo(mergedStudent);
+        setSelectedAdmissionStudent(mergedStudent);
+      }
+    } catch (error) {
+      console.error("Error fetching fee details:", error);
+      setModalError("Unable to load fee details. Please try again or contact support.");
+      setFeeHeads([]);
+      setNewTransactionDetails([]);
+    }
+  };
+
+  const getAcademicRemaining = (row) =>
+    Math.max(
+      0,
+      (row.Fee_Due || 0) - (row.Fee_Recieved || 0) - (row.Concession || 0)
+    );
+
+  const getFineRemaining = (row) =>
+    row.isFineApplicable
+      ? Math.max(0, (row.fineAmount || 0) - (row.Fine_Amount || 0))
+      : 0;
+
+  const getVanRemaining = (row) => {
+    if (!row.ShowVanFeeInput) return 0;
+    const alreadyEntered = Number(row.VanFee || 0);
+    return Math.max(0, (row.Van_Fee_Due || 0) - alreadyEntered);
+  };
+
+  const sortTuitionFirst = (rows) => {
+    const withIdx = rows.map((r, i) => ({ r, i }));
+    withIdx.sort((a, b) => {
+      const at = /tuition/i.test(a.r.Fee_Heading_Name) ? 1 : 0;
+      const bt = /tuition/i.test(b.r.Fee_Heading_Name) ? 1 : 0;
+      if (bt !== at) return bt - at;
+      return a.i - b.i;
+    });
+    return withIdx.map((x) => x.i);
+  };
+
+  const autoAllocateQuickAmount = () => {
+    const amt = parseNumberInput(quickAmount);
+    if (isNaN(amt) || amt <= 0) {
+      Swal.fire("Enter amount", "Please enter a positive amount to auto-fill.", "info");
+      return;
+    }
+    if (!newTransactionDetails.length) {
+      setModalError("Pick a student and load fee details first to auto-allocate.");
+      return;
+    }
+
+    let remaining = amt;
+    const updated = newTransactionDetails.map((d) => ({ ...d }));
+    const order = sortTuitionFirst(updated);
+
+    for (const idx of order) {
+      if (remaining <= 0) break;
+      const row = updated[idx];
+
+      const acadNeed = getAcademicRemaining(row);
+      if (acadNeed > 0 && remaining > 0) {
+        const take = Math.min(remaining, acadNeed);
+        row.Fee_Recieved = (row.Fee_Recieved || 0) + take;
+        remaining -= take;
+      }
+
+      const fineNeed = getFineRemaining(row);
+      if (!row.isFineEdited && fineNeed > 0 && remaining > 0) {
+        const takeFine = Math.min(remaining, fineNeed);
+        row.Fine_Amount = (row.Fine_Amount || 0) + takeFine;
+        remaining -= takeFine;
+      }
+
+      const vanNeed = getVanRemaining(row);
+      if (vanNeed > 0 && remaining > 0) {
+        const takeVan = Math.min(remaining, vanNeed);
+        row.VanFee = (row.VanFee || 0) + takeVan;
+        remaining -= takeVan;
+      }
+
+      if (row.ShowVanFeeInput) {
+        const baseDueNoFine = Math.max(0, (row.Van_Fee_Due || 0) - (row.Van_Fine_Amount || 0));
+        row.Van_Fee_Remaining = Math.max(0, baseDueNoFine - (row.VanFee || 0));
+      }
+    }
+
+    setNewTransactionDetails(updated);
+    setSelectedHeads(
+      new Set(
+        updated
+          .filter((row) => Number(row.Fee_Recieved || 0) > 0)
+          .map((row) => String(row.Fee_Head))
+      )
+    );
+    setSelectedFineHeads(
+      new Set(
+        updated
+          .filter((row) => Number(row.Fine_Amount || 0) > 0)
+          .map((row) => String(row.Fee_Head))
+      )
+    );
+    setSelectedTransportHeads(
+      new Set(
+        updated
+          .filter((row) => row.ShowVanFeeInput && Number(row.VanFee || 0) > 0)
+          .map((row) => String(row.Fee_Head))
+      )
+    );
+
+    if (remaining > 0) {
+      Swal.fire(
+        "Amount left",
+        `₹${remaining.toLocaleString("en-IN")} could not be allocated (no remaining dues/fines/${transportLabel.toLowerCase()} dues).`,
+        "info"
+      );
+    }
+  };
+
+  const clearQuickAllocations = () => {
+    if (!newTransactionDetails.length) return;
+    const cleared = newTransactionDetails.map((d) => ({
+      ...d,
+      Fee_Recieved: 0,
+      Fine_Amount: 0,
+      VanFee: 0,
+    }));
+    setNewTransactionDetails(cleared);
+    setSelectedHeads(new Set());
+    setSelectedFineHeads(new Set());
+    setSelectedTransportHeads(new Set());
+  };
+
+  const saveTransaction = async () => {
+    try {
+      setModalError(null);
+
+      if (editingTransaction) {
+        const activeEditMode =
+          findModeByValue(editingTransaction.PaymentMode, transactionModes) ||
+          findModeByValue(editingTransaction.PaymentMode, activeTransactionModes);
+        const modeValidationError = validateModeInfo(editingTransaction, activeEditMode);
+        if (modeValidationError) {
+          setModalError(modeValidationError);
+          if (modeUsesPopupDetails(activeEditMode)) setShowChequePopup(true);
+          return;
+        }
+
+          const updatedTransaction = {
+          Fee_Recieved: editingTransaction.Fee_Recieved,
+          Concession: editingTransaction.Concession,
+          VanFee: editingTransaction.VanFee,
+          Fine_Amount: editingTransaction.Fine_Amount || 0,
+          Van_Fee_Concession: editingTransaction.Van_Fee_Concession,
+          PaymentMode:
+            activeEditMode?.name ||
+            normalizePaymentModeValue(editingTransaction.PaymentMode, transactionModes),
+          mode_of_transaction_id: activeEditMode?.id || null,
+          bank_account_id: activeEditMode?.requires_bank
+            ? Number(editingTransaction.bank_account_id || 0) || null
+            : null,
+          reference_no: activeEditMode?.requires_reference_no
+            ? String(
+                editingTransaction.reference_no ||
+                  editingTransaction.Transaction_ID ||
+                  ""
+              ).trim() || null
+            : null,
+          bank_name:
+            activeEditMode?.requires_cheque_no || activeEditMode?.requires_cheque_date
+              ? String(
+                  editingTransaction.bank_name || editingTransaction.BankName || ""
+                ).trim() || null
+              : null,
+          cheque_no: activeEditMode?.requires_cheque_no
+            ? String(
+                editingTransaction.cheque_no || editingTransaction.ChequeNumber || ""
+              ).trim() || null
+            : null,
+          cheque_date: activeEditMode?.requires_cheque_date
+            ? normalizeDateInput(
+                editingTransaction.cheque_date || editingTransaction.ChequeDate
+              ) || null
+            : null,
+
+          Transaction_ID: activeEditMode?.requires_reference_no
+            ? String(
+                editingTransaction.reference_no ||
+                  editingTransaction.Transaction_ID ||
+                  ""
+              ).trim() || null
+            : null,
+          ChequeNumber: activeEditMode?.requires_cheque_no
+            ? String(
+                editingTransaction.cheque_no || editingTransaction.ChequeNumber || ""
+              ).trim() || null
+            : null,
+          ChequeDate: activeEditMode?.requires_cheque_date
+            ? normalizeDateInput(
+                editingTransaction.cheque_date || editingTransaction.ChequeDate
+              ) || null
+            : null,
+          BankName:
+            activeEditMode?.requires_cheque_no || activeEditMode?.requires_cheque_date
+              ? String(
+                  editingTransaction.bank_name || editingTransaction.BankName || ""
+                ).trim() || null
+              : null,
+          DateOfTransaction: toTransactionDatePayload(
+            editingTransaction.DateOfTransaction
+          ),
+          session_id: editingTransaction.session_id ?? null,
+          Remarks: editingTransaction.Remarks || null,
+        };
+
+        const response = await api.put(
+          `/transactions/${editingTransaction.Serial}`,
+          updatedTransaction
+        );
+
+        if (response.data.success) {
+          Swal.fire("Updated!", "Transaction has been updated successfully.", "success");
+          fetchTransactions();
+          fetchDaySummary();
+          setShowModal(false);
+          setShowChequePopup(false);
+          setEditingTransaction(null);
+        } else {
+          setModalError(response.data.message || "Unable to update transaction.");
+        }
+      } else {
+        if (!selectedStudentInfo || newTransactionDetails.length === 0) {
+          setModalError("Please select a student and fill in the fee details.");
+          return;
+        }
+        if (!paymentMode) {
+          setModalError("Please select a payment mode.");
+          return;
+        }
+        if (!selectedSession) {
+          setModalError("Please select an academic session before collecting.");
+          return;
+        }
+
+        const activeCreateMode =
+          findModeByValue(paymentMode, activeTransactionModes) ||
+          findModeByValue(paymentMode, transactionModes);
+        const createModeValidationError = validateModeInfo(
+          paymentDetails,
+          activeCreateMode
+        );
+        if (createModeValidationError) {
+          setModalError(createModeValidationError);
+          if (modeUsesPopupDetails(activeCreateMode)) setShowChequePopup(true);
+          return;
+        }
+
+        const commonPaymentPayload = {
+          PaymentMode:
+            activeCreateMode?.name ||
+            normalizePaymentModeValue(paymentMode, activeTransactionModes),
+          mode_of_transaction_id: activeCreateMode?.id || null,
+          bank_account_id: activeCreateMode?.requires_bank
+            ? Number(paymentDetails.bank_account_id || 0) || null
+            : null,
+          reference_no: activeCreateMode?.requires_reference_no
+            ? String(
+                paymentDetails.reference_no || paymentDetails.Transaction_ID || ""
+              ).trim() || null
+            : null,
+          bank_name:
+            activeCreateMode?.requires_cheque_no || activeCreateMode?.requires_cheque_date
+              ? String(
+                  paymentDetails.bank_name || paymentDetails.BankName || ""
+                ).trim() || null
+              : null,
+          cheque_no: activeCreateMode?.requires_cheque_no
+            ? String(
+                paymentDetails.cheque_no || paymentDetails.ChequeNumber || ""
+              ).trim() || null
+            : null,
+          cheque_date: activeCreateMode?.requires_cheque_date
+            ? normalizeDateInput(
+                paymentDetails.cheque_date || paymentDetails.ChequeDate
+              ) || null
+            : null,
+          Transaction_ID: activeCreateMode?.requires_reference_no
+            ? String(
+                paymentDetails.reference_no || paymentDetails.Transaction_ID || ""
+              ).trim() || null
+            : null,
+          BankName:
+            activeCreateMode?.requires_cheque_no || activeCreateMode?.requires_cheque_date
+              ? String(
+                  paymentDetails.bank_name || paymentDetails.BankName || ""
+                ).trim() || null
+              : null,
+          ChequeNumber: activeCreateMode?.requires_cheque_no
+            ? String(
+                paymentDetails.cheque_no || paymentDetails.ChequeNumber || ""
+              ).trim() || null
+            : null,
+          ChequeDate: activeCreateMode?.requires_cheque_date
+            ? normalizeDateInput(
+                paymentDetails.cheque_date || paymentDetails.ChequeDate
+              ) || null
+            : null,
+        };
+
+        const transactionsPayload = newTransactionDetails.map((details) => ({
+          AdmissionNumber: selectedStudentInfo.admission_number,
+          Student_ID: selectedStudentInfo.id,
+          Class_ID: selectedStudentInfo.class_id,
+          Section_ID: selectedStudentInfo.section_id,
+          DateOfTransaction: toTransactionDatePayload(transactionDate),
+          Fee_Head: details.Fee_Head,
+          Fee_Recieved: details.Fee_Recieved,
+          Concession: details.isOpeningBalance ? 0 : details.Concession,
+          VanFee:
+            details.ShowVanFeeInput && !details.isOpeningBalance
+              ? details.VanFee || 0
+              : null,
+          Van_Fee_Concession:
+            details.ShowVanFeeInput && !details.isOpeningBalance
+              ? details.Van_Fee_Concession || 0
+              : null,
+          Route_ID:
+            details.ShowVanFeeInput &&
+            details.SelectedRoute &&
+            !details.isOpeningBalance
+              ? Number(details.SelectedRoute)
+              : null,
+          ...commonPaymentPayload,
+          Fine_Amount:
+            details.isFineApplicable && !details.isOpeningBalance
+              ? details.Fine_Amount || 0
+              : 0,
+          session_id: selectedSession,
+          Remarks: remarks || null,
+        }));
+
+        const response = await api.post("/transactions/bulk", {
+          transactions: transactionsPayload,
+        });
+
+        if (response.data.success) {
+          Swal.fire({
+            title: "Added!",
+            text: `Transactions added with Slip ID: ${response.data.slipId}. Print receipt?`,
+            icon: "success",
+            showCancelButton: true,
+            confirmButtonText: "Print Receipt",
+            cancelButtonText: "Close",
+            allowOutsideClick: false,
+          }).then((result) => {
+            if (result.isConfirmed) handlePrintReceipt(response.data.slipId);
+          });
+
+          resetForm();
+          fetchTransactions();
+          fetchDaySummary();
+        } else {
+          setModalError(response.data.message || "Failed to create transactions.");
+        }
+
+        await fetchFeeHeadsForStudent(
+          selectedStudentInfo.class_id,
+          selectedStudentInfo.id
+        );
+      }
+    } catch (error) {
+      console.error("Error saving transactions:", error);
+      const serverMsg =
+        error.response?.data?.message ||
+        error.response?.data?.error ||
+        error.response?.data?.details ||
+        error.message;
+      setModalError(serverMsg || "An error occurred while saving the transaction.");
+    }
+  };
+
+  const resetForm = () => {
+    setFeeHeads([]);
+    setNewTransactionDetails([]);
+    setSelectedStudentInfo(null);
+    setSelectedAdmissionStudent(null);
+    setSelectedClass("");
+    setSelectedSection("");
+    setStudents([]);
+    setShowModal(false);
+    setShowChequePopup(false);
+    setPaymentMode(defaultPaymentMode);
+    setPaymentDetails(EMPTY_PAYMENT_DETAILS);
+    setQuickAmount("");
+    setSelectedHeads(new Set());
+    setSelectedFineHeads(new Set());
+    setSelectedTransportHeads(new Set());
+    setModalError(null);
+    setRemarks("");
+    setShowSearchPanel(true);
+    setShowStudentExtra(false);
+    setShowCollectionDetails(true);
+    setSiblingDetailsMap({});
+  };
+
+  const cancelTransaction = async (id) => {
+    try {
+      await api.post(`/transactions/${id}/cancel`);
+      Swal.fire("Cancelled!", "Transaction has been cancelled.", "success");
+      fetchTransactions();
+      fetchDaySummary();
+    } catch (error) {
+      console.error("Error cancelling transaction:", error);
+      Swal.fire("Error!", error.response?.data?.message || "Unable to cancel.", "error");
+    }
+  };
+
+  const deleteTransaction = async (id) => {
+    try {
+      await api.delete(`/transactions/${id}`);
+      Swal.fire("Deleted!", "Transaction permanently deleted.", "success");
+      fetchTransactions();
+      fetchDaySummary();
+    } catch (error) {
+      console.error("Error deleting transaction:", error);
+      Swal.fire("Error!", error.response?.data?.message || "Unable to delete.", "error");
+    }
+  };
+
+  useEffect(() => {
+    fetchTransportRoutes();
+    fetchClasses();
+    fetchSections();
+    fetchSessions();
+    fetchTransactionModes();
+    fetchSchoolBankAccounts();
+    fetchTransportDisplayLabel();
+  }, [fetchTransportDisplayLabel]);
+
+  useEffect(() => {
+    if (showModal) {
+      setSearchAdmissionNumber("");
+      setSelectedAdmissionStudent(null);
+      setSelectedStudentInfo(null);
+      setFeeHeads([]);
+      setNewTransactionDetails([]);
+      setPaymentMode(defaultPaymentMode);
+      setPaymentDetails(EMPTY_PAYMENT_DETAILS);
+      setShowChequePopup(false);
+      setQuickAmount("");
+      setSelectedHeads(new Set());
+      setSelectedFineHeads(new Set());
+      setSelectedTransportHeads(new Set());
+      setModalError(null);
+      setRemarks("");
+      setShowSearchPanel(true);
+      setShowStudentExtra(false);
+      setShowCollectionDetails(true);
+    } else {
+      setShowChequePopup(false);
+    }
+  }, [showModal]);
+
+  useEffect(() => {
+    if (!activeTransactionModes.length) return;
+    setPaymentMode((prev) => normalizePaymentModeValue(prev, activeTransactionModes));
+  }, [activeTransactionModes]);
+
+  useEffect(() => {
+    if (!editingTransaction) return;
+    const normalizedMode = normalizePaymentModeValue(
+      editingTransaction.PaymentMode,
+      transactionModes
+    );
+    if (normalizedMode !== editingTransaction.PaymentMode) {
+      setEditingTransaction((prev) =>
+        prev ? { ...prev, PaymentMode: normalizedMode } : prev
+      );
+      return;
+    }
+
+    const modeMeta =
+      findModeByValue(normalizedMode, transactionModes) ||
+      findModeByValue(normalizedMode, activeTransactionModes);
+    const normalizedPaymentState = buildPaymentDetailsState(editingTransaction, modeMeta);
+
+    const needsSync =
+      String(editingTransaction.reference_no || "") !==
+        String(normalizedPaymentState.reference_no || "") ||
+      String(editingTransaction.bank_account_id || "") !==
+        String(normalizedPaymentState.bank_account_id || "") ||
+      String(editingTransaction.bank_name || "") !==
+        String(normalizedPaymentState.bank_name || "") ||
+      String(editingTransaction.cheque_no || "") !==
+        String(normalizedPaymentState.cheque_no || "") ||
+      String(normalizeDateInput(editingTransaction.cheque_date) || "") !==
+        String(normalizedPaymentState.cheque_date || "");
+
+    if (needsSync) {
+      setEditingTransaction((prev) =>
+        prev
+          ? {
+              ...prev,
+              reference_no: normalizedPaymentState.reference_no,
+              bank_account_id: normalizedPaymentState.bank_account_id,
+              bank_name: normalizedPaymentState.bank_name,
+              cheque_no: normalizedPaymentState.cheque_no,
+              cheque_date: normalizedPaymentState.cheque_date,
+              Transaction_ID: normalizedPaymentState.Transaction_ID,
+              BankName: normalizedPaymentState.BankName,
+              ChequeNumber: normalizedPaymentState.ChequeNumber,
+              ChequeDate: normalizedPaymentState.ChequeDate,
+            }
+          : prev
+      );
+    }
+  }, [editingTransaction, transactionModes, activeTransactionModes]);
+
+  useEffect(() => {
+    fetchSections(selectedClass);
+    fetchStudentsByClassAndSection();
+  }, [selectedClass, selectedSection, selectedSession]);
+
+  useEffect(() => {
+    fetchTransactions();
+    fetchDaySummary();
+    const intervalId = setInterval(() => {
+      fetchTransactions();
+      fetchDaySummary();
+    }, POLLING_INTERVAL);
+    return () => clearInterval(intervalId);
+  }, [selectedSession]);
+
+  useEffect(() => {
+  if (!showModal) return;
+  if (editingTransaction) return;
+  if (!selectedSession) return;
+  if (!selectedStudentInfo?.id) return;
+
+  fetchFeeHeadsForStudent(
+    selectedStudentInfo.class_id ?? selectedStudentInfo.Class?.id,
+    selectedStudentInfo.id,
+    selectedStudentInfo
+  );
+}, [selectedSession]);
+
+  const paymentModeCollections = useMemo(() => {
+    const rows = Array.isArray(daySummary?.paymentSummary)
+      ? daySummary.paymentSummary
+      : [];
+
+    return rows.map((p, index) => {
+      const rawMode = firstNonEmpty(
+        p?.PaymentMode,
+        p?.paymentMode,
+        p?.payment_mode,
+        p?.Mode,
+        p?.mode,
+        p?.name,
+        p?.label
+      );
+
+      return {
+        key: firstNonEmpty(rawMode, `mode-${index}`),
+        PaymentMode: getPaymentModeLabel(rawMode, transactionModes),
+        TotalAmountCollected:
+          Number(
+            p?.TotalAmountCollected ??
+              p?.totalAmountCollected ??
+              p?.total_amount_collected ??
+              p?.AmountCollected ??
+              p?.amountCollected ??
+              p?.amount ??
+              0
+          ) || 0,
+      };
+    });
+  }, [daySummary?.paymentSummary, transactionModes]);
+
+  const cashCollection = useMemo(() => {
+    return paymentModeCollections
+      .filter((p) => String(p?.PaymentMode || "").trim().toLowerCase() === "cash")
+      .reduce((acc, p) => acc + Number(p?.TotalAmountCollected || 0), 0);
+  }, [paymentModeCollections]);
+
+  const totalVanConcessionDay = useMemo(
+    () => transactions.reduce((sum, t) => sum + (t.Van_Fee_Concession || 0), 0),
+    [transactions]
+  );
+
+  return (
+    <div className="container-fluid mt-4">
+      <h2 className="mb-3 text-center">Transactions Management</h2>
+
+      <div className="d-flex justify-content-between align-items-center mb-3">
+        <h4 className="fw-bold text-primary">Transaction Summary for Today</h4>
+        <span className="text-muted fs-6">{new Date().toLocaleDateString()}</span>
+      </div>
+
+      {daySummary && daySummary.data ? (
+        <Row className="mb-4 g-3">
+          <Col md={3}>
+            <Card className="shadow-sm border-0 h-100">
+              <Card.Body className="text-center">
+                <div className="small text-uppercase text-muted mb-1">Total Collection</div>
+                <div className="fs-3 fw-bold">{formatINR(daySummary.grandTotal || 0)}</div>
+                <Badge bg="success" className="mt-2">
+                  Cash: {formatINR(cashCollection)}
+                </Badge>
+              </Card.Body>
+            </Card>
+          </Col>
+
+          <Col md={2}>
+            <Card className="shadow-sm border-0 h-100">
+              <Card.Body className="text-center">
+                <div className="small text-uppercase text-muted mb-1">Fee Received</div>
+                <div className="fs-4 fw-bold">
+                  {formatINR(
+                    (daySummary.data || []).reduce(
+                      (acc, it) => acc + parseFloat(it.TotalFeeReceived || 0),
+                      0
+                    )
+                  )}
+                </div>
+              </Card.Body>
+            </Card>
+          </Col>
+
+          <Col md={2}>
+            <Card className="shadow-sm border-0 h-100">
+              <Card.Body className="text-center">
+                <div className="small text-uppercase text-muted mb-1">{transportLabel}</div>
+                <div className="fs-4 fw-bold">
+                  {formatINR(
+                    (daySummary.data || []).reduce(
+                      (acc, it) => acc + parseFloat(it.TotalVanFee || 0),
+                      0
+                    )
+                  )}
+                </div>
+              </Card.Body>
+            </Card>
+          </Col>
+
+          <Col md={2}>
+            <Card className="shadow-sm border-0 h-100">
+              <Card.Body className="text-center">
+                <div className="small text-uppercase text-muted mb-1">Concession</div>
+                <div className="fs-4 fw-bold">
+                  {formatINR(
+                    (daySummary.data || []).reduce(
+                      (acc, it) => acc + parseFloat(it.TotalConcession || 0),
+                      0
+                    )
+                  )}
+                </div>
+              </Card.Body>
+            </Card>
+          </Col>
+
+          <Col md={2}>
+            <Card className="shadow-sm border-0 h-100">
+              <Card.Body className="text-center">
+                <div className="small text-uppercase text-muted mb-1">{transportLabel} Cons.</div>
+                <div className="fs-4 fw-bold">{formatINR(totalVanConcessionDay)}</div>
+              </Card.Body>
+            </Card>
+          </Col>
+
+          <Col md={1}>
+            <Card className="shadow-sm border-0 h-100">
+              <Card.Body className="text-center">
+                <div className="small text-uppercase text-muted mb-1">Fine</div>
+                <div className="fs-4 fw-bold">
+                  {formatINR(
+                    (daySummary.data || []).reduce(
+                      (acc, it) => acc + parseFloat(it.TotalFine || 0),
+                      0
+                    )
+                  )}
+                </div>
+              </Card.Body>
+            </Card>
+          </Col>
+        </Row>
+      ) : (
+        <p className="text-center text-muted">Loading transaction summary...</p>
+      )}
+
+      <Row className="mb-4 g-3">
+        {paymentModeCollections.map((p) => (
+          <Col md={3} key={p.key}>
+            <Card className="shadow-sm border-0 h-100">
+              <Card.Body className="text-center">
+                <div className="small text-uppercase text-muted mb-1">
+                  {`${p.PaymentMode} Collection`}
+                </div>
+                <div className="fs-4 fw-bold">
+                  {formatINR(Number(p.TotalAmountCollected || 0))}
+                </div>
+              </Card.Body>
+            </Card>
+          </Col>
+        ))}
+      </Row>
+
+      <div className="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <div className="d-flex align-items-center gap-2">
+          <Form.Group className="mb-0" style={{ minWidth: 280 }}>
+            <Form.Label className="mb-0" style={{ fontSize: 12 }}>
+              Academic Session
+            </Form.Label>
+            <Form.Select
+              value={selectedSession ?? ""}
+              onChange={(e) =>
+                setSelectedSession(e.target.value ? Number(e.target.value) : null)
+              }
+            >
+              <option value="">Select Session</option>
+              {sessions.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name || s.label || `${s.start_date || ""} - ${s.end_date || ""}`}
+                </option>
+              ))}
+            </Form.Select>
+          </Form.Group>
+          <div className="form-text ms-2" style={{ fontSize: 12, color: "#6c757d" }}>
+            Pick session once — applies to collections.
+          </div>
+        </div>
+
+        <div>
+          <Button
+            variant="success"
+            className="btn-collect"
+            onClick={() => {
+              if (!selectedSession) {
+                Swal.fire(
+                  "Session required",
+                  "Please select an academic session before collecting fees.",
+                  "warning"
+                );
+                return;
+              }
+              setEditingTransaction(null);
+              setPaymentDetails(EMPTY_PAYMENT_DETAILS);
+              setShowChequePopup(false);
+              resetForm();
+              fetchClasses();
+              fetchSections();
+              fetchStudentsByClassAndSection();
+              setShowModal(true);
+            }}
+          >
+            + Collect Fee
+          </Button>
+        </div>
+      </div>
+
+      <div className="table-responsive">
+        <table className="table table-striped table-sm align-middle">
+          <thead className="table-light">
+            <tr>
+              <th>#</th>
+              <th>Student</th>
+              <th>Slip ID</th>
+              <th>Adm. No.</th>
+              <th>Class</th>
+              <th>Date</th>
+              <th>Head</th>
+              <th>Concession</th>
+              <th>Fee Received</th>
+              <th>{transportLabel}</th>
+              <th>{transportLabel} Cons.</th>
+              <th>Fine</th>
+              <th>Mode</th>
+              <th>Status</th>
+              <th>Remarks</th>
+              <th>Actions</th>
+              <th>Receipt</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {(() => {
+              const grouped = new Map();
+              const activeTxns = (transactions || []).filter((t) => t.status !== "cancelled");
+              activeTxns.forEach((t) => {
+                if (!grouped.has(t.Slip_ID)) grouped.set(t.Slip_ID, []);
+                grouped.get(t.Slip_ID).push(t);
+              });
+
+              const rows = Array.from(grouped.entries()).flatMap(([slipID, group]) =>
+                group.map((t, index) => {
+                  const isMiddleRow = index === Math.floor(group.length / 2);
+                  return (
+                    <tr key={t.Serial}>
+                      <td>{activeTxns.length - activeTxns.indexOf(t)}</td>
+                      <td>{t.Student?.name || "—"}</td>
+                      <td>{t.Slip_ID}</td>
+                      <td>{t.AdmissionNumber}</td>
+                      <td>{t.Class?.class_name || "—"}</td>
+                      <td>{formatTransactionDateOnly(t.DateOfTransaction)}</td>
+                      <td>{t.FeeHeading?.fee_heading || "—"}</td>
+                      <td>{formatINR(t.Concession)}</td>
+                      <td>{formatINR(t.Fee_Recieved)}</td>
+                      <td>{formatINR(t.VanFee)}</td>
+                      <td>{formatINR(t.Van_Fee_Concession || 0)}</td>
+                      <td className={t.Fine_Amount > 0 ? "text-danger fw-bold" : ""}>
+                        {formatINR(t.Fine_Amount || 0)}
+                      </td>
+                      <td>{getPaymentModeLabel(t.PaymentMode, transactionModes)}</td>
+                      <td>
+                        <Badge bg="success">Active</Badge>
+                      </td>
+                      <td>{t.Remarks || "—"}</td>
+
+                      <td className="text-nowrap">
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          className="me-1"
+                          onClick={() => {
+                            setEditingTransaction({
+                              Serial: t.Serial,
+                              Fee_Recieved: t.Fee_Recieved,
+                              Concession: t.Concession,
+                              VanFee: t.VanFee,
+                              Fine_Amount: t.Fine_Amount || 0,
+                              Van_Fee_Concession: t.Van_Fee_Concession || 0,
+                              PaymentMode: normalizePaymentModeValue(
+                                t.modeOfTransaction?.name || t.PaymentMode,
+                                transactionModes
+                              ),
+                              mode_of_transaction_id:
+                                t.mode_of_transaction_id || t.modeOfTransaction?.id || "",
+                              bank_account_id: t.bank_account_id
+                                ? String(t.bank_account_id)
+                                : "",
+                              reference_no: t.reference_no || t.Transaction_ID || "",
+                              bank_name: t.bank_name || t.BankName || "",
+                              cheque_no: t.cheque_no || t.ChequeNumber || "",
+                              cheque_date: toDisplayDateInput(
+                                t.cheque_date || t.ChequeDate
+                              ),
+                              Transaction_ID: t.reference_no || t.Transaction_ID || "",
+                              ChequeNumber: t.cheque_no || t.ChequeNumber || "",
+                              ChequeDate: toDisplayDateInput(
+                                t.cheque_date || t.ChequeDate
+                              ),
+                              BankName: t.bank_name || t.BankName || "",
+                              FeeHeadingName: t.FeeHeading?.fee_heading || "—",
+                              StudentName: t.Student?.name || "—",
+                              AdmissionNumber: t.AdmissionNumber,
+                              ClassName: t.Class?.class_name || "—",
+                              DateOfTransaction: toDisplayDateInput(t.DateOfTransaction),
+                              session_id: t.session_id ?? null,
+                              Remarks: t.Remarks || "",
+                            });
+                            setShowModal(true);
+                          }}
+                        >
+                          Edit
+                        </Button>
+
+                        {canCancel() && (
+                          <Button
+                            variant="warning"
+                            size="sm"
+                            className="me-1"
+                            onClick={() =>
+                              Swal.fire({
+                                title: "Cancel this transaction?",
+                                text: "Status will become cancelled.",
+                                icon: "warning",
+                                showCancelButton: true,
+                                confirmButtonText: "Yes, cancel",
+                              }).then((r) => {
+                                if (r.isConfirmed) cancelTransaction(t.Serial);
+                              })
+                            }
+                          >
+                            Cancel
+                          </Button>
+                        )}
+
+                        {canDelete(t) && (
+                          <Button
+                            variant="danger"
+                            size="sm"
+                            onClick={() =>
+                              Swal.fire({
+                                title: "Delete permanently?",
+                                text: "This cannot be undone.",
+                                icon: "error",
+                                showCancelButton: true,
+                                confirmButtonText: "Yes, delete",
+                              }).then((r) => {
+                                if (r.isConfirmed) deleteTransaction(t.Serial);
+                              })
+                            }
+                          >
+                            Delete
+                          </Button>
+                        )}
+                      </td>
+
+                      {isMiddleRow && (
+                        <td className="align-middle text-center border-start border-0">
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            onClick={() => viewReceipt(t.Slip_ID)}
+                            className="me-2"
+                          >
+                            View
+                          </Button>
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => handlePrintReceipt(t.Slip_ID)}
+                          >
+                            Print
+                          </Button>
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })
+              );
+
+              if (rows.length === 0) {
+                return (
+                  <tr key="no-data">
+                    <td colSpan={17} className="text-center py-5 text-muted">
+                      No transactions to display.
+                    </td>
+                  </tr>
+                );
+              }
+              return rows;
+            })()}
+          </tbody>
+        </table>
+
+        {showReceiptModal && (
+          <ReceiptModal
+            show={showReceiptModal}
+            onClose={() => setShowReceiptModal(false)}
+            slipId={selectedSlipId}
+          />
+        )}
+      </div>
+
+      <Modal
+        show={showModal}
+        onHide={() => {
+          setShowChequePopup(false);
+          setEditingTransaction(null);
+          setShowModal(false);
+        }}
+        size="xl"
+        fullscreen="md-down"
+        scrollable
+        dialogClassName="collection-modal"
+      >
+        <Modal.Header closeButton>
+          <Modal.Title>{editingTransaction ? "Edit Transaction" : "Collect Fee"}</Modal.Title>
+        </Modal.Header>
+
+        <Modal.Body>
+          <style>{`
+            .modal-dialog.collection-modal {
+              max-width: min(99vw, 1680px);
+              width: 99vw;
+              margin: 0.35rem auto;
+              height: calc(100dvh - 0.7rem);
+            }
+            .modal-dialog.collection-modal .modal-content {
+              border: 0;
+              border-radius: 18px;
+              overflow: hidden;
+              max-height: calc(100dvh - 0.7rem);
+            }
+            .collection-modal .modal-header {
+              background: linear-gradient(135deg, #0d6efd 0%, #0b5ed7 100%);
+              color: #fff;
+              border-bottom: 0;
+            }
+            .collection-modal .modal-header .btn-close {
+              filter: invert(1);
+            }
+            .modal-dialog.collection-modal .modal-body {
+              background: #f8fbff;
+              padding: 0.65rem;
+              overflow-y: auto;
+            }
+            .collection-panel {
+              background: #fff;
+              border: 1px solid #e9ecef;
+              border-radius: 16px;
+              box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+            }
+            .collection-table-wrap {
+              width: 100%;
+              overflow: auto;
+              max-height: calc(100dvh - 330px);
+              min-height: 260px;
+              border: 1px solid #dee2e6;
+              border-radius: 12px;
+              background: #fff;
+            }
+            .collection-table-wrap table {
+              min-width: 1180px;
+            }
+            .edit-grid .form-label,
+            .collection-details-grid .form-label {
+              font-weight: 600;
+              color: #495057;
+              margin-bottom: 0.2rem;
+              font-size: 0.82rem;
+            }
+            .collection-details-grid .form-control,
+            .collection-details-grid .form-select {
+              min-height: 36px;
+              padding: 0.35rem 0.6rem;
+              font-size: 0.9rem;
+            }
+            .transaction-meta-chip {
+              display: inline-flex;
+              align-items: center;
+              gap: 0.35rem;
+              padding: 0.35rem 0.65rem;
+              border-radius: 999px;
+              background: #f1f5f9;
+              color: #334155;
+              font-size: 0.8rem;
+              font-weight: 600;
+            }
+            .student-brief-inline {
+              display: flex;
+              flex-wrap: wrap;
+              gap: 0.5rem;
+              font-size: 0.88rem;
+              line-height: 1.35;
+            }
+            .selected-student-strip {
+              background: #ffffff;
+              border: 1px solid #dbe7ff;
+              border-radius: 14px;
+              box-shadow: 0 8px 18px rgba(13, 110, 253, 0.08);
+              padding: 0.55rem 0.8rem;
+              margin-bottom: 0.5rem;
+            }
+            .selected-student-name {
+              font-size: 0.95rem;
+              font-weight: 700;
+              color: #0b3d91;
+              line-height: 1.2;
+            }
+            .selected-student-meta {
+              display: flex;
+              flex-wrap: wrap;
+              gap: 0.35rem 0.75rem;
+              font-size: 0.82rem;
+              color: #495057;
+              line-height: 1.35;
+              margin-top: 0.15rem;
+            }
+            .compact-card .card-body {
+              padding: 0.7rem 0.9rem;
+            }
+            .fee-toolbar-card .card-body {
+              padding: 0.6rem 0.9rem;
+            }
+            @media (max-height: 820px) {
+              .modal-dialog.collection-modal {
+                margin: 0.2rem auto;
+                height: calc(100dvh - 0.4rem);
+              }
+              .modal-dialog.collection-modal .modal-content {
+                max-height: calc(100dvh - 0.4rem);
+              }
+              .modal-dialog.collection-modal .modal-body {
+                padding: 0.5rem;
+              }
+              .selected-student-strip {
+                padding: 0.45rem 0.65rem;
+                margin-bottom: 0.4rem;
+              }
+              .selected-student-name {
+                font-size: 0.9rem;
+              }
+              .selected-student-meta {
+                font-size: 0.78rem;
+                gap: 0.25rem 0.55rem;
+              }
+              .compact-card .card-body,
+              .fee-toolbar-card .card-body {
+                padding: 0.5rem 0.65rem;
+              }
+              .collection-table-wrap {
+                max-height: calc(100dvh - 300px);
+                min-height: 240px;
+              }
+              .collection-details-grid .form-control,
+              .collection-details-grid .form-select {
+                min-height: 32px;
+                padding: 0.25rem 0.5rem;
+                font-size: 0.85rem;
+              }
+            }
+            @media (max-width: 768px) {
+              .modal-dialog.collection-modal .modal-body {
+                padding: 0.65rem;
+              }
+              .collection-table-wrap {
+                max-height: 65dvh;
+              }
+              .collection-modal .modal-footer {
+                padding: 0.75rem;
+              }
+              .collection-modal .modal-footer .footer-actions {
+                width: 100%;
+              }
+              .collection-modal .modal-footer .footer-actions .btn {
+                flex: 1 1 auto;
+              }
+            }
+          `}</style>
+          {modalError && (
+            <Alert variant="danger" onClose={() => setModalError(null)} dismissible>
+              {modalError}
+            </Alert>
+          )}
+
+          {!editingTransaction ? (
+            <>
+              {selectedStudentInfo && !showSearchPanel ? (
+                <div className="selected-student-strip">
+                  <div className="d-flex justify-content-between align-items-start flex-wrap gap-2">
+                    <div style={{ minWidth: 0, flex: "1 1 520px" }}>
+                      <div className="selected-student-name d-flex align-items-center gap-2 flex-wrap">
+                        <span>{selectedStudentInfo?.name || "—"}</span>
+                        {selectedStudentInfo?.is_student_inactive && (
+                          <Badge bg="danger">Inactive / Disabled</Badge>
+                        )}
+                      </div>
+                      <div className="selected-student-meta">
+                        <span><strong>Adm:</strong> {selectedStudentInfo?.admission_number || "—"}</span>
+                        <span><strong>Class:</strong> {selectedStudentClassLabel}</span>
+                        <span><strong>Section:</strong> {selectedStudentSectionLabel}</span>
+                        {selectedStudentInfo?.father_name ? (
+                          <span><strong>Father:</strong> {selectedStudentInfo?.father_name}</span>
+                        ) : null}
+                      </div>
+
+                    </div>
+
+                    <div className="d-flex align-items-center gap-2 flex-wrap">
+                      <Button
+                        variant="success"
+                        size="sm"
+                        onClick={openStudentFeePage}
+                      >
+                        Parent Payment Page
+                      </Button>
+                      <Button
+                        variant="outline-secondary"
+                        size="sm"
+                        onClick={() => setShowStudentExtra((v) => !v)}
+                      >
+                        {showStudentExtra ? "Hide More" : "More"}
+                      </Button>
+                      <Button
+                        variant="outline-primary"
+                        size="sm"
+                        onClick={() => setShowSearchPanel(true)}
+                      >
+                        Change Student
+                      </Button>
+                    </div>
+                  </div>
+
+                  {showStudentExtra && (
+                    <div className="mt-2">
+                      {renderCustomFieldsBlock(selectedStudentInfo)}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <Card className="mb-2 shadow-sm border-0 compact-card">
+                  <Card.Body>
+                    <div className="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                      <div>
+                        <div className="fw-semibold">Student Selection</div>
+                        <div className="text-muted small">
+                          Search and choose student
+                        </div>
+                      </div>
+
+                      {selectedStudentInfo && (
+                        <Button
+                          variant="outline-secondary"
+                          size="sm"
+                          onClick={() => setShowStudentExtra((v) => !v)}
+                        >
+                          {showStudentExtra ? "Hide More" : "More"}
+                        </Button>
+                      )}
+                    </div>
+
+                    {selectedStudentInfo && (
+                      <div className="selected-student-strip mt-2 mb-0">
+                        <div className="d-flex justify-content-between align-items-start flex-wrap gap-2">
+                          <div style={{ minWidth: 0, flex: "1 1 520px" }}>
+                            <div className="selected-student-name d-flex align-items-center gap-2 flex-wrap">
+                              <span>{selectedStudentInfo?.name || "—"}</span>
+                              {selectedStudentInfo?.is_student_inactive && (
+                                <Badge bg="danger">Inactive / Disabled</Badge>
+                              )}
+                            </div>
+                            <div className="selected-student-meta">
+                              <span><strong>Adm:</strong> {selectedStudentInfo?.admission_number || "—"}</span>
+                              <span><strong>Class:</strong> {selectedStudentClassLabel}</span>
+                              <span><strong>Section:</strong> {selectedStudentSectionLabel}</span>
+                              {selectedStudentInfo?.father_name ? (
+                                <span><strong>Father:</strong> {selectedStudentInfo?.father_name}</span>
+                              ) : null}
+                            </div>
+
+                          </div>
+
+                          {feeHeads.length > 0 && (
+                            <Button
+                              variant="outline-primary"
+                              size="sm"
+                              onClick={() => setShowSearchPanel(false)}
+                            >
+                              Hide Search
+                            </Button>
+                          )}
+                        </div>
+
+                        {showStudentExtra && (
+                          <div className="mt-2">
+                            {renderCustomFieldsBlock(selectedStudentInfo)}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {showSearchPanel && (
+                      <div className="mt-3">
+                        <Tabs
+                          activeKey={activeTab}
+                          onSelect={(tab) => {
+                            setActiveTab(tab);
+                            setModalError(null);
+                            if (tab === "admissionNumber") {
+                              setSearchAdmissionNumber("");
+                              setSelectedAdmissionStudent(null);
+                              setFeeHeads([]);
+                              setNewTransactionDetails([]);
+                            } else if (tab === "searchByName") {
+                              setSelectedStudentInfo(null);
+                              setSelectedAdmissionStudent(null);
+                              setFeeHeads([]);
+                              setNewTransactionDetails([]);
+                            }
+                          }}
+                          className="mb-0"
+                        >
+                          <Tab eventKey="admissionNumber" title="Search Student">
+                            <style>{`
+                              .sb-autocomplete { position: relative; }
+                              .sb-menu {
+                                position: absolute; top: 100%; left: 0; right: 0;
+                                max-height: 280px; overflow: auto; z-index: 1056;
+                                background: #fff; border: 1px solid rgba(0,0,0,.125);
+                                border-radius: .375rem; margin-top: 4px;
+                                box-shadow: 0 4px 16px rgba(0,0,0,.12);
+                              }
+                              .sb-item { padding: .5rem .75rem; cursor: pointer; display: flex; flex-direction: column; gap: 2px; }
+                              .sb-item:hover, .sb-item.active { background: #f6f7f9; }
+                              .primary-line { font-weight: 600; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+                              .secondary-line { font-size: 12px; color: #6c757d; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+                              .pill { font-weight: 500; font-size: 12px; color: #495057; background: #eef1f5; border-radius: 999px; padding: 1px 8px; margin-left: 6px; }
+                            `}</style>
+
+                            <Form.Group className="mb-3">
+                              <Form.Label>Search (name / admission no.)</Form.Label>
+                              <div className="sb-autocomplete" ref={sbWrapRef}>
+                                <Form.Control
+                                  type="text"
+                                  value={sbQuery}
+                                  placeholder="Type name or admission no."
+                                  onChange={(e) => {
+                                    setSbQuery(e.target.value);
+                                    setModalError(null);
+                                    debounce(() => fetchStudentsInline(e.target.value), 300);
+                                  }}
+                                  onFocus={() => {
+                                    if (sbResults.length) setSbOpen(true);
+                                  }}
+                                  onKeyDown={(e) => {
+                                    if (!sbOpen || !sbResults.length) return;
+                                    if (e.key === "ArrowDown") {
+                                      e.preventDefault();
+                                      setSbActive((idx) => (idx + 1) % sbResults.length);
+                                    } else if (e.key === "ArrowUp") {
+                                      e.preventDefault();
+                                      setSbActive((idx) => (idx - 1 + sbResults.length) % sbResults.length);
+                                    } else if (e.key === "Enter") {
+                                      e.preventDefault();
+                                      const s = sbResults[sbActive] || sbResults[0];
+                                      if (s) handlePickStudent(s);
+                                    } else if (e.key === "Escape") {
+                                      setSbOpen(false);
+                                    }
+                                  }}
+                                  autoComplete="off"
+                                />
+
+                                {sbOpen && (
+                                  <div className="sb-menu">
+                                    {sbResults.length === 0 ? (
+                                      <div className="sb-item text-muted">No students found</div>
+                                    ) : (
+                                      sbResults.map((s, idx) => {
+                                        const className =
+                                          s?.Class?.class_name ||
+                                          s?.class_name ||
+                                          s?.class?.class_name ||
+                                          s?.className ||
+                                          "—";
+                                        const adm = s.admission_number || "—";
+                                        return (
+                                          <div
+                                            key={s.id}
+                                            className={`sb-item ${idx === sbActive ? "active" : ""}`}
+                                            onMouseEnter={() => setSbActive(idx)}
+                                            onClick={() => handlePickStudent(s)}
+                                          >
+                                            <div className="primary-line">
+                                              {escapeHtml(s.name)}
+                                              <span className="pill">{escapeHtml(adm)}</span>
+                                              {s.is_student_inactive && (
+                                                <Badge bg="danger" pill className="ms-2">
+                                                  Inactive
+                                                </Badge>
+                                              )}
+                                            </div>
+                                            <div className="secondary-line">Class: {escapeHtml(className)}</div>
+                                          </div>
+                                        );
+                                      })
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+
+                              <div className="form-text mt-1">
+                                Uses current session for better matches
+                                {selectedSession
+                                  ? ` (${sessions.find((x) => x.id === selectedSession)?.name || ""})`
+                                  : ""}{" "}
+                                .
+                              </div>
+                            </Form.Group>
+
+                            {selectedAdmissionStudent && (
+                              <div className="mb-1">
+                                <div className="student-brief-inline d-flex align-items-center flex-wrap gap-2">
+                                  <span>
+                                    <strong>Name:</strong> {selectedAdmissionStudent?.name || "—"}
+                                  </span>
+                                  <span>
+                                    | <strong>Class:</strong>{" "}
+                                    {selectedStudentClassLabel}
+                                  </span>
+                                  <span>
+                                    | <strong>Section:</strong>{" "}
+                                    {selectedStudentSectionLabel}
+                                  </span>
+                                  <span>
+                                    | <strong>Father:</strong> {selectedAdmissionStudent?.father_name || "—"}
+                                  </span>
+                                  <span>
+                                    | <strong>Adm No:</strong> {selectedAdmissionStudent?.admission_number || "—"}
+                                  </span>
+                                  {selectedAdmissionStudent?.is_student_inactive && (
+                                    <Badge bg="danger" className="ms-1">
+                                      Inactive / Disabled Student
+                                    </Badge>
+                                  )}
+                                  {siblingSummaryRows.length > 0 && (
+                                    <span>
+                                      | <strong>Siblings:</strong>{" "}
+                                      {siblingSummaryRows
+                                        .map(
+                                          (sib) =>
+                                            `${sib.display_name || "—"} (${sib.class_name || "—"}/${sib.section_name || "—"})`
+                                        )
+                                        .join(", ")}
+                                    </span>
+                                  )}
+                                  <Button
+                                    variant="success"
+                                    size="sm"
+                                    className="ms-0 ms-md-2"
+                                    onClick={openStudentFeePage}
+                                  >
+                                    Parent Payment Page
+                                  </Button>
+                                </div>
+                              </div>
+                            )}
+                          </Tab>
+
+                          <Tab
+                            eventKey="siblings"
+                            title={`Siblings${selectedStudentSiblings.length ? ` (${selectedStudentSiblings.length})` : ""}`}
+                            disabled={!selectedStudentInfo || selectedStudentSiblings.length === 0}
+                          >
+                            <div className="pt-3">
+                              {!selectedStudentInfo ? (
+                                <Alert variant="info" className="mb-0">
+                                  Search and select a student first.
+                                </Alert>
+                              ) : selectedStudentSiblings.length === 0 ? (
+                                <Alert variant="secondary" className="mb-0">
+                                  No siblings linked with this student.
+                                </Alert>
+                              ) : (
+                                <>
+                                  <div className="text-muted small mb-3">
+                                    Open a linked sibling directly and load the same collection screen.
+                                  </div>
+                                  <Row className="g-2">
+                                    {siblingSummaryRows.map((sib) => (
+                                      <Col md={6} key={`${sib.slot}-${sib.id || sib.display_name}`}>
+                                        <Card className="shadow-sm border-0 h-100 compact-card">
+                                          <Card.Body className="d-flex justify-content-between align-items-center gap-2 flex-wrap">
+                                            <div>
+                                              <div className="fw-semibold">{sib.display_name || "—"}</div>
+                                              <div className="text-muted small">
+                                                {sib.class_name || "—"} / {sib.section_name || "—"}
+                                              </div>
+                                              <div className="text-muted small">Sibling {sib.slot}</div>
+                                            </div>
+
+                                            <Button
+                                              size="sm"
+                                              variant="outline-primary"
+                                              onClick={() => handlePickSibling(sib.id || sib.display_name)}
+                                              disabled={loadingSibling}
+                                            >
+                                              {loadingSibling ? "Loading..." : "Open"}
+                                            </Button>
+                                          </Card.Body>
+                                        </Card>
+                                      </Col>
+                                    ))}
+                                  </Row>
+                                </>
+                              )}
+                            </div>
+                          </Tab>
+
+                          <Tab eventKey="searchByName" title="Search by Class">
+                            <div className="d-flex flex-wrap gap-3 mb-3">
+                              <Form.Group style={{ minWidth: 200 }}>
+                                <Form.Label>Class</Form.Label>
+                                <Form.Select
+                                  value={selectedClass}
+                                  onChange={(e) => setSelectedClass(e.target.value)}
+                                >
+                                  <option value="">Select Class</option>
+                                  {(Array.isArray(classes) ? classes : []).map((cls) => (
+                                    <option key={cls.id} value={cls.id}>
+                                      {cls.class_name}
+                                    </option>
+                                  ))}
+                                </Form.Select>
+                              </Form.Group>
+
+                              <Form.Group style={{ minWidth: 200 }}>
+                                <Form.Label>Section</Form.Label>
+                                <Form.Select
+                                  value={selectedSection}
+                                  onChange={(e) => setSelectedSection(e.target.value)}
+                                >
+                                  <option value="">Select Section</option>
+                                  {(Array.isArray(sections) ? sections : []).map((sec) => (
+                                    <option key={sec.id} value={sec.id}>
+                                      {sec.section_name}
+                                    </option>
+                                  ))}
+                                </Form.Select>
+                              </Form.Group>
+                            </div>
+
+                            <Form.Group className="mb-3">
+                              <Form.Label>Student</Form.Label>
+                              <Form.Select
+                                value={selectedStudentInfo?.id || ""}
+                                onChange={(e) => {
+                                  const student = students.find(
+                                    (s) => s.id === parseInt(e.target.value, 10)
+                                  ) || null;
+
+                                  setModalError(null);
+                                  setSelectedStudentInfo(student);
+                                  setSelectedAdmissionStudent(student);
+
+                                  if (!student) {
+                                    setFeeHeads([]);
+                                    setNewTransactionDetails([]);
+                                    return;
+                                  }
+
+                                  setSelectedClass(student.class_id ?? student.Class?.id ?? "");
+                                  setSelectedSection(student.section_id ?? student.Section?.id ?? "");
+
+                                  if (!selectedSession) {
+                                    setModalError(
+                                      "Please select an academic session before loading fee details."
+                                    );
+                                    return;
+                                  }
+
+                                  fetchFeeHeadsForStudent(
+                                    student.class_id ?? student.Class?.id,
+                                    student.id,
+                                    student
+                                  );
+                                }}
+                                disabled={!students.length}
+                              >
+                                <option value="">Select Student</option>
+                                {students.map((s) => (
+                                  <option key={s.id} value={s.id}>
+                                    {s.name} - {s.admission_number}{s.is_student_inactive ? " (Inactive / Disabled)" : ""}
+                                  </option>
+                                ))}
+                              </Form.Select>
+                            </Form.Group>
+
+                            {selectedStudentInfo && (
+                              <div className="mb-1">
+                                <div className="student-brief-inline d-flex align-items-center flex-wrap gap-2">
+                                  <div>
+                                    <strong>Name:</strong> {selectedStudentInfo?.name || "—"}
+                                  </div>
+                                  <div>
+                                    | <strong>Class:</strong>{" "}
+                                    {selectedStudentClassLabel}
+                                  </div>
+                                  <div>
+                                    | <strong>Section:</strong>{" "}
+                                    {selectedStudentSectionLabel}
+                                  </div>
+                                  <div>
+                                    | <strong>Father:</strong> {selectedStudentInfo?.father_name || "—"}
+                                  </div>
+                                  <div>
+                                    | <strong>Adm No:</strong> {selectedStudentInfo?.admission_number || "—"}
+                                  </div>
+                                  {selectedStudentInfo?.is_student_inactive && (
+                                    <Badge bg="danger" className="ms-1">
+                                      Inactive / Disabled Student
+                                    </Badge>
+                                  )}
+                                  <Button
+                                    variant="success"
+                                    size="sm"
+                                    className="ms-0 ms-md-2"
+                                    onClick={openStudentFeePage}
+                                  >
+                                    Parent Payment Page
+                                  </Button>
+                                </div>
+                              </div>
+                            )}
+                          </Tab>
+                        </Tabs>
+                      </div>
+                    )}
+                  </Card.Body>
+                </Card>
+              )}
+
+              <Card className="mb-2 shadow-sm border-0 collection-panel compact-card">
+                <Card.Body>
+                  <div className="d-flex flex-wrap align-items-center justify-content-between gap-2">
+                    <div>
+                      <h6 className="mb-1">Collection Details</h6>
+                      <div className="text-muted small">
+                        Date, session, payment mode and remarks
+                      </div>
+                    </div>
+
+                    <div className="d-flex align-items-center gap-2 flex-wrap">
+                      <div className="transaction-meta-chip">
+                        Slip will be created for the selected heads
+                      </div>
+                      {selectedStudentInfo && (
+                        <div className="transaction-meta-chip">
+                          Student: {selectedStudentInfo?.name || "—"} | {selectedStudentClassLabel} / {selectedStudentSectionLabel}
+                        </div>
+                      )}
+                      {(selectedStudentInfo || selectedAdmissionStudent)?.is_student_inactive && (
+                        <div className="transaction-meta-chip text-danger fw-semibold">
+                          Inactive / Disabled Student
+                        </div>
+                      )}
+                      {loadingSiblingSummary ? (
+                        <div className="transaction-meta-chip">
+                          Loading siblings...
+                        </div>
+                      ) : siblingSummaryRows.length > 0 ? (
+                        <div
+                          className="transaction-meta-chip"
+                          style={{ maxWidth: "520px" }}
+                          title={siblingSummaryRows
+                            .map(
+                              (sib) =>
+                                `${sib.display_name || "—"} (${sib.class_name || "—"}/${sib.section_name || "—"})`
+                            )
+                            .join(", ")}
+                        >
+                          Siblings:{" "}
+                          {siblingSummaryRows
+                            .map(
+                              (sib) =>
+                                `${sib.display_name || "—"} (${sib.class_name || "—"}/${sib.section_name || "—"})`
+                            )
+                            .join(", ")}
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  {(selectedStudentInfo || selectedAdmissionStudent)?.is_student_inactive && (
+                    <Alert variant="warning" className="mt-3 mb-0 py-2">
+                      <strong>Warning:</strong> This student is marked as{" "}
+                      <strong>Inactive / Disabled</strong>. Please confirm before collecting fee.
+                    </Alert>
+                  )}
+
+                  {showCollectionDetails && (
+                    <Row className="g-2 collection-details-grid mt-2">
+                      <Col lg={3} md={6}>
+                        <Form.Group>
+                          <Form.Label>Academic Session</Form.Label>
+                          <Form.Select
+                            value={selectedSession ?? ""}
+                            onChange={(e) =>
+                              setSelectedSession(e.target.value ? Number(e.target.value) : null)
+                            }
+                          >
+                            <option value="">Select Session</option>
+                            {sessions.map((s) => (
+                              <option key={s.id} value={s.id}>
+                                {s.name || s.label || `${s.start_date || ""} - ${s.end_date || ""}`}
+                              </option>
+                            ))}
+                          </Form.Select>
+                        </Form.Group>
+                      </Col>
+
+                      <Col lg={3} md={6}>
+                        <Form.Group>
+                          <div className="d-flex align-items-center justify-content-between gap-2">
+                            <Form.Label className="mb-1">Transaction Date</Form.Label>
+                            <Button
+                              variant="outline-secondary"
+                              size="sm"
+                              className="py-0 px-2"
+                              onClick={() => setTransactionDate(getTodayDateInput())}
+                            >
+                              Reset
+                            </Button>
+                          </div>
+                          <Form.Control
+                            type="text"
+                            inputMode="numeric"
+                            placeholder="dd/mm/yyyy"
+                            value={transactionDate}
+                            onChange={(e) => setTransactionDate(e.target.value)}
+                          />
+                          
+                        </Form.Group>
+                      </Col>
+
+                      <Col lg={3} md={6}>
+                        <Form.Group>
+                          <Form.Label>Payment Mode</Form.Label>
+                          <Form.Select
+                            value={paymentMode}
+                            onChange={(e) => applyCreatePaymentMode(e.target.value)}
+                          >
+                            {activeTransactionModes.map((mode) => (
+                              <option key={mode.id || mode.name} value={mode.name}>
+                                {mode.name}
+                              </option>
+                            ))}
+                          </Form.Select>
+                        </Form.Group>
+                      </Col>
+
+                      <Col lg={3} md={6}>
+                        <Form.Group>
+                          <Form.Label>Remarks</Form.Label>
+                          <Form.Control
+                            type="text"
+                            placeholder="Enter remarks (optional)"
+                            value={remarks}
+                            onChange={(e) => setRemarks(e.target.value)}
+                          />
+                        </Form.Group>
+                      </Col>
+
+                      {selectedPaymentModeMeta?.requires_reference_no && (
+                        <Col lg={4} md={6}>
+                          <Form.Group>
+                            <Form.Label>Reference / Transaction ID</Form.Label>
+                            <Form.Control
+                              type="text"
+                              placeholder="Enter reference / transaction ID"
+                              value={
+                                paymentDetails.reference_no || paymentDetails.Transaction_ID || ""
+                              }
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                setPaymentDetails((prev) => ({
+                                  ...prev,
+                                  reference_no: value,
+                                  Transaction_ID: value,
+                                }));
+                              }}
+                            />
+                          </Form.Group>
+                        </Col>
+                      )}
+
+                      {selectedPaymentModeMeta?.requires_bank && (
+                        <Col lg={4} md={6}>
+                          <Form.Group>
+                            <Form.Label>Receiving Bank Account</Form.Label>
+                            <Form.Select
+                              value={paymentDetails.bank_account_id || ""}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                setPaymentDetails((prev) => ({
+                                  ...prev,
+                                  bank_account_id: value,
+                                }));
+                              }}
+                            >
+                              <option value="">Select bank account</option>
+                              {bankAccounts.map((bank) => (
+                                <option key={bank.id} value={bank.id}>
+                                  {formatBankAccountLabel(bank)}
+                                </option>
+                              ))}
+                            </Form.Select>
+                            {!bankAccounts.length && (
+                              <small className="text-danger d-block mt-1">
+                                No active bank accounts found. Please add them in Bank Accounts master.
+                              </small>
+                            )}
+                          </Form.Group>
+                        </Col>
+                      )}
+
+                      {modeUsesPopupDetails(selectedPaymentModeMeta) && (
+                        <Col lg={5} md={6}>
+                          <Form.Group>
+                            <Form.Label>
+                              {modeUsesChequeFields(selectedPaymentModeMeta)
+                                ? "Cheque Details"
+                                : "Payment Details"}
+                            </Form.Label>
+                            <div className="d-flex flex-wrap align-items-center gap-2">
+                              <Button variant="outline-primary" size="sm" onClick={openChequePopup}>
+                                {hasModeExtraInfo(paymentDetails, selectedPaymentModeMeta)
+                                  ? "Edit Details"
+                                  : "Add Details"}
+                              </Button>
+                              {formatModeDetailsSummary(
+                                paymentDetails,
+                                selectedPaymentModeMeta,
+                                bankAccounts
+                              ) && (
+                                <small className="text-muted">
+                                  {formatModeDetailsSummary(
+                                    paymentDetails,
+                                    selectedPaymentModeMeta,
+                                    bankAccounts
+                                  )}
+                                </small>
+                              )}
+                            </div>
+                          </Form.Group>
+                        </Col>
+                      )}
+                    </Row>
+                  )}
+                </Card.Body>
+              </Card>
+
+              {openingBalanceDue > 0 && (
+                <div className="d-flex justify-content-end mb-2">
+                  <Badge
+                    bg="danger"
+                    pill
+                    title="Previous session balance is pending"
+                    style={{ fontSize: "0.78rem", padding: "6px 10px" }}
+                  >
+                    Prev. Bal. {formatINR(openingBalanceDue)}
+                  </Badge>
+                </div>
+              )}
+
+              {feeHeads.length > 0 && (
+                <Card className="mb-2 shadow-sm fee-toolbar-card">
+                  <Card.Body
+                    className="d-flex flex-wrap align-items-center justify-content-between gap-3"
+                    style={{ padding: "0.75rem 1rem" }}
+                  >
+                    <div className="d-flex align-items-center gap-3 flex-wrap">
+                      <div className="fw-semibold text-secondary">
+                        Total Due:{" "}
+                        <span className="text-danger">{formatINR(totalDueBase)}</span>
+                      </div>
+
+                      <div className="fw-semibold text-secondary">
+                        | Selected Due:{" "}
+                        <span className="text-success">
+                          {formatINR(selectedDueBase || 0)}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="d-flex align-items-center gap-2 flex-wrap">
+                      <Form.Control
+                        type="number"
+                        {...MONEY_INPUT_PROPS}
+                        placeholder="Quick Fill ₹"
+                        value={quickAmount}
+                        onChange={(e) => setQuickAmount(e.target.value)}
+                        style={{
+                          width: 120,
+                          textAlign: "right",
+                          fontWeight: "500",
+                          fontSize: "0.9rem",
+                        }}
+                      />
+                      <Button variant="success" size="sm" onClick={autoAllocateQuickAmount}>
+                        Apply
+                      </Button>
+                      <Button variant="outline-secondary" size="sm" onClick={clearQuickAllocations}>
+                        Clear
+                      </Button>
+                    </div>
+                  </Card.Body>
+                </Card>
+              )}
+
+              {feeHeads.length > 0 && (
+                <>
+                  <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+                    <h5 className="mb-0">Fee Details</h5>
+                    <div className="d-flex align-items-center gap-3 flex-wrap">
+                      <Form.Check
+                        type="checkbox"
+                        id="show-due-without-concession"
+                        label="Show due without concession"
+                        checked={showDueWithoutConcession}
+                        onChange={(e) => setShowDueWithoutConcession(e.target.checked)}
+                      />
+                      <small className="text-muted">Scroll for more heads</small>
+                    </div>
+                  </div>
+                  <div className="collection-table-wrap">
+                    <table className="table table-bordered mb-0">
+                      <thead className="table-light sticky-top">
+                        <tr style={{ fontSize: "0.85rem" }}>
+                          <th style={{ width: 42, textAlign: "center" }}>
+                            <Form.Check
+                              type="checkbox"
+                              aria-label="Select all academic fee heads"
+                              checked={
+                                newTransactionDetails.length > 0 &&
+                                newTransactionDetails.every((row) =>
+                                  selectedHeads.has(String(row.Fee_Head))
+                                )
+                              }
+                              onChange={(e) => {
+                                const checked = e.target.checked;
+
+                                if (checked) {
+                                  setSelectedHeads(() => {
+                                    const all = new Set();
+                                    newTransactionDetails.forEach((row) =>
+                                      all.add(String(row.Fee_Head))
+                                    );
+                                    return all;
+                                  });
+                                  setSelectedFineHeads(() => {
+                                    const all = new Set();
+                                    newTransactionDetails
+                                      .filter((row) => row.isFineApplicable && !row.isOpeningBalance)
+                                      .forEach((row) => all.add(String(row.Fee_Head)));
+                                    return all;
+                                  });
+                                  setSelectedTransportHeads(() => {
+                                    const all = new Set();
+                                    newTransactionDetails
+                                      .filter((row) => row.ShowVanFeeInput && !row.isOpeningBalance)
+                                      .forEach((row) => all.add(String(row.Fee_Head)));
+                                    return all;
+                                  });
+                                  newTransactionDetails.forEach((row, idx) => {
+                                    fillRowAuto(idx);
+                                    if (row.ShowVanFeeInput && !row.isOpeningBalance) fillTransportAuto(idx);
+                                  });
+                                } else {
+                                  setSelectedHeads(new Set());
+                                  setSelectedFineHeads(new Set());
+                                  setSelectedTransportHeads(new Set());
+                                  newTransactionDetails.forEach((row, idx) => {
+                                    clearRowAuto(idx);
+                                    if (row.ShowVanFeeInput && !row.isOpeningBalance) clearTransportAuto(idx);
+                                  });
+                                }
+                              }}
+                            />
+                          </th>
+                          <th style={{ minWidth: 135 }}>Fee</th>
+                          <th style={{ minWidth: 95 }}>Due</th>
+                          <th style={{ minWidth: 90 }}>Cons</th>
+                          <th style={{ minWidth: 92 }}>Recv</th>
+                          <th style={{ minWidth: 95 }}>{transportLabel} Due</th>
+                          <th style={{ minWidth: 95 }}>{transportLabel} Cons.</th>
+                          <th style={{ minWidth: 116 }}>
+                            <div className="d-flex align-items-center justify-content-center gap-1">
+                              <Form.Check
+                                type="checkbox"
+                                aria-label={`Select all ${transportLabel} fees`}
+                                checked={
+                                  newTransactionDetails.some(
+                                    (row) => row.ShowVanFeeInput && !row.isOpeningBalance
+                                  ) &&
+                                  newTransactionDetails
+                                    .filter((row) => row.ShowVanFeeInput && !row.isOpeningBalance)
+                                    .every((row) =>
+                                      selectedTransportHeads.has(String(row.Fee_Head))
+                                    )
+                                }
+                                disabled={
+                                  !newTransactionDetails.some(
+                                    (row) => row.ShowVanFeeInput && !row.isOpeningBalance
+                                  )
+                                }
+                                onChange={(e) => {
+                                  const checked = e.target.checked;
+                                  const transportRows = newTransactionDetails
+                                    .map((row, idx) => ({ row, idx }))
+                                    .filter(({ row }) => row.ShowVanFeeInput && !row.isOpeningBalance);
+
+                                  if (checked) {
+                                    setSelectedTransportHeads(() => {
+                                      const all = new Set();
+                                      transportRows.forEach(({ row }) =>
+                                        all.add(String(row.Fee_Head))
+                                      );
+                                      return all;
+                                    });
+                                    transportRows.forEach(({ idx }) => fillTransportAuto(idx));
+                                  } else {
+                                    setSelectedTransportHeads(new Set());
+                                    transportRows.forEach(({ idx }) => clearTransportAuto(idx));
+                                  }
+                                }}
+                              />
+                              <span>{transportLabel} Pay</span>
+                            </div>
+                          </th>
+                          <th style={{ minWidth: 104 }}>
+                            <div className="d-flex align-items-center justify-content-center gap-1">
+                              <Form.Check
+                                type="checkbox"
+                                aria-label="Select all fines"
+                                checked={
+                                  newTransactionDetails.some(
+                                    (row) => row.isFineApplicable && !row.isOpeningBalance
+                                  ) &&
+                                  newTransactionDetails
+                                    .filter((row) => row.isFineApplicable && !row.isOpeningBalance)
+                                    .every((row) =>
+                                      selectedFineHeads.has(String(row.Fee_Head))
+                                    )
+                                }
+                                disabled={
+                                  !newTransactionDetails.some(
+                                    (row) => row.isFineApplicable && !row.isOpeningBalance
+                                  )
+                                }
+                                onChange={(e) => {
+                                  const checked = e.target.checked;
+                                  const fineRows = newTransactionDetails
+                                    .map((row, idx) => ({ row, idx }))
+                                    .filter(({ row }) => row.isFineApplicable && !row.isOpeningBalance);
+
+                                  if (checked) {
+                                    setSelectedFineHeads(() => {
+                                      const all = new Set();
+                                      fineRows.forEach(({ row }) =>
+                                        all.add(String(row.Fee_Head))
+                                      );
+                                      return all;
+                                    });
+                                    fineRows.forEach(({ idx }) => fillFineAuto(idx));
+                                  } else {
+                                    setSelectedFineHeads(new Set());
+                                    fineRows.forEach(({ idx }) => clearFineAuto(idx));
+                                  }
+                                }}
+                              />
+                              <span>Fine</span>
+                            </div>
+                          </th>
+                        </tr>
+                      </thead>
+
+                      <tbody>
+                        {newTransactionDetails.map((feeDetail, index) => (
+                          <tr
+                            key={`${feeDetail.Fee_Head}-${index}`}
+                            className={feeDetail.isOpeningBalance ? "table-warning" : ""}
+                          >
+                            <td style={{ textAlign: "center" }}>
+                              <Form.Check
+                                type="checkbox"
+                                aria-label={`Select ${feeDetail.Fee_Heading_Name}`}
+                                checked={selectedHeads.has(String(feeDetail.Fee_Head))}
+                                onChange={(e) => {
+                                  const checked = e.target.checked;
+                                  const key = String(feeDetail.Fee_Head);
+
+                                  setSelectedHeads((prev) => {
+                                    const next = new Set(prev);
+                                    if (checked) next.add(key);
+                                    else next.delete(key);
+                                    return next;
+                                  });
+
+                                  setSelectedFineHeads((prev) => {
+                                    const next = new Set(prev);
+                                    if (checked && feeDetail.isFineApplicable && !feeDetail.isOpeningBalance) {
+                                      next.add(key);
+                                    } else {
+                                      next.delete(key);
+                                    }
+                                    return next;
+                                  });
+
+                                  setSelectedTransportHeads((prev) => {
+                                    const next = new Set(prev);
+                                    if (checked && feeDetail.ShowVanFeeInput && !feeDetail.isOpeningBalance) {
+                                      next.add(key);
+                                    } else {
+                                      next.delete(key);
+                                    }
+                                    return next;
+                                  });
+
+                                  if (checked) {
+                                    fillRowAuto(index);
+                                    if (feeDetail.ShowVanFeeInput && !feeDetail.isOpeningBalance) {
+                                      fillTransportAuto(index);
+                                    }
+                                  } else {
+                                    clearRowAuto(index);
+                                    if (feeDetail.ShowVanFeeInput && !feeDetail.isOpeningBalance) {
+                                      clearTransportAuto(index);
+                                    }
+                                  }
+                                }}
+                              />
+                            </td>
+
+                            <td
+                              onClick={() => {
+                                const key = String(feeDetail.Fee_Head);
+                                setSelectedHeads((prev) => {
+                                  const next = new Set(prev);
+                                  next.add(key);
+                                  return next;
+                                });
+                                setSelectedFineHeads((prev) => {
+                                  const next = new Set(prev);
+                                  if (feeDetail.isFineApplicable && !feeDetail.isOpeningBalance) {
+                                    next.add(key);
+                                  }
+                                  return next;
+                                });
+                                setSelectedTransportHeads((prev) => {
+                                  const next = new Set(prev);
+                                  if (feeDetail.ShowVanFeeInput && !feeDetail.isOpeningBalance) {
+                                    next.add(key);
+                                  }
+                                  return next;
+                                });
+                                fillRowAuto(index);
+                                if (feeDetail.ShowVanFeeInput && !feeDetail.isOpeningBalance) {
+                                  fillTransportAuto(index);
+                                }
+                              }}
+                              style={{ cursor: "pointer", userSelect: "none" }}
+                              title={`Click to auto-fill fee, fine and ${transportLabel}. Fine or ${transportLabel} can be unticked separately.`}
+                              className="fw-semibold"
+                            >
+                              {feeDetail.Fee_Heading_Name}
+                            </td>
+
+                            <td>
+                              <OverlayTrigger
+                                placement="top"
+                                overlay={
+                                  <Tooltip id={`tooltip-fee-${feeDetail.Fee_Head}`}>
+                                    <div style={{ textAlign: "left", padding: 8 }}>
+                                      <div>
+                                        <strong className="text-primary">Original Fee:</strong>
+                                        <span className="ms-1">
+                                          {formatINR(feeDetail.Original_Fee_Due || 0)}
+                                        </span>
+                                      </div>
+
+                                      {feeDetail.defaultConcessionAmount > 0 &&
+                                        selectedStudentInfo?.concession && (
+                                          <div>
+                                            <strong className="text-success">
+                                              {selectedStudentInfo.concession.concession_name}:
+                                            </strong>
+                                            <span className="ms-1">
+                                              {formatINR(feeDetail.defaultConcessionAmount)}
+                                            </span>
+                                          </div>
+                                        )}
+
+                                      {feeDetail.Concession > 0 && (
+                                        <div>
+                                          <strong className="text-success">Extra Concession:</strong>
+                                          <span className="ms-1">
+                                            {formatINR(feeDetail.Concession)}
+                                          </span>
+                                        </div>
+                                      )}
+
+                                      {feeDetail.fineAmount > 0 && (
+                                        <div>
+                                          <strong className="text-danger">Fine Applied:</strong>
+                                          <span className="ms-1">
+                                            {formatINR(feeDetail.fineAmount)}
+                                          </span>
+                                        </div>
+                                      )}
+
+                                      {feeDetail.ShowVanFeeInput && (
+                                        <>
+                                          <hr />
+                                          <div>
+                                            <strong>Route Fee:</strong>
+                                            <span className="ms-1">
+                                              {formatINR(feeDetail._routeFee || 0)}
+                                            </span>
+                                          </div>
+                                          <div>
+                                            <strong>{transportLabel} Received:</strong>
+                                            <span className="ms-1">
+                                              {formatINR(feeDetail._receivedVanFee)}
+                                            </span>
+                                          </div>
+                                          <div>
+                                            <strong>Concession:</strong>
+                                            <span className="ms-1">
+                                              {formatINR(feeDetail._vanFeeConcession || 0)}
+                                            </span>
+                                          </div>
+                                          <div>
+                                            <strong>Remaining (before fine):</strong>
+                                            <span className="ms-1">
+                                              {formatINR(feeDetail.Van_Fee_Remaining)}
+                                            </span>
+                                          </div>
+                                          <div>
+                                            <strong>{transportLabel} Fine:</strong>
+                                            <span className="ms-1">
+                                              {formatINR(feeDetail.Van_Fine_Amount)}
+                                            </span>
+                                          </div>
+                                          <div>
+                                            <strong>Total {transportLabel} Due (after fine):</strong>
+                                            <span className="ms-1">
+                                              {formatINR(feeDetail.Van_Fee_Due)}
+                                            </span>
+                                          </div>
+                                        </>
+                                      )}
+                                    </div>
+                                  </Tooltip>
+                                }
+                              >
+                                <div className="fw-bold text-dark">
+                                  {(() => {
+                                    const netDue = getAcademicDisplayDue(
+                                      feeDetail,
+                                      showDueWithoutConcession
+                                    );
+                                    const originalFine = feeDetail.fineAmount || 0;
+                                    const fineReceived = feeDetail.Fine_Amount || 0;
+                                    const fineDue = Math.max(0, originalFine - fineReceived);
+                                    return (
+                                      <>
+                                        {formatINR(netDue)}
+                                        {feeDetail.isFineApplicable && fineDue > 0 && (
+                                          <>
+                                            {" + "}
+                                            <span className="text-danger">
+                                              {formatINR(fineDue)} (fine)
+                                            </span>
+                                          </>
+                                        )}
+                                      </>
+                                    );
+                                  })()}
+                                </div>
+                              </OverlayTrigger>
+                            </td>
+
+                            <td>
+                              <Form.Control
+                                type="number"
+                        {...MONEY_INPUT_PROPS}
+                                value={feeDetail.Concession || ""}
+                                onChange={(e) => {
+                                  const updated = [...newTransactionDetails];
+                                  const row = { ...updated[index] };
+                                  row.Concession = parseNumberInput(e.target.value);
+                                  updated[index] = row;
+                                  setNewTransactionDetails(updated);
+                                }}
+                                disabled={
+                                  feeDetail.isOpeningBalance ||
+                                  (feeDetail.Fee_Due || 0) - (feeDetail.Fee_Recieved || 0) <= 0
+                                }
+                              />
+                            </td>
+
+                            <td>
+                              <Form.Control
+                                type="number"
+                        {...MONEY_INPUT_PROPS}
+                                value={feeDetail.Fee_Recieved || ""}
+                                onChange={(e) => {
+                                  const updated = [...newTransactionDetails];
+                                  const row = { ...updated[index] };
+                                  const val = parseNumberInput(e.target.value);
+                                  const maxAllowed = Math.max(
+                                    0,
+                                    (row.Fee_Due || 0) - (row.Concession || 0)
+                                  );
+                                  row.Fee_Recieved = Math.min(val, maxAllowed);
+                                  updated[index] = row;
+                                  setNewTransactionDetails(updated);
+                                }}
+                                disabled={(feeDetail.Fee_Due || 0) <= 0}
+                              />
+                            </td>
+
+                            <td>
+                              {feeDetail.ShowVanFeeInput ? (
+                                <div>
+                                  {(() => {
+                                    const totalDue = Number(feeDetail.Van_Fee_Due || 0);
+                                    const alreadyRec = Number(feeDetail._receivedVanFee || 0);
+                                    const enteredNow = Number(feeDetail.VanFee || 0);
+                                    const remainingNow = Math.max(0, totalDue - enteredNow);
+                                    return (
+                                      <>
+                                        <div className="fw-semibold">{formatINR(remainingNow)}</div>
+                                        <div className="small text-muted">Rec: {formatINR(alreadyRec)}</div>
+                                      </>
+                                    );
+                                  })()}
+                                </div>
+                              ) : (
+                                "—"
+                              )}
+                            </td>
+
+                            <td>
+                              {feeDetail.ShowVanFeeInput ? (
+                                <Form.Control
+                                  type="number"
+                        {...MONEY_INPUT_PROPS}
+                                  value={
+                                    feeDetail.Van_Fee_Concession === 0
+                                      ? ""
+                                      : feeDetail.Van_Fee_Concession
+                                  }
+                                  onChange={(e) => {
+                                    const updated = [...newTransactionDetails];
+                                    const row = { ...updated[index] };
+                                    const cons = parseNumberInput(e.target.value);
+                                    row.Van_Fee_Concession = cons;
+                                    row._vanFeeConcession = cons;
+
+                                    syncVanRemaining(row);
+
+                                    updated[index] = row;
+                                    setNewTransactionDetails(updated);
+                                  }}
+                                  // disabled={(feeDetail.Van_Fee_Due || 0) <= 0}
+                                  disabled={!feeDetail.ShowVanFeeInput}
+                                />
+                              ) : (
+                                "—"
+                              )}
+                            </td>
+
+                            <td style={{ maxWidth: 126 }}>
+                              {feeDetail.ShowVanFeeInput && !feeDetail.isOpeningBalance ? (
+                                <div className="d-flex align-items-center gap-1">
+                                  <Form.Check
+                                    type="checkbox"
+                                    className="m-0 flex-shrink-0"
+                                    aria-label={`Select ${transportLabel} for ${feeDetail.Fee_Heading_Name}`}
+                                    checked={selectedTransportHeads.has(String(feeDetail.Fee_Head))}
+                                    onChange={(e) => {
+                                      const checked = e.target.checked;
+                                      const key = String(feeDetail.Fee_Head);
+
+                                      setSelectedTransportHeads((prev) => {
+                                        const next = new Set(prev);
+                                        if (checked) next.add(key);
+                                        else next.delete(key);
+                                        return next;
+                                      });
+
+                                      if (checked) fillTransportAuto(index);
+                                      else clearTransportAuto(index);
+                                    }}
+                                  />
+                                  <Form.Control
+                                    type="number"
+                        {...MONEY_INPUT_PROPS}
+                                    size="sm"
+                                    value={feeDetail.VanFee === 0 ? "" : feeDetail.VanFee}
+                                    style={{ minWidth: 0, width: 78 }}
+                                    onChange={(e) => {
+                                      const updated = [...newTransactionDetails];
+                                      const row = { ...updated[index] };
+                                      const enteredValue = parseNumberInput(e.target.value);
+                                      const key = String(row.Fee_Head);
+
+                                      row.VanFee = enteredValue;
+                                      syncVanRemaining(row);
+
+                                      updated[index] = row;
+                                      setNewTransactionDetails(updated);
+
+                                      setSelectedTransportHeads((prev) => {
+                                        const next = new Set(prev);
+                                        if (enteredValue > 0) next.add(key);
+                                        else next.delete(key);
+                                        return next;
+                                      });
+                                    }}
+                                    disabled={!feeDetail.ShowVanFeeInput}
+                                  />
+                                </div>
+                              ) : (
+                                "—"
+                              )}
+                            </td>
+
+                            <td style={{ maxWidth: 112 }}>
+                              {feeDetail.isFineApplicable && !feeDetail.isOpeningBalance ? (
+                                <div className="d-flex align-items-center gap-1">
+                                  <Form.Check
+                                    type="checkbox"
+                                    className="m-0 flex-shrink-0"
+                                    aria-label={`Select fine for ${feeDetail.Fee_Heading_Name}`}
+                                    checked={selectedFineHeads.has(String(feeDetail.Fee_Head))}
+                                    onChange={(e) => {
+                                      const checked = e.target.checked;
+                                      const key = String(feeDetail.Fee_Head);
+
+                                      setSelectedFineHeads((prev) => {
+                                        const next = new Set(prev);
+                                        if (checked) next.add(key);
+                                        else next.delete(key);
+                                        return next;
+                                      });
+
+                                      if (checked) fillFineAuto(index);
+                                      else clearFineAuto(index);
+                                    }}
+                                  />
+                                  <Form.Control
+                                    type="number"
+                        {...MONEY_INPUT_PROPS}
+                                    size="sm"
+                                    value={
+                                      feeDetail.Fine_Amount === 0 && !feeDetail.isFineEdited
+                                        ? ""
+                                        : feeDetail.Fine_Amount
+                                    }
+                                    style={{ minWidth: 0, width: 72 }}
+                                    onChange={(e) => {
+                                      const updated = [...newTransactionDetails];
+                                      const row = { ...updated[index] };
+                                      const value = parseNumberInput(e.target.value);
+                                      const enteredValue = Math.max(
+                                        0,
+                                        Math.min(value, Number(row.fineAmount || 0))
+                                      );
+                                      const key = String(row.Fee_Head);
+
+                                      row.Fine_Amount = enteredValue;
+                                      row.isFineEdited = true;
+                                      updated[index] = row;
+                                      setNewTransactionDetails(updated);
+
+                                      setSelectedFineHeads((prev) => {
+                                        const next = new Set(prev);
+                                        if (enteredValue > 0) next.add(key);
+                                        else next.delete(key);
+                                        return next;
+                                      });
+                                    }}
+                                  />
+                                </div>
+                              ) : (
+                                "—"
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
+            </>
+          ) : (
+            <>
+              <Card className="mb-3 shadow-sm border-0 collection-panel">
+                <Card.Body>
+                  <div className="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-3">
+                    <div>
+                      <h5 className="mb-1">Edit Transaction</h5>
+                      <div className="text-muted small">
+                        Update the transaction details neatly from this popup.
+                      </div>
+                    </div>
+                    <div className="transaction-meta-chip">
+                      Head: {editingTransaction?.FeeHeadingName || "—"}
+                    </div>
+                  </div>
+
+                  <Row className="g-3 mb-3">
+                    <Col lg={3} md={6}>
+                      <div className="p-3 rounded-3 border bg-light h-100">
+                        <div className="small text-muted mb-1">Student</div>
+                        <div className="fw-semibold">{editingTransaction?.StudentName || "—"}</div>
+                      </div>
+                    </Col>
+                    <Col lg={3} md={6}>
+                      <div className="p-3 rounded-3 border bg-light h-100">
+                        <div className="small text-muted mb-1">Admission No.</div>
+                        <div className="fw-semibold">{editingTransaction?.AdmissionNumber || "—"}</div>
+                      </div>
+                    </Col>
+                    <Col lg={3} md={6}>
+                      <div className="p-3 rounded-3 border bg-light h-100">
+                        <div className="small text-muted mb-1">Class</div>
+                        <div className="fw-semibold">{editingTransaction?.ClassName || "—"}</div>
+                      </div>
+                    </Col>
+                    <Col lg={3} md={6}>
+                      <div className="p-3 rounded-3 border bg-light h-100">
+                        <div className="small text-muted mb-1">Fee Head</div>
+                        <div className="fw-semibold">{editingTransaction?.FeeHeadingName || "—"}</div>
+                      </div>
+                    </Col>
+                  </Row>
+
+                  <Row className="g-3 edit-grid">
+                    <Col lg={3} md={6}>
+                      <Form.Group>
+                        <Form.Label>Transaction Date</Form.Label>
+                        <Form.Control
+                          type="text"
+                          inputMode="numeric"
+                          placeholder="dd/mm/yyyy"
+                          value={editingTransaction?.DateOfTransaction || ""}
+                          onChange={(e) =>
+                            setEditingTransaction((prev) => ({
+                              ...prev,
+                              DateOfTransaction: e.target.value,
+                            }))
+                          }
+                        />
+                      </Form.Group>
+                    </Col>
+
+                    <Col lg={3} md={6}>
+                      <Form.Group>
+                        <Form.Label>Payment Mode</Form.Label>
+                        <Form.Select
+                          value={editingTransaction?.PaymentMode || defaultPaymentMode}
+                          onChange={(e) => applyEditPaymentMode(e.target.value)}
+                        >
+                          {activeTransactionModes.map((mode) => (
+                            <option key={mode.id || mode.name} value={mode.name}>
+                              {mode.name}
+                            </option>
+                          ))}
+                        </Form.Select>
+                      </Form.Group>
+                    </Col>
+
+                    <Col lg={3} md={6}>
+                      <Form.Group>
+                        <Form.Label>Academic Session</Form.Label>
+                        <Form.Select
+                          value={editingTransaction?.session_id ?? ""}
+                          onChange={(e) =>
+                            setEditingTransaction((prev) => ({
+                              ...prev,
+                              session_id: e.target.value ? Number(e.target.value) : null,
+                            }))
+                          }
+                        >
+                          <option value="">Select Session</option>
+                          {sessions.map((s) => (
+                            <option key={s.id} value={s.id}>
+                              {s.name || s.label || `${s.start_date || ""} - ${s.end_date || ""}`}
+                            </option>
+                          ))}
+                        </Form.Select>
+                      </Form.Group>
+                    </Col>
+
+                    <Col lg={3} md={6}>
+                      <Form.Group>
+                        <Form.Label>Remarks</Form.Label>
+                        <Form.Control
+                          type="text"
+                          placeholder="Enter remarks"
+                          value={editingTransaction?.Remarks || ""}
+                          onChange={(e) =>
+                            setEditingTransaction((prev) => ({
+                              ...prev,
+                              Remarks: e.target.value,
+                            }))
+                          }
+                        />
+                      </Form.Group>
+                    </Col>
+
+                    <Col lg={3} md={6}>
+                      <Form.Group>
+                        <Form.Label>Fee Received</Form.Label>
+                        <Form.Control
+                          type="number"
+                        {...MONEY_INPUT_PROPS}
+                          value={zeroAsBlank(editingTransaction?.Fee_Recieved)}
+                          onChange={(e) =>
+                            setEditingTransaction((prev) => ({
+                              ...prev,
+                              Fee_Recieved: parseNumberInput(e.target.value),
+                            }))
+                          }
+                        />
+                      </Form.Group>
+                    </Col>
+
+                    <Col lg={3} md={6}>
+                      <Form.Group>
+                        <Form.Label>Concession</Form.Label>
+                        <Form.Control
+                          type="number"
+                        {...MONEY_INPUT_PROPS}
+                          value={zeroAsBlank(editingTransaction?.Concession)}
+                          onChange={(e) =>
+                            setEditingTransaction((prev) => ({
+                              ...prev,
+                              Concession: parseNumberInput(e.target.value),
+                            }))
+                          }
+                        />
+                      </Form.Group>
+                    </Col>
+
+                    <Col lg={3} md={6}>
+                      <Form.Group>
+                        <Form.Label>{transportLabel}</Form.Label>
+                        <Form.Control
+                          type="number"
+                        {...MONEY_INPUT_PROPS}
+                          value={zeroAsBlank(editingTransaction?.VanFee)}
+                          onChange={(e) =>
+                            setEditingTransaction((prev) => ({
+                              ...prev,
+                              VanFee: parseNumberInput(e.target.value),
+                            }))
+                          }
+                        />
+                      </Form.Group>
+                    </Col>
+
+                    <Col lg={3} md={6}>
+                      <Form.Group>
+                        <Form.Label>{transportLabel} Concession</Form.Label>
+                        <Form.Control
+                          type="number"
+                        {...MONEY_INPUT_PROPS}
+                          value={zeroAsBlank(editingTransaction?.Van_Fee_Concession)}
+                          onChange={(e) =>
+                            setEditingTransaction((prev) => ({
+                              ...prev,
+                              Van_Fee_Concession: parseNumberInput(e.target.value),
+                            }))
+                          }
+                        />
+                      </Form.Group>
+                    </Col>
+
+                    <Col lg={3} md={6}>
+                      <Form.Group>
+                        <Form.Label>Fine</Form.Label>
+                        <Form.Control
+                          type="number"
+                        {...MONEY_INPUT_PROPS}
+                          value={zeroAsBlank(editingTransaction?.Fine_Amount)}
+                          onChange={(e) =>
+                            setEditingTransaction((prev) => ({
+                              ...prev,
+                              Fine_Amount: parseNumberInput(e.target.value),
+                            }))
+                          }
+                        />
+                      </Form.Group>
+                    </Col>
+
+                    {editingPaymentModeMeta?.requires_reference_no && (
+                      <Col lg={4} md={6}>
+                        <Form.Group>
+                          <Form.Label>Reference / Transaction ID</Form.Label>
+                          <Form.Control
+                            type="text"
+                            placeholder="Enter reference / transaction ID"
+                            value={
+                              editingTransaction?.reference_no ||
+                              editingTransaction?.Transaction_ID ||
+                              ""
+                            }
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              setEditingTransaction((prev) => ({
+                                ...prev,
+                                reference_no: value,
+                                Transaction_ID: value,
+                              }));
+                            }}
+                          />
+                        </Form.Group>
+                      </Col>
+                    )}
+
+                    {editingPaymentModeMeta?.requires_bank && (
+                      <Col lg={4} md={6}>
+                        <Form.Group>
+                          <Form.Label>Receiving Bank Account</Form.Label>
+                          <Form.Select
+                            value={editingTransaction?.bank_account_id || ""}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              setEditingTransaction((prev) => ({
+                                ...prev,
+                                bank_account_id: value,
+                              }));
+                            }}
+                          >
+                            <option value="">Select bank account</option>
+                            {bankAccounts.map((bank) => (
+                              <option key={bank.id} value={bank.id}>
+                                {formatBankAccountLabel(bank)}
+                              </option>
+                            ))}
+                          </Form.Select>
+                          {!bankAccounts.length && (
+                            <small className="text-danger d-block mt-1">
+                              No active bank accounts found. Please add them in Bank Accounts master.
+                            </small>
+                          )}
+                        </Form.Group>
+                      </Col>
+                    )}
+
+                    {modeUsesPopupDetails(editingPaymentModeMeta) && (
+                      <Col lg={5} md={6}>
+                        <Form.Group>
+                          <Form.Label>
+                            {modeUsesChequeFields(editingPaymentModeMeta)
+                              ? "Cheque Details"
+                              : "Payment Details"}
+                          </Form.Label>
+                          <div className="d-flex flex-wrap align-items-center gap-2">
+                            <Button variant="outline-primary" size="sm" onClick={openChequePopup}>
+                              {hasModeExtraInfo(editingTransaction, editingPaymentModeMeta)
+                                ? "Edit Details"
+                                : "Add Details"}
+                            </Button>
+                            {formatModeDetailsSummary(
+                              editingTransaction,
+                              editingPaymentModeMeta,
+                              bankAccounts
+                            ) && (
+                              <small className="text-muted">
+                                {formatModeDetailsSummary(
+                                  editingTransaction,
+                                  editingPaymentModeMeta,
+                                  bankAccounts
+                                )}
+                              </small>
+                            )}
+                          </div>
+                        </Form.Group>
+                      </Col>
+                    )}
+                  </Row>
+                </Card.Body>
+              </Card>
+            </>
+          )}
+        </Modal.Body>
+
+        <Modal.Footer
+          className="py-3 px-3"
+          style={{
+            background: "#fff",
+            borderTop: "1px solid #e9ecef",
+          }}
+        >
+          {editingTransaction ? (
+            <div className="w-100 d-flex flex-wrap align-items-center justify-content-between gap-2">
+              <div className="small text-muted">
+                Date: {formatTransactionDateOnly(editingTransaction?.DateOfTransaction)}
+              </div>
+              <div className="d-flex align-items-center gap-2 footer-actions">
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    setShowChequePopup(false);
+                    setEditingTransaction(null);
+                    setShowModal(false);
+                  }}
+                >
+                  Close
+                </Button>
+                <Button variant="primary" onClick={saveTransaction}>
+                  Update Transaction
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="w-100 d-flex flex-wrap align-items-center justify-content-between gap-3">
+              <div
+                className="d-flex flex-wrap align-items-center gap-2 px-2 py-2"
+                style={{
+                  background: "#f8f9fa",
+                  borderRadius: "12px",
+                  border: "1px solid #dee2e6",
+                  minWidth: 0,
+                  flex: "1 1 420px",
+                }}
+              >
+                <div className="small text-success fw-bold">
+                  <strong>Total:</strong> {formatINR(grandTotal)}
+                </div>
+                <div className="small">
+                  <strong>Acad:</strong> {formatINR(totalFeeReceived)}
+                </div>
+                <div className="small">
+                  <strong>{transportLabel}:</strong> {formatINR(totalVanFee)}
+                </div>
+                <div className="small text-danger">
+                  <strong>Fine:</strong> {formatINR(totalFine)}
+                </div>
+                <div className="small text-secondary">
+                  <strong>Acad Cons:</strong> {formatINR(totalAcademicConcession)}
+                </div>
+                <div className="small text-secondary">
+                  <strong>{transportLabel} Cons:</strong> {formatINR(totalVanConcession)}
+                </div>
+              </div>
+
+              <div className="d-flex flex-wrap align-items-center gap-2 footer-actions">
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    setShowChequePopup(false);
+                    setShowModal(false);
+                  }}
+                >
+                  Close
+                </Button>
+
+                {selectedStudentInfo?.admission_number && (
+                  <Button
+                    variant="info"
+                    onClick={() =>
+                      window.open(
+                        `/reports/student/${selectedStudentInfo.admission_number}`,
+                        "_blank"
+                      )
+                    }
+                  >
+                    View Full Report
+                  </Button>
+                )}
+
+                <Button variant="primary" onClick={saveTransaction}>
+                  Save Collection
+                </Button>
+              </div>
+            </div>
+          )}
+        </Modal.Footer>
+      </Modal>
+
+      <Modal show={showChequePopup} onHide={closeChequePopup} centered backdrop="static">
+        <Modal.Header closeButton>
+          <Modal.Title>
+            {modeUsesChequeFields(popupModeMeta) ? "Cheque Details" : "Payment Details"}
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <Row className="g-3">
+            {popupModeMeta?.requires_reference_no && (
+              <Col md={12}>
+                <Form.Group>
+                  <Form.Label>Reference / Transaction ID</Form.Label>
+                  <Form.Control
+                    type="text"
+                    placeholder="Enter reference / UTR / transaction ID"
+                    value={
+                      editingTransaction
+                        ? editingTransaction?.reference_no || editingTransaction?.Transaction_ID || ""
+                        : paymentDetails.reference_no || paymentDetails.Transaction_ID || ""
+                    }
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      if (editingTransaction) {
+                        setEditingTransaction((prev) => ({
+                          ...prev,
+                          reference_no: value,
+                          Transaction_ID: value,
+                        }));
+                      } else {
+                        setPaymentDetails((prev) => ({
+                          ...prev,
+                          reference_no: value,
+                          Transaction_ID: value,
+                        }));
+                      }
+                    }}
+                  />
+                </Form.Group>
+              </Col>
+            )}
+
+
+            {popupModeMeta?.requires_cheque_no && (
+              <Col md={12}>
+                <Form.Group>
+                  <Form.Label>Cheque Number</Form.Label>
+                  <Form.Control
+                    type="text"
+                    placeholder="Enter cheque number"
+                    value={
+                      editingTransaction
+                        ? editingTransaction?.cheque_no || editingTransaction?.ChequeNumber || ""
+                        : paymentDetails.cheque_no || paymentDetails.ChequeNumber || ""
+                    }
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      if (editingTransaction) {
+                        setEditingTransaction((prev) => ({
+                          ...prev,
+                          cheque_no: value,
+                          ChequeNumber: value,
+                        }));
+                      } else {
+                        setPaymentDetails((prev) => ({
+                          ...prev,
+                          cheque_no: value,
+                          ChequeNumber: value,
+                        }));
+                      }
+                    }}
+                  />
+                </Form.Group>
+              </Col>
+            )}
+
+            {popupModeMeta?.requires_cheque_date && (
+              <Col md={12}>
+                <Form.Group>
+                  <Form.Label>Cheque Date</Form.Label>
+                  <Form.Control
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="dd/mm/yyyy"
+                    value={
+                      editingTransaction
+                        ? editingTransaction?.cheque_date || editingTransaction?.ChequeDate || ""
+                        : paymentDetails.cheque_date || paymentDetails.ChequeDate || ""
+                    }
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      if (editingTransaction) {
+                        setEditingTransaction((prev) => ({
+                          ...prev,
+                          cheque_date: value,
+                          ChequeDate: value,
+                        }));
+                      } else {
+                        setPaymentDetails((prev) => ({
+                          ...prev,
+                          cheque_date: value,
+                          ChequeDate: value,
+                        }));
+                      }
+                    }}
+                  />
+                </Form.Group>
+              </Col>
+            )}
+
+            {(popupModeMeta?.requires_cheque_no || popupModeMeta?.requires_cheque_date) && (
+              <Col md={12}>
+                <Form.Group>
+                  <Form.Label>Instrument Bank Name</Form.Label>
+                  <Form.Control
+                    type="text"
+                    placeholder="Enter instrument bank name"
+                    value={
+                      editingTransaction
+                        ? editingTransaction?.bank_name || editingTransaction?.BankName || ""
+                        : paymentDetails.bank_name || paymentDetails.BankName || ""
+                    }
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      if (editingTransaction) {
+                        setEditingTransaction((prev) => ({
+                          ...prev,
+                          bank_name: value,
+                          BankName: value,
+                        }));
+                      } else {
+                        setPaymentDetails((prev) => ({
+                          ...prev,
+                          bank_name: value,
+                          BankName: value,
+                        }));
+                      }
+                    }}
+                  />
+                </Form.Group>
+              </Col>
+            )}
+          </Row>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={closeChequePopup}>
+            Close
+          </Button>
+          <Button variant="primary" onClick={saveChequePopup}>
+            Save Details
+          </Button>
+        </Modal.Footer>
+      </Modal>
+    </div>
+  );
+};
+
+export default Transactions;

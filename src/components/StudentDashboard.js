@@ -592,6 +592,13 @@ export default function StudentDashboard() {
           badge={<span className="badge rounded-pill text-bg-warning text-dark fs-6">{fmtINR(feeSummary.vanDue)} van due</span>}
         />
         <QuickLink
+          to="/my-library"
+          icon={<i className="bi bi-journal-bookmark text-success"></i>}
+          label="My Library"
+          desc="Issued books, due dates & fines"
+          badge={<span className="badge rounded-pill text-bg-success fs-6">Open</span>}
+        />
+        <QuickLink
           to="/academic-calendar-view"
           icon={<i className="bi bi-calendar3 text-primary"></i>}
           label="Academic Calendar"

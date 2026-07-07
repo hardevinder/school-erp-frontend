@@ -1,0 +1,253 @@
+/* ─────────────────────────────
+   MODAL: Fullscreen, centered, above sidebar
+   ───────────────────────────── */
+
+/* Put the modal & backdrop above any sidebar/navbar */
+.modal-backdrop {
+  z-index: 5000 !important;
+}
+.modal {
+  z-index: 5050 !important;
+}
+
+/* Center the dialog horizontally even when very wide */
+.modal-xxxl {
+  max-width: 100vw !important;     /* full width */
+  height: 100vh !important;         /* full height */
+  margin-left: auto !important;
+  margin-right: auto !important;
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+}
+
+/* Ensure the dialog itself uses the full height */
+.modal.show .modal-dialog.modal-xxxl {
+  height: 100%;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* Boost flex centering reliability */
+.modal.modal-dialog-centered,
+.modal.show {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+/* Fill the viewport; remove rounded corners for a true fullscreen feel */
+.modal-xxxl .modal-content {
+  height: 100%;
+  border-radius: 0;
+}
+
+/* ─────────────────────────────
+   Sticky header & layout
+   ───────────────────────────── */
+
+.modal-header-sticky {
+  position: sticky;
+  top: 0;
+  z-index: 9; /* above table headers */
+  background: #fff;
+  border-bottom: 1px solid var(--bs-border-color, #dee2e6);
+}
+
+/* Body takes remaining height between header and footer */
+.modal-body-fixed {
+  padding: 0;
+  background: #fff;
+  overflow: hidden;
+  height: calc(100% - 56px - 56px); /* header + footer */
+  display: flex;
+  flex-direction: column;
+}
+
+/* Controls */
+.modal-controls {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: .75rem;
+  align-items: center;
+  padding: .75rem 1rem;
+  border-bottom: 1px solid var(--bs-border-color, #e9ecef);
+  background: #fff;
+}
+.modal-search { min-width: 260px; }
+
+/* Scrollable table container */
+.table-container {
+  flex: 1;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 12px;
+  scrollbar-gutter: stable both-edges;
+}
+.table-container .table { margin-bottom: 0; }
+
+/* Sticky table header cells */
+.modal-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: #f8f9fa !important;
+  box-shadow: 0 2px 3px rgba(0, 0, 0, 0.05);
+}
+
+/* ─────────────────────────────
+   Scrollable area: show ~10 rows max
+   ───────────────────────────── */
+.scrollable-table {
+  max-height: calc(10 * 2.6rem + 70px); /* about 10 rows + header/footer spacing */
+  overflow-y: auto;
+  overflow-x: auto;
+  border-top: 1px solid #dee2e6;
+  border-bottom: 1px solid #dee2e6;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-gutter: stable both-edges;
+}
+
+/* Keep left sticky headers above normal ones */
+.modal-table thead .slc {
+  z-index: 12 !important;
+}
+
+/* Keep 'Overall' heading pinned on the right */
+.modal-table thead .sticky-overall {
+  position: sticky;
+  right: 0;
+  background: #f8f9fa !important;
+  z-index: 11;
+  box-shadow: -1px 0 0 rgba(0, 0, 0, 0.05);
+}
+
+/* Main page summary header also sticky */
+.table-sticky thead.sticky-top { top: 0; z-index: 1; }
+
+/* Softer status colors */
+.text-danger-soft { color: #b02a37 !important; }
+.text-success-soft { color: #1b5e20 !important; }
+
+.due-full   { background: #fff1f1 !important; color: #b02a37 !important; font-weight: 600; }
+.due-partial{ background: #fff7e6 !important; color: #7a5b00 !important; font-weight: 600; }
+.due-zero   { background: #eef9f0 !important; color: #1b5e20 !important; font-weight: 600; }
+
+/* Readability */
+.modal-table {
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: auto;
+  min-width: 1000px;
+}
+.table td, .table th { vertical-align: middle; white-space: nowrap; }
+
+/* ─────────────────────────────
+   Sticky Left Columns: #, Name, Admission, Class
+   ───────────────────────────── */
+.slc {
+  position: sticky;
+  background: #fff !important;
+  z-index: 7;
+  background-clip: padding-box;
+}
+.modal-table thead .slc { z-index: 8; }
+
+.slc-1, .slc-2, .slc-3, .slc-4, .slc-5 { min-width: 120px; }
+.slc-1 { left: 0;                                   min-width: 64px;  text-align: center; }
+.slc-2 { left: 64px;                                min-width: 220px; } /* Name */
+.slc-3 { left: calc(64px + 220px);                  min-width: 140px; } /* Admission */
+.slc-4 { left: calc(64px + 220px + 140px);          min-width: 120px; } /* Class */
+.slc-5 { left: calc(64px + 220px + 140px + 120px);  min-width: 120px; } /* Optional extra (e.g. Route) */
+
+.modal-table thead .slc {
+  box-shadow: inset 0 -1px 0 var(--bs-border-color, #e9ecef);
+}
+
+/* ─────────────────────────────
+   Sticky Overall Total (right side)
+   ───────────────────────────── */
+.modal-table .sticky-overall {
+  position: sticky;
+  right: 0;
+  background: #fff !important;
+  z-index: 6;
+  background-clip: padding-box;
+  box-shadow: -1px 0 0 rgba(0,0,0,0.05);
+  text-align: right;
+  font-weight: 600;
+}
+
+/* ─────────────────────────────
+   Grouped Fee Head Headers
+   ───────────────────────────── */
+.modal-table thead th.group-top,
+.modal-table thead th.sub-top,
+.modal-table .feehead-group-header {
+  position: sticky;
+  top: 0;
+  background: #fff !important;
+  z-index: 7;
+  text-align: center;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+/* Make all sticky sections opaque */
+.modal-table .slc,
+.modal-table thead th,
+.modal-table .sticky-overall,
+.modal-table .feehead-group-header {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  background-color: #fff !important;
+}
+
+/* Clickable chips in summary table */
+.click-chip-cell { vertical-align: middle; }
+.count-chip {
+  display: inline-block;
+  padding: .25rem .5rem;
+  border-radius: 9999px;
+  font-weight: 600;
+  font-size: .875rem;
+  line-height: 1;
+  cursor: pointer;
+  user-select: none;
+  transition: transform .05s ease, box-shadow .15s ease;
+  border: 1px solid transparent;
+}
+.count-chip:hover { transform: translateY(-1px); }
+.chip-success { background: #e8f5e9; color: #1b5e20; border-color: #c8e6c9; }
+.chip-warning { background: #fff8e1; color: #7a5b00; border-color: #ffe0b2; }
+.chip-danger  { background: #ffebee; color: #b02a37; border-color: #ffcdd2; }
+
+.overflow-x-auto { overflow-x: auto; }
+
+/* ─────────────────────────────
+   OB Table & Totals
+   ───────────────────────────── */
+.ob-row { transition: background-color .2s ease; }
+.ob-overdue { background-color: #fff1f1; }
+.ob-overdue .ob-amount { color: #b42318; font-weight: 600; }
+.ob-ok .ob-amount { color: #6c757d; }
+
+.table-total-row {
+  background-color: #f8f9fa !important;
+  font-weight: 600;
+  border-top: 2px solid #dee2e6;
+}
+.table-total-row th,
+.table-total-row td {
+  border-top: 2px solid #dee2e6 !important;
+}
+
+/* ─────────────────────────────
+   Sticky Footer (bottom totals)
+   ───────────────────────────── */
+.modal-table tfoot .sticky-footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 9;
+  background: #f8f9fa !important;
+  box-shadow: 0 -2px 3px rgba(0, 0, 0, 0.05);
+}

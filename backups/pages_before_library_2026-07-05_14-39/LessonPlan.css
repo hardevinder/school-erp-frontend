@@ -1,0 +1,43 @@
+.lesson-plan-modal-dialog {
+  max-height: calc(100vh - 2rem);
+}
+
+.lesson-plan-modal-content {
+  max-height: calc(100vh - 2rem);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.lesson-plan-modal-content form {
+  min-height: 0;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+}
+
+.lesson-plan-modal-content .modal-body {
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+.lesson-plan-modal-footer {
+  flex-shrink: 0;
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+}
+
+.lesson-plan-swal-container {
+  z-index: 20000 !important;
+}
+
+.lesson-plan-swal-container .swal2-popup {
+  z-index: 20001 !important;
+}
+
+@media (max-width: 767.98px) {
+  .lesson-plan-modal-content {
+    max-height: 100vh;
+  }
+}

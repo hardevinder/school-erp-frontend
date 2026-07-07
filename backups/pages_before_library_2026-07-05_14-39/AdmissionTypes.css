@@ -1,0 +1,356 @@
+.admission-types-page {
+  padding: 24px;
+  background: #f4f7fb;
+  min-height: 100vh;
+}
+
+.at-header-card {
+  background: linear-gradient(135deg, #0f172a, #1d4ed8);
+  color: #ffffff;
+  border-radius: 22px;
+  padding: 28px;
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  align-items: center;
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.18);
+  margin-bottom: 20px;
+}
+
+.at-eyebrow {
+  margin: 0 0 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 12px;
+  font-weight: 800;
+  opacity: 0.8;
+}
+
+.at-header-card h1 {
+  margin: 0;
+  font-size: 32px;
+  font-weight: 800;
+}
+
+.at-subtitle {
+  margin: 8px 0 0;
+  max-width: 760px;
+  color: rgba(255, 255, 255, 0.86);
+  font-size: 15px;
+}
+
+.at-primary-btn {
+  border: none;
+  background: #ffffff;
+  color: #1d4ed8;
+  padding: 12px 18px;
+  border-radius: 14px;
+  font-weight: 800;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.12);
+  white-space: nowrap;
+  transition: 0.2s ease;
+}
+
+.at-primary-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.16);
+}
+
+.at-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.at-stat-card {
+  background: #ffffff;
+  border-radius: 18px;
+  padding: 18px;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 10px 25px rgba(15, 23, 42, 0.06);
+}
+
+.at-stat-card span {
+  display: block;
+  font-size: 13px;
+  color: #64748b;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.at-stat-card strong {
+  display: block;
+  color: #0f172a;
+  font-size: 24px;
+  font-weight: 850;
+}
+
+.at-toolbar {
+  background: #ffffff;
+  border-radius: 18px;
+  padding: 16px;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 10px 25px rgba(15, 23, 42, 0.05);
+  display: grid;
+  grid-template-columns: 1fr 220px auto;
+  gap: 14px;
+  align-items: end;
+  margin-bottom: 18px;
+}
+
+.at-search-wrap span,
+.at-filter-wrap span {
+  display: block;
+  font-size: 12px;
+  font-weight: 800;
+  color: #475569;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.at-search-wrap input,
+.at-filter-wrap select {
+  width: 100%;
+  height: 44px;
+  border: 1px solid #dbe3ef;
+  border-radius: 13px;
+  padding: 0 14px;
+  outline: none;
+  color: #0f172a;
+  background: #f8fafc;
+  transition: 0.2s ease;
+}
+
+.at-search-wrap input:focus,
+.at-filter-wrap select:focus {
+  border-color: #2563eb;
+  background: #ffffff;
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.1);
+}
+
+.at-refresh-btn {
+  height: 44px;
+  border: 1px solid #dbe3ef;
+  background: #0f172a;
+  color: #ffffff;
+  border-radius: 13px;
+  padding: 0 18px;
+  font-weight: 800;
+  transition: 0.2s ease;
+}
+
+.at-refresh-btn:hover {
+  background: #1e293b;
+}
+
+.at-table-card {
+  background: #ffffff;
+  border-radius: 20px;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 14px 32px rgba(15, 23, 42, 0.06);
+  overflow: hidden;
+}
+
+.at-table-top {
+  padding: 18px 20px;
+  border-bottom: 1px solid #e5e7eb;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.at-table-top h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 850;
+  color: #0f172a;
+}
+
+.at-table-top p {
+  margin: 4px 0 0;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.at-table {
+  margin-bottom: 0;
+}
+
+.at-table thead th {
+  background: #f8fafc;
+  color: #334155;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  border-bottom: 1px solid #e5e7eb;
+  padding: 14px 16px;
+  white-space: nowrap;
+}
+
+.at-table tbody td {
+  padding: 14px 16px;
+  vertical-align: middle;
+  color: #334155;
+  border-bottom: 1px solid #edf2f7;
+}
+
+.at-table tbody tr:hover {
+  background: #f8fbff;
+}
+
+.at-type-title {
+  font-weight: 850;
+  color: #0f172a;
+}
+
+.at-type-id {
+  color: #94a3b8;
+  font-size: 12px;
+  margin-top: 2px;
+}
+
+.at-code-badge {
+  display: inline-flex;
+  background: #eef2ff;
+  color: #3730a3;
+  border: 1px solid #c7d2fe;
+  border-radius: 999px;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 850;
+  letter-spacing: 0.04em;
+}
+
+.at-status-badge,
+.at-default-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 6px 11px;
+  font-size: 12px;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.at-status-badge.active {
+  background: #dcfce7;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+}
+
+.at-status-badge.inactive {
+  background: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+}
+
+.at-default-badge {
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fde68a;
+}
+
+.at-description {
+  max-width: 360px;
+  color: #475569;
+}
+
+.at-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.at-action-btn {
+  border: none;
+  border-radius: 10px;
+  padding: 7px 10px;
+  font-size: 12px;
+  font-weight: 850;
+  transition: 0.2s ease;
+}
+
+.at-action-btn:hover {
+  transform: translateY(-1px);
+}
+
+.at-action-btn.edit {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.at-action-btn.default {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.at-action-btn.deactivate {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.at-action-btn.restore {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.at-empty {
+  text-align: center;
+  padding: 34px !important;
+  color: #64748b !important;
+  font-weight: 700;
+}
+
+.at-swal-popup {
+  border-radius: 22px !important;
+}
+
+.at-swal-confirm {
+  border-radius: 12px !important;
+  font-weight: 800 !important;
+}
+
+@media (max-width: 992px) {
+  .at-header-card {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .at-stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .at-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .at-refresh-btn {
+    width: 100%;
+  }
+}
+
+@media (max-width: 576px) {
+  .admission-types-page {
+    padding: 14px;
+  }
+
+  .at-header-card {
+    padding: 20px;
+    border-radius: 18px;
+  }
+
+  .at-header-card h1 {
+    font-size: 25px;
+  }
+
+  .at-stats-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .at-primary-btn {
+    width: 100%;
+  }
+}

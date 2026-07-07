@@ -192,6 +192,7 @@ import StudentLessonPlans from "./pages/StudentLessonPlans";
 import AdmissionAssessments from "./pages/AdmissionAssessments";
 import EntranceExamPortal from "./pages/EntranceExamPortal";
 import InventoryDashboard from "./components/InventoryDashboard";
+import LibraryManagement from "./pages/LibraryManagement";
 import {
   InventoryCategories,
   InventoryItems,
@@ -204,6 +205,29 @@ import {
   InventoryTransactions as InventoryTransactionsPage,
   InventoryStockReport,
 } from "./pages/inventory";
+
+const MY_LIBRARY_ROLES = [
+  "superadmin",
+  "admin",
+  "principal",
+  "academic_coordinator",
+  "teacher",
+  "student",
+  "hr",
+  "accounts",
+  "account",
+  "frontoffice",
+  "admission",
+  "examination",
+  "transport",
+  "transporter",
+  "librarian",
+  "library",
+  "libraryadmin",
+  "inventoryadmin",
+  "storeincharge",
+  "labincharge",
+];
 
 // ---------- auth guard ----------
 const getStoredRoles = () => {
@@ -718,6 +742,70 @@ function App() {
             }
           />
 
+          {/* ✅ Library */}
+          <Route
+            path="/library-dashboard"
+            element={
+              <RequireRole roles={["superadmin", "admin", "principal", "librarian", "library", "libraryadmin"]}>
+                <LibraryManagement mode="dashboard" />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="/library/books"
+            element={
+              <RequireRole roles={["superadmin", "admin", "principal", "librarian", "library", "libraryadmin"]}>
+                <LibraryManagement mode="books" />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="/library/members"
+            element={
+              <RequireRole roles={["superadmin", "admin", "principal", "librarian", "library", "libraryadmin"]}>
+                <LibraryManagement mode="members" />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="/library/issue-return"
+            element={
+              <RequireRole roles={["superadmin", "admin", "principal", "librarian", "library", "libraryadmin"]}>
+                <LibraryManagement mode="issue-return" />
+              </RequireRole>
+            }
+          />
+          <Route path="/library/reservations" element={<Navigate to="/library/issue-return" replace />} />
+          <Route
+            path="/library/fines"
+            element={
+              <RequireRole roles={["superadmin", "admin", "principal", "librarian", "library", "libraryadmin"]}>
+                <LibraryManagement mode="fines" />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="/library/reports"
+            element={
+              <RequireRole roles={["superadmin", "admin", "principal", "librarian", "library", "libraryadmin"]}>
+                <LibraryManagement mode="reports" />
+              </RequireRole>
+            }
+          />
+          <Route path="/library/settings" element={<Navigate to="/library-dashboard" replace />} />
+          <Route
+            path="/my-library"
+            element={
+              <RequireRole roles={MY_LIBRARY_ROLES}>
+                <LibraryManagement studentView />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="/student-library"
+            element={<Navigate to="/my-library" replace />}
+          />
+
           {/* ✅ Transport: Drivers / Conductors (guarded) */}
           <Route
             path="/transport-staff"
@@ -1115,7 +1203,7 @@ function App() {
           <Route
             path="/transfer-certificates"
             element={
-              <RequireRole roles={["admin", "superadmin", "frontoffice"]}>
+              <RequireRole roles={["admin", "superadmin", "frontoffice", "academic_coordinator", "coordinator"]}>
                 <TransferCertificates />
               </RequireRole>
             }
