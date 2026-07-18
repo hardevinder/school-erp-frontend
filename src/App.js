@@ -173,6 +173,7 @@ import TransportAttendanceMobile from "./pages/TransportAttendanceMobile";
 
 // ✅ NEW: Transport Attendance Report (Bus-wise summary + details)
 import TransportAttendanceReport from "./pages/TransportAttendanceReport";
+import LiveBusTracking from "./pages/LiveBusTracking";
 
 import StudentStatsSummary from "./pages/StudentStatsSummary";
 
@@ -1288,6 +1289,17 @@ function App() {
             element={
               <RequireRole roles={["superadmin", "admin", "accounts", "academic_coordinator", "teacher"]}>
                 <StudentStatsSummary />
+              </RequireRole>
+            }
+          />
+
+
+          {/* Live bus tracking for Transport/Admin */}
+          <Route
+            path="/live-bus-tracking"
+            element={
+              <RequireRole roles={["transport", "admin", "superadmin"]}>
+                <LiveBusTracking />
               </RequireRole>
             }
           />

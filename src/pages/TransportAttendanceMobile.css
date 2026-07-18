@@ -409,3 +409,303 @@
     max-width: 50vw;
   }
 }
+
+/* Driver trip and live GPS tracking */
+.ta-tripTracker {
+  margin-top: 9px;
+  padding: 11px;
+  border-radius: 15px;
+  border: 1px solid #dbe3ee;
+  background: linear-gradient(180deg, #f8fbff, #ffffff);
+}
+
+.ta-tripTracker.active {
+  border-color: rgba(25, 135, 84, 0.35);
+  background: linear-gradient(180deg, #effcf4, #ffffff);
+}
+
+.ta-tripTrackerTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.ta-tripTrackerLabel {
+  color: #6b7280;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.35px;
+  text-transform: uppercase;
+}
+
+.ta-tripTrackerTitle {
+  margin-top: 2px;
+  color: #17263a;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.ta-gpsBadge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: #e5e7eb;
+  color: #4b5563;
+  font-size: 9px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.ta-gpsBadge.active,
+.ta-gpsBadge.sending,
+.ta-gpsBadge.starting {
+  background: #d1fae5;
+  color: #047857;
+}
+
+.ta-gpsMessage {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 9px;
+  color: #4b5563;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.ta-gpsDot {
+  width: 9px;
+  height: 9px;
+  flex: 0 0 9px;
+  border-radius: 50%;
+  background: #9ca3af;
+}
+
+.ta-gpsDot.active {
+  background: #16a34a;
+  box-shadow: 0 0 0 4px rgba(22, 163, 74, 0.12);
+}
+
+.ta-gpsDot.starting,
+.ta-gpsDot.sending {
+  background: #0d6efd;
+  animation: taGpsPulse 1.1s infinite;
+}
+
+.ta-gpsDot.error {
+  background: #dc3545;
+}
+
+@keyframes taGpsPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.45; transform: scale(0.8); }
+}
+
+.ta-gpsGrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 7px;
+  margin-top: 10px;
+}
+
+.ta-gpsGrid > div {
+  min-width: 0;
+  padding: 7px;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.85);
+  border: 1px solid rgba(0,0,0,0.07);
+  text-align: center;
+}
+
+.ta-gpsGrid span {
+  display: block;
+  color: #6b7280;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.ta-gpsGrid b {
+  display: block;
+  margin-top: 2px;
+  color: #18263a;
+  font-size: 11px;
+}
+
+.ta-tripActions {
+  margin-top: 10px;
+}
+
+.ta-startTrip,
+.ta-endTrip {
+  width: 100%;
+  height: 38px;
+  border: 0;
+  border-radius: 11px;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.ta-startTrip {
+  background: linear-gradient(135deg, #198754, #0f6b40);
+}
+
+.ta-endTrip {
+  background: linear-gradient(135deg, #dc3545, #a9212f);
+}
+
+.ta-startTrip:disabled,
+.ta-endTrip:disabled {
+  opacity: 0.55;
+}
+
+.ta-trackingHint {
+  margin-top: 7px;
+  color: #6b7280;
+  font-size: 9.5px;
+  line-height: 1.35;
+}
+
+.ta-pill:disabled,
+.ta-input:disabled {
+  cursor: not-allowed;
+  opacity: 0.68;
+}
+
+@media (max-width: 420px) {
+  .ta-gpsGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+
+/* ============================================================
+ * Student pickup / drop location cards
+ * ============================================================ */
+
+.ta-locationGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(15, 23, 42, 0.07);
+}
+
+.ta-locationCard {
+  min-width: 0;
+  padding: 8px 9px;
+  border: 1px solid rgba(15, 23, 42, 0.09);
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.ta-locationCard.pickup {
+  border-left: 3px solid #198754;
+}
+
+.ta-locationCard.drop {
+  border-left: 3px solid #0d6efd;
+}
+
+.ta-locationCard.active.pickup {
+  background: #effcf4;
+  border-color: rgba(25, 135, 84, 0.32);
+}
+
+.ta-locationCard.active.drop {
+  background: #eef6ff;
+  border-color: rgba(13, 110, 253, 0.3);
+}
+
+.ta-locationHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 5px;
+}
+
+.ta-locationType {
+  color: #26384f;
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.35px;
+}
+
+.ta-locationCard.pickup .ta-locationType {
+  color: #157347;
+}
+
+.ta-locationCard.drop .ta-locationType {
+  color: #0b5ed7;
+}
+
+.ta-currentTripTag {
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: #fff;
+  color: #445269;
+  border: 1px solid rgba(15, 23, 42, 0.09);
+  font-size: 8px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.ta-locationStop {
+  color: #17263a;
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.ta-locationAddress {
+  margin-top: 3px;
+  color: #5e6b7d;
+  font-size: 10px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.ta-locationCoords {
+  margin-top: 4px;
+  color: #7a8696;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    "Liberation Mono", "Courier New", monospace;
+  font-size: 8.5px;
+  overflow-wrap: anywhere;
+}
+
+.ta-mapBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 27px;
+  margin-top: 7px;
+  padding: 5px 9px;
+  border-radius: 8px;
+  background: #fff;
+  color: #175e9b;
+  border: 1px solid rgba(23, 94, 155, 0.2);
+  font-size: 9.5px;
+  font-weight: 900;
+  text-decoration: none;
+}
+
+.ta-mapBtn:hover,
+.ta-mapBtn:focus {
+  color: #0b4e88;
+  background: #f2f8ff;
+  text-decoration: none;
+}
+
+@media (max-width: 420px) {
+  .ta-locationGrid {
+    grid-template-columns: 1fr;
+  }
+}

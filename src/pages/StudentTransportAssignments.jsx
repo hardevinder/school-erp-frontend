@@ -1412,6 +1412,12 @@ const StudentTransportAssignments = () => {
   });
   const [assignmentSaving, setAssignmentSaving] = useState(false);
 
+  // Active bus assignments shown directly in the student listing.
+  // undefined = not loaded yet, null = API loaded but no active assignment.
+  const [activeAssignmentsByStudent, setActiveAssignmentsByStudent] = useState({});
+  const [assignmentListLoading, setAssignmentListLoading] = useState(false);
+  const loadedAssignmentStudentIdsRef = useRef(new Set());
+
   // -------------------- Load dropdown data --------------------
   const fetchStudents = async () => {
     const res = await api.get("/students");
@@ -1436,6 +1442,8 @@ const StudentTransportAssignments = () => {
   const refreshAll = async (showToast = true) => {
     setLoading(true);
     try {
+      loadedAssignmentStudentIdsRef.current.clear();
+      setActiveAssignmentsByStudent({});
       await Promise.all([fetchStudents(), fetchBuses(), fetchRoutes()]);
       if (showToast) {
         Swal.fire({
@@ -1476,11 +1484,19 @@ const StudentTransportAssignments = () => {
   // -------------------- helpers: names/labels --------------------
   const findBusNo = (id) => {
     const b = buses.find((x) => String(x.id) === String(id));
-    if (!b) return "—";
-    const label = `${safeStr(b.bus_no)}${
+    if (!b) return id ? `Bus ID ${id}` : "—";
+    const label = `${safeStr(b.bus_no) || `Bus ${b.id}`}${
       b.reg_no ? ` (${safeStr(b.reg_no)})` : ""
     }`;
     return label || "—";
+  };
+
+  const getListingAssignment = (studentId) =>
+    activeAssignmentsByStudent[String(studentId)];
+
+  const hasActiveBusAssignment = (studentId) => {
+    const assignment = getListingAssignment(studentId);
+    return Boolean(assignment?.pickup_bus_id || assignment?.drop_bus_id);
   };
 
   const getStudentLabel = (studentId) => {
@@ -1559,18 +1575,29 @@ const StudentTransportAssignments = () => {
 
   // -------------------- export helpers --------------------
   const getExportRows = (rows) =>
-    rows.map((s, idx) => ({
-      "S. No.": idx + 1,
-      Name: safeStr(s?.name) || "—",
-      "Admission No": safeStr(s?.admission_number) || "—",
-      Status: getStudentStatus(s),
-      Class: getClassName(s),
-      Section: getSectionName(s),
-      "Village / City": getStudentPlaceName(s),
-      Route: getStudentRouteDisplay(s),
-      "Transport Assigned": hasTransportAssigned(s) ? "Yes" : "No",
-      "Route Cost": s?.route_cost ?? getRouteObjectByStudent(s)?.Cost ?? "—",
-    }));
+    rows.map((s, idx) => {
+      const assignment = getListingAssignment(s.id);
+
+      return {
+        "S. No.": idx + 1,
+        Name: safeStr(s?.name) || "—",
+        "Admission No": safeStr(s?.admission_number) || "—",
+        Status: getStudentStatus(s),
+        Class: getClassName(s),
+        Section: getSectionName(s),
+        "Pickup Bus": assignment === undefined
+          ? "Not Loaded"
+          : findBusNo(assignment?.pickup_bus_id),
+        "Drop Bus": assignment === undefined
+          ? "Not Loaded"
+          : findBusNo(assignment?.drop_bus_id),
+        "Bus Assignment": hasActiveBusAssignment(s.id) ? "Assigned" : "Not Assigned",
+        "Effective From": safeStr(assignment?.start_date) || "—",
+        "Village / City": getStudentPlaceName(s),
+        Route: getStudentRouteDisplay(s),
+        "Route Cost": s?.route_cost ?? getRouteObjectByStudent(s)?.Cost ?? "—",
+      };
+    });
 
   const downloadAssignmentsExcel = async () => {
     try {
@@ -1634,9 +1661,12 @@ const StudentTransportAssignments = () => {
             "Status",
             "Class",
             "Section",
+            "Pickup Bus",
+            "Drop Bus",
+            "Bus Assignment",
+            "Effective From",
             "Village / City",
             "Route",
-            "Transport Assigned",
             "Route Cost",
           ],
         ],
@@ -1647,9 +1677,12 @@ const StudentTransportAssignments = () => {
           r.Status,
           r.Class,
           r.Section,
+          r["Pickup Bus"],
+          r["Drop Bus"],
+          r["Bus Assignment"],
+          r["Effective From"],
           r["Village / City"],
           r.Route,
-          r["Transport Assigned"],
           r["Route Cost"],
         ]),
         styles: { fontSize: 8, cellPadding: 4 },
@@ -1742,6 +1775,23 @@ const StudentTransportAssignments = () => {
         payload,
       );
 
+      // Refresh today's active assignment so the listing updates immediately.
+      const todayAssignment = await fetchActiveAssignment(
+        studentId,
+        fmtYYYYMMDD(new Date()),
+      );
+      const normalizedTodayAssignment =
+        todayAssignment?.assignment ||
+        todayAssignment?.data ||
+        todayAssignment ||
+        null;
+
+      loadedAssignmentStudentIdsRef.current.add(String(studentId));
+      setActiveAssignmentsByStudent((previous) => ({
+        ...previous,
+        [String(studentId)]: normalizedTodayAssignment,
+      }));
+
       setAssignmentDialog({ open: false, studentId: null, current: null });
 
       await Swal.fire({
@@ -1814,6 +1864,75 @@ const StudentTransportAssignments = () => {
   ]);
 
   const visibleStudents = filteredStudents.slice(0, visibleCount);
+  const visibleStudentIdsKey = visibleStudents
+    .map((student) => String(student.id))
+    .join(",");
+
+  // Load active pickup/drop assignments for the rows currently visible.
+  // This avoids making one API request for every student in the database.
+  useEffect(() => {
+    const studentIds = visibleStudents
+      .map((student) => String(student.id))
+      .filter(Boolean)
+      .filter(
+        (studentId) =>
+          !loadedAssignmentStudentIdsRef.current.has(studentId),
+      );
+
+    if (!studentIds.length) return undefined;
+
+    let cancelled = false;
+    const listingDate = fmtYYYYMMDD(new Date());
+
+    const loadAssignments = async () => {
+      setAssignmentListLoading(true);
+
+      try {
+        const results = [];
+        const requestBatchSize = 8;
+
+        for (let index = 0; index < studentIds.length; index += requestBatchSize) {
+          if (cancelled) return;
+
+          const batchIds = studentIds.slice(index, index + requestBatchSize);
+          const batchResults = await Promise.all(
+            batchIds.map(async (studentId) => {
+              const response = await fetchActiveAssignment(
+                studentId,
+                listingDate,
+              );
+              const assignment =
+                response?.assignment || response?.data || response || null;
+              return [studentId, assignment];
+            }),
+          );
+
+          results.push(...batchResults);
+        }
+
+        if (cancelled) return;
+
+        studentIds.forEach((studentId) =>
+          loadedAssignmentStudentIdsRef.current.add(studentId),
+        );
+
+        setActiveAssignmentsByStudent((previous) => ({
+          ...previous,
+          ...Object.fromEntries(results),
+        }));
+      } finally {
+        if (!cancelled) setAssignmentListLoading(false);
+      }
+    };
+
+    loadAssignments();
+
+    return () => {
+      cancelled = true;
+    };
+    // visibleStudentIdsKey intentionally controls loading when rows change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visibleStudentIdsKey]);
 
   const stats = useMemo(() => {
     const enabledStudents = students.filter(
@@ -1835,8 +1954,18 @@ const StudentTransportAssignments = () => {
       filteredStudents: filteredStudents.length,
       totalPlaces: placeOptions.length,
       withTransport,
+      visibleBusAssignments: visibleStudents.filter((student) =>
+        hasActiveBusAssignment(student.id),
+      ).length,
     };
-  }, [students, filteredStudents, placeOptions, routes]);
+  }, [
+    students,
+    filteredStudents,
+    placeOptions,
+    routes,
+    visibleStudents,
+    activeAssignmentsByStudent,
+  ]);
 
   // -------------------- UI --------------------
   return (
@@ -1895,8 +2024,55 @@ const StudentTransportAssignments = () => {
           border-color: rgba(13,110,253,0.45);
           box-shadow: 0 0 0 0.14rem rgba(13,110,253,0.1);
         }
-        .sta-table-wrap{ border-radius: 14px; overflow: hidden; }
-        .sta-table{ margin: 0; }
+        .sta-table-wrap{
+          border-radius: 14px;
+          overflow: auto;
+          border: 1px solid rgba(0,0,0,0.06);
+        }
+        .sta-table{
+          margin: 0;
+          min-width: 1540px;
+          border-collapse: separate;
+          border-spacing: 0;
+        }
+        .sta-sticky-col{
+          position: sticky;
+          background: #fff;
+          z-index: 2;
+        }
+        .sta-table thead .sta-sticky-col{
+          background: #f4f7fb;
+          z-index: 4;
+        }
+        .sta-col-name{ left: 0; width: 220px; min-width: 220px; }
+        .sta-col-admission{
+          left: 220px;
+          width: 150px;
+          min-width: 150px;
+          box-shadow: 8px 0 12px -12px rgba(0,0,0,0.55);
+        }
+        .sta-row:hover .sta-sticky-col{
+          background: #f7faff;
+        }
+        .sta-bus-cell{ min-width: 175px; }
+        .sta-bus-label{
+          display: inline-flex;
+          align-items: center;
+          min-height: 28px;
+          padding: 5px 9px;
+          border-radius: 9px;
+          background: #eef6ff;
+          border: 1px solid rgba(13,110,253,0.16);
+          color: #164f8f;
+          font-size: 12px;
+          font-weight: 800;
+          white-space: nowrap;
+        }
+        .sta-bus-label-empty{
+          background: #f7f7f8;
+          border-color: rgba(108,117,125,0.16);
+          color: #6c757d;
+        }
         .sta-table thead th{
           font-size: 12px;
           font-weight: 800;
@@ -2008,10 +2184,9 @@ const StudentTransportAssignments = () => {
                   Student Transport Assignments
                 </div>
                 <div className="sta-subtitle">
-                  Manage pickup and drop bus allocation for students with clean
-                  village/city filtering, transport-status filtering, student
-                  status filtering, and export exactly what is visible on
-                  screen.
+                  View each student's active pickup and drop bus directly in
+                  the listing, manage assignments, filter student records, and
+                  export the current transport details.
                 </div>
               </div>
 
@@ -2078,8 +2253,10 @@ const StudentTransportAssignments = () => {
 
               <div className="col-6 col-md-2">
                 <div className="sta-stat">
-                  <div className="sta-stat-label">With Transport</div>
-                  <div className="sta-stat-value">{stats.withTransport}</div>
+                  <div className="sta-stat-label">Visible Bus Assigned</div>
+                  <div className="sta-stat-value">
+                    {assignmentListLoading ? "…" : stats.visibleBusAssignments}
+                  </div>
                 </div>
               </div>
             </div>
@@ -2206,13 +2383,16 @@ const StudentTransportAssignments = () => {
             <table className="table table-hover sta-table">
               <thead>
                 <tr>
-                  <th style={{ width: 60 }}>#</th>
-                  <th>Name</th>
-                  <th style={{ width: 150 }}>Admission</th>
+                  <th style={{ width: 60, minWidth: 60 }}>#</th>
+                  <th className="sta-sticky-col sta-col-name">Student Name</th>
+                  <th className="sta-sticky-col sta-col-admission">Admission No.</th>
                   <th style={{ width: 120 }}>Student Status</th>
                   <th style={{ width: 120 }}>Class</th>
                   <th style={{ width: 90 }}>Sec</th>
-                  <th style={{ width: 150 }}>Transport Status</th>
+                  <th className="sta-bus-cell">Pickup Bus</th>
+                  <th className="sta-bus-cell">Drop Bus</th>
+                  <th style={{ width: 150 }}>Bus Assignment</th>
+                  <th style={{ width: 125 }}>Effective From</th>
                   <th>Village / City</th>
                   <th style={{ width: 130 }}>Action</th>
                 </tr>
@@ -2220,16 +2400,21 @@ const StudentTransportAssignments = () => {
               <tbody>
                 {visibleStudents.map((s, idx) => {
                   const studentStatus = getStudentStatus(s);
+                  const activeAssignment = getListingAssignment(s.id);
+                  const assignmentLoaded = activeAssignment !== undefined;
+                  const busAssigned = hasActiveBusAssignment(s.id);
 
                   return (
                     <tr key={s.id} className="sta-row">
                       <td>{idx + 1}</td>
-                      <td>
+                      <td className="sta-sticky-col sta-col-name">
                         <div style={{ fontWeight: 800, color: "#1f2f45" }}>
                           {safeStr(s?.name) || "—"}
                         </div>
                       </td>
-                      <td>{safeStr(s?.admission_number) || "—"}</td>
+                      <td className="sta-sticky-col sta-col-admission">
+                        {safeStr(s?.admission_number) || "—"}
+                      </td>
                       <td>
                         <span
                           className={`sta-status-badge ${
@@ -2245,17 +2430,46 @@ const StudentTransportAssignments = () => {
                       </td>
                       <td>{getClassName(s)}</td>
                       <td>{getSectionName(s)}</td>
+                      <td className="sta-bus-cell">
+                        <span
+                          className={`sta-bus-label ${
+                            !activeAssignment?.pickup_bus_id
+                              ? "sta-bus-label-empty"
+                              : ""
+                          }`}
+                        >
+                          {!assignmentLoaded
+                            ? "Loading…"
+                            : findBusNo(activeAssignment?.pickup_bus_id)}
+                        </span>
+                      </td>
+                      <td className="sta-bus-cell">
+                        <span
+                          className={`sta-bus-label ${
+                            !activeAssignment?.drop_bus_id
+                              ? "sta-bus-label-empty"
+                              : ""
+                          }`}
+                        >
+                          {!assignmentLoaded
+                            ? "Loading…"
+                            : findBusNo(activeAssignment?.drop_bus_id)}
+                        </span>
+                      </td>
                       <td>
                         <span
                           className={`sta-pill ${
-                            hasTransportAssigned(s) ? "" : "text-secondary"
+                            busAssigned ? "" : "text-secondary"
                           }`}
                         >
-                          {hasTransportAssigned(s)
-                            ? "Assigned"
-                            : "Not Assigned"}
+                          {!assignmentLoaded
+                            ? "Loading…"
+                            : busAssigned
+                              ? "Assigned"
+                              : "Not Assigned"}
                         </span>
                       </td>
+                      <td>{safeStr(activeAssignment?.start_date) || "—"}</td>
                       <td style={{ minWidth: 220 }}>
                         <span className="sta-route-chip">
                           {getStudentRouteDisplay(s)}
@@ -2267,7 +2481,7 @@ const StudentTransportAssignments = () => {
                           disabled={loading}
                           onClick={() => openAssignDialog(String(s.id))}
                         >
-                          Assign Bus
+                          {busAssigned ? "Update Bus" : "Assign Bus"}
                         </button>
                       </td>
                     </tr>
@@ -2276,7 +2490,7 @@ const StudentTransportAssignments = () => {
 
                 {filteredStudents.length === 0 && (
                   <tr>
-                    <td colSpan="9">
+                    <td colSpan="12">
                       <div className="sta-empty">
                         <div className="sta-empty-title">No students found</div>
                         <div className="sta-empty-sub">

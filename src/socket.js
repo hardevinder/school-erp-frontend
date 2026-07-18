@@ -38,11 +38,9 @@ socket.on("connect", () => {
   console.debug("[socket] connected:", socket.id);
 });
 
-socket.on("reconnect_attempt", (attempt) => {
-  // Refresh token before each reconnect attempt
+socket.io.on("reconnect_attempt", (attempt) => {
+  // Refresh token before each reconnect attempt.
   socket.auth = { token: getToken() };
-  // socket.io v4: if you use query token instead, also refresh:
-  // socket.io.opts.query = { token: getToken() };
   console.debug("[socket] reconnect_attempt:", attempt);
 });
 
@@ -59,6 +57,37 @@ socket.on("fee-notification", (data) => {
   console.log("[socket] fee-notification:", data);
   alert(`${data.title}\n${data.message}`);
 });
+
+
+/** Refresh Socket.IO authentication after login/role changes. */
+export function refreshSocketAuth() {
+  const token = getToken();
+  socket.auth = { token };
+
+  if (socket.connected) {
+    socket.disconnect();
+  }
+
+  if (token) {
+    socket.connect();
+  }
+}
+
+/** Live bus tracking events for Transport/Admin viewers. */
+export function onBusTripStarted(handler) {
+  socket.on("busTripStarted", handler);
+  return () => socket.off("busTripStarted", handler);
+}
+
+export function onBusLocationUpdated(handler) {
+  socket.on("busLocationUpdated", handler);
+  return () => socket.off("busLocationUpdated", handler);
+}
+
+export function onBusTripEnded(handler) {
+  socket.on("busTripEnded", handler);
+  return () => socket.off("busTripEnded", handler);
+}
 
 /** ==============================================================
  *                          CHAT HELPERS

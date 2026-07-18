@@ -401,6 +401,14 @@ export default function Sidebar({ headerHeight = 56 }) {
             path: "/transport-dashboard",
             roles: ["transport", "transporter"],
           },
+
+          {
+            key: "live-bus-tracking",
+            label: "Live Bus Tracking",
+            icon: "bi-geo-alt-fill",
+            path: "/live-bus-tracking",
+            roles: ["transport"],
+          },
           {
             key: "transportations",
             label: "Transport Routes",
@@ -1028,7 +1036,8 @@ export default function Sidebar({ headerHeight = 56 }) {
       groups.push({
         heading: "Transport",
         items: [
-          { key: "transportations", label: "Transport Routes", icon: "bi-truck", path: "/transportations" },
+                    { key: "live-bus-tracking-admin", label: "Live Bus Tracking", icon: "bi-geo-alt-fill", path: "/live-bus-tracking", roles: ["admin", "superadmin"] },
+{ key: "transportations", label: "Transport Routes", icon: "bi-truck", path: "/transportations" },
           { key: "buses", label: "Buses", icon: "bi-bus-front", path: "/buses" },
           { key: "student-transport-assignments", label: "Transport Assignments", icon: "bi-person-check", path: "/student-transport-assignments" },
         ],
@@ -1332,7 +1341,7 @@ export default function Sidebar({ headerHeight = 56 }) {
     frontoffice: ["frontoffice-dashboard", "gate-pass", "visitors", "enquiries", "students"],
     admission: ["admission-dashboard", "enquiries", "student-strength-projection", "students"],
     examination: ["exam-dashboard", "exams", "exam-schemes", "marks-entry", "report-card-generator"],
-    transport: ["transport-dashboard-direct", "transportations", "buses", "student-transport-assignments"],
+    transport: ["transport-dashboard-direct", "live-bus-tracking", "transportations", "buses", "student-transport-assignments"],
     transporter: ["transport-dashboard-direct", "transportations", "buses", "student-transport-assignments"],
     librarian: ["library-dashboard", "library-books", "library-issue-return", "library-members"],
     library: ["library-dashboard", "library-books", "library-issue-return", "library-members"],

@@ -180,7 +180,8 @@ const Tile = ({ title, value, variant = "secondary", hint, to, onClick }) => {
 /* ---------------- Component ---------------- */
 export default function TransportDashboard() {
   const navigate = useNavigate();
-  const { isAdmin, isSuperadmin, isAccounts, isTransport, isDriver, isConductor } = useMemo(getRoleFlags, []);
+  const { roles, isAdmin, isSuperadmin, isAccounts, isTransport, isDriver, isConductor } = useMemo(getRoleFlags, []);
+  const canViewLiveTracking = roles.includes("transport") || isAdmin || isSuperadmin;
 
   // who can use transport dashboard page
   const canUse = isTransport || isAdmin || isSuperadmin || isAccounts || isDriver || isConductor;
@@ -201,6 +202,13 @@ export default function TransportDashboard() {
   const [routes, setRoutes] = useState([]);
   const [buses, setBuses] = useState([]);
   const [recentAssignments, setRecentAssignments] = useState([]);
+  const [liveTrackingCounts, setLiveTrackingCounts] = useState({
+    total: 0,
+    live: 0,
+    stale: 0,
+    waiting: 0,
+    notStarted: 0,
+  });
 
   // Staff counts
   const [staffCounts, setStaffCounts] = useState({
@@ -218,6 +226,7 @@ export default function TransportDashboard() {
     assignments: false,
     students: false,
     staff: false,
+    live: false,
   });
 
   const [error, setError] = useState("");
@@ -235,6 +244,7 @@ export default function TransportDashboard() {
   const ASSIGN_BASE = "/student-transport-assignments";
   const STUDENTS_BASE = "/students";
   const STAFF_BASE = "/transport-staff";
+  const LIVE_TRACKING_BASE = "/bus-trips/live";
 
   // centralized api config for session
   const sessionCfg = useMemo(
@@ -398,13 +408,45 @@ export default function TransportDashboard() {
     }
   }, [canUse, sessionCfg]);
 
+
+  const fetchLiveTrackingCounts = useCallback(async () => {
+    if (!canViewLiveTracking) return;
+    setLoading((state) => ({ ...state, live: true }));
+    try {
+      const response = await api.get(LIVE_TRACKING_BASE);
+      const list = Array.isArray(response?.data?.buses) ? response.data.buses : [];
+      const counts = {
+        total: list.length,
+        live: 0,
+        stale: 0,
+        waiting: 0,
+        notStarted: 0,
+      };
+
+      list.forEach((item) => {
+        if (item?.tracking_status === "live") counts.live += 1;
+        else if (item?.tracking_status === "stale") counts.stale += 1;
+        else if (item?.tracking_status === "waiting_for_location") counts.waiting += 1;
+        else counts.notStarted += 1;
+      });
+
+      setLiveTrackingCounts(counts);
+      setLastUpdated(new Date());
+    } catch (error) {
+      console.error("fetchLiveTrackingCounts error:", error);
+    } finally {
+      setLoading((state) => ({ ...state, live: false }));
+    }
+  }, [canViewLiveTracking]);
+
   const refreshAll = useCallback(() => {
     fetchRoutes();
     fetchBuses();
     fetchRecentAssignments();
     fetchStudentsWithTransport();
     fetchStaffCounts();
-  }, [fetchRoutes, fetchBuses, fetchRecentAssignments, fetchStudentsWithTransport, fetchStaffCounts]);
+    fetchLiveTrackingCounts();
+  }, [fetchRoutes, fetchBuses, fetchRecentAssignments, fetchStudentsWithTransport, fetchStaffCounts, fetchLiveTrackingCounts]);
 
   useEffect(() => {
     if (!canUse) return;
@@ -424,9 +466,12 @@ export default function TransportDashboard() {
     timersRef.current.assign = setInterval(fetchRecentAssignments, POLLING_INTERVAL);
     timersRef.current.students = setInterval(fetchStudentsWithTransport, POLLING_INTERVAL);
     timersRef.current.staff = setInterval(fetchStaffCounts, POLLING_INTERVAL);
+    if (canViewLiveTracking) {
+      timersRef.current.live = setInterval(fetchLiveTrackingCounts, POLLING_INTERVAL);
+    }
 
     return () => Object.values(timersRef.current || {}).forEach(clearInterval);
-  }, [autoRefresh, canUse, fetchRoutes, fetchBuses, fetchRecentAssignments, fetchStudentsWithTransport, fetchStaffCounts]);
+  }, [autoRefresh, canUse, canViewLiveTracking, fetchRoutes, fetchBuses, fetchRecentAssignments, fetchStudentsWithTransport, fetchStaffCounts, fetchLiveTrackingCounts]);
 
   /* ---------------- Derived KPI ---------------- */
   const busKpis = useMemo(() => {
@@ -444,7 +489,7 @@ export default function TransportDashboard() {
     return { total, withFine, uniqVillages };
   }, [routes]);
 
-  const busy = loading.routes || loading.buses || loading.assignments || loading.students || loading.staff;
+  const busy = loading.routes || loading.buses || loading.assignments || loading.students || loading.staff || loading.live;
 
   /* ---------------- Quick Links (UPDATED) ---------------- */
   const quickLinks = useMemo(() => {
@@ -490,6 +535,16 @@ export default function TransportDashboard() {
         show: isTransport || isAdmin || isSuperadmin || isAccounts,
       },
 
+
+      {
+        label: "Live Bus Tracking",
+        icon: "bi-geo-alt-fill",
+        href: "/live-bus-tracking",
+        gradient: "linear-gradient(135deg, #10b981, #047857)",
+        desc: `Live: ${liveTrackingCounts.live} · Stale: ${liveTrackingCounts.stale}`,
+        show: canViewLiveTracking,
+      },
+
       // ✅ NEW: Attendance Mobile
       {
         label: "Mark Attendance (Mobile)",
@@ -525,6 +580,8 @@ export default function TransportDashboard() {
     isAccounts,
     canMarkMobile,
     canSeeReport,
+    canViewLiveTracking,
+    liveTrackingCounts,
   ]);
 
   /* ---------------- Tiles (UPDATED) ---------------- */
@@ -555,6 +612,22 @@ export default function TransportDashboard() {
       { title: "Staff Total", value: staffCounts.total, variant: "secondary", to: "/transport-staff", show: isTransport || isAdmin || isSuperadmin || isAccounts },
       { title: "Staff Inactive", value: staffCounts.inactiveStaff, variant: "warning", to: "/transport-staff", show: isTransport || isAdmin || isSuperadmin || isAccounts },
       { title: "User Disabled", value: staffCounts.userDisabled, variant: "warning", to: "/transport-staff", show: isTransport || isAdmin || isSuperadmin || isAccounts },
+
+
+      {
+        title: "Live Buses",
+        value: liveTrackingCounts.live,
+        variant: "success",
+        to: "/live-bus-tracking",
+        show: canViewLiveTracking,
+      },
+      {
+        title: "GPS Alerts",
+        value: liveTrackingCounts.stale + liveTrackingCounts.waiting,
+        variant: "warning",
+        to: "/live-bus-tracking",
+        show: canViewLiveTracking,
+      },
 
       // ✅ NEW: Attendance
       {
@@ -644,6 +717,10 @@ export default function TransportDashboard() {
                 <StatPill label="Conductors" value={staffCounts.conductors} tone="danger" to="/transport-staff" />
                 <StatPill label="Buses Active" value={busKpis.active} tone="primary" to="/buses" />
                 <StatPill label="Routes" value={routeKpis.total} tone="info" to="/transportations" />
+
+                {canViewLiveTracking ? (
+                  <StatPill label="Live Buses" value={liveTrackingCounts.live} tone="success" to="/live-bus-tracking" />
+                ) : null}
 
                 {canMarkMobile ? (
                   <StatPill label="Mark Attendance" value="Open" tone="warning" to="/transport-attendance" />
@@ -784,6 +861,11 @@ export default function TransportDashboard() {
                     <Link className="btn btn-sm btn-outline-success" to="/buses">
                       Buses
                     </Link>
+                    {canViewLiveTracking ? (
+                      <Link className="btn btn-sm btn-outline-primary" to="/live-bus-tracking">
+                        Live Tracking
+                      </Link>
+                    ) : null}
                     <Link className="btn btn-sm btn-outline-danger" to="/transport-staff">
                       Staff
                     </Link>
