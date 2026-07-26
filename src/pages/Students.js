@@ -313,6 +313,8 @@ const DEFAULT_EXPORT_COLUMNS = [
 const Students = () => {
   const navigate = useNavigate();
   const {
+    isAdmin,
+    isSuperadmin,
     canManageStudents,
     canAddStudents,
     canEditStudents,
@@ -2587,13 +2589,13 @@ const Students = () => {
                 <tr>
                   <th className="border-0 py-2 d-none d-md-table-cell">#</th>
                   <th className="border-0 py-2">Photo</th>
-                  <th className="border-0 py-2">Adm. #</th>
+                  <th className="border-0 py-2 students-sticky-admission">Adm. #</th>
 
                   {isCompact ? (
-                    <th className="border-0 py-2">Info</th>
+                    <th className="border-0 py-2 students-sticky-name students-sticky-info">Info</th>
                   ) : (
                     <>
-                      <th className="border-0 py-2">Student Name</th>
+                      <th className="border-0 py-2 students-sticky-name">Student Name</th>
                       <th className="border-0 py-2 d-none d-lg-table-cell">Father</th>
                       <th className="border-0 py-2">Class</th>
                       <th className="border-0 py-2 d-none d-md-table-cell">Section</th>
@@ -2691,12 +2693,12 @@ const Students = () => {
                             <PhotoCell student={stu} />
                           </td>
 
-                          <td className="py-2 fw-medium" style={{ whiteSpace: "nowrap" }}>
+                          <td className="py-2 fw-medium students-sticky-admission" style={{ whiteSpace: "nowrap" }}>
                             {stu.admission_number || "-"}
                           </td>
 
                           {isCompact ? (
-                            <td className="py-2" style={{ minWidth: 260 }}>
+                            <td className="py-2 students-sticky-name students-sticky-info">
                               <div className="fw-semibold students-name-compact">{stu.name || "-"}</div>
 
                               {combinedSiblings.length > 0 && (
@@ -2740,7 +2742,7 @@ const Students = () => {
                             </td>
                           ) : (
                             <>
-                              <td className="py-2">
+                              <td className="py-2 students-sticky-name">
                                 <div className="fw-semibold">{stu.name}</div>
 
                                 {combinedSiblings.length > 0 && (
@@ -2899,6 +2901,19 @@ const Students = () => {
 
                                   {openActionMenuId === stu.id && (
                                     <div className="students-more-menu" onClick={(e) => e.stopPropagation()}>
+                                      {(isAdmin || isSuperadmin) && (
+                                        <button
+                                          type="button"
+                                          className="students-more-item"
+                                          onClick={() => {
+                                            setOpenActionMenuId(null);
+                                            navigate(`/student-360/${stu.id}`);
+                                          }}
+                                        >
+                                          <i className="bi bi-box-arrow-up-right"></i>
+                                          Open 360° Student View
+                                        </button>
+                                      )}
                                       {canUseTcOperations && stu.admission_number && (
                                         <button
                                           type="button"

@@ -4,6 +4,7 @@ import socket from "../socket";
 import axios from "axios";
 import moment from "moment";
 import Swal from "sweetalert2";
+import { getAuthToken } from "../utils/student360Session";
 import { useLocation } from "react-router-dom";
 import "bootstrap/dist/css/bootstrap.min.css";
 import { Pie } from "react-chartjs-2";
@@ -224,7 +225,7 @@ const StudentCalendar = () => {
   const [studentName, setStudentName] = useState("");
   const location = useLocation();
 
-  const token = localStorage.getItem("token");
+  const token = getAuthToken();
   const API_URL = process.env.REACT_APP_API_URL;
 
   const queryAdmission = useMemo(() => {
@@ -721,7 +722,7 @@ const StudentCalendar = () => {
 const StudentLeaveManagement = () => {
   const [leaveRequests, setLeaveRequests] = useState([]);
   const [newLeave, setNewLeave] = useState({ date: "", reason: "" });
-  const token = localStorage.getItem("token");
+  const token = getAuthToken();
   const API_URL = process.env.REACT_APP_API_URL;
 
   const fetchLeaveRequests = async () => {

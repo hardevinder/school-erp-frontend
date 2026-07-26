@@ -155,7 +155,9 @@ export default function InventoryStockReport() {
                   <th>Code</th>
                   <th>Category</th>
                   <th>Location</th>
-                  <th>Available Qty</th>
+                  <th>Purchased Qty</th>
+                  <th>Issued Qty</th>
+                  <th>Remaining Qty</th>
                   <th>Min Stock</th>
                   <th>Unit</th>
                 </tr>
@@ -163,7 +165,7 @@ export default function InventoryStockReport() {
               <tbody>
                 {filteredRows.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="text-center text-muted py-4">
+                    <td colSpan={9} className="text-center text-muted py-4">
                       No stock records found.
                     </td>
                   </tr>
@@ -182,6 +184,8 @@ export default function InventoryStockReport() {
                         <td>{inventoryUtils.getCode(row)}</td>
                         <td>{inventoryUtils.getCategoryName(row)}</td>
                         <td>{inventoryUtils.getLocationName(row)}</td>
+                        <td>{Number(row?.purchased_quantity || 0)}</td>
+                        <td>{Number(row?.issued_quantity || 0)}</td>
                         <td className={isLow ? "text-danger fw-semibold" : ""}>{qty}</td>
                         <td>{minStock}</td>
                         <td>{row?.unit || row?.uom || "—"}</td>

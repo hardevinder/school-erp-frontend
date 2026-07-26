@@ -1,5 +1,6 @@
 // src/api.js
 import axios from "axios";
+import { getAuthToken, isStudent360Path } from "./utils/student360Session";
 
 /**
  * axios instance
@@ -19,7 +20,7 @@ const api = axios.create({
 api.interceptors.request.use(
   (config) => {
     try {
-      const raw = localStorage.getItem("token") || localStorage.getItem("authToken") || "";
+      const raw = getAuthToken();
       const token = raw && raw.startsWith("Bearer ") ? raw : raw ? `Bearer ${raw}` : "";
 
       config.headers = config.headers || {};
@@ -57,6 +58,10 @@ api.interceptors.response.use(
     const status = error?.response?.status;
 
     if (status === 401) {
+      if (isStudent360Path()) {
+        sessionStorage.removeItem("student360Token");
+        return Promise.reject(error);
+      }
       try {
         // remove stored token(s)
         localStorage.removeItem("token");

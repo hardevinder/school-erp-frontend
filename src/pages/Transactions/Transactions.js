@@ -20,6 +20,8 @@ import {
 } from "react-bootstrap";
 import ReceiptModal from "./ReceiptModal";
 import "bootstrap/dist/css/bootstrap.min.css";
+import DatePicker from "react-datepicker";
+import "react-datepicker/dist/react-datepicker.css";
 
 /* ---------------- Helpers ---------------- */
 const asArray = (d) => {
@@ -626,34 +628,74 @@ const hasModeExtraInfo = (details, mode) =>
       String(details?.bank_name || details?.BankName || "").trim()
   );
 
-const pad2 = (n) => String(n).padStart(2, "0");
+const pad2 = (value) => String(value).padStart(2, "0");
 
+const isValidDateParts = (year, month, day) => {
+  const yyyy = Number(year);
+  const mm = Number(month);
+  const dd = Number(day);
+
+  if (!Number.isInteger(yyyy) || !Number.isInteger(mm) || !Number.isInteger(dd)) {
+    return false;
+  }
+
+  if (yyyy < 1000 || yyyy > 9999 || mm < 1 || mm > 12 || dd < 1) {
+    return false;
+  }
+
+  const daysInMonth = new Date(yyyy, mm, 0).getDate();
+  return dd <= daysInMonth;
+};
+
+/**
+ * Safely normalize supported date values to YYYY-MM-DD.
+ *
+ * Calendar inputs and API/database values use YYYY-MM-DD.
+ * Older manual values such as D/M/YYYY are still accepted as Indian D/M/Y.
+ * Ambiguous slash dates are never passed to JavaScript's Date string parser.
+ */
 const normalizeDateInput = (value) => {
   if (!value) return "";
+
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) return "";
+    return `${value.getFullYear()}-${pad2(value.getMonth() + 1)}-${pad2(
+      value.getDate()
+    )}`;
+  }
 
   const raw = String(value).trim();
   if (!raw) return "";
 
-  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  // API/database or native calendar format, optionally with time.
+  const ymd = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:[T\s].*)?$/);
+  if (ymd) {
+    const year = Number(ymd[1]);
+    const month = Number(ymd[2]);
+    const day = Number(ymd[3]);
 
-  const dmy = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-  if (dmy) return `${dmy[3]}-${dmy[2]}-${dmy[1]}`;
-
-  const parsed = new Date(raw);
-  if (!Number.isNaN(parsed.getTime())) {
-    return `${parsed.getFullYear()}-${pad2(parsed.getMonth() + 1)}-${pad2(parsed.getDate())}`;
+    if (!isValidDateParts(year, month, day)) return "";
+    return `${year}-${pad2(month)}-${pad2(day)}`;
   }
 
-  const ymd = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (ymd) return `${ymd[1]}-${ymd[2]}-${ymd[3]}`;
+  // Backward compatibility for old/manual Indian dates.
+  const dmy = raw.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})$/);
+  if (dmy) {
+    const day = Number(dmy[1]);
+    const month = Number(dmy[2]);
+    const year = Number(dmy[3]);
+
+    if (!isValidDateParts(year, month, day)) return "";
+    return `${year}-${pad2(month)}-${pad2(day)}`;
+  }
 
   return "";
 };
 
+// Human-readable day-first format used throughout transactions.
+// Example: 2026-07-07 -> 07/07/2026
 const formatDisplayDate = (value) => {
   if (!value) return "—";
-  const raw = String(value).trim();
-  if (/^\d{2}\/\d{2}\/\d{4}$/.test(raw)) return raw;
 
   const normalized = normalizeDateInput(value);
   if (!normalized) return "—";
@@ -662,24 +704,25 @@ const formatDisplayDate = (value) => {
   return `${dd}/${mm}/${yyyy}`;
 };
 
-const toDisplayDateInput = (value) => {
-  if (!value) return "";
-  const raw = String(value).trim();
-  if (/^\d{2}\/\d{2}\/\d{4}$/.test(raw)) return raw;
-  const normalized = normalizeDateInput(value);
-  if (!normalized) return raw;
-  const [yyyy, mm, dd] = normalized.split("-");
-  return `${dd}/${mm}/${yyyy}`;
-};
+// Value required by native <input type="date">.
+const toDatePickerValue = (value) => normalizeDateInput(value);
 
-const getTodayDateInput = () => {
-  const now = new Date();
-  return `${pad2(now.getDate())}/${pad2(now.getMonth() + 1)}/${now.getFullYear()}`;
+// Kept as an alias because older code in this file already calls this helper.
+const toDisplayDateInput = (value) => toDatePickerValue(value);
+
+const getTodayDateInput = () => toDatePickerValue(new Date());
+
+const toLocalDate = (value) => {
+  const normalized = normalizeDateInput(value);
+  if (!normalized) return null;
+
+  const [year, month, day] = normalized.split("-").map(Number);
+  return new Date(year, month - 1, day);
 };
 
 const toTransactionDatePayload = (value) => {
   const normalized = normalizeDateInput(value);
-  return normalized ? `${normalized}T12:00:00` : new Date().toISOString();
+  return normalized ? `${normalized}T12:00:00` : null;
 };
 
 const formatTransactionDateTime = (value) => formatDisplayDate(value);
@@ -2115,12 +2158,39 @@ const Transactions = () => {
 
       let transportDueMap = {};
       let firstTransportItem = null;
+      let transportDueItems = [];
       try {
         const dueResp = await api.get(
           `/student-transport/due/${studentId}?session_id=${selectedSession}`
         );
-        const dueData = dueResp.data?.data || {};
-        const items = Array.isArray(dueData.items) ? dueData.items : [];
+        const dueData = dueResp.data?.data ?? dueResp.data ?? {};
+        const rawItems = Array.isArray(dueData)
+          ? dueData
+          : Array.isArray(dueData.items)
+          ? dueData.items
+          : [];
+        const items = rawItems.map((item) => {
+          const feeHeadId =
+            item?.Fee_Head ??
+            item?.fee_head_id ??
+            item?.feeHeadId ??
+            item?.fee_heading_id;
+          const rawOverride =
+            item?.transport_override_applied ??
+            item?.transportOverrideApplied ??
+            false;
+
+          return {
+            ...item,
+            Fee_Head: feeHeadId,
+            transport_override_applied:
+              rawOverride === true ||
+              rawOverride === 1 ||
+              rawOverride === "1" ||
+              String(rawOverride).toLowerCase() === "true",
+          };
+        });
+        transportDueItems = items;
         items.forEach((it) => {
           if (it.Fee_Head !== undefined && it.Fee_Head !== null) {
             transportDueMap[String(it.Fee_Head)] = it;
@@ -2190,7 +2260,32 @@ const Transactions = () => {
       const hasExistingTxnForStudent =
         Array.isArray(receivedVanData) && receivedVanData.length > 0;
 
-      const feeDetails = feeDetailsData.map((detail) => {
+      // The transport-due API also contains override-only heads. Those heads may
+      // not be present in the regular academic fee-details response, so merge
+      // them here to ensure Collect Fee does not silently drop valid overrides.
+      const regularFeeHeadIds = new Set(
+        feeDetailsData
+          .map((detail) => String(detail?.fee_heading_id ?? ""))
+          .filter(Boolean)
+      );
+      const overrideOnlyFeeDetails = transportDueItems
+        .filter(
+          (item) =>
+            item?.transport_override_applied &&
+            item?.Fee_Head !== undefined &&
+            item?.Fee_Head !== null &&
+            !regularFeeHeadIds.has(String(item.Fee_Head))
+        )
+        .map((item) => ({
+          fee_heading_id: item.Fee_Head,
+          fee_heading:
+            item.feeHeadName || item.Fee_Heading_Name || "Transport Fee",
+          feeDue: 0,
+          fineAmount: 0,
+          transportApplicable: true,
+        }));
+
+      const feeDetails = [...feeDetailsData, ...overrideOnlyFeeDetails].map((detail) => {
         const headId = detail.fee_heading_id;
 
         const transportApplicable =
@@ -2266,6 +2361,7 @@ const Transactions = () => {
         // Do NOT use generic amount/price/fare here because those can be the
         // normal academic fee amount and can wrongly appear as transport due.
         const feeDetailCost = pickNum(
+          detail.actual_van_fee_due,
           detail.transportCost,
           detail.TransportCost,
           detail.routeFee,
@@ -2331,7 +2427,29 @@ const Transactions = () => {
 
         const serverCostVal = pickNum(serverCostPerHead, serverTransportCostGlobal);
 
-        const selectedRouteFee = selectedSessionIsActive
+        // A student/session/head override is the authoritative billed amount,
+        // including for the active session. The previous active-session branch
+        // preferred the student's live route cost and hid valid overrides.
+        const hasTransportOverride = Boolean(
+          transportItem?.transport_override_applied ||
+            detail?.transport_override_applied === true ||
+            detail?.transport_override_applied === 1 ||
+            detail?.transport_override_applied === "1" ||
+            String(detail?.transport_override_applied).toLowerCase() === "true"
+        );
+
+        const overrideTransportCost = pickNum(
+          transportItemCost,
+          detail?.actual_van_fee_due,
+          detail?.van_net_due,
+          detail?.transportCost,
+          detail?.TransportCost,
+          detail?.transport_amount
+        );
+
+        const selectedRouteFee = hasTransportOverride
+          ? overrideTransportCost
+          : selectedSessionIsActive
           ? pickNum(
               studentTransportCost,
               routeObjCost,
@@ -2349,8 +2467,12 @@ const Transactions = () => {
               studentRouteFromFeeDetails?.route_cost
             );
 
-        const receivedVanFeeFromMap = receivedVanFeeMap[headId] || 0;
-        const vanFeeConcessionFromMap = vanFeeConcessionMap[headId] || 0;
+        const receivedVanFeeFromMap =
+          receivedVanFeeMap[headId] ||
+          Number(detail?.actual_van_paid || 0);
+        const vanFeeConcessionFromMap =
+          vanFeeConcessionMap[headId] ||
+          Number(detail?.actual_van_concession || 0);
 
         const receivedFromServer =
           transportItem &&
@@ -2379,9 +2501,12 @@ const Transactions = () => {
           selectedRouteFee - (receivedFromServer || 0) - (concessionFromServer || 0)
         );
 
+        const shouldUseServerTransportAmounts = Boolean(
+          transportItem && (!selectedSessionIsActive || hasTransportOverride)
+        );
+
         const remainingBeforeFineFromServer =
-          !selectedSessionIsActive &&
-          transportItem &&
+          shouldUseServerTransportAmounts &&
           (transportItem.remainingBeforeFine !== undefined ||
             transportItem.RemainingBeforeFine !== undefined)
             ? Number(
@@ -2399,8 +2524,7 @@ const Transactions = () => {
         );
 
         const finalDue =
-          !selectedSessionIsActive &&
-          transportItem &&
+          shouldUseServerTransportAmounts &&
           (transportItem.due !== undefined || transportItem.FinalDue !== undefined)
             ? Number(transportItem.due ?? transportItem.FinalDue ?? 0)
             : Math.max(0, remainingBeforeFineFromServer + vanFineFromServer);
@@ -2458,8 +2582,12 @@ const Transactions = () => {
         );
 
         const hasRouteForSelectedSession = selectedSessionIsActive
-          ? hasCurrentTransportOptIn
-          : Boolean(hasHistoricalTransportEvidence || hasCurrentTransportOptIn);
+          ? Boolean(hasCurrentTransportOptIn || hasTransportOverride)
+          : Boolean(
+              hasHistoricalTransportEvidence ||
+                hasCurrentTransportOptIn ||
+                hasTransportOverride
+            );
 
         const hasPositiveTransportCost =
           Number(selectedRouteFee || 0) > 0 ||
@@ -2479,7 +2607,9 @@ const Transactions = () => {
         const canEditVanForHead = Boolean(transportApplicable);
         const shouldShowTransportDue = Boolean(
           transportApplicable &&
-            (hasTransportPaymentHistory ||
+            (hasTransportOverride ||
+              hasTransportDueItem ||
+              hasTransportPaymentHistory ||
               (hasRouteForSelectedSession && hasPositiveTransportCost))
         );
 
@@ -2512,7 +2642,13 @@ const Transactions = () => {
               Van_Fee_Due: effectiveFinalDue,
               Van_Fine_Amount: effectiveVanFine,
               SelectedRoute: shouldShowTransportDue
-                ? inferredRouteIdForHead(headId)
+                ? normalizeRouteId(
+                    hasTransportOverride
+                      ? transportItem?.transportId ??
+                          transportItem?.transportation_id ??
+                          inferredRouteIdForHead(headId)
+                      : inferredRouteIdForHead(headId)
+                  )
                 : null,
               HasTransportRouteDue: shouldShowTransportDue,
             }
@@ -2911,7 +3047,17 @@ const Transactions = () => {
           return;
         }
 
-          const updatedTransaction = {
+        const normalizedEditDate = normalizeDateInput(
+          editingTransaction.DateOfTransaction
+        );
+        if (!normalizedEditDate) {
+          setModalError(
+            "Please enter a valid transaction date in DD/MM/YYYY format."
+          );
+          return;
+        }
+
+        const updatedTransaction = {
           Fee_Recieved: editingTransaction.Fee_Recieved,
           Concession: editingTransaction.Concession,
           VanFee: editingTransaction.VanFee,
@@ -2971,9 +3117,7 @@ const Transactions = () => {
                   editingTransaction.bank_name || editingTransaction.BankName || ""
                 ).trim() || null
               : null,
-          DateOfTransaction: toTransactionDatePayload(
-            editingTransaction.DateOfTransaction
-          ),
+          DateOfTransaction: `${normalizedEditDate}T12:00:00`,
           session_id: editingTransaction.session_id ?? null,
           Remarks: editingTransaction.Remarks || null,
         };
@@ -3004,6 +3148,14 @@ const Transactions = () => {
         }
         if (!selectedSession) {
           setModalError("Please select an academic session before collecting.");
+          return;
+        }
+
+        const normalizedTransactionDate = normalizeDateInput(transactionDate);
+        if (!normalizedTransactionDate) {
+          setModalError(
+            "Please enter a valid transaction date in DD/MM/YYYY format."
+          );
           return;
         }
 
@@ -3077,7 +3229,7 @@ const Transactions = () => {
           Student_ID: selectedStudentInfo.id,
           Class_ID: selectedStudentInfo.class_id,
           Section_ID: selectedStudentInfo.section_id,
-          DateOfTransaction: toTransactionDatePayload(transactionDate),
+          DateOfTransaction: `${normalizedTransactionDate}T12:00:00`,
           Fee_Head: details.Fee_Head,
           Fee_Recieved: details.Fee_Recieved,
           Concession: details.isOpeningBalance ? 0 : details.Concession,
@@ -3359,7 +3511,7 @@ const Transactions = () => {
 
       <div className="d-flex justify-content-between align-items-center mb-3">
         <h4 className="fw-bold text-primary">Transaction Summary for Today</h4>
-        <span className="text-muted fs-6">{new Date().toLocaleDateString()}</span>
+        <span className="text-muted fs-6">{formatDisplayDate(new Date())}</span>
       </div>
 
       {daySummary && daySummary.data ? (
@@ -3619,7 +3771,7 @@ const Transactions = () => {
                               StudentName: t.Student?.name || "—",
                               AdmissionNumber: t.AdmissionNumber,
                               ClassName: t.Class?.class_name || "—",
-                              DateOfTransaction: toDisplayDateInput(t.DateOfTransaction),
+                              DateOfTransaction: formatDisplayDate(t.DateOfTransaction),
                               session_id: t.session_id ?? null,
                               Remarks: t.Remarks || "",
                             });
@@ -3714,6 +3866,7 @@ const Transactions = () => {
             show={showReceiptModal}
             onClose={() => setShowReceiptModal(false)}
             slipId={selectedSlipId}
+            dateFormatter={formatDisplayDate}
           />
         )}
       </div>
@@ -4439,7 +4592,9 @@ const Transactions = () => {
                       <Col lg={3} md={6}>
                         <Form.Group>
                           <div className="d-flex align-items-center justify-content-between gap-2">
-                            <Form.Label className="mb-1">Transaction Date</Form.Label>
+                            <Form.Label id="transaction-date-label" className="mb-1">
+                              Transaction Date
+                            </Form.Label>
                             <Button
                               variant="outline-secondary"
                               size="sm"
@@ -4449,12 +4604,20 @@ const Transactions = () => {
                               Reset
                             </Button>
                           </div>
-                          <Form.Control
-                            type="text"
-                            inputMode="numeric"
-                            placeholder="dd/mm/yyyy"
-                            value={transactionDate}
-                            onChange={(e) => setTransactionDate(e.target.value)}
+                          <DatePicker
+                            selected={toLocalDate(transactionDate)}
+                            onChange={(date) =>
+                              setTransactionDate(toDatePickerValue(date))
+                            }
+                            dateFormat="dd/MM/yyyy"
+                            className="form-control w-100"
+                            wrapperClassName="w-100"
+                            placeholderText="dd/mm/yyyy"
+                            showMonthDropdown
+                            showYearDropdown
+                            scrollableYearDropdown
+                            yearDropdownItemNumber={15}
+                            ariaLabelledBy="transaction-date-label"
                           />
                           
                         </Form.Group>
@@ -5274,7 +5437,8 @@ const Transactions = () => {
                         <Form.Control
                           type="text"
                           inputMode="numeric"
-                          placeholder="dd/mm/yyyy"
+                          placeholder="DD/MM/YYYY"
+                          maxLength={10}
                           value={editingTransaction?.DateOfTransaction || ""}
                           onChange={(e) =>
                             setEditingTransaction((prev) => ({
@@ -5282,6 +5446,7 @@ const Transactions = () => {
                               DateOfTransaction: e.target.value,
                             }))
                           }
+                          aria-label="Transaction date in DD/MM/YYYY format"
                         />
                       </Form.Group>
                     </Col>
@@ -5693,9 +5858,8 @@ const Transactions = () => {
                 <Form.Group>
                   <Form.Label>Cheque Date</Form.Label>
                   <Form.Control
-                    type="text"
-                    inputMode="numeric"
-                    placeholder="dd/mm/yyyy"
+                    type="date"
+                    lang="en-GB"
                     value={
                       editingTransaction
                         ? editingTransaction?.cheque_date || editingTransaction?.ChequeDate || ""

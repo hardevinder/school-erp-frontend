@@ -652,6 +652,7 @@ const AssignmentModal = ({
   open,
   studentLabel,
   buses,
+  operationalRoutes,
   current,
   saving,
   onClose,
@@ -660,6 +661,8 @@ const AssignmentModal = ({
   const [form, setForm] = useState({
     pickupBusId: "",
     dropBusId: "",
+    pickupRouteId: "",
+    dropRouteId: "",
     pickupStop: "",
     dropStop: "",
     startDate: fmtYYYYMMDD(),
@@ -697,6 +700,12 @@ const AssignmentModal = ({
     setForm({
       pickupBusId: current?.pickup_bus_id ? String(current.pickup_bus_id) : "",
       dropBusId: current?.drop_bus_id ? String(current.drop_bus_id) : "",
+      pickupRouteId: current?.pickup_route_id
+        ? String(current.pickup_route_id)
+        : "",
+      dropRouteId: current?.drop_route_id
+        ? String(current.drop_route_id)
+        : "",
       pickupStop: safeStr(current?.pickup_stop),
       dropStop: safeStr(current?.drop_stop),
       startDate: fmtYYYYMMDD(current?.start_date || new Date()),
@@ -877,6 +886,14 @@ const AssignmentModal = ({
       );
       return;
     }
+    if (form.pickupBusId && !form.pickupRouteId) {
+      Swal.fire("Validation", "Please select the actual pickup route.", "warning");
+      return;
+    }
+    if (form.dropBusId && !form.dropRouteId) {
+      Swal.fire("Validation", "Please select the actual drop route.", "warning");
+      return;
+    }
 
     const notificationRadius = Number(form.notificationRadiusMeters);
 
@@ -913,6 +930,8 @@ const AssignmentModal = ({
     await onSubmit({
       pickup_bus_id: form.pickupBusId ? Number(form.pickupBusId) : null,
       drop_bus_id: form.dropBusId ? Number(form.dropBusId) : null,
+      pickup_route_id: form.pickupRouteId ? Number(form.pickupRouteId) : null,
+      drop_route_id: form.dropRouteId ? Number(form.dropRouteId) : null,
       pickup_stop: safeStr(form.pickupStop) || null,
       drop_stop: safeStr(form.dropStop) || null,
       start_date: form.startDate,
@@ -1087,6 +1106,24 @@ const AssignmentModal = ({
                 </div>
 
                 <div className="sta-assignment-field">
+                  <label>Actual Pickup Route</label>
+                  <select
+                    value={form.pickupRouteId}
+                    onChange={(event) =>
+                      setField("pickupRouteId", event.target.value)
+                    }
+                  >
+                    <option value="">-- Select Pickup Route --</option>
+                    {operationalRoutes.map((route) => (
+                      <option key={route.id} value={route.id}>
+                        {route.route_name}
+                        {route.route_code ? ` (${route.route_code})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="sta-assignment-field">
                   <label>Pickup Stop</label>
                   <input
                     type="text"
@@ -1209,6 +1246,24 @@ const AssignmentModal = ({
                       <option key={bus.id} value={bus.id}>
                         {safeStr(bus.bus_no) || `Bus ${bus.id}`}
                         {bus.reg_no ? ` (${safeStr(bus.reg_no)})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="sta-assignment-field">
+                  <label>Actual Drop Route</label>
+                  <select
+                    value={form.dropRouteId}
+                    onChange={(event) =>
+                      setField("dropRouteId", event.target.value)
+                    }
+                  >
+                    <option value="">-- Select Drop Route --</option>
+                    {operationalRoutes.map((route) => (
+                      <option key={route.id} value={route.id}>
+                        {route.route_name}
+                        {route.route_code ? ` (${route.route_code})` : ""}
                       </option>
                     ))}
                   </select>
@@ -1396,6 +1451,7 @@ const StudentTransportAssignments = () => {
   const [students, setStudents] = useState([]);
   const [buses, setBuses] = useState([]);
   const [routes, setRoutes] = useState([]);
+  const [operationalRoutes, setOperationalRoutes] = useState([]);
 
   const [search, setSearch] = useState("");
   const [selectedRouteFilterId, setSelectedRouteFilterId] = useState("");
@@ -1439,12 +1495,50 @@ const StudentTransportAssignments = () => {
     setRoutes(Array.isArray(res.data) ? res.data : []);
   };
 
+  const fetchOperationalRoutes = async () => {
+    const res = await api.get("/bus-operational-routes");
+    setOperationalRoutes(
+      Array.isArray(res.data?.routes) ? res.data.routes : [],
+    );
+  };
+
+  const createOperationalRoute = async () => {
+    const result = await Swal.fire({
+      title: "Create Actual Bus Route",
+      input: "text",
+      inputLabel: "Route name",
+      inputPlaceholder: "e.g. Morning Route A",
+      showCancelButton: true,
+      inputValidator: (value) =>
+        value?.trim() ? undefined : "Route name is required",
+    });
+    if (!result.isConfirmed) return;
+    try {
+      await api.post("/bus-operational-routes", {
+        route_name: result.value.trim(),
+      });
+      await fetchOperationalRoutes();
+      Swal.fire("Created", "Actual bus route created.", "success");
+    } catch (error) {
+      Swal.fire(
+        "Unable to Create",
+        error?.response?.data?.error || "Failed to create route.",
+        "error",
+      );
+    }
+  };
+
   const refreshAll = async (showToast = true) => {
     setLoading(true);
     try {
       loadedAssignmentStudentIdsRef.current.clear();
       setActiveAssignmentsByStudent({});
-      await Promise.all([fetchStudents(), fetchBuses(), fetchRoutes()]);
+      await Promise.all([
+        fetchStudents(),
+        fetchBuses(),
+        fetchRoutes(),
+        fetchOperationalRoutes(),
+      ]);
       if (showToast) {
         Swal.fire({
           icon: "success",
@@ -1764,6 +1858,7 @@ const StudentTransportAssignments = () => {
 
     const payload = {
       student_id: Number(studentId),
+      transport_id: assignmentDialog.current?.transport_id ?? null,
       ...values,
     };
 
@@ -2192,6 +2287,13 @@ const StudentTransportAssignments = () => {
 
               <div className="sta-top-actions">
                 <button
+                  className="btn btn-primary sta-btn"
+                  onClick={createOperationalRoute}
+                  disabled={loading}
+                >
+                  Add Actual Route
+                </button>
+                <button
                   className="btn btn-outline-success sta-btn"
                   onClick={downloadAssignmentsExcel}
                   disabled={loading}
@@ -2518,6 +2620,7 @@ const StudentTransportAssignments = () => {
         open={assignmentDialog.open}
         studentLabel={getStudentLabel(assignmentDialog.studentId)}
         buses={buses}
+        operationalRoutes={operationalRoutes}
         current={assignmentDialog.current}
         saving={assignmentSaving}
         onClose={closeAssignmentDialog}

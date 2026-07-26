@@ -17,6 +17,7 @@ const getEmptyForm = () => ({
 export default function InventoryIssueStock() {
   const [items, setItems] = useState([]);
   const [locations, setLocations] = useState([]);
+  const [users, setUsers] = useState([]);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [formValues, setFormValues] = useState(getEmptyForm());
@@ -24,12 +25,14 @@ export default function InventoryIssueStock() {
   const loadMasters = async () => {
     setLoading(true);
     try {
-      const [itemRows, locationRows] = await Promise.all([
+      const [itemRows, locationRows, userRows] = await Promise.all([
         inventoryApi.getItems(),
         inventoryApi.getLocations(),
+        inventoryApi.getEligibleIssueUsers(),
       ]);
       setItems(itemRows || []);
       setLocations(locationRows || []);
+      setUsers(userRows || []);
     } catch (err) {
       Swal.fire(
         "Error",
@@ -59,14 +62,19 @@ export default function InventoryIssueStock() {
     }));
   }, [locations]);
 
+  const userOptions = useMemo(() => users.map((user) => ({
+    value: String(user.id),
+    label: `${user.name || user.username} (${(user.roles || []).join(", ")})`,
+  })), [users]);
+
   const buildIssuePayload = (form) => {
     return {
       item_id: Number(form.itemId),
       from_location_id: Number(form.locationId),
       quantity: Number(form.quantity),
-      issued_to: form.issuedTo?.trim() || null,
+      issued_to_user_id: Number(form.issuedTo) || null,
       reference_no: form.referenceNo?.trim() || null,
-      txn_date: form.txnDate || null,
+      transaction_date: form.txnDate || null,
       remarks: form.remarks?.trim() || null,
     };
   };
@@ -75,8 +83,8 @@ export default function InventoryIssueStock() {
     try {
       const payload = buildIssuePayload(form);
 
-      if (!payload.item_id || !payload.from_location_id || !payload.quantity) {
-        Swal.fire("Error", "Item, location and quantity are required", "error");
+      if (!payload.item_id || !payload.from_location_id || !payload.issued_to_user_id || !payload.quantity) {
+        Swal.fire("Error", "Item, location, issued-to user and quantity are required", "error");
         return;
       }
 
@@ -121,8 +129,10 @@ export default function InventoryIssueStock() {
     },
     {
       name: "issuedTo",
-      label: "Issued To",
-      placeholder: "Department / Teacher / Lab / Student",
+      label: "Issued To User",
+      type: "select",
+      required: true,
+      options: userOptions,
     },
     {
       name: "referenceNo",
@@ -178,7 +188,7 @@ export default function InventoryIssueStock() {
 
           <InventoryTransactionForm
             title="Issue Stock"
-            subtitle="Use this for classrooms, labs, departments, or staff issue entries"
+            subtitle="Issue to an eligible user; Student and Driver roles are excluded"
             initialValues={formValues}
             fields={fields}
             saving={saving}

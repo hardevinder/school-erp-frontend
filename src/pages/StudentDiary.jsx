@@ -1,6 +1,7 @@
 // src/pages/StudentDiary.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
+import { getAuthToken } from "../utils/student360Session";
 import socket from "../socket"; // adjust path if needed
 
 const API_URL = process.env.REACT_APP_API_URL || "";
@@ -78,7 +79,7 @@ const StudentDiary = () => {
     } catch {}
     const single = localStorage.getItem("userRole");
     if (single) return [normalizeRole(single)];
-    const token = localStorage.getItem("token");
+    const token = getAuthToken();
     if (token) {
       const payload = parseJwt(token);
       if (payload) {
@@ -167,7 +168,7 @@ const StudentDiary = () => {
   const [dateTo, setDateTo] = useState("");
   const [sortDir, setSortDir] = useState("desc"); // 'asc' | 'desc'
 
-  const token = localStorage.getItem("token");
+  const token = getAuthToken();
   const abortRef = useRef(null);
 
   // Prefer active student admission for API

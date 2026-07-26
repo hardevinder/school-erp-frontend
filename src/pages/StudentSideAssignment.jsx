@@ -2,6 +2,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import socket from "../socket"; // adjust path as needed
+import { getAuthToken } from "../utils/student360Session";
 
 const API_URL = process.env.REACT_APP_API_URL || "";
 
@@ -92,7 +93,7 @@ const StudentAssignments = () => {
 
   const [lastSyncedAt, setLastSyncedAt] = useState(null);
 
-  const token = localStorage.getItem("token");
+  const token = getAuthToken();
   const abortRef = useRef(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
 

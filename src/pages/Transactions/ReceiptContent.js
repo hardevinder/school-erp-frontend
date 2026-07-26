@@ -3,6 +3,21 @@ import { Table, Row, Col } from "react-bootstrap";
 import normalizeUploadedUrl from "../../utils/normalizeUploadedUrl";
 import api from "../../api";
 
+const formatDateTimeDDMMYYYY = (value) => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  const datePart = [
+    String(date.getDate()).padStart(2, "0"),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    date.getFullYear(),
+  ].join("/");
+  const timePart = date.toLocaleTimeString("en-IN", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  return `${datePart} ${timePart}`;
+};
+
 const placeholderDataUrl =
   "data:image/svg+xml;utf8," +
   encodeURIComponent(
@@ -170,7 +185,7 @@ const ReceiptContent = ({ school = {}, receipt = [], slipId = "—", student = {
               <p><strong>Admission No:</strong> {student?.admission_number || "-"}</p>
               <p><strong>Class:</strong> {items[0]?.Class?.class_name || "-"}</p>
               <p><strong>Address:</strong> {student?.address || "-"}</p>
-              <p><strong>Date:</strong> {new Date(items[0]?.DateOfTransaction || Date.now()).toLocaleString()}</p>
+              <p><strong>Date:</strong> {formatDateTimeDDMMYYYY(items[0]?.DateOfTransaction || Date.now())}</p>
             </td>
           </tr>
         </tbody>

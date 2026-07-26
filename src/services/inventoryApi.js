@@ -128,6 +128,11 @@ export const inventoryApi = {
     return request("post", `${BASE}/transactions/issue`, { data: payload });
   },
 
+  async getEligibleIssueUsers() {
+    const data = await request("get", `${BASE}/eligible-issue-users`);
+    return pickArray(data, ["users", "data", "rows"]);
+  },
+
   async transferStock(payload) {
     return request("post", `${BASE}/transactions/transfer`, { data: payload });
   },

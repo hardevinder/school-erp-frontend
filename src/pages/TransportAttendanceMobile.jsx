@@ -193,6 +193,8 @@ export default function TransportAttendanceMobile() {
   const [buses, setBuses] = useState([]);
   const [busId, setBusId] = useState(null);
   const [tripType, setTripType] = useState("pickup");
+  const [routes, setRoutes] = useState([]);
+  const [operationalRouteId, setOperationalRouteId] = useState(null);
   const [date, setDate] = useState(todayYYYYMMDD());
 
   const [rows, setRows] = useState([]);
@@ -353,7 +355,13 @@ export default function TransportAttendanceMobile() {
     setLoading(true);
     try {
       const response = await api.get("/transport-attendance/my-list", {
-        params: { trip_type: tripType, date },
+        params: {
+          trip_type: tripType,
+          date,
+          ...(operationalRouteId
+            ? { operational_route_id: operationalRouteId }
+            : {}),
+        },
       });
 
       const list = Array.isArray(response?.data?.students)
@@ -374,7 +382,37 @@ export default function TransportAttendanceMobile() {
     } finally {
       setLoading(false);
     }
-  }, [tripType, date]);
+  }, [tripType, date, operationalRouteId]);
+
+  const loadRoutes = useCallback(async () => {
+    if (!isDriver || !busId) {
+      setRoutes([]);
+      setOperationalRouteId(null);
+      return;
+    }
+    try {
+      const response = await api.get("/bus-trips/my-routes", {
+        params: { bus_id: busId, trip_type: tripType },
+      });
+      const list = Array.isArray(response?.data?.routes)
+        ? response.data.routes
+        : [];
+      setRoutes(list);
+      setOperationalRouteId((current) => {
+        if (activeTrip?.operational_route_id) {
+          return Number(activeTrip.operational_route_id);
+        }
+        if (list.some((route) => Number(route.id) === Number(current))) {
+          return current;
+        }
+        return list.length === 1 ? Number(list[0].id) : null;
+      });
+    } catch (error) {
+      console.error("Load routes error:", error);
+      setRoutes([]);
+      setOperationalRouteId(null);
+    }
+  }, [isDriver, busId, tripType, activeTrip?.operational_route_id]);
 
   const loadActiveTrip = useCallback(async () => {
     if (!isDriver) return;
@@ -388,6 +426,11 @@ export default function TransportAttendanceMobile() {
       if (trip) {
         setBusId(Number(trip.bus_id));
         setTripType(trip.trip_type || "pickup");
+        setOperationalRouteId(
+          trip.operational_route_id
+            ? Number(trip.operational_route_id)
+            : null,
+        );
         setGpsState((current) => ({
           ...current,
           status: trip.latest_location_at ? "active" : "starting",
@@ -567,6 +610,10 @@ export default function TransportAttendanceMobile() {
   }, [loadList]);
 
   useEffect(() => {
+    loadRoutes();
+  }, [loadRoutes]);
+
+  useEffect(() => {
     activeTripIdRef.current = activeTrip?.id || null;
 
     if (isDriver && activeTrip?.id) {
@@ -597,10 +644,14 @@ export default function TransportAttendanceMobile() {
       Swal.fire("Select Bus", "Please select your assigned bus first.", "warning");
       return;
     }
+    if (!operationalRouteId) {
+      Swal.fire("Select Route", "Please select the route for this trip.", "warning");
+      return;
+    }
 
     const confirmation = await Swal.fire({
       title: `Start ${tripType === "pickup" ? "Pickup" : "Drop"} Trip?`,
-      text: `${getBusLabel(busId)} will start sharing live GPS location.`,
+      text: `${getBusLabel(busId)} will start sharing location for the selected route.`,
       icon: "question",
       showCancelButton: true,
       confirmButtonText: "Start Trip",
@@ -613,6 +664,7 @@ export default function TransportAttendanceMobile() {
       const response = await api.post("/bus-trips/start", {
         bus_id: Number(busId),
         trip_type: tripType,
+        operational_route_id: Number(operationalRouteId),
       });
 
       const trip = response?.data?.trip || null;
@@ -790,6 +842,7 @@ export default function TransportAttendanceMobile() {
       const response = await api.post("/transport-attendance/mark-bulk", {
         date,
         trip_type: tripType,
+        operational_route_id: operationalRouteId,
         records: filteredRows.map((row) => ({
           student_id: row.student_id,
           status: getEffectiveStatus(row),
@@ -892,7 +945,9 @@ export default function TransportAttendanceMobile() {
                   type="button"
                   className="ta-startTrip"
                   onClick={startTrip}
-                  disabled={tripActionLoading || !busId}
+                  disabled={
+                    tripActionLoading || !busId || !operationalRouteId
+                  }
                 >
                   {tripActionLoading ? "Starting…" : "Start Trip & GPS"}
                 </button>
@@ -961,6 +1016,30 @@ export default function TransportAttendanceMobile() {
               </select>
             </label>
           </div>
+
+          {isDriver && (
+            <label className="ta-label">
+              Route
+              <select
+                className="ta-input"
+                value={operationalRouteId ?? ""}
+                disabled={Boolean(activeTrip) || !busId}
+                onChange={(event) =>
+                  setOperationalRouteId(
+                    event.target.value ? Number(event.target.value) : null,
+                  )
+                }
+              >
+                <option value="">Select Route</option>
+                {routes.map((route) => (
+                  <option key={route.id} value={route.id}>
+                    {route.route_name || `Route #${route.id}`}
+                    {route.route_code ? ` • ${route.route_code}` : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
 
           <div className="ta-row tight">
             <input

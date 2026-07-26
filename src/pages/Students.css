@@ -155,6 +155,71 @@
   vertical-align: middle;
 }
 
+/* Keep the student identity visible while the wide listing scrolls. */
+.students-table .students-sticky-admission,
+.students-table .students-sticky-name {
+  position: sticky;
+  background-color: #fff;
+  background-clip: padding-box;
+}
+
+.students-table .students-sticky-admission {
+  left: 0;
+  z-index: 5;
+  width: 120px;
+  min-width: 120px;
+  max-width: 120px;
+}
+
+.students-table .students-sticky-name {
+  left: 120px;
+  z-index: 4;
+  width: 240px;
+  min-width: 240px;
+  max-width: 240px;
+  box-shadow: 7px 0 9px -9px rgba(15, 23, 42, 0.65);
+}
+
+.students-table .students-sticky-info {
+  width: 280px;
+  min-width: 280px;
+  max-width: 280px;
+}
+
+.students-table thead .students-sticky-admission,
+.students-table thead .students-sticky-name {
+  z-index: 12;
+  background: #eef2ff;
+}
+
+.students-table.table-striped > tbody > tr:nth-of-type(odd) > .students-sticky-admission,
+.students-table.table-striped > tbody > tr:nth-of-type(odd) > .students-sticky-name {
+  background-color: #f8f9fa;
+}
+
+.students-table.table-hover > tbody > tr:hover > .students-sticky-admission,
+.students-table.table-hover > tbody > tr:hover > .students-sticky-name {
+  background-color: #f2f6ff;
+}
+
+@media (max-width: 767.98px) {
+  .students-table .students-sticky-admission {
+    width: 105px;
+    min-width: 105px;
+    max-width: 105px;
+  }
+
+  .students-table .students-sticky-name {
+    left: 105px;
+  }
+
+  .students-table .students-sticky-info {
+    width: 230px;
+    min-width: 230px;
+    max-width: 230px;
+  }
+}
+
 .students-badge {
   font-size: 0.72rem;
   padding: 0.28rem 0.45rem;

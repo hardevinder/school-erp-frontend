@@ -13,9 +13,10 @@ import "react-toastify/dist/ReactToastify.css";
 import ChatContainer from "./chat/ChatContainer";
 import socket from "../socket";
 import { Link } from "react-router-dom";
+import { getAuthToken } from "../utils/student360Session";
 
 const API_URL = process.env.REACT_APP_API_URL || "";
-const token = () => localStorage.getItem("token");
+const token = getAuthToken;
 
 const readActiveAdmission = () =>
   localStorage.getItem("activeStudentAdmission") ||

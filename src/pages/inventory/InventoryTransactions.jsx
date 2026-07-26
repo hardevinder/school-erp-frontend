@@ -210,7 +210,7 @@ export default function InventoryTransactions() {
                         <td className="text-truncate" style={{ maxWidth: 220 }} title={row?.remarks || ""}>
                           {row?.remarks || "—"}
                         </td>
-                        <td>{inventoryUtils.getUserName(row)}</td>
+                        <td>{row?.issuedToUser?.name || inventoryUtils.getUserName(row)}</td>
                         <td>
                           {!safeLower(type).includes("cancel") ? (
                             <button className="btn btn-sm btn-outline-danger" onClick={() => handleCancel(row)}>

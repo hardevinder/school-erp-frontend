@@ -1,6 +1,7 @@
 // src/pages/StudentTimetableDisplay.jsx
 import React, { useState, useEffect, useMemo } from "react";
 import "bootstrap/dist/css/bootstrap.min.css";
+import { getAuthToken } from "../utils/student360Session";
 
 const API_URL = process.env.REACT_APP_API_URL || "";
 const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -21,7 +22,7 @@ const StudentTimetableDisplay = () => {
   const [mobileOpenIdx, setMobileOpenIdx] = useState(0);
 
   // NEW: roles + switcher state (parity with Diary/Navbar)
-  const token = localStorage.getItem("token");
+  const token = getAuthToken();
   const parseJwt = (tkn) => {
     try {
       const p = tkn.split(".")[1];
@@ -338,7 +339,18 @@ const StudentTimetableDisplay = () => {
             }
           );
           const data = await res.json();
-          subs[date] = data;
+          // Different backend versions return either a plain array or a
+          // wrapped collection. Never pass an error/meta object to render.
+          const rows = Array.isArray(data)
+            ? data
+            : Array.isArray(data?.substitutions)
+              ? data.substitutions
+              : Array.isArray(data?.data)
+                ? data.data
+                : Array.isArray(data?.rows)
+                  ? data.rows
+                  : [];
+          subs[date] = rows;
         } catch (err) {
           console.error(`Error fetching substitutions for ${date}:`, err);
           subs[date] = [];
@@ -595,7 +607,8 @@ const StudentTimetableDisplay = () => {
                               </td>
                             ) : (
                               periods.map((period) => {
-                                const subsForDay = studentSubs[weekDates[day]] || [];
+                                const rawSubsForDay = studentSubs[weekDates[day]];
+                                const subsForDay = Array.isArray(rawSubsForDay) ? rawSubsForDay : [];
                                 const subsForPeriod = subsForDay.filter(
                                   (sub) => sub.periodId === period.id && sub.day === day
                                 );
@@ -686,7 +699,8 @@ const StudentTimetableDisplay = () => {
                             ) : (
                               <div className="d-flex flex-column gap-2">
                                 {periods.map((p) => {
-                                  const subsForDay = studentSubs[weekDates[day]] || [];
+                                  const rawSubsForDay = studentSubs[weekDates[day]];
+                                  const subsForDay = Array.isArray(rawSubsForDay) ? rawSubsForDay : [];
                                   const subsForPeriod = subsForDay.filter(
                                     (sub) => sub.periodId === p.id && sub.day === day
                                   );

@@ -172,6 +172,7 @@ const CancelledTransactions = () => {
             <label className="form-label">From Date</label>
             <input
               type="date"
+              lang="en-GB"
               className="form-control"
               value={fromDate}
               onChange={(e) => {
@@ -185,6 +186,7 @@ const CancelledTransactions = () => {
             <label className="form-label">To Date</label>
             <input
               type="date"
+              lang="en-GB"
               className="form-control"
               value={toDate}
               onChange={(e) => {

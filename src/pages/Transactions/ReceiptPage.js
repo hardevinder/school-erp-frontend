@@ -3,6 +3,21 @@ import { useParams } from "react-router-dom";
 import { Button, Table, Row, Col } from "react-bootstrap";
 import api from "../../api"; // Ensure your API utility is properly configured
 
+const formatDateTimeDDMMYYYY = (value) => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  const datePart = [
+    String(date.getDate()).padStart(2, "0"),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    date.getFullYear(),
+  ].join("/");
+  const timePart = date.toLocaleTimeString("en-IN", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  return `${datePart} ${timePart}`;
+};
+
 // Print-specific styles: When printing, the receipt container uses full width.
 const printStyles = `
   @media print {
@@ -193,7 +208,7 @@ const ReceiptPrint = () => {
                 <p><strong>Address:</strong> {student.address}</p>
                 <p>
                   <strong>Date:</strong>{" "}
-                  {new Date(receipt[0].DateOfTransaction).toLocaleString()}
+                  {formatDateTimeDDMMYYYY(receipt[0].DateOfTransaction)}
                 </p>
               </td>
             </tr>

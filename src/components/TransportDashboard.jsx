@@ -527,6 +527,14 @@ export default function TransportDashboard() {
         show: isTransport || isAdmin || isSuperadmin || isAccounts,
       },
       {
+        label: "Transport Expenses",
+        icon: "bi-receipt-cutoff",
+        href: "/transport-expenses",
+        gradient: "linear-gradient(135deg, #f97316, #c2410c)",
+        desc: "Vehicle and route-wise expense management",
+        show: isTransport || isAdmin || isSuperadmin || isAccounts,
+      },
+      {
         label: "Drivers / Conductors",
         icon: "bi-person-badge",
         href: "/transport-staff",

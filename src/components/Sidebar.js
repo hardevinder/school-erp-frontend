@@ -338,6 +338,13 @@ export default function Sidebar({ headerHeight = 56 }) {
             path: "/combined-circulars",
             roles: ["examination"],
           },
+          {
+            key: "examination-expenses",
+            label: "Examination Expenses",
+            icon: "bi-wallet2",
+            path: "/examination-expenses",
+            roles: ["examination", "admin", "superadmin"],
+          },
         ],
       });
 
@@ -706,6 +713,13 @@ export default function Sidebar({ headerHeight = 56 }) {
             roles: ["accounts", "account"],
           },
           {
+            key: "expense-management-accounts",
+            label: "Expense Management",
+            icon: "bi-wallet2",
+            path: "/expense-management",
+            roles: ["accounts", "account", "admin", "superadmin"],
+          },
+          {
             key: "opening-balances",
             label: "Opening Balances",
             icon: "bi-clipboard-data",
@@ -951,6 +965,8 @@ export default function Sidebar({ headerHeight = 56 }) {
         items: [
           { key: "users", label: "Users", icon: "bi-person", path: "/users", roles: ["superadmin"] },
           { key: "users-tracking", label: "User Tracking", icon: "bi-activity", path: "/users-tracking", roles: ["admin", "superadmin"] },
+          { key: "expense-management", label: "Expense Management", icon: "bi-wallet2", path: "/expense-management", roles: ["admin", "superadmin"] },
+          { key: "examination-expenses-admin", label: "Examination Expenses", icon: "bi-journal-text", path: "/examination-expenses", roles: ["admin", "superadmin"] },
           { key: "classes", label: "Classes", icon: "bi-list-task", path: "/classes" },
           { key: "sections", label: "Sections", icon: "bi-grid", path: "/sections" },
           { key: "sessions", label: "Sessions", icon: "bi-calendar4-week", path: "/sessions" },

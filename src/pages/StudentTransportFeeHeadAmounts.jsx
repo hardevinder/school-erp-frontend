@@ -3,6 +3,10 @@ import Swal from "sweetalert2";
 import api from "../api";
 
 const safeStr = (v) => String(v ?? "").trim();
+const escapeHtml = (v) =>
+  safeStr(v).replace(/[&<>'"]/g, (char) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[char]
+  );
 
 const formatCurrency = (v) => {
   const n = Number(v || 0);
@@ -75,6 +79,15 @@ const StudentTransportFeeHeadAmounts = () => {
   const [sessions, setSessions] = useState([]);
   const [feeHeads, setFeeHeads] = useState([]);
   const [transportations, setTransportations] = useState([]);
+  const [bulkLoading, setBulkLoading] = useState(false);
+  const [bulkStudents, setBulkStudents] = useState([]);
+  const [bulkForm, setBulkForm] = useState({
+    session_id: "",
+    transportation_id: "",
+    student_ids: [],
+    headAmounts: {},
+    remarks: "",
+  });
 
   const [filters, setFilters] = useState({
     q: "",
@@ -248,7 +261,10 @@ const StudentTransportFeeHeadAmounts = () => {
     if (!form.session_id && activeSession?.id) {
       setForm((prev) => ({ ...prev, session_id: String(activeSession.id) }));
     }
-  }, [activeSession, form.session_id]);
+    if (!bulkForm.session_id && activeSession?.id) {
+      setBulkForm((prev) => ({ ...prev, session_id: String(activeSession.id) }));
+    }
+  }, [activeSession, form.session_id, bulkForm.session_id]);
 
   useEffect(() => {
     const onDocClick = (e) => {
@@ -414,6 +430,142 @@ const StudentTransportFeeHeadAmounts = () => {
       Swal.fire("Error", msg, "error");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const loadBulkStudents = async () => {
+    if (!bulkForm.session_id || !bulkForm.transportation_id) {
+      return Swal.fire("Validation", "Select a session and route first.", "warning");
+    }
+    setBulkLoading(true);
+    try {
+      const { data } = await api.get(
+        "/student-transport-fee-head-amounts/bulk/route-students",
+        {
+          params: {
+            session_id: bulkForm.session_id,
+            transportation_id: bulkForm.transportation_id,
+          },
+        }
+      );
+      const students = asStudentArray(data).map(normalizeStudentRow).filter((s) => s.id);
+      setBulkStudents(students);
+      setBulkForm((prev) => ({
+        ...prev,
+        student_ids: students.map((student) => Number(student.id)),
+      }));
+      if (!students.length) {
+        Swal.fire("No students", "No students are currently assigned to this route.", "info");
+      }
+    } catch (error) {
+      Swal.fire(
+        "Error",
+        error?.response?.data?.error || "Failed to load students for this route.",
+        "error"
+      );
+    } finally {
+      setBulkLoading(false);
+    }
+  };
+
+  const toggleBulkStudent = (studentId) => {
+    setBulkForm((prev) => {
+      const selected = new Set(prev.student_ids.map(Number));
+      if (selected.has(Number(studentId))) selected.delete(Number(studentId));
+      else selected.add(Number(studentId));
+      return { ...prev, student_ids: [...selected] };
+    });
+  };
+
+  const toggleBulkHead = (feeHeadId) => {
+    setBulkForm((prev) => {
+      const headAmounts = { ...prev.headAmounts };
+      if (Object.prototype.hasOwnProperty.call(headAmounts, feeHeadId)) delete headAmounts[feeHeadId];
+      else headAmounts[feeHeadId] = "";
+      return { ...prev, headAmounts };
+    });
+  };
+
+  const buildBulkPayload = (apply) => ({
+    session_id: Number(bulkForm.session_id),
+    transportation_id: Number(bulkForm.transportation_id),
+    student_ids: bulkForm.student_ids.map(Number),
+    items: Object.entries(bulkForm.headAmounts).map(([fee_head_id, amount]) => ({
+      fee_head_id: Number(fee_head_id),
+      amount: Number(amount),
+    })),
+    remarks: safeStr(bulkForm.remarks) || "Bulk transport fee revision",
+    apply,
+  });
+
+  const previewAndApplyBulk = async () => {
+    const selectedHeads = Object.entries(bulkForm.headAmounts);
+    if (!bulkForm.session_id || !bulkForm.transportation_id) {
+      return Swal.fire("Validation", "Select a session and route.", "warning");
+    }
+    if (!bulkForm.student_ids.length) {
+      return Swal.fire("Validation", "Select at least one student.", "warning");
+    }
+    if (!selectedHeads.length) {
+      return Swal.fire("Validation", "Select at least one fee head.", "warning");
+    }
+    if (selectedHeads.some(([, amount]) => amount === "" || Number(amount) < 0)) {
+      return Swal.fire("Validation", "Enter a valid amount for every selected fee head.", "warning");
+    }
+
+    setBulkLoading(true);
+    try {
+      const { data: preview } = await api.post(
+        "/student-transport-fee-head-amounts/bulk/upsert",
+        buildBulkPayload(false)
+      );
+      const conflicts = preview?.changes?.filter((row) => row.conflict) || [];
+      const sampleRows = (preview?.changes || []).slice(0, 12);
+      const html = `
+        <div style="text-align:left;font-size:13px">
+          <p><b>${preview.summary.student_count}</b> students × <b>${preview.summary.fee_head_count}</b>
+          fee heads = <b>${preview.summary.change_count}</b> changes.</p>
+          <p>New: ${preview.summary.create_count} &nbsp; Updated: ${preview.summary.update_count}
+          &nbsp; Conflicts: <b style="color:${conflicts.length ? "#b42318" : "#16794b"}">${conflicts.length}</b></p>
+          <div style="max-height:280px;overflow:auto">
+            <table style="width:100%;border-collapse:collapse">
+              <thead><tr><th>Student</th><th>Head</th><th>Old</th><th>New</th><th>Paid/Concession</th></tr></thead>
+              <tbody>${sampleRows.map((row) => `<tr>
+                <td>${escapeHtml(row.student_name)}<br><small>${escapeHtml(row.admission_number)}</small></td>
+                <td>${escapeHtml(row.fee_heading)}</td>
+                <td>${row.previous_amount === null ? "—" : formatCurrency(row.previous_amount)}</td>
+                <td>${formatCurrency(row.new_amount)}</td>
+                <td style="color:${row.conflict ? "#b42318" : "inherit"}">${formatCurrency(row.paid_plus_concession)}</td>
+              </tr>`).join("")}</tbody>
+            </table>
+          </div>
+          ${preview.summary.change_count > sampleRows.length ? `<p><small>Showing first ${sampleRows.length} changes.</small></p>` : ""}
+        </div>`;
+      const confirmation = await Swal.fire({
+        icon: conflicts.length ? "error" : "question",
+        title: conflicts.length ? "Cannot apply revision" : "Apply bulk revision?",
+        html,
+        showCancelButton: !conflicts.length,
+        showConfirmButton: !conflicts.length,
+        confirmButtonText: "Apply all changes",
+        width: 850,
+      });
+      if (!confirmation.isConfirmed || conflicts.length) return;
+
+      const { data: applied } = await api.post(
+        "/student-transport-fee-head-amounts/bulk/upsert",
+        buildBulkPayload(true)
+      );
+      await fetchRows();
+      Swal.fire("Applied", applied.message || "Bulk transport revision saved.", "success");
+    } catch (error) {
+      Swal.fire(
+        "Error",
+        error?.response?.data?.error || "Failed to process bulk transport revision.",
+        "error"
+      );
+    } finally {
+      setBulkLoading(false);
     }
   };
 
@@ -634,6 +786,105 @@ const StudentTransportFeeHeadAmounts = () => {
               </div>
             </div>
           </div>
+        </div>
+
+        <div className="stfha-card p-3 mb-3">
+          <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+            <div>
+              <div className="h6 m-0" style={{ fontWeight: 800, color: "#203247" }}>
+                Bulk Transport Fee Revision
+              </div>
+              <div className="text-muted" style={{ fontSize: 13 }}>
+                Select a route, multiple students, and multiple fee heads. Preview before applying.
+              </div>
+            </div>
+            <span className="stfha-pill">Safe preview + atomic save</span>
+          </div>
+
+          <div className="row g-3">
+            <div className="col-md-4">
+              <label className="form-label stfha-label">Session</label>
+              <select className="form-select stfha-select" value={bulkForm.session_id}
+                onChange={(e) => {
+                  setBulkStudents([]);
+                  setBulkForm((prev) => ({ ...prev, session_id: e.target.value, student_ids: [] }));
+                }}>
+                <option value="">-- Select Session --</option>
+                {sessions.map((session) => <option key={session.id} value={session.id}>
+                  {getSessionLabel(session)}{session.is_active || session.isActive ? " (Active)" : ""}
+                </option>)}
+              </select>
+            </div>
+            <div className="col-md-5">
+              <label className="form-label stfha-label">Route</label>
+              <select className="form-select stfha-select" value={bulkForm.transportation_id}
+                onChange={(e) => {
+                  setBulkStudents([]);
+                  setBulkForm((prev) => ({ ...prev, transportation_id: e.target.value, student_ids: [] }));
+                }}>
+                <option value="">-- Select Route --</option>
+                {transportations.map((transport) => <option key={transport.id} value={transport.id}>
+                  {getTransportLabel(transport)}
+                </option>)}
+              </select>
+            </div>
+            <div className="col-md-3 d-flex align-items-end">
+              <button type="button" className="btn btn-outline-primary stfha-btn w-100"
+                onClick={loadBulkStudents} disabled={bulkLoading}>
+                {bulkLoading ? "Loading..." : "Load Route Students"}
+              </button>
+            </div>
+          </div>
+
+          {bulkStudents.length > 0 && <>
+            <div className="row g-3 mt-1">
+              <div className="col-lg-6">
+                <div className="d-flex justify-content-between align-items-center mb-2">
+                  <label className="form-label stfha-label m-0">Students ({bulkForm.student_ids.length}/{bulkStudents.length})</label>
+                  <button type="button" className="btn btn-sm btn-outline-secondary" onClick={() =>
+                    setBulkForm((prev) => ({ ...prev, student_ids: prev.student_ids.length === bulkStudents.length ? [] : bulkStudents.map((s) => Number(s.id)) }))}>
+                    {bulkForm.student_ids.length === bulkStudents.length ? "Clear all" : "Select all"}
+                  </button>
+                </div>
+                <div className="border rounded p-2" style={{ maxHeight: 290, overflowY: "auto" }}>
+                  {bulkStudents.map((student) => <label key={student.id} className="d-flex gap-2 align-items-start py-1">
+                    <input type="checkbox" className="form-check-input" checked={bulkForm.student_ids.includes(Number(student.id))}
+                      onChange={() => toggleBulkStudent(student.id)} />
+                    <span><b>{student.name}</b> {student.admission_number ? `(${student.admission_number})` : ""}
+                      <small className="d-block text-muted">{student.class_name || "Class not available"}</small></span>
+                  </label>)}
+                </div>
+              </div>
+              <div className="col-lg-6">
+                <label className="form-label stfha-label">Fee Heads and Revised Amounts</label>
+                <div className="border rounded p-2" style={{ maxHeight: 290, overflowY: "auto" }}>
+                  {feeHeads.map((head) => {
+                    const selected = Object.prototype.hasOwnProperty.call(bulkForm.headAmounts, head.id);
+                    return <div key={head.id} className="d-flex gap-2 align-items-center py-1">
+                      <input type="checkbox" className="form-check-input" checked={selected} onChange={() => toggleBulkHead(head.id)} />
+                      <span style={{ flex: 1 }}>{getFeeHeadLabel(head)}</span>
+                      <input type="number" min="0" step="0.01" className="form-control form-control-sm" style={{ width: 130 }}
+                        placeholder="Amount" disabled={!selected} value={selected ? bulkForm.headAmounts[head.id] : ""}
+                        onChange={(e) => setBulkForm((prev) => ({ ...prev, headAmounts: { ...prev.headAmounts, [head.id]: e.target.value } }))} />
+                    </div>;
+                  })}
+                </div>
+              </div>
+            </div>
+            <div className="row g-3 mt-1">
+              <div className="col-md-9">
+                <label className="form-label stfha-label">Remarks</label>
+                <input className="form-control stfha-input" value={bulkForm.remarks}
+                  placeholder="Example: Revised transport fee effective from Second Head"
+                  onChange={(e) => setBulkForm((prev) => ({ ...prev, remarks: e.target.value }))} />
+              </div>
+              <div className="col-md-3 d-flex align-items-end">
+                <button type="button" className="btn btn-primary stfha-btn w-100" onClick={previewAndApplyBulk} disabled={bulkLoading}>
+                  Preview & Apply
+                </button>
+              </div>
+            </div>
+          </>}
         </div>
 
         <div className="row g-3">

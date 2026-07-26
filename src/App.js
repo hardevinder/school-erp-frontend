@@ -36,6 +36,8 @@ import Transportation from "./pages/Transportation";
 import Buses from "./pages/Buses";
 import StudentTransportAssignments from "./pages/StudentTransportAssignments";
 import StudentTransportFeeHeadAmounts from "./pages/StudentTransportFeeHeadAmounts";
+import TransportExpenses from "./pages/TransportExpenses";
+import ExpenseManagement from "./pages/ExpenseManagement";
 import ModeOfTransactions from "./pages/ModeOfTransactions";
 import SchoolBankAccounts from "./pages/SchoolBankAccounts";
 import PaymentGatewaySettings from "./pages/PaymentGatewaySettings";  
@@ -176,6 +178,7 @@ import TransportAttendanceReport from "./pages/TransportAttendanceReport";
 import LiveBusTracking from "./pages/LiveBusTracking";
 
 import StudentStatsSummary from "./pages/StudentStatsSummary";
+import Student360Portal from "./pages/Student360Portal";
 
 import AttendanceEntry from "./pages/AttendanceEntry";
 
@@ -525,6 +528,7 @@ function App() {
               </RequirePermission>
             }
           />
+          <Route path="/student-360/:studentId" element={<RequireRole roles={["admin", "superadmin"]}><Student360Portal /></RequireRole>} />
 
           <Route
             path="/student-id-cards"
@@ -954,6 +958,37 @@ function App() {
             }
           />
           <Route path="/transportation" element={<Navigate to="/transportations" replace />} />
+
+          <Route
+            path="/expense-management"
+            element={
+              <RequireRole roles={["accounts", "account", "admin", "superadmin"]}>
+                <ExpenseManagement />
+              </RequireRole>
+            }
+          />
+
+          <Route
+            path="/examination-expenses"
+            element={
+              <RequireRole roles={["examination", "admin", "superadmin"]}>
+                <ExpenseManagement
+                  basePath="/examination-expenses"
+                  title="Examination Expenses"
+                  subtitle="Examination, Admin and Superadmin expense records"
+                />
+              </RequireRole>
+            }
+          />
+
+          <Route
+            path="/transport-expenses"
+            element={
+              <RequireRole roles={["transport", "transport_admin", "admin", "superadmin", "accounts"]}>
+                <TransportExpenses />
+              </RequireRole>
+            }
+          />
 
           {/* ✅ Transport: Buses (guarded) */}
           <Route
