@@ -4,7 +4,7 @@ import TeacherTimetableAssignment from "./TeacherTimetableAssignment";
 import "./CombinedTimetableAssignment.css";
 
 const TABS = [
-  { key: "class", label: "Class Wise" },
+  { key: "class", label: "Class / Section Wise" },
   { key: "teacher", label: "Teacher Wise" },
 ];
 

@@ -107,10 +107,11 @@ const TeacherTimetableAssignment = () => {
         const newConflict = createEmptyConflictGrid(periods);
 
         (Array.isArray(data) ? data : []).forEach((record) => {
-          const { day, periodId, classId, subjectId, id } = record;
+          const { day, periodId, classId, sectionId, subjectId, id } = record;
           if (newAssign[day] && newAssign[day][periodId] !== undefined) {
             newAssign[day][periodId] = {
               classId: classId || 0,
+              sectionId: sectionId || null,
               subjectId: subjectId || 0,
               id: id || null,
             };
@@ -188,6 +189,7 @@ const TeacherTimetableAssignment = () => {
 
     if (field === 'classId') {
       newCell.subjectId = 0;
+      newCell.sectionId = null;
     }
 
     setAssignments((prev) => ({
@@ -355,6 +357,7 @@ const TeacherTimetableAssignment = () => {
               periodId: period.id,
               teacherId: Number(selectedTeacher),
               classId: cell.classId,
+              ...(cell.sectionId ? { sectionId: cell.sectionId } : {}),
               subjectId: cell.subjectId,
               day,
               source: 'teacher',
@@ -396,6 +399,7 @@ const TeacherTimetableAssignment = () => {
             ...prev[record.day],
             [record.periodId]: {
               classId: savedRow.classId,
+              sectionId: savedRow.sectionId || null,
               subjectId: savedRow.subjectId,
               id: savedRow.id || null,
             },

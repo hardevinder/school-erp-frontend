@@ -595,14 +595,17 @@ const TeacherTimetableView = () => {
     const selectedTeacherId = toNum(teacherSub.teacherId ?? teacherSub.id);
 
     let classId = null;
+    let sectionId = null;
     let subjectId = null;
     for (const rec of cellRecords) {
       classId = classId ?? toNum(rec?.Class?.id ?? rec?.classId);
+      sectionId = sectionId ?? toNum(rec?.Section?.id ?? rec?.sectionId);
       subjectId = subjectId ?? toNum(rec?.Subject?.id ?? rec?.subjectId);
-      if (classId && subjectId) break;
+      if (classId && sectionId && subjectId) break;
     }
 
     if (!classId) return { error: 'Class record lacks a valid class ID.' };
+    if (!sectionId) return { error: 'Class record lacks a valid section ID.' };
     if (!subjectId) return { error: 'Class record lacks a valid subject ID.' };
     if (!selectedTeacherId) return { error: 'Selected substitute teacher is invalid.' };
 
@@ -611,6 +614,7 @@ const TeacherTimetableView = () => {
         date: selectedDate,
         periodId,
         classId,
+        sectionId,
         teacherId: selectedTeacherId, // USER id
         original_teacherId: originalTeacherId, // USER id
         subjectId,

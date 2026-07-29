@@ -21,6 +21,8 @@ const buttonStyle = {
 const TimetableAssignment = () => {
   const [classes, setClasses] = useState([]);
   const [selectedClass, setSelectedClass] = useState(null);
+  const [sections, setSections] = useState([]);
+  const [selectedSection, setSelectedSection] = useState(null);
   const [periods, setPeriods] = useState([]);
   const [associations, setAssociations] = useState([]);
   const [hovered, setHovered] = useState({ day: null, period: null });
@@ -85,6 +87,35 @@ const TimetableAssignment = () => {
   }, []);
 
   useEffect(() => {
+    fetch(`${API_URL}/sections`, { headers: getAuthHeaders() })
+      .then((res) => res.json())
+      .then((data) => setSections(Array.isArray(data) ? data : []))
+      .catch((error) => console.error('Error fetching sections:', error));
+  }, []);
+
+  const classSections = useMemo(
+    () =>
+      sections.filter(
+        (section) =>
+          String(section.class_id ?? section.classId ?? '') === String(selectedClass ?? '')
+      ),
+    [sections, selectedClass]
+  );
+
+  useEffect(() => {
+    const stillValid = classSections.some(
+      (section) => String(section.id) === String(selectedSection)
+    );
+    if (!stillValid) {
+      const sectionA =
+        classSections.find(
+          (section) => String(section.section_name || '').trim().toUpperCase() === 'A'
+        ) || classSections[0];
+      setSelectedSection(sectionA?.id || null);
+    }
+  }, [classSections, selectedSection]);
+
+  useEffect(() => {
     fetch(`${API_URL}/periods`, { headers: getAuthHeaders() })
       .then((res) => res.json())
       .then((data) => {
@@ -117,9 +148,9 @@ const TimetableAssignment = () => {
   }, []);
 
   useEffect(() => {
-    if (!selectedClass || periods.length === 0) return;
+    if (!selectedClass || !selectedSection || periods.length === 0) return;
 
-    fetch(`${API_URL}/period-class-teacher-subject/class/${selectedClass}`, {
+    fetch(`${API_URL}/period-class-teacher-subject/class/${selectedClass}?sectionId=${selectedSection}`, {
       headers: getAuthHeaders(),
     })
       .then((res) => res.json())
@@ -190,7 +221,7 @@ const TimetableAssignment = () => {
         setConflictCells(newConflict);
       })
       .catch((error) => console.error('Error fetching timetable for class:', error));
-  }, [selectedClass, periods]);
+  }, [selectedClass, selectedSection, periods]);
 
   const getAvailableSubjects = () => {
     const filtered = associations.filter((assoc) => assoc.class_id === selectedClass);
@@ -521,6 +552,7 @@ const TimetableAssignment = () => {
             const record = {
               periodId: period.id,
               classId: selectedClass,
+              sectionId: selectedSection,
               day,
             };
 
@@ -579,7 +611,7 @@ const TimetableAssignment = () => {
       swal('Success', 'Timetable saved successfully!', 'success');
 
       const refreshResponse = await fetch(
-        `${API_URL}/period-class-teacher-subject/class/${selectedClass}`,
+        `${API_URL}/period-class-teacher-subject/class/${selectedClass}?sectionId=${selectedSection}`,
         { headers: getAuthHeaders() }
       );
       const refreshData = await refreshResponse.json();
@@ -649,8 +681,8 @@ const TimetableAssignment = () => {
   };
 
   const handlePrintPdf = async () => {
-    if (!selectedClass) {
-      swal('Select Class', 'Please select a class first.', 'warning');
+    if (!selectedClass || !selectedSection) {
+      swal('Select Class & Section', 'Please select a class and section first.', 'warning');
       return;
     }
 
@@ -658,7 +690,7 @@ const TimetableAssignment = () => {
       setPrinting(true);
 
       const response = await fetch(
-        `${API_URL}/period-class-teacher-subject/class/${selectedClass}/pdf`,
+        `${API_URL}/period-class-teacher-subject/class/${selectedClass}/pdf?sectionId=${selectedSection}`,
         {
           method: 'GET',
           headers: getPdfHeaders(),
@@ -738,6 +770,9 @@ const TimetableAssignment = () => {
 
   const selectedClassName =
     classes.find((cls) => String(cls.id) === String(selectedClass))?.class_name || 'Select Class';
+  const selectedSectionName =
+    classSections.find((section) => String(section.id) === String(selectedSection))
+      ?.section_name || 'Select Section';
 
   const getCellStatusStyle = (statuses = []) => {
     if (statuses.length > 0 && statuses.every((status) => status === 'saved')) {
@@ -893,20 +928,22 @@ const TimetableAssignment = () => {
             <div>
               <h4 className="mb-1 fw-bold text-dark">Timetable Assignment</h4>
               <div className="small text-muted">
-                Compact class-wise timetable view for smaller screens.
+                Compact class and section-wise timetable view for smaller screens.
               </div>
             </div>
 
             <div className="d-flex flex-column flex-sm-row gap-2 align-items-stretch">
               <div className="bg-white border rounded-3 px-3 py-2 shadow-sm">
                 <div className="small text-muted">Class</div>
-                <div className="fw-semibold text-dark">{selectedClassName}</div>
+                <div className="fw-semibold text-dark">
+                  {selectedClassName} - {selectedSectionName}
+                </div>
               </div>
 
               <button
                 className="btn btn-outline-dark fw-semibold px-4"
                 onClick={handlePrintPdf}
-                disabled={printing || !selectedClass}
+                disabled={printing || !selectedClass || !selectedSection}
                 style={{ borderRadius: '10px', minWidth: '140px' }}
               >
                 {printing ? 'Opening PDF...' : 'Print PDF'}
@@ -915,7 +952,7 @@ const TimetableAssignment = () => {
               <button
                 className="btn btn-primary fw-semibold px-4"
                 onClick={handleSave}
-                disabled={saving || !selectedClass}
+                disabled={saving || !selectedClass || !selectedSection}
                 style={{ borderRadius: '10px', minWidth: '150px' }}
               >
                 {saving ? 'Saving...' : 'Save Timetable'}
@@ -924,7 +961,7 @@ const TimetableAssignment = () => {
           </div>
 
           <div className="row g-2 mt-2 align-items-stretch">
-            <div className="col-lg-4">
+            <div className="col-lg-3">
               <div className="bg-white border rounded-4 p-2 h-100 shadow-sm">
                 <label htmlFor="classSelect" className="form-label fw-semibold text-dark small mb-1">
                   Select Class
@@ -939,6 +976,29 @@ const TimetableAssignment = () => {
                   {classes.map((cls) => (
                     <option key={cls.id} value={cls.id}>
                       {cls.class_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="col-lg-3">
+              <div className="bg-white border rounded-4 p-2 h-100 shadow-sm">
+                <label htmlFor="sectionSelect" className="form-label fw-semibold text-dark small mb-1">
+                  Select Section
+                </label>
+                <select
+                  id="sectionSelect"
+                  className="form-select"
+                  value={selectedSection || ''}
+                  onChange={(e) => setSelectedSection(parseInt(e.target.value, 10))}
+                  disabled={!selectedClass || !classSections.length}
+                  style={{ borderRadius: '10px', minHeight: '40px' }}
+                >
+                  {!classSections.length && <option value="">No sections</option>}
+                  {classSections.map((section) => (
+                    <option key={section.id} value={section.id}>
+                      {section.section_name}
                     </option>
                   ))}
                 </select>
