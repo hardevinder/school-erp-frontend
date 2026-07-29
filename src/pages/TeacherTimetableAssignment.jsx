@@ -25,7 +25,7 @@ const TeacherTimetableAssignment = () => {
     days.forEach((day) => {
       grid[day] = {};
       periodList.forEach((period) => {
-        grid[day][period.id] = { classId: 0, subjectId: 0, id: null };
+        grid[day][period.id] = { classId: 0, sectionId: 0, subjectId: 0, id: null };
       });
     });
     return grid;
@@ -46,6 +46,7 @@ const TeacherTimetableAssignment = () => {
   const [selectedTeacher, setSelectedTeacher] = useState('');
   const [periods, setPeriods] = useState([]);
   const [associations, setAssociations] = useState([]);
+  const [sections, setSections] = useState([]);
 
   const [assignments, setAssignments] = useState({});
   const [savedAssignments, setSavedAssignments] = useState({});
@@ -53,6 +54,21 @@ const TeacherTimetableAssignment = () => {
   const [hovered, setHovered] = useState({ day: null, period: null });
   const [saving, setSaving] = useState(false);
   const [printing, setPrinting] = useState(false);
+
+  useEffect(() => {
+    fetch(`${API_URL}/sections`, { headers: getAuthHeaders() })
+      .then((res) => res.json())
+      .then((data) => setSections(Array.isArray(data) ? data : []))
+      .catch((error) => console.error('Error fetching sections:', error));
+  }, []);
+
+  const defaultSectionId = useMemo(
+    () =>
+      sections.find(
+        (section) => String(section.section_name || '').trim().toUpperCase() === 'A'
+      )?.id || sections[0]?.id || 0,
+    [sections]
+  );
 
   useEffect(() => {
     fetch(`${API_URL}/periods`, {
@@ -96,7 +112,7 @@ const TeacherTimetableAssignment = () => {
   }, []);
 
   useEffect(() => {
-    if (!selectedTeacher || periods.length === 0) return;
+    if (!selectedTeacher || periods.length === 0 || sections.length === 0) return;
 
     fetch(`${API_URL}/period-class-teacher-subject/timetable-teacher/${selectedTeacher}`, {
       headers: getAuthHeaders(),
@@ -111,7 +127,7 @@ const TeacherTimetableAssignment = () => {
           if (newAssign[day] && newAssign[day][periodId] !== undefined) {
             newAssign[day][periodId] = {
               classId: classId || 0,
-              sectionId: sectionId || null,
+              sectionId: sectionId || defaultSectionId,
               subjectId: subjectId || 0,
               id: id || null,
             };
@@ -124,7 +140,7 @@ const TeacherTimetableAssignment = () => {
         setConflictCells(newConflict);
       })
       .catch((error) => console.error('Error fetching timetable for teacher:', error));
-  }, [selectedTeacher, periods]);
+  }, [selectedTeacher, periods, sections, defaultSectionId]);
 
   const getAvailableClasses = () => {
     if (!Array.isArray(associations) || !selectedTeacher) return [];
@@ -160,12 +176,15 @@ const TeacherTimetableAssignment = () => {
   };
 
   const updateConflictStatus = (day, periodId, newCell) => {
-    const saved = savedAssignments?.[day]?.[periodId] || { classId: 0, subjectId: 0 };
+    const saved =
+      savedAssignments?.[day]?.[periodId] || { classId: 0, sectionId: 0, subjectId: 0 };
 
     const status =
       newCell.classId === 0 && newCell.subjectId === 0
         ? ''
-        : newCell.classId === saved.classId && newCell.subjectId === saved.subjectId
+        : newCell.classId === saved.classId &&
+          newCell.sectionId === saved.sectionId &&
+          newCell.subjectId === saved.subjectId
         ? 'saved'
         : 'pending';
 
@@ -180,7 +199,12 @@ const TeacherTimetableAssignment = () => {
 
   const handleAssignmentChange = (day, periodId, field, value) => {
     const currentCell =
-      assignments?.[day]?.[periodId] || { classId: 0, subjectId: 0, id: null };
+      assignments?.[day]?.[periodId] || {
+        classId: 0,
+        sectionId: 0,
+        subjectId: 0,
+        id: null,
+      };
 
     const newCell = {
       ...currentCell,
@@ -189,7 +213,7 @@ const TeacherTimetableAssignment = () => {
 
     if (field === 'classId') {
       newCell.subjectId = 0;
-      newCell.sectionId = null;
+      newCell.sectionId = value ? defaultSectionId : 0;
     }
 
     setAssignments((prev) => ({
@@ -220,6 +244,7 @@ const TeacherTimetableAssignment = () => {
                   [periodId]: {
                     ...(newAssignments[d][periodId] || {}),
                     classId: newCell.classId,
+                    sectionId: newCell.sectionId,
                     subjectId: newCell.subjectId,
                   },
                 };
@@ -353,11 +378,14 @@ const TeacherTimetableAssignment = () => {
         periods.forEach((period) => {
           const cell = assignments?.[day]?.[period.id];
           if (cell && cell.classId && cell.subjectId) {
+            if (!cell.sectionId) {
+              throw new Error(`Please select a section for ${day}, period ${period.period_name}.`);
+            }
             records.push({
               periodId: period.id,
               teacherId: Number(selectedTeacher),
               classId: cell.classId,
-              ...(cell.sectionId ? { sectionId: cell.sectionId } : {}),
+              sectionId: cell.sectionId,
               subjectId: cell.subjectId,
               day,
               source: 'teacher',
@@ -851,6 +879,7 @@ const TeacherTimetableAssignment = () => {
                     {periods.map((period) => {
                       const cellAssignment = assignments?.[day]?.[period.id] || {
                         classId: 0,
+                        sectionId: 0,
                         subjectId: 0,
                         id: null,
                       };
@@ -906,6 +935,27 @@ const TeacherTimetableAssignment = () => {
 
                               <select
                                 className="form-select form-select-sm compact-select"
+                                value={cellAssignment.sectionId || 0}
+                                onChange={(e) =>
+                                  handleAssignmentChange(
+                                    day,
+                                    period.id,
+                                    'sectionId',
+                                    parseInt(e.target.value, 10)
+                                  )
+                                }
+                                disabled={!cellAssignment.classId || cellAssignment.classId === 0}
+                              >
+                                <option value={0}>Select Section</option>
+                                {sections.map((section) => (
+                                  <option key={section.id} value={section.id}>
+                                    {section.section_name}
+                                  </option>
+                                ))}
+                              </select>
+
+                              <select
+                                className="form-select form-select-sm compact-select"
                                 value={cellAssignment.subjectId || 0}
                                 onChange={(e) =>
                                   handleAssignmentChange(
@@ -915,7 +965,11 @@ const TeacherTimetableAssignment = () => {
                                     parseInt(e.target.value, 10)
                                   )
                                 }
-                                disabled={!cellAssignment.classId || cellAssignment.classId === 0}
+                                disabled={
+                                  !cellAssignment.classId ||
+                                  cellAssignment.classId === 0 ||
+                                  !cellAssignment.sectionId
+                                }
                               >
                                 <option value={0}>Select Subject</option>
                                 {getAvailableSubjects(cellAssignment.classId).map((subject) => (
