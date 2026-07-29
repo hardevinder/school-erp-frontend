@@ -94,12 +94,8 @@ const TimetableAssignment = () => {
   }, []);
 
   const classSections = useMemo(
-    () =>
-      sections.filter(
-        (section) =>
-          String(section.class_id ?? section.classId ?? '') === String(selectedClass ?? '')
-      ),
-    [sections, selectedClass]
+    () => sections,
+    [sections]
   );
 
   useEffect(() => {
