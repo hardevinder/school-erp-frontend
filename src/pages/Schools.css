@@ -21,6 +21,117 @@ h1 {
   overflow: visible !important;
 }
 
+.school-editor {
+  max-height: calc(100dvh - 190px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 2px 8px 8px;
+  scrollbar-width: thin;
+}
+
+.school-editor .card {
+  border: 0;
+  border-radius: 14px;
+  box-shadow: 0 4px 18px rgba(15, 23, 42, 0.08);
+  overflow: hidden;
+}
+
+.school-editor .card-header {
+  background: linear-gradient(135deg, #f8fafc, #eef2ff);
+  border-bottom-color: #e2e8f0;
+  color: #172554;
+}
+
+.school-map-heading,
+.school-map-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.school-map-search-wrap {
+  position: relative;
+  margin: 12px 0 10px;
+}
+
+.school-map-search-wrap > i {
+  position: absolute;
+  z-index: 2;
+  top: 50%;
+  left: 13px;
+  color: #64748b;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.school-map-search-wrap .form-control {
+  min-height: 44px;
+  padding-left: 38px;
+  border-radius: 10px;
+  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.06);
+}
+
+.school-map-search-wrap gmp-place-autocomplete {
+  width: 100%;
+  min-height: 44px;
+  color-scheme: light;
+}
+
+/* Google Places appends its suggestions to <body>; keep them above SweetAlert. */
+.pac-container {
+  z-index: 20000 !important;
+}
+
+.swal2-popup:has(.school-editor) .swal2-close {
+  top: 8px;
+  right: 8px;
+  color: #475569;
+}
+
+.school-map-shell {
+  position: relative;
+  height: clamp(280px, 40vh, 420px);
+  overflow: hidden;
+  border: 1px solid #cbd5e1;
+  border-radius: 14px;
+  background: #e2e8f0;
+}
+
+#swal-school-map {
+  width: 100%;
+  height: 100%;
+}
+
+.school-map-loading {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  color: #334155;
+  background: linear-gradient(135deg, #eff6ff, #f8fafc);
+}
+
+.school-map-error {
+  display: flex;
+  height: 100%;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  padding: 20px;
+  color: #b91c1c;
+  text-align: center;
+  background: #fff7f7;
+}
+
+.school-map-footer {
+  min-height: 34px;
+  padding-top: 7px;
+}
+
 /* Scroll only inside form, not whole popup */
 .school-swal-form {
   max-height: calc(100vh - 190px);
@@ -127,5 +238,44 @@ h1 {
 
   h1 {
     font-size: 20px;
+  }
+
+  .swal2-popup:has(.school-editor) {
+    width: calc(100% - 16px) !important;
+    max-height: calc(100dvh - 16px) !important;
+    padding: 12px !important;
+  }
+
+  .swal2-popup:has(.school-editor) .swal2-title {
+    padding-top: 4px;
+    font-size: 1.25rem;
+  }
+
+  .school-editor {
+    max-height: calc(100dvh - 170px);
+    padding-inline: 2px;
+  }
+
+  .school-editor .card-body {
+    padding: 14px 12px;
+  }
+
+  .school-map-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .school-map-heading .btn {
+    width: 100%;
+  }
+
+  .school-map-shell {
+    height: 300px;
+  }
+
+  .school-map-footer {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
   }
 }

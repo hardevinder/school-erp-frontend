@@ -1240,6 +1240,7 @@ export default function Sidebar({ headerHeight = 56 }) {
           { key: "teacher-timetable-display", label: "Timetable", icon: "bi-table", path: "/teacher-timetable-display" },
           { key: "combined-teacher-substitution", label: "My Substitutions", icon: "bi-arrow-repeat", path: "/combined-teacher-substitution" },
           { key: "lesson-plan", label: "Lesson Plan", icon: "bi-journal-text", path: "/lesson-plan" },
+          { key: "my-visitors", label: "My Visitors", icon: "bi-person-badge", path: "/my-visitors" },
         ],
       });
 

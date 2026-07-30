@@ -161,6 +161,7 @@ import GatePass from "./pages/GatePass";
 
 // ✅ NEW: Visitors page
 import Visitors from "./pages/Visitors";
+import MyVisitors from "./pages/MyVisitors";
 
 // ✅ Academic Calendar (Coordinator CRUD page)
 import AcademicCalendar from "./pages/AcademicCalendar";
@@ -505,6 +506,7 @@ function App() {
             }
           />
           <Route path="/visitor" element={<Navigate to="/visitors" replace />} />
+          <Route path="/my-visitors" element={<MyVisitors />} />
 
           {/* Chat */}
           <Route path="/chat" element={<Chat chatId="chat_room_1" currentUserId={currentUserId} />} />

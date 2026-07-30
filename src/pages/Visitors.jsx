@@ -365,6 +365,23 @@ const Visitors = () => {
     }
   };
 
+  const viewIdProof = async (v) => {
+    try {
+      const response = await api.get(`/visitors/${v.id}/id-proof`, {
+        responseType: "blob",
+      });
+      const url = URL.createObjectURL(response.data);
+      window.open(url, "_blank", "noopener,noreferrer");
+      window.setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch (err) {
+      Swal.fire(
+        "ID Proof Unavailable",
+        err?.response?.data?.error || "The ID proof may have expired or been deleted.",
+        "error"
+      );
+    }
+  };
+
   // ---------------- Filter table ----------------
   const filtered = useMemo(() => {
     const s = search.trim().toLowerCase();
@@ -477,7 +494,9 @@ const Visitors = () => {
             <th>Purpose</th>
             <th>Meet</th>
             <th>Status</th>
+            <th>Response</th>
             <th>Check-in</th>
+            <th>Meeting</th>
             <th>Check-out</th>
             <th style={{ width: 320 }}>Actions</th>
           </tr>
@@ -526,10 +545,30 @@ const Visitors = () => {
                     {v.status}
                   </span>
                 </td>
+                <td>
+                  <span className={`badge ${
+                    v.approval_status === "ACCEPTED"
+                      ? "bg-success"
+                      : v.approval_status === "DECLINED"
+                      ? "bg-danger"
+                      : "bg-warning text-dark"
+                  }`}>
+                    {v.approval_status || "PENDING"}
+                  </span>
+                </td>
                 <td>{inAt}</td>
+                <td>
+                  <div className="small">Start: {v.meeting_started_at ? new Date(v.meeting_started_at).toLocaleString() : "-"}</div>
+                  <div className="small">End: {v.meeting_ended_at ? new Date(v.meeting_ended_at).toLocaleString() : "-"}</div>
+                </td>
                 <td>{outAt}</td>
                 <td>
                   <div className="d-flex gap-2 flex-wrap">
+                    {v.has_id_proof && (
+                      <button className="btn btn-outline-info btn-sm" onClick={() => viewIdProof(v)}>
+                        View ID
+                      </button>
+                    )}
                     <button className="btn btn-outline-dark btn-sm" onClick={() => handlePdf(v)}>
                       PDF
                     </button>

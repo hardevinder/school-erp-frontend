@@ -193,7 +193,7 @@ const loadGoogleMapsApi = () => {
   return googleMapsLoaderPromise;
 };
 
-const LocationPickerModal = ({
+export const LocationPickerModal = ({
   open,
   title,
   initialLocation,

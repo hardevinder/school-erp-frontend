@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import Swal from "sweetalert2";
 import api from "../api";
+import { LocationPickerModal } from "./StudentTransportAssignments";
 
 const blankForm = {
   employee_id: "",
@@ -9,7 +10,13 @@ const blankForm = {
   drop_bus_id: "",
   drop_route_id: "",
   pickup_stop: "",
+  pickup_address: "",
+  pickup_latitude: "",
+  pickup_longitude: "",
   drop_stop: "",
+  drop_address: "",
+  drop_latitude: "",
+  drop_longitude: "",
   start_date: new Date().toISOString().slice(0, 10),
 };
 
@@ -21,6 +28,7 @@ export default function EmployeeTransportAssignments() {
   const [form, setForm] = useState(blankForm);
   const [search, setSearch] = useState("");
   const [saving, setSaving] = useState(false);
+  const [pickerType, setPickerType] = useState(null);
 
   const load = async () => {
     try {
@@ -66,7 +74,13 @@ export default function EmployeeTransportAssignments() {
       drop_bus_id: current?.drop_bus_id ? String(current.drop_bus_id) : "",
       drop_route_id: current?.drop_route_id ? String(current.drop_route_id) : "",
       pickup_stop: current?.pickup_stop || "",
+      pickup_address: current?.pickup_address || "",
+      pickup_latitude: current?.pickup_latitude || "",
+      pickup_longitude: current?.pickup_longitude || "",
       drop_stop: current?.drop_stop || "",
+      drop_address: current?.drop_address || "",
+      drop_latitude: current?.drop_latitude || "",
+      drop_longitude: current?.drop_longitude || "",
     });
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -111,6 +125,26 @@ export default function EmployeeTransportAssignments() {
 
   const busOptions = buses.map((bus) => ({ value: bus.id, label: `${bus.bus_no || `Bus ${bus.id}`}${bus.reg_no ? ` (${bus.reg_no})` : ""}` }));
   const routeOptions = routes.map((route) => ({ value: route.id, label: route.route_name || route.route_code || `Route ${route.id}` }));
+  const pickupLocation = {
+    address: form.pickup_address,
+    latitude: form.pickup_latitude,
+    longitude: form.pickup_longitude,
+  };
+  const dropLocation = {
+    address: form.drop_address,
+    latitude: form.drop_latitude,
+    longitude: form.drop_longitude,
+  };
+  const applyPickedLocation = (location) => {
+    const prefix = pickerType === "pickup" ? "pickup" : "drop";
+    setForm((old) => ({
+      ...old,
+      [`${prefix}_address`]: location.address || "",
+      [`${prefix}_latitude`]: location.latitude ?? "",
+      [`${prefix}_longitude`]: location.longitude ?? "",
+    }));
+    setPickerType(null);
+  };
 
   return (
     <div className="container-fluid py-3">
@@ -131,9 +165,29 @@ export default function EmployeeTransportAssignments() {
           {field("pickup_bus_id", "Pickup bus", busOptions)}
           {field("pickup_route_id", "Pickup route", routeOptions)}
           <div className="col-md-2"><label className="form-label">Pickup stop</label><input className="form-control" name="pickup_stop" value={form.pickup_stop} onChange={change} /></div>
+          <div className="col-md-6">
+            <div className="card card-body h-100 border-primary-subtle bg-light">
+              <div className="d-flex align-items-center justify-content-between mb-2">
+                <strong><i className="bi bi-geo-alt-fill text-primary me-2" />Pickup Location</strong>
+                <button type="button" className="btn btn-sm btn-outline-primary" onClick={() => setPickerType("pickup")}>Select on Map</button>
+              </div>
+              <div className="text-muted small">{form.pickup_address || "No pickup location selected"}</div>
+              {form.pickup_latitude && <div className="small mt-2"><strong>Coordinates:</strong> {form.pickup_latitude}, {form.pickup_longitude}</div>}
+            </div>
+          </div>
           {field("drop_bus_id", "Drop bus", busOptions)}
           {field("drop_route_id", "Drop route", routeOptions)}
           <div className="col-md-3"><label className="form-label">Drop stop</label><input className="form-control" name="drop_stop" value={form.drop_stop} onChange={change} /></div>
+          <div className="col-md-6">
+            <div className="card card-body h-100 border-success-subtle bg-light">
+              <div className="d-flex align-items-center justify-content-between mb-2">
+                <strong><i className="bi bi-geo-alt-fill text-success me-2" />Drop Location</strong>
+                <button type="button" className="btn btn-sm btn-outline-success" onClick={() => setPickerType("drop")}>Select on Map</button>
+              </div>
+              <div className="text-muted small">{form.drop_address || "No drop location selected"}</div>
+              {form.drop_latitude && <div className="small mt-2"><strong>Coordinates:</strong> {form.drop_latitude}, {form.drop_longitude}</div>}
+            </div>
+          </div>
           <div className="col-md-3"><label className="form-label">Start date</label><input type="date" className="form-control" name="start_date" value={form.start_date} onChange={change} /></div>
           <div className="col-12"><button className="btn btn-success" disabled={saving}>{saving ? "Saving…" : "Assign Bus Facility"}</button></div>
         </div>
@@ -156,6 +210,20 @@ export default function EmployeeTransportAssignments() {
           })}</tbody>
         </table></div>
       </div>
+      <LocationPickerModal
+        open={pickerType === "pickup"}
+        title="Select Employee Pickup Location"
+        initialLocation={pickupLocation}
+        onClose={() => setPickerType(null)}
+        onConfirm={applyPickedLocation}
+      />
+      <LocationPickerModal
+        open={pickerType === "drop"}
+        title="Select Employee Drop Location"
+        initialLocation={dropLocation}
+        onClose={() => setPickerType(null)}
+        onConfirm={applyPickedLocation}
+      />
     </div>
   );
 }
