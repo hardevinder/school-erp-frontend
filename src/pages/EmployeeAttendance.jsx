@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import api from "../api";
 import Swal from "sweetalert2";
 import "./EmployeeAttendance.css";
+import EmployeeAvatar from "../components/EmployeeAvatar";
 
 /* =========================
    Helpers / Constants
@@ -760,14 +761,17 @@ export default function EmployeeAttendance() {
                   <td>{idx + 1}</td>
 
                   <td>
-                    <button
-                      type="button"
-                      className="btn btn-link p-0 text-decoration-none"
-                      onClick={() => openCalendar(emp)}
-                      title="View monthly attendance"
-                    >
-                      {emp?.name || "-"}
-                    </button>
+                    <div className="d-flex align-items-center gap-2">
+                      <EmployeeAvatar person={emp} size={40} />
+                      <button
+                        type="button"
+                        className="btn btn-link p-0 text-decoration-none text-start"
+                        onClick={() => openCalendar(emp)}
+                        title="View monthly attendance"
+                      >
+                        {emp?.name || "-"}
+                      </button>
+                    </div>
                   </td>
 
                   <td>{emp?.department?.name || "-"}</td>
@@ -974,6 +978,7 @@ function CalendarModal({
           <div className="modal-content shadow-lg">
             <div className="modal-header">
               <div className="d-flex align-items-center gap-3">
+                <EmployeeAvatar person={employee} size={42} />
                 <h5 className="modal-title mb-0">{employee?.name}</h5>
                 <span className="badge bg-secondary">
                   Attendance Calendar

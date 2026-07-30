@@ -1,5 +1,6 @@
 // src/pages/StudentTransportAssignments.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import api from "../api";
 import Swal from "sweetalert2";
 import * as XLSX from "xlsx";
@@ -1446,6 +1447,7 @@ const AssignmentModal = ({
 };
 
 const StudentTransportAssignments = () => {
+  const navigate = useNavigate();
   useMemo(getRoleFlags, []); // keep existing pattern
 
   const [students, setStudents] = useState([]);
@@ -1457,6 +1459,11 @@ const StudentTransportAssignments = () => {
   const [selectedRouteFilterId, setSelectedRouteFilterId] = useState("");
   const [transportStatusFilter, setTransportStatusFilter] = useState("all");
   const [studentStatusFilter, setStudentStatusFilter] = useState("all");
+  const [classFilter, setClassFilter] = useState("");
+  const [selectedStudentIds, setSelectedStudentIds] = useState([]);
+  const [bulkPickupRouteId, setBulkPickupRouteId] = useState("");
+  const [bulkDropRouteId, setBulkDropRouteId] = useState("");
+  const [bulkSaving, setBulkSaving] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [visibleCount, setVisibleCount] = useState(40);
@@ -1500,32 +1507,6 @@ const StudentTransportAssignments = () => {
     setOperationalRoutes(
       Array.isArray(res.data?.routes) ? res.data.routes : [],
     );
-  };
-
-  const createOperationalRoute = async () => {
-    const result = await Swal.fire({
-      title: "Create Actual Bus Route",
-      input: "text",
-      inputLabel: "Route name",
-      inputPlaceholder: "e.g. Morning Route A",
-      showCancelButton: true,
-      inputValidator: (value) =>
-        value?.trim() ? undefined : "Route name is required",
-    });
-    if (!result.isConfirmed) return;
-    try {
-      await api.post("/bus-operational-routes", {
-        route_name: result.value.trim(),
-      });
-      await fetchOperationalRoutes();
-      Swal.fire("Created", "Actual bus route created.", "success");
-    } catch (error) {
-      Swal.fire(
-        "Unable to Create",
-        error?.response?.data?.error || "Failed to create route.",
-        "error",
-      );
-    }
   };
 
   const refreshAll = async (showToast = true) => {
@@ -1603,6 +1584,9 @@ const StudentTransportAssignments = () => {
 
   const getClassName = (s) =>
     safeStr(s?.class_name || s?.Class?.class_name || s?.ClassName || "") || "—";
+
+  const getClassId = (s) =>
+    safeStr(s?.class_id || s?.Class?.id || s?.ClassId || "");
 
   const getSectionName = (s) =>
     safeStr(
@@ -1805,8 +1789,21 @@ const StudentTransportAssignments = () => {
     setSelectedRouteFilterId("");
     setTransportStatusFilter("all");
     setStudentStatusFilter("all");
+    setClassFilter("");
+    setSelectedStudentIds([]);
     setVisibleCount(40);
   };
+
+  const classOptions = useMemo(() => {
+    const unique = new Map();
+    students.forEach((student) => {
+      const id = getClassId(student);
+      if (id && !unique.has(id)) unique.set(id, getClassName(student));
+    });
+    return Array.from(unique, ([id, name]) => ({ id, name })).sort((a, b) =>
+      a.name.localeCompare(b.name, undefined, { numeric: true }),
+    );
+  }, [students]);
 
   // -------------------- Assignment modal --------------------
   const openAssignDialog = async (studentId) => {
@@ -1934,6 +1931,7 @@ const StudentTransportAssignments = () => {
       const place = getStudentPlaceName(s).toLowerCase();
       const hasTransport = hasTransportAssigned(s);
       const studentStatus = getStudentStatus(s);
+      const classOk = !classFilter || getClassId(s) === classFilter;
 
       const textOk = !q || name.includes(q) || adm.includes(q);
       const placeOk = !selectedPlace || place === selectedPlace;
@@ -1947,7 +1945,7 @@ const StudentTransportAssignments = () => {
         (studentStatusFilter === "enabled" && studentStatus === "enabled") ||
         (studentStatusFilter === "disabled" && studentStatus === "disabled");
 
-      return textOk && placeOk && transportOk && statusOk;
+      return textOk && placeOk && transportOk && statusOk && classOk;
     });
   }, [
     students,
@@ -1955,8 +1953,110 @@ const StudentTransportAssignments = () => {
     selectedRouteFilterId,
     transportStatusFilter,
     studentStatusFilter,
+    classFilter,
     routes,
   ]);
+
+  const filteredStudentIds = useMemo(
+    () => filteredStudents.map((student) => String(student.id)),
+    [filteredStudents],
+  );
+  const allFilteredSelected =
+    filteredStudentIds.length > 0 &&
+    filteredStudentIds.every((id) => selectedStudentIds.includes(id));
+
+  const toggleStudentSelection = (studentId) => {
+    const id = String(studentId);
+    setSelectedStudentIds((previous) =>
+      previous.includes(id)
+        ? previous.filter((value) => value !== id)
+        : [...previous, id],
+    );
+  };
+
+  const toggleAllFilteredStudents = () => {
+    setSelectedStudentIds((previous) => {
+      if (allFilteredSelected) {
+        const filteredSet = new Set(filteredStudentIds);
+        return previous.filter((id) => !filteredSet.has(id));
+      }
+      return [...new Set([...previous, ...filteredStudentIds])];
+    });
+  };
+
+  const applyBulkActualRoutes = async () => {
+    if (!selectedStudentIds.length) {
+      return Swal.fire("Select Students", "Please select at least one student.", "warning");
+    }
+    if (!bulkPickupRouteId && !bulkDropRouteId) {
+      return Swal.fire(
+        "Select Route",
+        "Please select an actual pickup route or actual drop route.",
+        "warning",
+      );
+    }
+
+    const confirmation = await Swal.fire({
+      icon: "question",
+      title: "Apply actual routes in bulk?",
+      text: `This will update ${selectedStudentIds.length} selected student(s) with an active bus assignment.`,
+      showCancelButton: true,
+      confirmButtonText: "Yes, apply",
+    });
+    if (!confirmation.isConfirmed) return;
+
+    setBulkSaving(true);
+    try {
+      const response = await api.patch(
+        "/student-transport-assignments/bulk/actual-routes",
+        {
+          student_ids: selectedStudentIds.map(Number),
+          pickup_route_id: bulkPickupRouteId ? Number(bulkPickupRouteId) : null,
+          drop_route_id: bulkDropRouteId ? Number(bulkDropRouteId) : null,
+        },
+      );
+      const result = response.data || {};
+      const updatedIds = new Set(
+        (result.updated_student_ids || []).map((id) => String(id)),
+      );
+      setActiveAssignmentsByStudent((previous) =>
+        Object.fromEntries(
+          Object.entries(previous).map(([studentId, assignment]) => [
+            studentId,
+            updatedIds.has(studentId) && assignment
+              ? {
+                  ...assignment,
+                  ...(bulkPickupRouteId
+                    ? { pickup_route_id: Number(bulkPickupRouteId) }
+                    : {}),
+                  ...(bulkDropRouteId
+                    ? { drop_route_id: Number(bulkDropRouteId) }
+                    : {}),
+                }
+              : assignment,
+          ]),
+        ),
+      );
+      setSelectedStudentIds([]);
+      setBulkPickupRouteId("");
+      setBulkDropRouteId("");
+      await Swal.fire({
+        icon: result.skipped_count ? "warning" : "success",
+        title: "Bulk Update Complete",
+        text: `${result.updated_count || 0} updated${
+          result.skipped_count ? `, ${result.skipped_count} skipped because the required active bus assignment was missing.` : ""
+        }`,
+      });
+    } catch (error) {
+      Swal.fire(
+        "Error",
+        error?.response?.data?.error || "Failed to update actual routes in bulk.",
+        "error",
+      );
+    } finally {
+      setBulkSaving(false);
+    }
+  };
 
   const visibleStudents = filteredStudents.slice(0, visibleCount);
   const visibleStudentIdsKey = visibleStudents
@@ -2288,10 +2388,10 @@ const StudentTransportAssignments = () => {
               <div className="sta-top-actions">
                 <button
                   className="btn btn-primary sta-btn"
-                  onClick={createOperationalRoute}
+                  onClick={() => navigate("/actual-routes")}
                   disabled={loading}
                 >
-                  Add Actual Route
+                  Manage Actual Routes
                 </button>
                 <button
                   className="btn btn-outline-success sta-btn"
@@ -2364,7 +2464,30 @@ const StudentTransportAssignments = () => {
             </div>
 
             <div className="row g-3 mt-1 sta-filter">
-              <div className="col-md-3">
+              <div className="col-md-2">
+                <label className="form-label">Class</label>
+                <select
+                  className="form-select"
+                  value={classFilter}
+                  onChange={(e) => {
+                    setClassFilter(e.target.value);
+                    setSelectedStudentIds([]);
+                    setVisibleCount(40);
+                  }}
+                >
+                  <option value="">All Classes</option>
+                  {classOptions.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name}
+                    </option>
+                  ))}
+                </select>
+                <div className="text-muted mt-1" style={{ fontSize: 12 }}>
+                  Filter students class-wise.
+                </div>
+              </div>
+
+              <div className="col-md-2">
                 <label className="form-label">Student Status</label>
                 <select
                   className="form-select"
@@ -2383,7 +2506,7 @@ const StudentTransportAssignments = () => {
                 </div>
               </div>
 
-              <div className="col-md-3">
+              <div className="col-md-2">
                 <label className="form-label">Filter by Village / City</label>
                 <select
                   className="form-select"
@@ -2406,7 +2529,7 @@ const StudentTransportAssignments = () => {
                 </div>
               </div>
 
-              <div className="col-md-3">
+              <div className="col-md-2">
                 <label className="form-label">Search Student</label>
                 <input
                   className="form-control"
@@ -2455,6 +2578,77 @@ const StudentTransportAssignments = () => {
         </div>
 
         <div className="sta-card p-2 p-md-3">
+          <div className="border rounded-3 bg-light p-3 mb-3">
+            <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+              <div>
+                <div style={{ fontWeight: 800, color: "#213247" }}>
+                  Bulk Actual Route Assignment
+                </div>
+                <div className="text-muted" style={{ fontSize: 12 }}>
+                  Filter by class, select students below, then apply pickup and/or
+                  drop routes to their active bus assignments.
+                </div>
+              </div>
+              <span className="sta-pill">
+                <b>{selectedStudentIds.length}</b> selected
+              </span>
+            </div>
+            <div className="row g-2 align-items-end">
+              <div className="col-md-4">
+                <label className="form-label">Actual Pickup Route</label>
+                <select
+                  className="form-select"
+                  value={bulkPickupRouteId}
+                  onChange={(e) => setBulkPickupRouteId(e.target.value)}
+                >
+                  <option value="">Leave pickup route unchanged</option>
+                  {operationalRoutes.map((route) => (
+                    <option key={route.id} value={route.id}>
+                      {route.route_name}
+                      {route.route_code ? ` (${route.route_code})` : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="col-md-4">
+                <label className="form-label">Actual Drop Route</label>
+                <select
+                  className="form-select"
+                  value={bulkDropRouteId}
+                  onChange={(e) => setBulkDropRouteId(e.target.value)}
+                >
+                  <option value="">Leave drop route unchanged</option>
+                  {operationalRoutes.map((route) => (
+                    <option key={route.id} value={route.id}>
+                      {route.route_name}
+                      {route.route_code ? ` (${route.route_code})` : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="col-md-2">
+                <button
+                  className="btn btn-outline-primary w-100"
+                  type="button"
+                  onClick={toggleAllFilteredStudents}
+                  disabled={!filteredStudents.length || bulkSaving}
+                >
+                  {allFilteredSelected ? "Unselect Filtered" : "Select Filtered"}
+                </button>
+              </div>
+              <div className="col-md-2">
+                <button
+                  className="btn btn-success w-100"
+                  type="button"
+                  onClick={applyBulkActualRoutes}
+                  disabled={!selectedStudentIds.length || bulkSaving}
+                >
+                  {bulkSaving ? "Applying…" : "Apply Routes"}
+                </button>
+              </div>
+            </div>
+          </div>
+
           <div className="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
             <div className="d-flex align-items-center gap-2 flex-wrap">
               <div
@@ -2485,6 +2679,16 @@ const StudentTransportAssignments = () => {
             <table className="table table-hover sta-table">
               <thead>
                 <tr>
+                  <th style={{ width: 42, minWidth: 42 }}>
+                    <input
+                      className="form-check-input"
+                      type="checkbox"
+                      aria-label="Select all filtered students"
+                      checked={allFilteredSelected}
+                      onChange={toggleAllFilteredStudents}
+                      disabled={!filteredStudents.length}
+                    />
+                  </th>
                   <th style={{ width: 60, minWidth: 60 }}>#</th>
                   <th className="sta-sticky-col sta-col-name">Student Name</th>
                   <th className="sta-sticky-col sta-col-admission">Admission No.</th>
@@ -2508,6 +2712,15 @@ const StudentTransportAssignments = () => {
 
                   return (
                     <tr key={s.id} className="sta-row">
+                      <td>
+                        <input
+                          className="form-check-input"
+                          type="checkbox"
+                          aria-label={`Select ${safeStr(s?.name) || "student"}`}
+                          checked={selectedStudentIds.includes(String(s.id))}
+                          onChange={() => toggleStudentSelection(s.id)}
+                        />
+                      </td>
                       <td>{idx + 1}</td>
                       <td className="sta-sticky-col sta-col-name">
                         <div style={{ fontWeight: 800, color: "#1f2f45" }}>
@@ -2592,7 +2805,7 @@ const StudentTransportAssignments = () => {
 
                 {filteredStudents.length === 0 && (
                   <tr>
-                    <td colSpan="12">
+                    <td colSpan="13">
                       <div className="sta-empty">
                         <div className="sta-empty-title">No students found</div>
                         <div className="sta-empty-sub">

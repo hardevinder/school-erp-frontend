@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import swal from 'sweetalert';
+import EmployeeAvatar from '../components/EmployeeAvatar';
 
 const API_URL = process.env.REACT_APP_API_URL;
 const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -546,6 +547,8 @@ const TeacherTimetableAssignment = () => {
 
   const selectedTeacherName =
     teachers.find((t) => String(t.id) === String(selectedTeacher))?.name || 'Select Teacher';
+  const selectedTeacherRecord =
+    teachers.find((t) => String(t.id) === String(selectedTeacher)) || null;
 
   const getCellStatusStyle = (status) => {
     if (status === 'saved') {
@@ -707,7 +710,10 @@ const TeacherTimetableAssignment = () => {
             <div className="d-flex flex-column flex-sm-row gap-2 align-items-stretch">
               <div className="bg-white border rounded-3 px-3 py-2 shadow-sm">
                 <div className="small text-muted">Teacher</div>
-                <div className="fw-semibold text-dark">{selectedTeacherName}</div>
+                <div className="d-flex align-items-center gap-2">
+                  <EmployeeAvatar person={selectedTeacherRecord} size={42} />
+                  <div className="fw-semibold text-dark">{selectedTeacherName}</div>
+                </div>
               </div>
 
               <button
@@ -815,6 +821,32 @@ const TeacherTimetableAssignment = () => {
                 <div className="small text-muted mt-2">
                   Monday entry can still copy the same period to the full week.
                 </div>
+              </div>
+            </div>
+
+            <div className="col-12">
+              <div className="small fw-semibold text-dark mb-2">
+                Teacher Photos
+              </div>
+              <div className="d-flex gap-2 overflow-auto pb-2">
+                {teachers.map((teacher) => {
+                  const active =
+                    String(teacher.id) === String(selectedTeacher);
+                  return (
+                    <button
+                      key={teacher.id}
+                      type="button"
+                      className={`btn d-flex align-items-center gap-2 flex-shrink-0 ${
+                        active ? 'btn-primary' : 'btn-light border'
+                      }`}
+                      onClick={() => setSelectedTeacher(String(teacher.id))}
+                      title={`Create timetable for ${teacher.name}`}
+                    >
+                      <EmployeeAvatar person={teacher} size={36} />
+                      <span className="fw-semibold">{teacher.name}</span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </div>

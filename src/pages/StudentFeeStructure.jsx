@@ -25,6 +25,14 @@ const safeDateOrNull = (dateStr) => {
   return d.toString() === "Invalid Date" ? null : dateStr;
 };
 
+const escapeHtml = (value) =>
+  String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+
 const formatFineCell = (fee) => {
   if (!fee) return "-";
   if (fee.fineType === "percentage") {
@@ -512,7 +520,7 @@ const StudentFeeStructure = () => {
           Swal.showValidationMessage("Category is required");
           return false;
         }
-        if (!feeDue) {
+        if (feeDue === "" || Number(feeDue) < 0) {
           Swal.showValidationMessage("Fee Due is required");
           return false;
         }
@@ -582,6 +590,258 @@ const StudentFeeStructure = () => {
   const handleEdit = (fee) => openAddOrEditModal(fee);
   const handleCopy = (fee) => {
     openAddOrEditModal({ ...fee, __isCopy: true, id: null });
+  };
+
+  const openMidSessionOverrideModal = async () => {
+    const studentsData = students.length ? students : await fetchStudents();
+    const classesData = classes.length ? classes : await fetchClasses();
+    const sessionData = sessions.length ? sessions : await fetchSessions();
+
+    const classOptionsHtml = [
+      `<option value="">Select Class</option>`,
+      ...classesData.map(
+        (cls) =>
+          `<option value="${cls.id}">${escapeHtml(cls.class_name)}</option>`
+      ),
+    ].join("");
+    const sessionOptionsHtml = sessionData
+      .map(
+        (session) =>
+          `<option value="${session.id}">${escapeHtml(session.name)}${
+            session.is_active ? " (Active)" : ""
+          }</option>`
+      )
+      .join("");
+
+    const selection = await Swal.fire({
+      title: "Mid-session Fee Override",
+      width: "720px",
+      html: `
+        <div class="text-start">
+          <p class="small text-muted mb-3">
+            Select a student, then waive earlier fee heads or enter a reduced amount.
+          </p>
+          <div class="row g-2">
+            <div class="col-md-6">
+              <label class="form-label small mb-1">Class</label>
+              <select id="overrideClassId" class="form-select form-select-sm">
+                ${classOptionsHtml}
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small mb-1">Student</label>
+              <select id="overrideStudentId" class="form-select form-select-sm">
+                <option value="">Select class first</option>
+              </select>
+            </div>
+            <div class="col-12">
+              <label class="form-label small mb-1">Session</label>
+              <select id="overrideSessionId" class="form-select form-select-sm">
+                ${sessionOptionsHtml}
+              </select>
+            </div>
+          </div>
+        </div>
+      `,
+      showCancelButton: true,
+      confirmButtonText: "Choose Fee Heads",
+      focusConfirm: false,
+      allowOutsideClick: false,
+      didOpen: () => {
+        const classEl = document.getElementById("overrideClassId");
+        const studentEl = document.getElementById("overrideStudentId");
+        const sessionEl = document.getElementById("overrideSessionId");
+        if (selectedSessionId) sessionEl.value = String(selectedSessionId);
+
+        const refreshStudents = () => {
+          const classId = classEl.value;
+          const matching = studentsData.filter((student) => {
+            const studentClassId =
+              student.class_id ??
+              student.ClassId ??
+              student.classId ??
+              student.Class?.id ??
+              student.class?.id;
+            return String(studentClassId) === String(classId);
+          });
+          studentEl.innerHTML = [
+            `<option value="">Select Student</option>`,
+            ...matching.map(
+              (student) =>
+                `<option value="${student.id}">${escapeHtml(
+                  student.name || "Unnamed"
+                )}${
+                  student.admission_number
+                    ? ` (${escapeHtml(student.admission_number)})`
+                    : ""
+                }</option>`
+            ),
+          ].join("");
+        };
+        classEl.addEventListener("change", refreshStudents);
+      },
+      preConfirm: () => {
+        const student_id = Number(
+          document.getElementById("overrideStudentId").value
+        );
+        const session_id = Number(
+          document.getElementById("overrideSessionId").value
+        );
+        if (!student_id || !session_id) {
+          Swal.showValidationMessage("Student and session are required");
+          return false;
+        }
+        return { student_id, session_id };
+      },
+    });
+
+    if (!selection.isConfirmed) return;
+
+    let feeDetails = [];
+    try {
+      const { data } = await api.get(
+        `/students/${selection.value.student_id}/fee-details`,
+        { params: { session_id: selection.value.session_id } }
+      );
+      feeDetails = Array.isArray(data?.feeDetails) ? data.feeDetails : [];
+    } catch (error) {
+      console.error(error);
+      return Swal.fire("Error", "Failed to load student fee heads.", "error");
+    }
+
+    if (!feeDetails.length) {
+      return Swal.fire(
+        "No Fee Heads",
+        "No applicable fee heads were found for this student and session.",
+        "info"
+      );
+    }
+
+    const rowsHtml = feeDetails
+      .map((head, index) => {
+        const id = Number(head.fee_heading_id);
+        const configuredAmount = Number(
+          head.original_fee_due ?? head.originalFeeDue ?? head.feeDue ?? 0
+        );
+        const adjusted = Number(head.total_adjusted || 0);
+        return `
+          <tr>
+            <td class="text-center">
+              <input class="form-check-input override-head-check"
+                type="checkbox" data-index="${index}">
+            </td>
+            <td class="text-start">${escapeHtml(
+              head.fee_heading || `Fee Head ${id}`
+            )}</td>
+            <td class="text-end">₹${configuredAmount.toFixed(2)}</td>
+            <td class="text-end">₹${adjusted.toFixed(2)}</td>
+            <td>
+              <input type="number" min="${adjusted}" step="0.01"
+                class="form-control form-control-sm override-head-amount"
+                data-index="${index}" value="0" disabled>
+            </td>
+          </tr>
+        `;
+      })
+      .join("");
+
+    const result = await Swal.fire({
+      title: "Select Fee Heads to Override",
+      width: "900px",
+      html: `
+        <div class="text-start">
+          <div class="alert alert-info py-2 small">
+            Check earlier/waived heads and keep New Amount at ₹0, or enter a
+            partial amount. Unchecked heads keep their normal fee.
+          </div>
+          <div class="table-responsive" style="max-height:420px">
+            <table class="table table-sm align-middle">
+              <thead>
+                <tr>
+                  <th style="width:55px">Apply</th>
+                  <th>Fee Head</th>
+                  <th class="text-end">Current</th>
+                  <th class="text-end">Paid + Concession</th>
+                  <th style="width:150px">New Amount</th>
+                </tr>
+              </thead>
+              <tbody>${rowsHtml}</tbody>
+            </table>
+          </div>
+          <label class="form-label small mb-1">Reason / Remarks</label>
+          <input id="overrideRemarks" class="form-control form-control-sm"
+            value="Mid-session admission fee adjustment">
+        </div>
+      `,
+      showCancelButton: true,
+      confirmButtonText: "Save Overrides",
+      allowOutsideClick: false,
+      focusConfirm: false,
+      didOpen: () => {
+        document.querySelectorAll(".override-head-check").forEach((checkbox) => {
+          checkbox.addEventListener("change", () => {
+            const input = document.querySelector(
+              `.override-head-amount[data-index="${checkbox.dataset.index}"]`
+            );
+            input.disabled = !checkbox.checked;
+          });
+        });
+      },
+      preConfirm: () => {
+        const items = [];
+        document
+          .querySelectorAll(".override-head-check:checked")
+          .forEach((checkbox) => {
+            const index = Number(checkbox.dataset.index);
+            const head = feeDetails[index];
+            const input = document.querySelector(
+              `.override-head-amount[data-index="${index}"]`
+            );
+            const amount = Number(input.value);
+            if (!Number.isFinite(amount) || amount < 0) {
+              items.push({ invalid: true });
+              return;
+            }
+            items.push({
+              fee_heading_id: Number(head.fee_heading_id),
+              amount,
+            });
+          });
+        if (!items.length) {
+          Swal.showValidationMessage("Select at least one fee head");
+          return false;
+        }
+        if (items.some((item) => item.invalid)) {
+          Swal.showValidationMessage("Enter a valid non-negative amount");
+          return false;
+        }
+        return {
+          ...selection.value,
+          items,
+          remarks:
+            document.getElementById("overrideRemarks").value.trim() || null,
+        };
+      },
+    });
+
+    if (!result.isConfirmed) return;
+
+    try {
+      const { data } = await api.post(
+        "/student-fee-structures/bulk-overrides",
+        result.value
+      );
+      setSelectedSessionId(result.value.session_id);
+      await fetchStudentFeeStructures({
+        sessionId: result.value.session_id,
+      });
+      return Swal.fire("Saved", data?.message || "Fee overrides saved.", "success");
+    } catch (error) {
+      console.error(error);
+      const message =
+        error?.response?.data?.error || "Failed to save fee overrides.";
+      return Swal.fire("Error", message, "error");
+    }
   };
 
   // ---------------------- Options & Filters ----------------------
@@ -739,9 +999,17 @@ const StudentFeeStructure = () => {
                 </button>
 
                 {canEdit && (
-                  <button className="btn btn-success btn-sm" onClick={handleAdd}>
-                    + Add
-                  </button>
+                  <>
+                    <button
+                      className="btn btn-warning btn-sm"
+                      onClick={openMidSessionOverrideModal}
+                    >
+                      Mid-session Override
+                    </button>
+                    <button className="btn btn-success btn-sm" onClick={handleAdd}>
+                      + Add
+                    </button>
+                  </>
                 )}
               </div>
             </div>

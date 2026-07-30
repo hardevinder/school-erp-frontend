@@ -35,6 +35,8 @@ import Transportation from "./pages/Transportation";
 // ✅ NEW: Transport pages
 import Buses from "./pages/Buses";
 import StudentTransportAssignments from "./pages/StudentTransportAssignments";
+import EmployeeTransportAssignments from "./pages/EmployeeTransportAssignments";
+import ActualRoutes from "./pages/ActualRoutes";
 import StudentTransportFeeHeadAmounts from "./pages/StudentTransportFeeHeadAmounts";
 import TransportExpenses from "./pages/TransportExpenses";
 import ExpenseManagement from "./pages/ExpenseManagement";
@@ -958,6 +960,14 @@ function App() {
             }
           />
           <Route path="/transportation" element={<Navigate to="/transportations" replace />} />
+          <Route
+            path="/actual-routes"
+            element={
+              <RequireRole roles={["transport", "transporter", "admin", "superadmin", "accounts"]}>
+                <ActualRoutes />
+              </RequireRole>
+            }
+          />
 
           <Route
             path="/expense-management"
@@ -1006,6 +1016,14 @@ function App() {
             element={
               <RequireRole roles={["transport", "admin", "superadmin", "accounts"]}>
                 <StudentTransportAssignments />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="/employee-transport-assignments"
+            element={
+              <RequireRole roles={["transport", "admin", "superadmin", "accounts", "hr"]}>
+                <EmployeeTransportAssignments />
               </RequireRole>
             }
           />

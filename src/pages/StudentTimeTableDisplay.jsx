@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import "bootstrap/dist/css/bootstrap.min.css";
 import { getAuthToken } from "../utils/student360Session";
+import EmployeeAvatar from "../components/EmployeeAvatar";
 
 const API_URL = process.env.REACT_APP_API_URL || "";
 const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -9,6 +10,14 @@ const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"
 /* Helpers */
 const normalizeAdmission = (s) => String(s || "").replace(/\//g, "-").trim();
 const normalizeRole = (r) => String(r || "").toLowerCase();
+
+const TeacherLabel = ({ teacher }) =>
+  teacher ? (
+    <span className="d-inline-flex align-items-center gap-1">
+      <EmployeeAvatar person={teacher} size={24} />
+      <span>{teacher.name || ""}</span>
+    </span>
+  ) : null;
 
 const StudentTimetableDisplay = () => {
   const [periods, setPeriods] = useState([]);
@@ -620,7 +629,7 @@ const StudentTimetableDisplay = () => {
                                       <div className="p-2 small" style={theme.substitution}>
                                         <div className="fw-semibold mb-1">Substitution</div>
                                         <div>{s.Subject ? s.Subject.name : ""}</div>
-                                        <div className="text-muted">{s.Teacher ? s.Teacher.name : ""}</div>
+                                        <div className="text-muted"><TeacherLabel teacher={s.Teacher} /></div>
                                       </div>
                                     </td>
                                   );
@@ -640,7 +649,7 @@ const StudentTimetableDisplay = () => {
                                             {record.Subject ? record.Subject.name : record.subjectId}
                                           </div>
                                           <div className="text-muted">
-                                            {record.Teacher ? record.Teacher.name : ""}
+                                            <TeacherLabel teacher={record.Teacher} />
                                           </div>
                                         </div>
                                       ))
@@ -722,7 +731,7 @@ const StudentTimetableDisplay = () => {
                                             <div className="fw-semibold mb-1">Substitution</div>
                                             <div>{s.Subject ? s.Subject.name : ""}</div>
                                             <div className="text-muted">
-                                              {s.Teacher ? s.Teacher.name : ""}
+                                              <TeacherLabel teacher={s.Teacher} />
                                             </div>
                                           </div>
                                         </div>
@@ -750,7 +759,7 @@ const StudentTimetableDisplay = () => {
                                                 {record.Subject ? record.Subject.name : record.subjectId}
                                               </div>
                                               <div className="text-muted">
-                                                {record.Teacher ? record.Teacher.name : ""}
+                                                <TeacherLabel teacher={record.Teacher} />
                                               </div>
                                             </div>
                                           ))

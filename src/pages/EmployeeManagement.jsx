@@ -3,6 +3,7 @@ import api from '../api';
 import Swal from 'sweetalert2';
 import './EmployeeManagement.css';
 import { Modal, Button } from 'react-bootstrap';
+import EmployeeAvatar, { getEmployeePhotoUrl } from '../components/EmployeeAvatar';
 
 // Helper to format dates to YYYY-MM-DD for <input type="date" />
 const toDateInput = (d) => {
@@ -34,6 +35,7 @@ const EmployeeManagement = () => {
   const [modalMode, setModalMode] = useState('add');
   const [currentEmployee, setCurrentEmployee] = useState(null);
   const [file, setFile] = useState(null);
+  const [employeePhoto, setEmployeePhoto] = useState(null);
   const fileInputRef = useRef(null);
 
   const initialForm = {
@@ -153,6 +155,7 @@ const EmployeeManagement = () => {
       setCurrentEmployee(null);
     }
 
+    setEmployeePhoto(null);
     setModalOpen(true);
   };
 
@@ -179,7 +182,8 @@ const EmployeeManagement = () => {
     try {
       const cleanedForm = {};
 
-      for (const [key, value] of Object.entries(form)) {
+      for (const key of Object.keys(initialForm)) {
+        const value = form[key];
         cleanedForm[key] = value === '' ? null : value;
       }
 
@@ -187,10 +191,16 @@ const EmployeeManagement = () => {
         cleanedForm.department_id = Number(cleanedForm.department_id);
       }
 
+      const payload = new FormData();
+      Object.entries(cleanedForm).forEach(([key, value]) => {
+        if (value !== null && value !== undefined) payload.append(key, value);
+      });
+      if (employeePhoto) payload.append('photo', employeePhoto);
+
       if (modalMode === 'add') {
-        await api.post('/employees', cleanedForm);
+        await api.post('/employees', payload);
       } else {
-        await api.put(`/employees/${currentEmployee.id}`, cleanedForm);
+        await api.put(`/employees/${currentEmployee.id}`, payload);
       }
 
       closeModal();
@@ -566,7 +576,12 @@ const EmployeeManagement = () => {
                   className={emp.status === 'disabled' ? 'table-danger' : ''}
                 >
                   <td>{emp.employee_id}</td>
-                  <td>{emp.name}</td>
+                  <td>
+                    <div className="d-flex align-items-center gap-2">
+                      <EmployeeAvatar person={emp} size={38} />
+                      <span>{emp.name}</span>
+                    </div>
+                  </td>
                   <td>{emp.gender}</td>
                   <td>{emp.phone}</td>
                   <td>{emp.email}</td>
@@ -620,6 +635,41 @@ const EmployeeManagement = () => {
 
         <Modal.Body>
           <form onSubmit={submitForm} className="row g-3">
+            <div className="col-12">
+              <div className="d-flex align-items-center gap-3">
+                <EmployeeAvatar
+                  person={
+                    employeePhoto
+                      ? { photo_url: URL.createObjectURL(employeePhoto) }
+                      : currentEmployee
+                  }
+                  name={form.name}
+                  size={72}
+                />
+                <div>
+                  <label className="form-label mb-1">Employee Photo</label>
+                  <input
+                    type="file"
+                    className="form-control"
+                    accept="image/jpeg,image/png,image/webp"
+                    onChange={(event) =>
+                      setEmployeePhoto(event.target.files?.[0] || null)
+                    }
+                  />
+                  <div className="form-text">JPG, PNG or WEBP, maximum 5 MB.</div>
+                  {currentEmployee?.photo_url && !employeePhoto && (
+                    <a
+                      href={getEmployeePhotoUrl(currentEmployee)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="small"
+                    >
+                      View current photo
+                    </a>
+                  )}
+                </div>
+              </div>
+            </div>
             {Object.entries(initialForm)
               .filter(([k]) => k !== 'status')
               .map(([key]) => (
