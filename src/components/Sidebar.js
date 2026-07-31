@@ -992,6 +992,7 @@ export default function Sidebar({ headerHeight = 56 }) {
           { key: "sections", label: "Sections", icon: "bi-grid", path: "/sections" },
           { key: "sessions", label: "Sessions", icon: "bi-calendar4-week", path: "/sessions" },
           { key: "students", label: "Students", icon: "bi-people", path: "/students" },
+          { key: "ptm-management-admin", label: "PTM Management", icon: "bi-people-fill", path: "/ptm-management", roles: ["admin", "superadmin"] },
           { key: "bulk-promotion", label: "Bulk Promotion", icon: "bi-arrow-up-square", path: "/students/bulk-promotion", roles: ["admin", "superadmin", "accounts"] },
           { key: "promotion-history", label: "Promotion History", icon: "bi-clock-history", path: "/students/promotion-history", roles: ["admin", "superadmin", "accounts"] },
         ],
@@ -1141,6 +1142,7 @@ export default function Sidebar({ headerHeight = 56 }) {
           { key: "students", label: "Students", icon: "bi-people", path: "/students" },
           { key: "teacherAssignment", label: "Teacher Assignment", icon: "bi-person-check", path: "/teacher-assignment" },
           { key: "inchargeAssignment", label: "Incharge Assignment", icon: "bi-person-badge", path: "/incharge-assignment" },
+          { key: "ptm-management-coordinator", label: "PTM Management", icon: "bi-people-fill", path: "/ptm-management" },
           { key: "holidayMarking", label: "Holiday Marking", icon: "bi-calendar3", path: "/holiday-marking" },
           { key: "periods", label: "Periods", icon: "bi-clock", path: "/periods" },
           { key: "combined-timetable", label: "Timetable", icon: "bi-table", path: "/combined-timetable" },
@@ -1235,6 +1237,7 @@ export default function Sidebar({ headerHeight = 56 }) {
         items: [
           { key: "mark-attendance", label: "Mark Attendance", icon: "bi-check2-square", path: "/mark-attendance" },
           { key: "attendance-calendar", label: "Attendance Calendar", icon: "bi-calendar2-check", path: "/attendance-calendar" },
+          { key: "ptm-management-teacher", label: "PTM Feedback", icon: "bi-clipboard2-check", path: "/ptm-management" },
           { key: "assignments", label: "Assignments", icon: "bi-clipboard", path: "/assignments" },
           { key: "assignment-marking", label: "Assignment Marking", icon: "bi-pencil-square", path: "/assignment-marking" },
           { key: "teacher-timetable-display", label: "Timetable", icon: "bi-table", path: "/teacher-timetable-display" },

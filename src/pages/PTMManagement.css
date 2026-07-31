@@ -1,0 +1,124 @@
+.ptm-page { max-width: 1700px; }
+.ptm-class-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+.ptm-class-card { border: 1px solid #e3e7ee; border-radius: 12px; padding: 12px; background: #fbfcff; }
+.ptm-section-pill { display: inline-flex; align-items: center; gap: 6px; border: 1px solid #d8dee9; border-radius: 10px; padding: 7px 9px; background: #fff; cursor: pointer; }
+.ptm-section-pill.selected { border-color: #0d6efd; background: #edf5ff; }
+.ptm-section-pill small { display: block; color: #6c757d; font-size: 10px; }
+.ptm-meeting-select { max-width: 560px; }
+.ptm-stat { min-height: 82px; display: flex; align-items: center; gap: 12px; border: 1px solid #e8ebf1; border-radius: 12px; padding: 14px; background: linear-gradient(135deg, #fff, #f7f9ff); }
+.ptm-stat i { font-size: 25px; color: #0d6efd; }
+.ptm-stat small, .ptm-stat strong { display: block; }
+.ptm-stat strong { font-size: 24px; line-height: 1.1; }
+.ptm-page textarea { resize: vertical; }
+
+/* Prevent global Incharge Assignment table styles affecting PTM page */
+.ptm-page .table-responsive {
+  max-height: none !important;
+  overflow-x: auto !important;
+  overflow-y: visible !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+}
+
+.ptm-page .table thead th {
+  position: static !important;
+  top: auto !important;
+  z-index: auto !important;
+  box-shadow: none !important;
+}
+
+.ptm-page .card {
+  position: relative;
+  z-index: auto;
+}
+
+.ptm-page .table {
+  margin-bottom: 0;
+}
+
+
+/* PTM delete manager and student popup hotfix */
+.ptm-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 2050;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(18, 24, 38, 0.58);
+  backdrop-filter: blur(2px);
+}
+
+.ptm-student-modal {
+  width: min(1500px, 97vw);
+  max-height: 92vh;
+  overflow: hidden;
+  border: 0;
+}
+
+.ptm-student-modal > .card-body {
+  overflow: auto;
+  max-height: calc(92vh - 64px);
+}
+
+.ptm-student-modal .table-responsive {
+  max-height: none !important;
+  overflow: visible !important;
+}
+
+.ptm-student-modal .table thead th {
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 2 !important;
+  background: #fff !important;
+}
+
+.ptm-meeting-manager-modal {
+  width: min(760px, 96vw);
+  max-height: 88vh;
+  overflow: hidden;
+  border: 0;
+}
+
+.ptm-manager-list {
+  overflow-y: auto;
+  max-height: calc(88vh - 132px);
+}
+
+.ptm-manager-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 16px;
+  border-bottom: 1px solid #edf0f5;
+}
+
+.ptm-manager-row:last-child {
+  border-bottom: 0;
+}
+
+.ptm-manager-select-all {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #f7f9fc;
+}
+
+@media (max-width: 767px) {
+  .ptm-modal-backdrop {
+    padding: 8px;
+    align-items: flex-end;
+  }
+
+  .ptm-student-modal,
+  .ptm-meeting-manager-modal {
+    width: 100%;
+    max-height: 95vh;
+    border-radius: 16px 16px 0 0;
+  }
+
+  .ptm-student-modal > .card-body {
+    max-height: calc(95vh - 64px);
+  }
+}

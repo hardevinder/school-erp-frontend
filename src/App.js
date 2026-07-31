@@ -135,6 +135,7 @@ import DigitalDiary from "./pages/DigitalDiary";
 import StudentDiary from "./pages/StudentDiary";
 import DiaryDetail from "./pages/DiaryDetail";
 import CoordinatorDigitalDiaryMonitor from "./pages/CoordinatorDigitalDiaryMonitor";
+import PTMManagement from "./pages/PTMManagement";
 import AccountsDashboard from "./components/AccountsDashboard";
 import TransportSummary from "./pages/TransportSummary";
 import UserTracking from "./pages/UserTracking";
@@ -1234,6 +1235,16 @@ function App() {
           />
           <Route path="/digital-diary-monitor" element={<Navigate to="/coordinator-digital-diaries" replace />} />
           <Route path="/coordinator/diaries" element={<Navigate to="/coordinator-digital-diaries" replace />} />
+
+          {/* Parent Teacher Meeting Management */}
+          <Route
+            path="/ptm-management"
+            element={
+              <RequireRole roles={["teacher", "academic_coordinator", "coordinator", "principal", "admin", "superadmin", "super_admin"]}>
+                <PTMManagement />
+              </RequireRole>
+            }
+          />
 
           <Route path="/student-diary" element={<StudentDiary />} />
           <Route path="/diary/:id" element={<DiaryDetail />} />
