@@ -1,0 +1,13 @@
+.online-classes-page { max-width: 1500px; }
+.zoom-card { border-left: 4px solid #2d8cff !important; }
+.zoom-mark { width: 52px; height: 52px; border-radius: 14px; display: grid; place-items: center; color: #fff; background: #2d8cff; font-size: 1.35rem; }
+.online-classes-page thead th { background: #f8fafc; color: #64748b; font-size: .78rem; letter-spacing: .04em; text-transform: uppercase; padding: 1rem; }
+.online-classes-page tbody td { padding: 1rem; }
+.online-classes-page .badge { text-transform: capitalize; }
+.status-scheduled { background: #dbeafe; color: #1d4ed8; }
+.status-started { background: #dcfce7; color: #15803d; }
+.status-completed { background: #e2e8f0; color: #475569; }
+.status-cancelled { background: #fee2e2; color: #b91c1c; }
+.online-modal-backdrop { position: fixed; inset: 0; z-index: 1060; background: rgba(15, 23, 42, .58); display: grid; place-items: center; padding: 1rem; }
+.online-modal { width: min(760px, 100%); max-height: calc(100vh - 2rem); overflow: auto; }
+@media (max-width: 576px) { .online-classes-page tbody td { min-width: 130px; } }

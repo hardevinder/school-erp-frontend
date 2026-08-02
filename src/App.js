@@ -74,6 +74,7 @@ import TeacherSubstitutionListing from "./pages/TeacherSubstitutionListing";
 import TeacherSubstitutedListing from "./pages/TeacherSubstitutedListing";
 import TeacherCombinedSubstitutionPage from "./pages/TeacherCombinedSubstitutionPage";
 import LessonPlan from "./pages/LessonPlan";
+import OnlineClasses from "./pages/OnlineClasses";
 import MarkAttendance from "./pages/MarkAttendance";
 import AttendanceCalendar from "./pages/AttendanceCalendar";
 import TeacherTimetableAssignment from "./pages/TeacherTimetableAssignment";
@@ -1101,6 +1102,14 @@ function App() {
           <Route path="/teacher-substituted-listing" element={<TeacherSubstitutedListing />} />
           <Route path="/combined-teacher-substitution" element={<TeacherCombinedSubstitutionPage />} />
           <Route path="/lesson-plan" element={<LessonPlan />} />
+          <Route
+            path="/online-classes"
+            element={
+              <RequireRole roles={["superadmin", "admin", "academic_coordinator", "teacher", "student", "parent"]}>
+                <OnlineClasses />
+              </RequireRole>
+            }
+          />
           <Route
             path="/lesson-plans/:lessonPlanId/evaluations"
             element={
