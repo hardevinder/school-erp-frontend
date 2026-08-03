@@ -11,3 +11,10 @@
 .online-modal-backdrop { position: fixed; inset: 0; z-index: 1060; background: rgba(15, 23, 42, .58); display: grid; place-items: center; padding: 1rem; }
 .online-modal { width: min(760px, 100%); max-height: calc(100vh - 2rem); overflow: auto; }
 @media (max-width: 576px) { .online-classes-page tbody td { min-width: 130px; } }
+.attendance-modal { width: min(1180px, 100%); }
+.attendance-backdrop { z-index: 1070; }
+.attendance-summary { background: #fff; }
+.attendance-table-wrap { max-height: 430px; overflow: auto; }
+.attendance-table-wrap thead th { position: sticky; top: 0; z-index: 1; }
+@media (max-width: 768px) { .attendance-modal { width: 100%; } }
+.assessment-link-check{padding:14px 14px 14px 40px;border:1px dashed #8ea3e6;border-radius:12px;background:#f7f9ff}.assessment-link-check .form-check-input{margin-left:-24px}

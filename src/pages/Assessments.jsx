@@ -1,0 +1,279 @@
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import api from "../api";
+import "./Assessments.css";
+
+const unwrap = (response) => response?.data?.data ?? response?.data ?? [];
+const asList = (value) => Array.isArray(value) ? value : value?.rows || [];
+const readJson = (key, fallback = []) => { try { return JSON.parse(localStorage.getItem(key) || JSON.stringify(fallback)); } catch (_) { return fallback; } };
+const roleSet = () => new Set([...readJson("roles"), localStorage.getItem("role")].filter(Boolean).map((v) => String(v).toLowerCase()));
+const teacherRoles = new Set(["teacher", "admin", "superadmin", "super_admin", "academic_coordinator", "coordinator", "principal"]);
+const emptyQuestion = (index = 0) => ({ question_type: "mcq", question_text: "", options: ["", "", "", ""], correct_answer: 0, marks: 1, difficulty: "medium", explanation: "", topic: "", sort_order: index });
+const emptyForm = {
+  online_class_id: "", class_id: "", section_id: "", subject_id: "", title: "", description: "", instructions: "Attempt all questions.",
+  assessment_type: "test", mode: "online", total_marks: 20, duration_minutes: 30, starts_at: "", ends_at: "", publish_trigger: "manual", publish_at: "",
+  max_attempts: 1, result_release: "manual", randomize_questions: false, randomize_options: false, questions: [emptyQuestion(0)], question_paper: null, supporting_files: [],
+};
+const fmt = (value) => value ? new Date(value).toLocaleString() : "—";
+const toLocalInput = (value) => { if (!value) return ""; const d = new Date(value); const z = new Date(d.getTime() - d.getTimezoneOffset() * 60000); return z.toISOString().slice(0, 16); };
+const uniqueOptions = (rows, id, label) => [...new Map(rows.filter((r) => r[id] != null).map((r) => [Number(r[id]), { id: Number(r[id]), label: r[label] || `#${r[id]}` }])).values()];
+
+async function openBlob(url, filename) {
+  const response = await api.get(url, { responseType: "blob" });
+  const objectUrl = URL.createObjectURL(response.data);
+  const anchor = document.createElement("a"); anchor.href = objectUrl; anchor.target = "_blank"; anchor.rel = "noopener noreferrer"; anchor.download = filename || "download"; document.body.appendChild(anchor); anchor.click(); anchor.remove();
+  setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
+}
+
+export default function Assessments() {
+  const roles = useMemo(roleSet, []); const location = useLocation(); const navigate = useNavigate();
+  const canManage = [...roles].some((r) => teacherRoles.has(r)); const isStudent = roles.has("student");
+  const query = useMemo(() => new URLSearchParams(location.search), [location.search]);
+  const assessmentTypeFilter = query.get("assessment_type") || "";
+  const assignmentOnly = assessmentTypeFilter === "assignment";
+  const pageTitle = assignmentOnly ? "Assignments" : "Assessments & Tests";
+  const pageSubtitle = assignmentOnly
+    ? "Create, publish, collect scanned work, evaluate and publish assignment results."
+    : "Online quizzes, scanned answer sheets, AI papers and published results.";
+  const newAssessmentData = useCallback(() => ({
+    ...emptyForm,
+    assessment_type: assessmentTypeFilter || "test",
+    online_class_id: query.get("online_class_id") || "",
+  }), [assessmentTypeFilter, query]);
+  const [rows, setRows] = useState([]); const [options, setOptions] = useState([]); const [loading, setLoading] = useState(true); const [notice, setNotice] = useState(null);
+  const [builder, setBuilder] = useState(null); const [attempt, setAttempt] = useState(null); const [offline, setOffline] = useState(null); const [submissions, setSubmissions] = useState(null);
+  const flash = useCallback((type, text) => { setNotice({ type, text }); window.scrollTo({ top: 0, behavior: "smooth" }); }, []);
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const params = {}; if (query.get("online_class_id")) params.online_class_id = query.get("online_class_id"); if (assessmentTypeFilter) params.assessment_type = assessmentTypeFilter;
+      const calls = [api.get("/api/assessments", { params })]; if (canManage) calls.push(api.get("/api/assessments/options"));
+      const result = await Promise.all(calls); setRows(asList(unwrap(result[0]))); if (canManage) setOptions(asList(unwrap(result[1])));
+    } catch (error) { flash("danger", error.response?.data?.message || "Could not load assessments."); }
+    finally { setLoading(false); }
+  }, [assessmentTypeFilter, canManage, flash, query]);
+  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    if (!canManage || query.get("create") !== "1") return;
+    setBuilder({ mode: "create", data: newAssessmentData() });
+    const clean = new URLSearchParams(query); clean.delete("create"); navigate({ pathname: location.pathname, search: clean.toString() ? `?${clean}` : "" }, { replace: true });
+  }, [canManage, location.pathname, navigate, newAssessmentData, query]);
+
+  const refreshDetail = async (id) => unwrap(await api.get(`/api/assessments/${id}`));
+  const editAssessment = async (row) => {
+    try {
+      const full = await refreshDetail(row.id);
+      setBuilder({ mode: "edit", id: row.id, data: {
+        ...emptyForm, ...full, online_class_id: full.online_class_id || "", section_id: full.section_id || "", duration_minutes: full.duration_minutes || 30,
+        starts_at: toLocalInput(full.starts_at), ends_at: toLocalInput(full.ends_at), publish_at: toLocalInput(full.publish_at),
+        questions: (full.questions || []).length ? full.questions.map((q, i) => ({ ...q, options: Array.isArray(q.options) ? q.options : [], sort_order: i })) : [emptyQuestion(0)], question_paper: null, supporting_files: [],
+      } });
+    } catch (error) { flash("danger", error.response?.data?.message || "Could not open assessment."); }
+  };
+  const mutate = async (row, action, confirmText) => {
+    if (confirmText && !window.confirm(confirmText)) return;
+    try { await api.post(`/api/assessments/${row.id}/${action}`); flash("success", action === "results/publish" ? "Results published." : `Assessment ${action === "publish" ? "published" : "closed"}.`); await load(); }
+    catch (error) { flash("danger", error.response?.data?.message || "Action failed."); }
+  };
+  const cancel = async (row) => {
+    if (!window.confirm(`Cancel “${row.title}”?`)) return;
+    try { await api.delete(`/api/assessments/${row.id}`); flash("success", "Assessment cancelled."); await load(); }
+    catch (error) { flash("danger", error.response?.data?.message || "Could not cancel assessment."); }
+  };
+  const startAttempt = async (row) => {
+    try { const result = unwrap(await api.post(`/api/assessments/${row.id}/attempts/start`, { client_meta: { source: "web" } })); setAttempt(result); }
+    catch (error) { flash("danger", error.response?.data?.message || "Could not start assessment."); }
+  };
+  const openSubmissions = async (row) => {
+    try { const data = asList(unwrap(await api.get(`/api/assessments/${row.id}/submissions`))); setSubmissions({ assessment: row, rows: data }); }
+    catch (error) { flash("danger", error.response?.data?.message || "Could not load submissions."); }
+  };
+  const resultVisible = (row) => Boolean(row.enrollment?.result_published_at);
+
+  return <div className="assessment-page container-fluid py-3">
+    <div className="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+      <div><h2 className="mb-1">{pageTitle}</h2><div className="text-muted">{pageSubtitle}</div></div>
+      <div className="d-flex gap-2">
+        {(query.get("online_class_id") || assessmentTypeFilter) && <button className="btn btn-outline-secondary" onClick={() => navigate("/assessments")}>Show all</button>}
+        {!assignmentOnly && <button className="btn btn-outline-primary" onClick={() => navigate("/assessments?assessment_type=assignment")}><i className="bi bi-journal-check me-2" />Assignments</button>}
+        {canManage && <button className="btn btn-primary" onClick={() => setBuilder({ mode: "create", data: newAssessmentData() })}><i className="bi bi-plus-lg me-2" />{assignmentOnly ? "Create Assignment" : "Create Assessment"}</button>}
+      </div>
+    </div>
+    {notice && <div className={`alert alert-${notice.type} alert-dismissible`}>{notice.text}<button className="btn-close" onClick={() => setNotice(null)} /></div>}
+    <div className="assessment-summary-grid mb-4">
+      <Summary icon="bi-files" label="Total" value={rows.length} />
+      <Summary icon="bi-broadcast" label="Published" value={rows.filter((r) => r.status === "published").length} />
+      <Summary icon="bi-laptop" label="Online" value={rows.filter((r) => r.mode === "online").length} />
+      <Summary icon="bi-file-earmark-arrow-up" label="Offline" value={rows.filter((r) => r.mode === "offline").length} />
+      {!assignmentOnly && <Summary icon="bi-journal-check" label="Assignments" value={rows.filter((r) => r.assessment_type === "assignment").length} />}
+    </div>
+
+    {loading ? <div className="card border-0 shadow-sm p-5 text-center">Loading assessments…</div> : rows.length === 0 ? <div className="assessment-empty card border-0 shadow-sm p-5 text-center"><i className="bi bi-clipboard2-check" /><h4>No assessments yet</h4><p className="text-muted mb-0">Teachers can create an online quiz or publish an offline written paper.</p></div> :
+      <div className="row g-3">{rows.map((row) => <div className="col-xl-4 col-lg-6" key={row.id}><article className="assessment-card card border-0 shadow-sm h-100">
+        <div className="card-body">
+          <div className="d-flex justify-content-between gap-2"><div><span className={`assessment-mode mode-${row.mode}`}><i className={`bi ${row.mode === "online" ? "bi-laptop" : "bi-file-earmark-text"}`} /> {row.mode}</span><span className="assessment-type"><i className="bi bi-tag me-1" />{String(row.assessment_type || "test").replaceAll("_", " ")}</span><span className={`assessment-status status-${row.status}`}>{row.status.replaceAll("_", " ")}</span></div><span className="fw-semibold">{row.total_marks} marks</span></div>
+          <h5 className="mt-3 mb-1">{row.title}</h5><div className="text-muted small">{row.class?.class_name}{row.section?.section_name ? ` – ${row.section.section_name}` : ""} · {row.subject?.name}</div>
+          {row.onlineClass && <div className="linked-class mt-2"><i className="bi bi-camera-video me-1" />{row.onlineClass.title}</div>}
+          <div className="assessment-meta mt-3"><span><i className="bi bi-calendar-event" /> Opens {fmt(row.starts_at || row.published_at)}</span><span><i className="bi bi-hourglass-split" /> {row.duration_minutes ? `${row.duration_minutes} min` : "Written submission"}</span><span><i className="bi bi-clock-history" /> Deadline {fmt(row.ends_at)}</span></div>
+          {!row.can_manage && row.enrollment && <ResultStrip enrollment={row.enrollment} total={row.total_marks} visible={resultVisible(row)} />}
+        </div>
+        <div className="card-footer bg-white border-0 pt-0"><div className="d-flex flex-wrap gap-2">
+          <button className="btn btn-sm btn-outline-secondary" onClick={() => openBlob(`/api/assessments/${row.id}/pdf`, `${row.title}.pdf`)}><i className="bi bi-file-pdf me-1" />Paper</button>
+          {row.can_manage && <button className="btn btn-sm btn-outline-dark" onClick={() => openBlob(`/api/assessments/${row.id}/pdf?answer_key=1`, `${row.title}-answer-key.pdf`)}>Answer Key</button>}
+          {row.can_manage && ["draft", "scheduled"].includes(row.status) && <button className="btn btn-sm btn-outline-primary" onClick={() => editAssessment(row)}>Edit</button>}
+          {row.can_manage && ["draft", "scheduled"].includes(row.status) && <button className="btn btn-sm btn-primary" onClick={() => mutate(row, "publish", `Publish “${row.title}” now?`)}>Publish</button>}
+          {row.can_manage && row.status === "published" && <button className="btn btn-sm btn-outline-danger" onClick={() => mutate(row, "close", "Close submissions for this assessment?")}>Close</button>}
+          {row.can_manage && !["draft", "scheduled", "cancelled"].includes(row.status) && <button className="btn btn-sm btn-outline-success" onClick={() => openSubmissions(row)}>Submissions</button>}
+          {row.can_manage && ["closed", "evaluated", "result_published"].includes(row.status) && <button className="btn btn-sm btn-success" onClick={() => mutate(row, "results/publish", "Publish all evaluated results to students and parents?")}>Publish Results</button>}
+          {row.can_manage && !["cancelled", "result_published"].includes(row.status) && <button className="btn btn-sm btn-link text-danger" onClick={() => cancel(row)}>Cancel</button>}
+          {isStudent && row.status === "published" && row.mode === "online" && !["submitted", "evaluated"].includes(row.enrollment?.status) && <button className="btn btn-sm btn-primary" onClick={() => startAttempt(row)}>{row.assessment_type === "assignment" ? "Open Assignment" : "Attempt Test"}</button>}
+          {isStudent && row.status === "published" && row.mode === "offline" && !["submitted", "evaluated"].includes(row.enrollment?.status) && <button className="btn btn-sm btn-primary" onClick={() => setOffline(row)}><i className="bi bi-camera me-1" />{row.assessment_type === "assignment" ? "Upload Work" : "Upload Answer Sheets"}</button>}
+          {(row.files || []).filter((f) => ["question_paper", "supporting_material"].includes(f.kind)).map((file) => <button key={file.id} className="btn btn-sm btn-outline-secondary" onClick={() => openBlob(`/api/assessments/${row.id}/files/${file.id}`, file.original_name)}><i className="bi bi-download me-1" />{file.original_name}</button>)}
+        </div></div>
+      </article></div>)}</div>}
+
+    {builder && <AssessmentBuilder options={options} state={builder} onClose={() => setBuilder(null)} onSaved={async (message) => { setBuilder(null); flash("success", message); await load(); }} onError={(m) => flash("danger", m)} />}
+    {attempt && <AttemptModal payload={attempt} onClose={() => setAttempt(null)} onSubmitted={async () => { setAttempt(null); flash("success", "Assessment submitted successfully."); await load(); }} onError={(m) => flash("danger", m)} />}
+    {offline && <OfflineSubmit assessment={offline} onClose={() => setOffline(null)} onSubmitted={async () => { setOffline(null); flash("success", "Scanned answer sheets submitted."); await load(); }} onError={(m) => flash("danger", m)} />}
+    {submissions && <SubmissionsModal state={submissions} onClose={() => setSubmissions(null)} onChanged={async () => { await openSubmissions(submissions.assessment); await load(); }} onError={(m) => flash("danger", m)} />}
+  </div>;
+}
+
+function Summary({ icon, label, value }) { return <div className="assessment-summary card border-0 shadow-sm"><i className={`bi ${icon}`} /><div><div className="text-muted small">{label}</div><strong>{value}</strong></div></div>; }
+function ResultStrip({ enrollment, total, visible }) {
+  if (!visible) return <div className="student-result mt-3"><span>Status</span><strong>{String(enrollment.status || "assigned").replaceAll("_", " ")}</strong></div>;
+  return <div className="student-result published mt-3"><span>Result</span><strong>{enrollment.obtained_marks ?? 0}/{total} · {enrollment.grade || "—"}</strong>{enrollment.teacher_feedback && <small>{enrollment.teacher_feedback}</small>}</div>;
+}
+
+function AssessmentBuilder({ options, state, onClose, onSaved, onError }) {
+  const [form, setForm] = useState(state.data); const [busy, setBusy] = useState(false); const [aiBusy, setAiBusy] = useState(false);
+  const classRows = options.filter((o) => !form.class_id || Number(o.class_id) === Number(form.class_id));
+  const sectionRows = classRows.filter((o) => !form.section_id || Number(o.section_id) === Number(form.section_id));
+  const classes = uniqueOptions(options, "class_id", "class_name"); const sections = uniqueOptions(classRows, "section_id", "section_name"); const subjects = uniqueOptions(sectionRows, "subject_id", "subject_name");
+  const updateQuestion = (index, patch) => setForm((f) => ({ ...f, questions: f.questions.map((q, i) => i === index ? { ...q, ...patch } : q) }));
+  const addQuestion = () => setForm((f) => ({ ...f, questions: [...f.questions, emptyQuestion(f.questions.length)] }));
+  const removeQuestion = (index) => setForm((f) => ({ ...f, questions: f.questions.filter((_, i) => i !== index).map((q, i) => ({ ...q, sort_order: i })) }));
+  const generateAi = async () => {
+    if (!form.class_id || !form.subject_id || !form.title) return onError("Select class, subject and enter a title before AI generation.");
+    setAiBusy(true);
+    try {
+      const result = unwrap(await api.post("/api/assessments/ai/generate", { class_id: form.class_id, section_id: form.section_id || null, subject_id: form.subject_id, title: form.title, topic: form.description, total_marks: Number(form.total_marks), duration_minutes: Number(form.duration_minutes), question_count: Math.max(1, form.questions.length || 10), question_types: ["mcq", "true_false", "fill_blank", "short", "long"], language: "English" }));
+      setForm((f) => ({ ...f, title: result.title || f.title, description: result.description || f.description, instructions: result.instructions || f.instructions, questions: result.questions || f.questions, ai_meta: result.ai_meta }));
+    } catch (error) { onError(error.response?.data?.message || "AI could not generate the test."); }
+    finally { setAiBusy(false); }
+  };
+  const submit = async (event) => {
+    event.preventDefault(); setBusy(true);
+    try {
+      const fd = new FormData();
+      const data = { ...form, questions: form.mode === "online" ? form.questions : form.questions.filter((q) => q.question_text?.trim()), starts_at: form.starts_at ? new Date(form.starts_at).toISOString() : "", ends_at: form.ends_at ? new Date(form.ends_at).toISOString() : "", publish_at: form.publish_at ? new Date(form.publish_at).toISOString() : "" };
+      delete data.question_paper; delete data.supporting_files;
+      for (const [key, value] of Object.entries(data)) {
+        if (value === undefined || value === null) continue;
+        if (["questions", "ai_meta", "settings"].includes(key)) fd.append(key, JSON.stringify(value || (key === "questions" ? [] : {})));
+        else fd.append(key, typeof value === "boolean" ? String(value) : value);
+      }
+      if (form.question_paper) fd.append("question_paper", form.question_paper);
+      for (const file of form.supporting_files || []) fd.append("supporting_files", file);
+      if (state.mode === "edit") await api.patch(`/api/assessments/${state.id}`, fd); else await api.post("/api/assessments", fd);
+      onSaved(state.mode === "edit" ? "Assessment updated." : "Assessment created.");
+    } catch (error) { onError(error.response?.data?.errors?.join(". ") || error.response?.data?.message || "Could not save assessment."); }
+    finally { setBusy(false); }
+  };
+  return <Modal title={`${state.mode === "edit" ? "Edit" : "Create"} Assessment`} large onClose={onClose}><form onSubmit={submit}>
+    <div className="assessment-builder-body">
+      <div className="row g-3">
+        <SelectField label="Class" required value={form.class_id} options={classes} onChange={(v) => setForm({ ...form, class_id: v, section_id: "", subject_id: "" })} />
+        <SelectField label="Section" value={form.section_id} options={sections} onChange={(v) => setForm({ ...form, section_id: v, subject_id: "" })} empty="All sections" />
+        <SelectField label="Subject" required value={form.subject_id} options={subjects} onChange={(v) => setForm({ ...form, subject_id: v })} />
+        <Input label="Linked Online Class ID" value={form.online_class_id} onChange={(v) => setForm({ ...form, online_class_id: v })} placeholder="Optional" />
+        <Input label="Title" required value={form.title} onChange={(v) => setForm({ ...form, title: v })} />
+        <SelectField label="Type" value={form.assessment_type} options={[{ id: "quiz", label: "Quiz" }, { id: "test", label: "Test" }, { id: "assignment", label: "Assignment" }, { id: "practice", label: "Practice" }]} onChange={(v) => setForm({ ...form, assessment_type: v })} />
+        <SelectField label="Mode" value={form.mode} options={[{ id: "online", label: "Online attempt" }, { id: "offline", label: "Written / scanned upload" }]} onChange={(v) => setForm({ ...form, mode: v })} />
+        <Input label="Total Marks" type="number" min="0" step="0.5" value={form.total_marks} onChange={(v) => setForm({ ...form, total_marks: v })} />
+        <Input label="Duration (minutes)" type="number" min="1" value={form.duration_minutes} onChange={(v) => setForm({ ...form, duration_minutes: v })} />
+        <Input label="Maximum Attempts" type="number" min="1" max="10" value={form.max_attempts} onChange={(v) => setForm({ ...form, max_attempts: v })} />
+        <Input label="Available From" type="datetime-local" value={form.starts_at} onChange={(v) => setForm({ ...form, starts_at: v })} />
+        <Input label="Deadline" type="datetime-local" value={form.ends_at} onChange={(v) => setForm({ ...form, ends_at: v })} />
+        <SelectField label="Publish" value={form.publish_trigger} options={[{ id: "manual", label: "Save as draft" }, { id: "immediate", label: "Publish immediately" }, { id: "scheduled", label: "At scheduled time" }, { id: "after_class", label: "When linked Zoom class ends" }]} onChange={(v) => setForm({ ...form, publish_trigger: v })} />
+        {form.publish_trigger === "scheduled" && <Input label="Publish At" required type="datetime-local" value={form.publish_at} onChange={(v) => setForm({ ...form, publish_at: v })} />}
+        <SelectField label="Result Release" value={form.result_release} options={[{ id: "manual", label: "Teacher publishes results" }, { id: "immediate", label: "Immediately for auto-checked tests" }]} onChange={(v) => setForm({ ...form, result_release: v })} />
+        <div className="col-12"><label className="form-label">Description / chapters / topic</label><textarea className="form-control" rows="2" value={form.description || ""} onChange={(e) => setForm({ ...form, description: e.target.value })} /></div>
+        <div className="col-12"><label className="form-label">Instructions</label><textarea className="form-control" rows="2" value={form.instructions || ""} onChange={(e) => setForm({ ...form, instructions: e.target.value })} /></div>
+        <div className="col-12 d-flex flex-wrap gap-4"><Check label="Randomize questions" checked={form.randomize_questions} onChange={(v) => setForm({ ...form, randomize_questions: v })} /><Check label="Randomize options" checked={form.randomize_options} onChange={(v) => setForm({ ...form, randomize_options: v })} /></div>
+      </div>
+
+      {form.mode === "offline" && <div className="assessment-upload-box mt-4"><h6><i className="bi bi-file-earmark-pdf me-2" />Offline Question Paper</h6><p className="text-muted small">Upload PDF/Word/image, or keep questions below to generate a branded PDF.</p><input className="form-control" type="file" accept=".pdf,.doc,.docx,image/*" onChange={(e) => setForm({ ...form, question_paper: e.target.files?.[0] || null })} /></div>}
+
+      <div className="d-flex justify-content-between align-items-center mt-4 mb-2"><div><h5 className="mb-0">Questions</h5><small className="text-muted">AI drafts must be reviewed by the teacher before publishing.</small></div><div className="d-flex gap-2"><button type="button" className="btn btn-outline-primary" disabled={aiBusy} onClick={generateAi}><i className="bi bi-stars me-1" />{aiBusy ? "Generating…" : "AI Generate"}</button><button type="button" className="btn btn-outline-secondary" onClick={addQuestion}>Add Question</button></div></div>
+      {form.questions.map((q, index) => <QuestionEditor key={`${q.id || "new"}-${index}`} index={index} value={q} onChange={(patch) => updateQuestion(index, patch)} onRemove={() => removeQuestion(index)} />)}
+      <div className="assessment-upload-box mt-3"><label className="form-label fw-semibold">Supporting materials</label><input className="form-control" type="file" multiple onChange={(e) => setForm({ ...form, supporting_files: Array.from(e.target.files || []) })} /></div>
+    </div>
+    <div className="modal-action-bar"><button type="button" className="btn btn-light" onClick={onClose}>Close</button><button className="btn btn-primary" disabled={busy}>{busy ? "Saving…" : "Save Assessment"}</button></div>
+  </form></Modal>;
+}
+
+function QuestionEditor({ index, value, onChange, onRemove }) {
+  const objective = ["mcq", "true_false"].includes(value.question_type); const options = value.question_type === "true_false" ? ["True", "False"] : (value.options || ["", "", "", ""]);
+  return <div className="question-editor card border-0 mt-3"><div className="card-body"><div className="d-flex justify-content-between"><strong>Question {index + 1}</strong><button type="button" className="btn btn-sm btn-link text-danger" onClick={onRemove}>Remove</button></div><div className="row g-2 mt-1">
+    <SelectField label="Question Type" value={value.question_type} options={[{ id: "mcq", label: "MCQ" }, { id: "true_false", label: "True / False" }, { id: "fill_blank", label: "Fill in the blank" }, { id: "short", label: "Short answer" }, { id: "long", label: "Long answer" }]} onChange={(v) => onChange({ question_type: v, options: v === "true_false" ? ["True", "False"] : v === "mcq" ? (value.options?.length ? value.options : ["", "", "", ""]) : [] })} />
+    <Input label="Marks" type="number" min="0.5" step="0.5" value={value.marks} onChange={(v) => onChange({ marks: v })} />
+    <SelectField label="Difficulty" value={value.difficulty || "medium"} options={[{ id: "easy", label: "Easy" }, { id: "medium", label: "Medium" }, { id: "hard", label: "Hard" }]} onChange={(v) => onChange({ difficulty: v })} />
+    <Input label="Topic" value={value.topic || ""} onChange={(v) => onChange({ topic: v })} />
+    <div className="col-12"><label className="form-label">Question</label><textarea required className="form-control" rows="2" value={value.question_text} onChange={(e) => onChange({ question_text: e.target.value })} /></div>
+    {objective && <div className="col-12"><label className="form-label">Options and correct answer</label><div className="row g-2">{options.map((option, oi) => <div className="col-md-6" key={oi}><div className="input-group"><span className="input-group-text"><input type="radio" name={`correct-${index}`} checked={Number(value.correct_answer) === oi} onChange={() => onChange({ correct_answer: oi })} /></span><input className="form-control" required value={option} disabled={value.question_type === "true_false"} onChange={(e) => { const next = [...options]; next[oi] = e.target.value; onChange({ options: next }); }} /></div></div>)}</div></div>}
+    {value.question_type === "fill_blank" && <Input label="Accepted answer(s), comma separated" value={Array.isArray(value.correct_answer) ? value.correct_answer.join(", ") : value.correct_answer || ""} onChange={(v) => onChange({ correct_answer: v.split(",").map((x) => x.trim()).filter(Boolean) })} />}
+    {["short", "long"].includes(value.question_type) && <div className="col-12"><label className="form-label">Answer key / marking guidance</label><textarea className="form-control" rows="2" value={value.explanation || ""} onChange={(e) => onChange({ explanation: e.target.value })} /></div>}
+  </div></div></div>;
+}
+
+function AttemptModal({ payload, onClose, onSubmitted, onError }) {
+  const { attempt, assessment } = payload; const [answers, setAnswers] = useState(() => Object.fromEntries((assessment.questions || []).map((q) => [q.id, { question_id: q.id, answer_value: null, answer_text: "" }]))); const [remaining, setRemaining] = useState(null); const [busy, setBusy] = useState(false); const latest = useRef(answers); latest.current = answers;
+  const normalizedAnswers = useCallback(() => Object.values(latest.current), []);
+  const save = useCallback(async () => { try { await api.put(`/api/assessments/${assessment.id}/attempts/${attempt.id}/answers`, { answers: normalizedAnswers() }); } catch (_) {} }, [assessment.id, attempt.id, normalizedAnswers]);
+  const submit = useCallback(async (auto = false) => {
+    if (!auto && !window.confirm("Submit this assessment? You may not be able to change answers afterward.")) return;
+    setBusy(true); try { await api.post(`/api/assessments/${assessment.id}/submit`, { attempt_id: attempt.id, answers: normalizedAnswers() }); onSubmitted(); } catch (error) { onError(error.response?.data?.message || "Could not submit assessment."); } finally { setBusy(false); }
+  }, [assessment.id, attempt.id, normalizedAnswers, onError, onSubmitted]);
+  useEffect(() => { const timer = setInterval(save, 20000); return () => clearInterval(timer); }, [save]);
+  useEffect(() => {
+    if (!assessment.duration_minutes) return undefined;
+    const end = new Date(attempt.started_at).getTime() + Number(assessment.duration_minutes) * 60000;
+    const tick = () => { const seconds = Math.max(0, Math.floor((end - Date.now()) / 1000)); setRemaining(seconds); if (seconds === 0) submit(true); };
+    tick(); const id = setInterval(tick, 1000); return () => clearInterval(id);
+  }, [assessment.duration_minutes, attempt.started_at, submit]);
+  const setAnswer = (question, patch) => setAnswers((old) => ({ ...old, [question.id]: { ...old[question.id], ...patch } }));
+  return <Modal title={assessment.title} large onClose={onClose}><div className="attempt-header"><span>{assessment.total_marks} marks</span><span>{assessment.questions?.length || 0} questions</span>{remaining != null && <strong className={remaining < 60 ? "text-danger" : ""}><i className="bi bi-stopwatch me-1" />{Math.floor(remaining / 60)}:{String(remaining % 60).padStart(2, "0")}</strong>}</div><div className="attempt-body">
+    {(assessment.questions || []).map((q, index) => <div className="attempt-question" key={q.id}><div className="d-flex justify-content-between"><strong>Q{index + 1}. {q.question_text}</strong><span>{q.marks} marks</span></div>
+      {["mcq", "true_false"].includes(q.question_type) ? <div className="mt-2">{(q.options || []).map((option, oi) => <label className="answer-option" key={oi}><input type="radio" name={`q-${q.id}`} checked={Number(answers[q.id]?.answer_value) === oi} onChange={() => setAnswer(q, { answer_value: oi, answer_text: "" })} /><span>{option}</span></label>)}</div> : <textarea className="form-control mt-2" rows={q.question_type === "long" ? 6 : 3} value={answers[q.id]?.answer_text || ""} onChange={(e) => setAnswer(q, { answer_text: e.target.value, answer_value: q.question_type === "fill_blank" ? e.target.value : null })} />}
+    </div>)}
+  </div><div className="modal-action-bar"><button className="btn btn-light" onClick={save}>Save Progress</button><button className="btn btn-primary" disabled={busy} onClick={() => submit(false)}>{busy ? "Submitting…" : "Submit Test"}</button></div></Modal>;
+}
+
+function OfflineSubmit({ assessment, onClose, onSubmitted, onError }) {
+  const [files, setFiles] = useState([]); const [busy, setBusy] = useState(false);
+  const submit = async (e) => { e.preventDefault(); if (!files.length) return onError("Select at least one scanned answer-sheet file."); setBusy(true); try { const fd = new FormData(); files.forEach((f) => fd.append("submission_files", f)); fd.append("client_meta", JSON.stringify({ source: "web_upload" })); await api.post(`/api/assessments/${assessment.id}/submit`, fd); onSubmitted(); } catch (error) { onError(error.response?.data?.message || "Could not upload answer sheets."); } finally { setBusy(false); } };
+  return <Modal title="Upload Answer Sheets" onClose={onClose}><form onSubmit={submit}><div className="p-4"><h5>{assessment.title}</h5><p className="text-muted">Scan clearly, keep pages in order and upload PDF/JPG/PNG files.</p><input className="form-control" required type="file" accept="application/pdf,image/*" multiple onChange={(e) => setFiles(Array.from(e.target.files || []))} />{files.length > 0 && <div className="mt-3 small">{files.map((f, i) => <div key={`${f.name}-${i}`}><i className="bi bi-file-earmark me-1" />{f.name}</div>)}</div>}</div><div className="modal-action-bar"><button type="button" className="btn btn-light" onClick={onClose}>Cancel</button><button className="btn btn-primary" disabled={busy}>{busy ? "Uploading…" : "Submit Answer Sheets"}</button></div></form></Modal>;
+}
+
+function SubmissionsModal({ state, onClose, onChanged, onError }) {
+  const [selected, setSelected] = useState(null);
+  return <Modal title={`Submissions — ${state.assessment.title}`} large onClose={onClose}><div className="table-responsive p-3"><table className="table align-middle"><thead><tr><th>Student</th><th>Status</th><th>Submitted</th><th>Marks</th><th /></tr></thead><tbody>{state.rows.map((row) => <tr key={row.id}><td><strong>{row.student?.name}</strong><small className="d-block text-muted">{row.student?.admission_number || ""}</small></td><td><span className={`assessment-status status-${row.status}`}>{row.status}</span></td><td>{fmt(row.submitted_at)}</td><td>{row.obtained_marks == null ? "—" : `${row.obtained_marks}/${state.assessment.total_marks}`}</td><td className="text-end"><button className="btn btn-sm btn-outline-primary" disabled={!row.latestAttempt} onClick={() => setSelected(row)}>Evaluate</button></td></tr>)}</tbody></table></div>{selected && <GradePanel assessment={state.assessment} enrollment={selected} onClose={() => setSelected(null)} onSaved={async () => { setSelected(null); await onChanged(); }} onError={onError} />}</Modal>;
+}
+
+function GradePanel({ assessment, enrollment, onClose, onSaved, onError }) {
+  const attempt = enrollment.latestAttempt; const [marks, setMarks] = useState(enrollment.obtained_marks ?? attempt?.obtained_marks ?? 0); const [feedback, setFeedback] = useState(enrollment.teacher_feedback || attempt?.teacher_feedback || ""); const [answerGrades, setAnswerGrades] = useState(() => (attempt?.answers || []).map((a) => ({ answer_id: a.id, awarded_marks: a.awarded_marks ?? 0, teacher_remark: a.teacher_remark || "" }))); const [files, setFiles] = useState([]); const [busy, setBusy] = useState(false);
+  const updateAnswer = (id, patch) => setAnswerGrades((rows) => rows.map((r) => r.answer_id === id ? { ...r, ...patch } : r));
+  const submit = async () => { setBusy(true); try { const fd = new FormData(); fd.append("obtained_marks", marks); fd.append("teacher_feedback", feedback); fd.append("answer_grades", JSON.stringify(answerGrades)); files.forEach((f) => fd.append("corrected_files", f)); await api.patch(`/api/assessments/${assessment.id}/submissions/${enrollment.student_id}/grade`, fd); onSaved(); } catch (error) { onError(error.response?.data?.message || "Could not save marks."); } finally { setBusy(false); } };
+  return <div className="grade-panel"><div className="d-flex justify-content-between"><div><h5 className="mb-0">Evaluate {enrollment.student?.name}</h5><small className="text-muted">{enrollment.student?.admission_number}</small></div><button className="btn-close" onClick={onClose} /></div>
+    {(attempt?.files || []).map((file) => <button key={file.id} className="btn btn-sm btn-outline-secondary mt-3 me-2" onClick={() => openBlob(`/api/assessments/${assessment.id}/files/${file.id}`, file.original_name)}><i className="bi bi-eye me-1" />{file.original_name}</button>)}
+    {assessment.mode === "online" && (attempt?.answers || []).map((answer) => { const grade = answerGrades.find((g) => g.answer_id === answer.id) || {}; return <div className="answer-grade mt-3" key={answer.id}><strong>{answer.question?.question_text}</strong><p className="mb-2 text-muted">Answer: {String(answer.answer_text ?? answer.answer_value ?? "—")}</p><div className="row g-2"><Input label={`Marks / ${answer.question?.marks}`} type="number" min="0" max={answer.question?.marks} step="0.5" value={grade.awarded_marks} onChange={(v) => updateAnswer(answer.id, { awarded_marks: v })} /><Input label="Remark" value={grade.teacher_remark} onChange={(v) => updateAnswer(answer.id, { teacher_remark: v })} /></div></div>; })}
+    <div className="row g-3 mt-2"><Input label={`Final Marks / ${assessment.total_marks}`} type="number" min="0" max={assessment.total_marks} step="0.5" value={marks} onChange={setMarks} /><div className="col-12"><label className="form-label">Teacher feedback</label><textarea className="form-control" rows="3" value={feedback} onChange={(e) => setFeedback(e.target.value)} /></div><div className="col-12"><label className="form-label">Corrected sheet / feedback file</label><input className="form-control" type="file" multiple onChange={(e) => setFiles(Array.from(e.target.files || []))} /></div></div>
+    <div className="text-end mt-3"><button className="btn btn-light me-2" onClick={onClose}>Cancel</button><button className="btn btn-success" disabled={busy} onClick={submit}>{busy ? "Saving…" : "Save Evaluation"}</button></div>
+  </div>;
+}
+
+function Modal({ title, children, onClose, large = false }) { return <div className="assessment-modal-backdrop"><div className={`assessment-modal card shadow-lg ${large ? "assessment-modal-lg" : ""}`} role="dialog" aria-modal="true"><div className="card-header d-flex align-items-center justify-content-between"><h5 className="mb-0">{title}</h5><button className="btn-close" onClick={onClose} /></div>{children}</div></div>; }
+function Input({ label, onChange, ...props }) { return <div className="col-md-6"><label className="form-label">{label}</label><input className="form-control" onChange={(e) => onChange(e.target.value)} {...props} /></div>; }
+function SelectField({ label, options, onChange, empty = "Select", ...props }) { return <div className="col-md-6"><label className="form-label">{label}</label><select className="form-select" onChange={(e) => onChange(e.target.value)} {...props}><option value="">{empty}</option>{options.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}</select></div>; }
+function Check({ label, checked, onChange }) { return <label className="form-check"><input className="form-check-input" type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} /><span className="form-check-label">{label}</span></label>; }

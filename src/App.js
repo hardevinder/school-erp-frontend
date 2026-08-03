@@ -75,6 +75,7 @@ import TeacherSubstitutedListing from "./pages/TeacherSubstitutedListing";
 import TeacherCombinedSubstitutionPage from "./pages/TeacherCombinedSubstitutionPage";
 import LessonPlan from "./pages/LessonPlan";
 import OnlineClasses from "./pages/OnlineClasses";
+import Assessments from "./pages/Assessments";
 import MarkAttendance from "./pages/MarkAttendance";
 import AttendanceCalendar from "./pages/AttendanceCalendar";
 import TeacherTimetableAssignment from "./pages/TeacherTimetableAssignment";
@@ -1107,6 +1108,14 @@ function App() {
             element={
               <RequireRole roles={["superadmin", "admin", "academic_coordinator", "teacher", "student", "parent"]}>
                 <OnlineClasses />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="/assessments"
+            element={
+              <RequireRole roles={["superadmin", "admin", "academic_coordinator", "coordinator", "principal", "teacher", "student", "parent"]}>
+                <Assessments />
               </RequireRole>
             }
           />

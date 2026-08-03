@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import api from "../api";
 import "./OnlineClasses.css";
+import OnlineClassAttendanceModal from "../components/OnlineClassAttendanceModal";
 
 const unwrap = (response) => response?.data?.data ?? response?.data ?? [];
 const list = (value) => Array.isArray(value) ? value : value?.rows || value?.classes || value?.subjects || value?.sections || [];
@@ -14,9 +16,11 @@ const initialForm = {
   date: "", time: "", duration_minutes: 40,
   timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Kolkata",
   waiting_room: true, mute_upon_entry: true, join_before_host: false, recording_setting: "none",
+  create_assessment: false,
 };
 
 export default function OnlineClasses() {
+  const navigate = useNavigate();
   const roles = useMemo(roleSet, []);
   const canSchedule = ["teacher", "admin", "superadmin", "super_admin", "academic_coordinator"].some((r) => roles.has(r));
   const [zoom, setZoom] = useState({ connected: false });
@@ -28,8 +32,9 @@ export default function OnlineClasses() {
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState(null);
+  const [attendanceRow, setAttendanceRow] = useState(null);
 
-  const flash = (type, text) => setNotice({ type, text });
+  const flash = useCallback((type, text) => setNotice({ type, text }), []);
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -43,7 +48,7 @@ export default function OnlineClasses() {
       }
     } catch (e) { flash("danger", e.response?.data?.message || "Could not load online classes."); }
     finally { setLoading(false); }
-  }, [canSchedule]);
+  }, [canSchedule, flash]);
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
@@ -51,7 +56,7 @@ export default function OnlineClasses() {
     if (q.get("zoom") === "connected") flash("success", "Zoom account connected.");
     if (q.get("zoom") === "error") flash("danger", q.get("message") || "Zoom connection failed.");
     if (q.has("zoom")) window.history.replaceState({}, "", window.location.pathname);
-  }, []);
+  }, [flash]);
 
   const connect = async () => {
     try { const r = await api.get("/api/zoom/connect"); window.location.assign(unwrap(r).authorization_url); }
@@ -79,11 +84,14 @@ export default function OnlineClasses() {
   const submit = async (e) => {
     e.preventDefault(); setBusy(true);
     try {
+      const createAssessment = Boolean(form.create_assessment) && !editing;
       const payload = { ...form, start_time: new Date(`${form.date}T${form.time}`).toISOString(), duration_minutes: Number(form.duration_minutes) };
-      delete payload.date; delete payload.time;
-      if (editing) await api.patch(`/api/online-classes/${editing.id}`, payload);
-      else await api.post("/api/online-classes", payload);
+      delete payload.date; delete payload.time; delete payload.create_assessment;
+      let saved;
+      if (editing) saved = unwrap(await api.patch(`/api/online-classes/${editing.id}`, payload));
+      else saved = unwrap(await api.post("/api/online-classes", payload));
       setShowForm(false); flash("success", editing ? "Online class updated." : "Online class scheduled."); await load();
+      if (createAssessment && saved?.id) navigate(`/assessments?create=1&online_class_id=${saved.id}`);
     } catch (err) {
       const data = err.response?.data;
       flash("danger", data?.errors?.join(". ") || data?.message || "Could not save online class.");
@@ -132,11 +140,21 @@ export default function OnlineClasses() {
           <td>{row.teacher?.name || "—"}</td><td><span className={`badge status-${row.status}`}>{row.status}</span></td>
           <td><div className="d-flex justify-content-end flex-wrap gap-2">
             {row.status !== "cancelled" && <button className="btn btn-sm btn-outline-primary" onClick={() => action(row, "join")}>Join</button>}
+            {(row.can_manage || roles.has("student")) && <button className="btn btn-sm btn-outline-dark" onClick={() => setAttendanceRow(row)}>{roles.has("student") && !row.can_manage ? "My Attendance" : "Attendance"}</button>}
+            <button className="btn btn-sm btn-outline-success" onClick={() => navigate(`/assessments?online_class_id=${row.id}`)}>Tests</button>
             {row.can_start && row.status !== "cancelled" && <button className="btn btn-sm btn-primary" onClick={() => action(row, "start")}>Start</button>}
             {row.can_manage && row.status !== "cancelled" && <><button className="btn btn-sm btn-outline-secondary" onClick={() => openEdit(row)}>Edit</button><button className="btn btn-sm btn-outline-danger" onClick={() => action(row, "cancel")}>Cancel</button></>}
           </div></td></tr>)}</tbody>
       </table></div>
     </div></div>
+
+
+    {attendanceRow && <OnlineClassAttendanceModal
+      onlineClass={attendanceRow}
+      canManage={Boolean(attendanceRow.can_manage)}
+      onClose={() => setAttendanceRow(null)}
+      onNotice={flash}
+    />}
 
     {showForm && <div className="online-modal-backdrop" role="presentation"><div className="online-modal card shadow-lg" role="dialog" aria-modal="true">
       <form onSubmit={submit}><div className="card-header d-flex justify-content-between align-items-center"><h5 className="mb-0">{editing ? "Edit" : "Schedule"} Online Class</h5><button type="button" className="btn-close" onClick={() => setShowForm(false)} /></div>
@@ -152,6 +170,7 @@ export default function OnlineClasses() {
         <Field label="Timezone" value={form.timezone} onChange={(v) => setForm({ ...form, timezone: v })} />
         <Select label="Recording" value={form.recording_setting} onChange={(v) => setForm({ ...form, recording_setting: v })} options={[{ id: "none", name: "Disabled" }, { id: "local", name: "Local" }, { id: "cloud", name: "Cloud" }]} nameKey="name" />
         <div className="col-12 d-flex flex-wrap gap-4">{[["waiting_room", "Waiting room"], ["mute_upon_entry", "Mute on entry"]].map(([key, label]) => <label className="form-check" key={key}><input className="form-check-input" type="checkbox" checked={form[key]} onChange={(e) => setForm({ ...form, [key]: e.target.checked })} /><span className="form-check-label">{label}</span></label>)}</div>
+        {!editing && <div className="col-12"><label className="form-check assessment-link-check"><input className="form-check-input" type="checkbox" checked={form.create_assessment} onChange={(e) => setForm({ ...form, create_assessment: e.target.checked })} /><span className="form-check-label"><strong>Create a test for this class</strong><small className="d-block text-muted">After scheduling, open AI/online/offline assessment builder linked to this class.</small></span></label></div>}
       </div></div><div className="card-footer text-end"><button type="button" className="btn btn-light me-2" onClick={() => setShowForm(false)}>Close</button><button className="btn btn-primary" disabled={busy}>{busy ? "Saving…" : "Save Class"}</button></div></form>
     </div></div>}
   </div>;
