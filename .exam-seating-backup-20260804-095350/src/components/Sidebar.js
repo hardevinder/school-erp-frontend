@@ -355,8 +355,6 @@ export default function Sidebar({ headerHeight = 56 }) {
           { key: "exams", label: "Exams", icon: "bi-journal-bookmark", path: "/exams", roles: ["examination"] },
           { key: "exam-schemes", label: "Exam Schemes", icon: "bi-card-checklist", path: "/exam-schemes", roles: ["examination"] },
           { key: "exam-schedules", label: "Exam Schedule", icon: "bi-calendar2-check", path: "/exam-schedules", roles: ["examination"] },
-          { key: "exam-seating", label: "Seating Plan & Duties", icon: "bi-grid-3x3-gap-fill", path: "/exam-seating", roles: ["examination"] },
-          { key: "answer-script-management", label: "Answer Scripts & Bundles", icon: "bi-box-seam-fill", path: "/answer-script-management", roles: ["examination"] },
           { key: "assessment-components", label: "Assessment Components", icon: "bi-diagram-3", path: "/assessment-components", roles: ["examination"] },
           { key: "term-management", label: "Terms", icon: "bi-calendar3-range", path: "/term-management", roles: ["examination"] },
           { key: "grade-schemes", label: "Grade Schemes", icon: "bi-ui-checks", path: "/grade-schemes", roles: ["examination"] },

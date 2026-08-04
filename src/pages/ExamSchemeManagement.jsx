@@ -26,6 +26,37 @@ const safeMode = (m) => {
   return s === "GRADE" ? "GRADE" : "MARKS";
 };
 
+const calculationOptions = [
+  ["WEIGHTED_SUM", "Weighted Sum (recommended for PT-1 + PT-2)"],
+  ["AVERAGE", "Equal Average"],
+  ["BEST_OF", "Best Of"],
+  ["SINGLE", "Single Component"],
+];
+
+const missingMarksOptions = [
+  ["REQUIRE_ALL", "Require all components"],
+  ["AVERAGE_AVAILABLE", "Calculate from available marks"],
+  ["ABSENT_AS_ZERO", "Treat absent as zero"],
+];
+
+const emptySchemeForm = (defaults = {}) => ({
+  id: null,
+  session_id: "",
+  class_id: "",
+  subject_id: "",
+  term_id: "",
+  component_id: "",
+  weightage_percent: "",
+  max_marks_override: "",
+  result_group_code: "",
+  result_group_label: "",
+  calculation_method: "WEIGHTED_SUM",
+  missing_marks_policy: "REQUIRE_ALL",
+  show_individual: true,
+  group_final_marks: "",
+  ...defaults,
+});
+
 // Sortable row component
 function SortableRow({
   scheme,
@@ -43,7 +74,13 @@ function SortableRow({
 
   // Grade/Marks now comes from AssessmentComponent.component_type
   const mode = safeMode(scheme.component?.component_type);
-  const maxMarks = scheme.component?.max_marks ?? 0;
+  const maxMarks =
+    scheme.effective_max_marks ??
+    scheme.max_marks_override ??
+    scheme.component?.max_marks ??
+    0;
+  const groupCode = String(scheme.result_group_code || "").trim();
+  const groupValidation = scheme.group_validation;
 
   return (
     <tr ref={setNodeRef} style={style}>
@@ -77,9 +114,37 @@ function SortableRow({
         </span>
       </td>
 
-      <td>{mode === "GRADE" ? "-" : maxMarks}</td>
+      <td>
+        {mode === "GRADE" ? "-" : maxMarks}
+        {mode === "MARKS" && scheme.max_marks_override != null && (
+          <div className="small text-primary">Class override</div>
+        )}
+      </td>
 
-      <td>{scheme.weightage_percent ?? 0}%</td>
+      <td>{mode === "GRADE" ? "-" : scheme.weightage_percent ?? 0}</td>
+
+      <td style={{ minWidth: 180 }}>
+        {groupCode ? (
+          <>
+            <div className="fw-semibold">
+              {scheme.result_group_label || groupCode} ({groupCode})
+            </div>
+            <div className="small text-muted">
+              Final: {scheme.group_final_marks ?? "-"}
+              {scheme.show_individual ? " • Individual visible" : " • Combined only"}
+            </div>
+            {groupValidation && !groupValidation.is_valid && (
+              <div className="small text-danger" title={(groupValidation.messages || []).join(" ")}>
+                ⚠ Group configuration incomplete
+              </div>
+            )}
+          </>
+        ) : (
+          <span className="text-muted">Not grouped</span>
+        )}
+      </td>
+
+      <td>{groupCode ? String(scheme.calculation_method || "WEIGHTED_SUM").replace(/_/g, " ") : "-"}</td>
 
       <td>
         {scheme.is_locked ? (
@@ -142,15 +207,7 @@ const ExamSchemeManagement = () => {
     subject_id: "",
   });
 
-  const [formData, setFormData] = useState({
-    id: null,
-    session_id: "",
-    class_id: "",
-    subject_id: "",
-    term_id: "",
-    component_id: "",
-    weightage_percent: "",
-  });
+  const [formData, setFormData] = useState(() => emptySchemeForm());
 
   const [isEditing, setIsEditing] = useState(false);
   const [showModal, setShowModal] = useState(false);
@@ -208,6 +265,12 @@ const ExamSchemeManagement = () => {
     (terms || []).forEach((t) => map.set(String(t.id), t));
     return map;
   }, [terms]);
+
+  const selectedFormComponent = useMemo(
+    () => components.find((component) => String(component.id) === String(formData.component_id)),
+    [components, formData.component_id]
+  );
+  const isGradeFormComponent = safeMode(selectedFormComponent?.component_type) === "GRADE";
 
   useEffect(() => {
     fetchDropdowns();
@@ -342,10 +405,13 @@ const ExamSchemeManagement = () => {
       });
 
       const deleted = res?.data?.deleted ?? 0;
+      const lockedSkipped = res?.data?.locked_skipped ?? 0;
 
       await Swal.fire(
         "Deleted ✅",
-        `${deleted} unlocked scheme(s) removed successfully.`,
+        `${deleted} unlocked scheme(s) removed successfully.${
+          lockedSkipped ? ` ${lockedSkipped} locked scheme(s) were skipped.` : ""
+        }`,
         "success"
       );
 
@@ -356,53 +422,91 @@ const ExamSchemeManagement = () => {
     }
   };
 
-  const openModal = (scheme) => {
-    if (scheme) {
-      setFormData({
-        id: scheme.id,
-        session_id: strId(scheme.session_id),
-        class_id: strId(scheme.class_id),
-        subject_id: strId(scheme.subject_id),
-        term_id: strId(scheme.term_id),
-        component_id: strId(scheme.component_id),
-        weightage_percent: strId(scheme.weightage_percent),
-      });
-      setIsEditing(true);
-    } else {
-      setFormData({
-        id: null,
-        session_id: filters.session_id ? String(filters.session_id) : "",
-        class_id: filters.class_id ? String(filters.class_id) : "",
-        subject_id: filters.subject_id ? String(filters.subject_id) : "",
-        term_id: "",
-        component_id: "",
-        weightage_percent: "",
-      });
-      setIsEditing(false);
-    }
-    setShowModal(true);
-  };
-
-  const openDuplicateModal = (scheme) => {
-    setFormData({
-      id: null,
+  const schemeToForm = (scheme, { duplicate = false } = {}) =>
+    emptySchemeForm({
+      id: duplicate ? null : scheme.id,
       session_id: strId(scheme.session_id),
       class_id: strId(scheme.class_id),
       subject_id: strId(scheme.subject_id),
       term_id: strId(scheme.term_id),
       component_id: strId(scheme.component_id),
       weightage_percent: strId(scheme.weightage_percent),
+      max_marks_override: strId(scheme.max_marks_override),
+      result_group_code: strId(scheme.result_group_code),
+      result_group_label: strId(scheme.result_group_label),
+      calculation_method: scheme.calculation_method || "WEIGHTED_SUM",
+      missing_marks_policy: scheme.missing_marks_policy || "REQUIRE_ALL",
+      show_individual:
+        scheme.show_individual === undefined || scheme.show_individual === null
+          ? true
+          : Boolean(scheme.show_individual),
+      group_final_marks: strId(scheme.group_final_marks),
     });
+
+  const openModal = (scheme) => {
+    if (scheme) {
+      setFormData(schemeToForm(scheme));
+      setIsEditing(true);
+    } else {
+      setFormData(
+        emptySchemeForm({
+          session_id: filters.session_id ? String(filters.session_id) : "",
+          class_id: filters.class_id ? String(filters.class_id) : "",
+          subject_id: filters.subject_id ? String(filters.subject_id) : "",
+        })
+      );
+      setIsEditing(false);
+    }
+    setShowModal(true);
+  };
+
+  const openDuplicateModal = (scheme) => {
+    setFormData(schemeToForm(scheme, { duplicate: true }));
     setIsEditing(false);
     setShowModal(true);
   };
 
   const closeModal = () => setShowModal(false);
 
-  const handleChange = (e) =>
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+  const handleChange = (e) => {
+    const { name, value, type, checked } = e.target;
+    setFormData((prev) => {
+      const next = {
+        ...prev,
+        [name]: type === "checkbox" ? checked : value,
+      };
+
+      if (name === "component_id") {
+        const selected = components.find(
+          (component) => String(component.id) === String(value)
+        );
+        if (safeMode(selected?.component_type) === "GRADE") {
+          next.max_marks_override = "";
+          next.result_group_code = "";
+          next.result_group_label = "";
+          next.group_final_marks = "";
+          next.show_individual = true;
+        }
+      }
+
+      return next;
+    });
+  };
 
   const handleSubmit = async () => {
+    const groupCode = String(formData.result_group_code || "")
+      .trim()
+      .toUpperCase();
+    const weightage = Number(formData.weightage_percent);
+    const maxOverride =
+      String(formData.max_marks_override || "").trim() === ""
+        ? null
+        : Number(formData.max_marks_override);
+    const groupFinalMarks =
+      String(formData.group_final_marks || "").trim() === ""
+        ? null
+        : Number(formData.group_final_marks);
+
     const payload = {
       ...formData,
       session_id: String(formData.session_id || ""),
@@ -410,24 +514,57 @@ const ExamSchemeManagement = () => {
       subject_id: String(formData.subject_id || ""),
       term_id: String(formData.term_id || ""),
       component_id: String(formData.component_id || ""),
-      weightage_percent: String(formData.weightage_percent || ""),
+      weightage_percent: formData.weightage_percent,
+      max_marks_override: maxOverride,
+      result_group_code: groupCode || null,
+      result_group_label: groupCode
+        ? String(formData.result_group_label || "").trim() || groupCode
+        : null,
+      calculation_method: groupCode
+        ? formData.calculation_method || "WEIGHTED_SUM"
+        : "WEIGHTED_SUM",
+      missing_marks_policy: groupCode
+        ? formData.missing_marks_policy || "REQUIRE_ALL"
+        : "REQUIRE_ALL",
+      show_individual: groupCode ? Boolean(formData.show_individual) : true,
+      group_final_marks: groupCode ? groupFinalMarks : null,
     };
 
-    const {
-      session_id,
-      class_id,
-      subject_id,
-      term_id,
-      component_id,
-      weightage_percent,
-    } = payload;
-
-    if (!session_id || !class_id || !subject_id || !term_id || !component_id) {
-      return Swal.fire("Warning", "Please fill all fields.", "warning");
+    if (
+      !payload.session_id ||
+      payload.class_id === "" ||
+      !payload.subject_id ||
+      !payload.term_id ||
+      !payload.component_id
+    ) {
+      return Swal.fire("Warning", "Please fill all required fields.", "warning");
     }
 
-    if (weightage_percent === "" || weightage_percent === null) {
-      return Swal.fire("Warning", "Please enter weightage.", "warning");
+    if (!Number.isFinite(weightage) || weightage < 0 || weightage > 100) {
+      return Swal.fire(
+        "Warning",
+        "Final weightage must be between 0 and 100.",
+        "warning"
+      );
+    }
+
+    if (maxOverride !== null && (!Number.isFinite(maxOverride) || maxOverride <= 0)) {
+      return Swal.fire(
+        "Warning",
+        "Entry maximum marks override must be greater than zero.",
+        "warning"
+      );
+    }
+
+    if (
+      groupCode &&
+      (!Number.isFinite(groupFinalMarks) || groupFinalMarks <= 0)
+    ) {
+      return Swal.fire(
+        "Warning",
+        "Group final marks are required when a result group is selected.",
+        "warning"
+      );
     }
 
     try {
@@ -436,7 +573,7 @@ const ExamSchemeManagement = () => {
       } else {
         await api.post("/exam-schemes", payload);
       }
-      Swal.fire("Success", "Saved successfully.", "success");
+      Swal.fire("Success", "Assessment scheme saved successfully.", "success");
       closeModal();
       fetchSchemes();
     } catch (e) {
@@ -1011,8 +1148,10 @@ const ExamSchemeManagement = () => {
                     <th>Term</th>
                     <th>Component</th>
                     <th style={{ width: 120 }}>Type</th>
-                    <th>Max Marks</th>
-                    <th>Weightage (%)</th>
+                    <th>Entry Max</th>
+                    <th>Final Weightage</th>
+                    <th>Result Group</th>
+                    <th>Calculation</th>
                     <th>Status</th>
                     <th style={{ width: 260 }}>Actions</th>
                   </tr>
@@ -1032,7 +1171,7 @@ const ExamSchemeManagement = () => {
 
                   {!schemes.length && (
                     <tr>
-                      <td colSpan={11} className="text-center text-muted py-4">
+                      <td colSpan={13} className="text-center text-muted py-4">
                         No schemes found for selected filters.
                       </td>
                     </tr>
@@ -1143,24 +1282,145 @@ const ExamSchemeManagement = () => {
             </div>
 
             <div className="col-12 col-md-6">
-              <label>Weightage (%)</label>
+              <label>Entry Maximum Marks (optional override)</label>
               <input
                 type="number"
+                step="0.01"
+                min="0.01"
+                name="max_marks_override"
+                value={formData.max_marks_override}
+                onChange={handleChange}
+                className="form-control"
+                placeholder="Leave blank to use component maximum"
+                disabled={isGradeFormComponent}
+              />
+              <small className="text-muted">
+                Example: teacher enters marks out of 20, 40 or 50 for this class.
+              </small>
+            </div>
+
+            <div className="col-12 col-md-6">
+              <label>Final Weightage / Converted Marks</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                max="100"
                 name="weightage_percent"
                 value={formData.weightage_percent}
                 onChange={handleChange}
                 className="form-control"
-                placeholder="%"
+                placeholder="Example: 10 or 5"
               />
               <small className="text-muted">
-                Weightage is allowed even for grade-mode subjects.
+                16/20 with final weightage 10 becomes 8/10.
+              </small>
+            </div>
+
+            <div className="col-12">
+              <hr className="my-2" />
+              <div className="fw-semibold">Optional Result Group</div>
+              <small className="text-muted">
+                Use the same group code for PT-1 and PT-2 when the report card should show one combined PT result.
+              </small>
+            </div>
+
+            <div className="col-12 col-md-4">
+              <label>Result Group Code</label>
+              <input
+                type="text"
+                name="result_group_code"
+                value={formData.result_group_code}
+                onChange={handleChange}
+                className="form-control"
+                placeholder="PT"
+                disabled={isGradeFormComponent}
+              />
+            </div>
+
+            <div className="col-12 col-md-4">
+              <label>Result Group Label</label>
+              <input
+                type="text"
+                name="result_group_label"
+                value={formData.result_group_label}
+                onChange={handleChange}
+                className="form-control"
+                placeholder="Periodic Test"
+                disabled={isGradeFormComponent || !String(formData.result_group_code || "").trim()}
+              />
+            </div>
+
+            <div className="col-12 col-md-4">
+              <label>Group Final Marks</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0.01"
+                name="group_final_marks"
+                value={formData.group_final_marks}
+                onChange={handleChange}
+                className="form-control"
+                placeholder="10"
+                disabled={isGradeFormComponent || !String(formData.result_group_code || "").trim()}
+              />
+            </div>
+
+            <div className="col-12 col-md-6">
+              <label>Calculation Method</label>
+              <select
+                name="calculation_method"
+                value={formData.calculation_method}
+                onChange={handleChange}
+                className="form-control"
+                disabled={isGradeFormComponent || !String(formData.result_group_code || "").trim()}
+              >
+                {calculationOptions.map(([value, label]) => (
+                  <option key={value} value={value}>{label}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="col-12 col-md-6">
+              <label>Missing / Absent Marks Rule</label>
+              <select
+                name="missing_marks_policy"
+                value={formData.missing_marks_policy}
+                onChange={handleChange}
+                className="form-control"
+                disabled={isGradeFormComponent || !String(formData.result_group_code || "").trim()}
+              >
+                {missingMarksOptions.map(([value, label]) => (
+                  <option key={value} value={value}>{label}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="col-12">
+              <div className="form-check">
+                <input
+                  className="form-check-input"
+                  type="checkbox"
+                  id="show_individual"
+                  name="show_individual"
+                  checked={Boolean(formData.show_individual)}
+                  onChange={handleChange}
+                  disabled={isGradeFormComponent || !String(formData.result_group_code || "").trim()}
+                />
+                <label className="form-check-label" htmlFor="show_individual">
+                  Show PT-1 / PT-2 separately on report card
+                </label>
+              </div>
+              <small className="text-muted">
+                Uncheck it to show only one combined group column such as PT / 10.
               </small>
             </div>
 
             <div className="col-12">
               <div className="alert alert-light border mb-0 mt-2">
-                <b>Tip:</b> To change a component between MARKS and GRADE, open the{" "}
-                <b>Assessment Components</b> page and edit that component.
+                <b>Examples:</b> Single PT: weightage 10, group PT, method SINGLE, final 10. {" "}
+                Two PTs: configure PT-1 and PT-2 with the same group PT, weightage 5 each, {" "}
+                method WEIGHTED_SUM, final 10, and uncheck individual display.
               </div>
             </div>
           </div>

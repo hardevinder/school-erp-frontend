@@ -110,8 +110,6 @@ import AssessmentComponentManagement from "./pages/AssessmentComponentManagement
 import EnquiryForm from "./pages/EnquiryForm";
 import AcademicYearManagement from "./pages/AcademicYearManagement";
 import ExamScheduleManagement from "./pages/ExamScheduleManagement";
-import ExamSeatingManagement from "./pages/ExamSeatingManagement";
-import AnswerScriptManagement from "./pages/AnswerScriptManagement";
 import ExamManagement from "./pages/ExamManagement";
 import RollNumberManagement from "./pages/RollNumberManagement";
 import MarksEntry from "./pages/MarksEntry";
@@ -1175,22 +1173,6 @@ function App() {
           <Route path="/exam-schemes" element={<ExamSchemeManagement />} />
           <Route path="/exams" element={<ExamManagement />} />
           <Route path="/exam-schedules" element={<ExamScheduleManagement />} />
-          <Route
-            path="/exam-seating"
-            element={
-              <RequireRole roles={["examination", "academic_coordinator", "principal", "admin", "superadmin"]}>
-                <ExamSeatingManagement />
-              </RequireRole>
-            }
-          />
-          <Route
-            path="/answer-script-management"
-            element={
-              <RequireRole roles={["examination", "academic_coordinator", "coordinator", "principal", "admin", "superadmin", "super_admin"]}>
-                <AnswerScriptManagement />
-              </RequireRole>
-            }
-          />
           <Route path="/roll-numbers" element={<RollNumberManagement />} />
           <Route path="/marks-entry" element={<MarksEntry />} />
 

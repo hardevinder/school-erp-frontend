@@ -111,7 +111,6 @@ import EnquiryForm from "./pages/EnquiryForm";
 import AcademicYearManagement from "./pages/AcademicYearManagement";
 import ExamScheduleManagement from "./pages/ExamScheduleManagement";
 import ExamSeatingManagement from "./pages/ExamSeatingManagement";
-import AnswerScriptManagement from "./pages/AnswerScriptManagement";
 import ExamManagement from "./pages/ExamManagement";
 import RollNumberManagement from "./pages/RollNumberManagement";
 import MarksEntry from "./pages/MarksEntry";
@@ -1180,14 +1179,6 @@ function App() {
             element={
               <RequireRole roles={["examination", "academic_coordinator", "principal", "admin", "superadmin"]}>
                 <ExamSeatingManagement />
-              </RequireRole>
-            }
-          />
-          <Route
-            path="/answer-script-management"
-            element={
-              <RequireRole roles={["examination", "academic_coordinator", "coordinator", "principal", "admin", "superadmin", "super_admin"]}>
-                <AnswerScriptManagement />
               </RequireRole>
             }
           />

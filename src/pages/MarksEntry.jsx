@@ -33,6 +33,17 @@ const asArray = (d) => {
 
 const upper = (v) => String(v || "").trim().toUpperCase();
 const safeMode = (m) => (upper(m) === "GRADE" ? "GRADE" : "MARKS");
+const getComponentMaximum = (component) => {
+  const value = Number(component?.max_marks ?? component?.effective_max_marks);
+  return Number.isFinite(value) && value > 0 ? value : null;
+};
+const escapeHtml = (value) =>
+  String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
 
 const attendanceOptions = ["P", "A", "L", "ACT", "LA", "ML", "X"];
 const defaultGradeOptions = ["G", "B", "Y", "R"];
@@ -366,61 +377,114 @@ const MarksEntry = () => {
     setGradeAttendance((prev) => ({ ...prev, [key]: value }));
   };
 
- const saveMarksEntry = async () => {
-  if (!examScheduleId) {
-    Swal.fire("Error", "Exam schedule not found.", "error");
-    return;
-  }
-
-  try {
-    let marksData = [];
-
-    if (evaluationMode === "GRADE") {
-      marksData = students.flatMap((student) =>
-        components.map((component) => {
-          const key = `${student.id}_${component.component_id}`;
-
-          return {
-            student_id: student.id,
-            component_id: component.component_id,
-            grade: gradeValues[key] || "",
-            attendance: gradeAttendance[key] || "P",
-          };
-        })
-      );
-    } else {
-      marksData = students.flatMap((student) =>
-        components.map((component) => {
-          const key = `${student.id}_${component.component_id}`;
-          return {
-            student_id: student.id,
-            component_id: component.component_id,
-            marks_obtained:
-              attendance[key] === "P" ? marks[key] || "" : null,
-            attendance: attendance[key] || "P",
-          };
-        })
-      );
+  const saveMarksEntry = async () => {
+    if (!examScheduleId) {
+      Swal.fire("Error", "Exam schedule not found.", "error");
+      return;
     }
 
-    await api.post("/marks-entry/save", {
-      exam_schedule_id: examScheduleId,
-      marksData,
-    });
-
-    Swal.fire(
-      "Success",
-      evaluationMode === "GRADE"
-        ? "Grades saved successfully"
-        : "Marks saved successfully",
-      "success"
+    const editableComponents = components.filter(
+      (component) => !component.is_locked
     );
+    if (!editableComponents.length) {
+      Swal.fire(
+        "Locked",
+        "All components are locked. Unlock the assessment scheme before editing marks.",
+        "warning"
+      );
+      return;
+    }
 
-    fetchMarksEntryData();
-  } catch (err) {
-    showApiError("Error", err, "Failed to save entry");
-  }
-};
+    if (evaluationMode !== "GRADE") {
+      const errors = [];
+      students.forEach((student) => {
+        editableComponents.forEach((component) => {
+          const key = `${student.id}_${component.component_id}`;
+          const att = attendance[key] || "P";
+          const raw = marks[key];
+          if (att !== "P" || raw === "" || raw === null || raw === undefined) {
+            return;
+          }
+
+          const numeric = Number(raw);
+          const maximum = getComponentMaximum(component);
+          if (!Number.isFinite(numeric) || numeric < 0) {
+            errors.push(
+              `${student.name}: ${component.abbreviation || component.name} must be a valid non-negative number.`
+            );
+          } else if (maximum !== null && numeric > maximum) {
+            errors.push(
+              `${student.name}: ${component.abbreviation || component.name} ${numeric} cannot exceed ${maximum}.`
+            );
+          }
+        });
+      });
+
+      if (errors.length) {
+        Swal.fire({
+          icon: "warning",
+          title: "Please correct marks",
+          html: `<div style="text-align:left;max-height:260px;overflow:auto">${errors
+            .slice(0, 20)
+            .map((message) => `<div>• ${escapeHtml(message)}</div>`)
+            .join("")}${errors.length > 20 ? `<div>...and ${errors.length - 20} more</div>` : ""}</div>`,
+        });
+        return;
+      }
+    }
+
+    try {
+      let marksData = [];
+
+      if (evaluationMode === "GRADE") {
+        marksData = students.flatMap((student) =>
+          editableComponents.map((component) => {
+            const key = `${student.id}_${component.component_id}`;
+            return {
+              student_id: student.id,
+              component_id: component.component_id,
+              grade: gradeValues[key] || "",
+              attendance: gradeAttendance[key] || "P",
+            };
+          })
+        );
+      } else {
+        marksData = students.flatMap((student) =>
+          editableComponents.map((component) => {
+            const key = `${student.id}_${component.component_id}`;
+            const att = attendance[key] || "P";
+            return {
+              student_id: student.id,
+              component_id: component.component_id,
+              marks_obtained:
+                att === "P" && marks[key] !== "" && marks[key] != null
+                  ? marks[key]
+                  : null,
+              attendance: att,
+            };
+          })
+        );
+      }
+
+      await api.post("/marks-entry/save", {
+        exam_schedule_id: examScheduleId,
+        marksData,
+      });
+
+      Swal.fire(
+        "Success",
+        evaluationMode === "GRADE"
+          ? "Grades saved successfully"
+          : "Marks saved successfully",
+        "success"
+      );
+
+      fetchMarksEntryData();
+    } catch (err) {
+      showApiError("Error", err, "Failed to save entry");
+    }
+  };
+
   const downloadExcelTemplate = async () => {
     const { session_id, class_id, section_id, exam_id, subject_id } = filters;
 
@@ -526,9 +590,32 @@ const MarksEntry = () => {
     return labels.length > 0 ? labels : defaultGradeOptions;
   }, [gradeOptions]);
 
+  const hasLockedComponents = useMemo(
+    () => components.some((component) => component.is_locked),
+    [components]
+  );
+
+  const allComponentsLocked = useMemo(
+    () => components.length > 0 && components.every((component) => component.is_locked),
+    [components]
+  );
+
+  const invalidGroups = useMemo(
+    () =>
+      components.filter(
+        (component) =>
+          component.result_group_code &&
+          component.group_validation &&
+          !component.group_validation.is_valid
+      ),
+    [components]
+  );
+
   const renderComponentHeader = (component) => {
     const abbr = component?.abbreviation || "";
     const name = component?.name || "";
+    const maximum = getComponentMaximum(component);
+    const weightage = Number(component?.final_weightage ?? component?.weightage_percent);
 
     return (
       <div className="text-center">
@@ -537,6 +624,19 @@ const MarksEntry = () => {
           <div className="small text-muted" style={{ whiteSpace: "normal" }}>
             {name}
           </div>
+        )}
+        {evaluationMode !== "GRADE" && (
+          <div className="small">
+            Entry: {maximum ?? "-"} • Final: {Number.isFinite(weightage) ? weightage : "-"}
+          </div>
+        )}
+        {component?.result_group_code && (
+          <div className="small text-primary">
+            Group: {component.result_group_label || component.result_group_code}
+          </div>
+        )}
+        {component?.is_locked && (
+          <span className="badge bg-danger mt-1">🔒 Locked</span>
         )}
       </div>
     );
@@ -648,7 +748,7 @@ const MarksEntry = () => {
             <button
               className="btn btn-success"
               onClick={saveMarksEntry}
-              disabled={!examScheduleId || loading}
+              disabled={!examScheduleId || loading || allComponentsLocked}
             >
               Save
             </button>
@@ -676,10 +776,24 @@ const MarksEntry = () => {
                 accept=".xlsx,.xls"
                 hidden
                 onChange={handleImportExcel}
-                disabled={!examScheduleId || loading}
+                disabled={!examScheduleId || loading || hasLockedComponents}
               />
             </label>
           </div>
+
+          {hasLockedComponents && (
+            <div className="alert alert-warning py-2">
+              <strong>Locked components are read-only.</strong>{" "}
+              Save ignores them, and Excel import is disabled until they are unlocked.
+            </div>
+          )}
+
+          {invalidGroups.length > 0 && (
+            <div className="alert alert-danger py-2">
+              <strong>Result group configuration is incomplete.</strong>{" "}
+              Open Exam Scheme and correct the group before locking or printing the report card.
+            </div>
+          )}
 
           {evaluationMode === "GRADE" && gradeOptionLabels.length > 0 && (
             <div className="alert alert-info py-2">
@@ -740,6 +854,7 @@ const MarksEntry = () => {
                               <select
                                 className="form-select"
                                 value={att}
+                                disabled={component.is_locked}
                                 onChange={(e) =>
                                   handleGradeAttendanceChange(
                                     student.id,
@@ -767,7 +882,7 @@ const MarksEntry = () => {
                                     e.target.value
                                   )
                                 }
-                                disabled={att !== "P"}
+                                disabled={component.is_locked || att !== "P"}
                               >
                                 <option value="">Select Grade</option>
                                 {gradeOptionLabels.map((label, idx) => (
@@ -803,11 +918,6 @@ const MarksEntry = () => {
                         className="text-center"
                       >
                         {renderComponentHeader(component)}
-                        {component.max_marks != null && (
-                          <div className="small text-muted">
-                            Max: {component.max_marks}
-                          </div>
-                        )}
                       </th>
                     ))}
                   </tr>
@@ -837,6 +947,7 @@ const MarksEntry = () => {
                               <select
                                 className="form-select"
                                 value={att}
+                                disabled={component.is_locked}
                                 onChange={(e) =>
                                   handleAttendanceChange(
                                     student.id,
@@ -862,8 +973,9 @@ const MarksEntry = () => {
                                 className="form-control"
                                 value={marks[key] ?? ""}
                                 min="0"
-                                max={component.max_marks ?? undefined}
-                                disabled={att !== "P"}
+                                step="0.01"
+                                max={getComponentMaximum(component) ?? undefined}
+                                disabled={component.is_locked || att !== "P"}
                                 onFocus={() => setActiveStudentId(student.id)}
                                 onChange={(e) =>
                                   handleMarksChange(

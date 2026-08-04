@@ -1,0 +1,2 @@
+Restore frontend file with:
+cp -a "/home/gurman/PathSeekers/pits-frontend/.exam-seating-backend-pdf-backup-20260804-111657/src/pages/ExamSeatingManagement.jsx" "/home/gurman/PathSeekers/pits-frontend/src/pages/ExamSeatingManagement.jsx"
