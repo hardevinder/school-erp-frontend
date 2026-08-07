@@ -3945,6 +3945,9 @@ const Transactions = () => {
               padding: 0.35rem 0.6rem;
               font-size: 0.9rem;
             }
+            .collection-date-picker-popper {
+              z-index: 1070 !important;
+            }
             .transaction-meta-chip {
               display: inline-flex;
               align-items: center;
@@ -4319,7 +4322,7 @@ const Transactions = () => {
                                       {siblingSummaryRows
                                         .map(
                                           (sib) =>
-                                            `${sib.display_name || "—"} (${sib.class_name || "—"}/${sib.section_name || "—"})`
+                                            `${sib.display_name || "—"} (Adm: ${sib.admission_number || "—"}, ${sib.class_name || "—"}/${sib.section_name || "—"})`
                                         )
                                         .join(", ")}
                                     </span>
@@ -4365,6 +4368,9 @@ const Transactions = () => {
                                               <div className="fw-semibold">{sib.display_name || "—"}</div>
                                               <div className="text-muted small">
                                                 {sib.class_name || "—"} / {sib.section_name || "—"}
+                                              </div>
+                                              <div className="text-muted small">
+                                                Adm: {sib.admission_number || "—"}
                                               </div>
                                               <div className="text-muted small">Sibling {sib.slot}</div>
                                             </div>
@@ -4524,11 +4530,6 @@ const Transactions = () => {
                       <div className="transaction-meta-chip">
                         Slip will be created for the selected heads
                       </div>
-                      {selectedStudentInfo && (
-                        <div className="transaction-meta-chip">
-                          Student: {selectedStudentInfo?.name || "—"} | {selectedStudentClassLabel} / {selectedStudentSectionLabel}
-                        </div>
-                      )}
                       {(selectedStudentInfo || selectedAdmissionStudent)?.is_student_inactive && (
                         <div className="transaction-meta-chip text-danger fw-semibold">
                           Inactive / Disabled Student
@@ -4545,7 +4546,7 @@ const Transactions = () => {
                           title={siblingSummaryRows
                             .map(
                               (sib) =>
-                                `${sib.display_name || "—"} (${sib.class_name || "—"}/${sib.section_name || "—"})`
+                                `${sib.display_name || "—"} (Adm: ${sib.admission_number || "—"}, ${sib.class_name || "—"}/${sib.section_name || "—"})`
                             )
                             .join(", ")}
                         >
@@ -4553,7 +4554,7 @@ const Transactions = () => {
                           {siblingSummaryRows
                             .map(
                               (sib) =>
-                                `${sib.display_name || "—"} (${sib.class_name || "—"}/${sib.section_name || "—"})`
+                                `${sib.display_name || "—"} (Adm: ${sib.admission_number || "—"}, ${sib.class_name || "—"}/${sib.section_name || "—"})`
                             )
                             .join(", ")}
                         </div>
@@ -4609,6 +4610,7 @@ const Transactions = () => {
                             onChange={(date) =>
                               setTransactionDate(toDatePickerValue(date))
                             }
+                            popperClassName="collection-date-picker-popper"
                             dateFormat="dd/MM/yyyy"
                             className="form-control w-100"
                             wrapperClassName="w-100"

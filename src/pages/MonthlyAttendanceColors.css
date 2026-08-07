@@ -1,0 +1,56 @@
+.monthly-register-page .attendance-code {
+  font-size: 0.8rem;
+  font-weight: 900;
+}
+
+.monthly-register-page .is-present {
+  color: #086b35 !important;
+  background: #bff0d1 !important;
+  box-shadow: inset 0 0 0 1px #8bdcab;
+}
+
+.monthly-register-page .is-absent {
+  color: #a70d1a !important;
+  background: #ffc7cc !important;
+  box-shadow: inset 0 0 0 1px #f2959d;
+}
+
+.monthly-register-page .is-leave {
+  color: #835000 !important;
+  background: #ffe19a !important;
+  box-shadow: inset 0 0 0 1px #efc35d;
+}
+
+.monthly-register-page .is-late {
+  color: #124f98 !important;
+  background: #bedcff !important;
+  box-shadow: inset 0 0 0 1px #86b9f3;
+}
+
+.monthly-register-page .is-halfday {
+  color: #6124a8 !important;
+  background: #ddc8ff !important;
+  box-shadow: inset 0 0 0 1px #ba96ef;
+}
+
+.monthly-register-page .is-holiday {
+  color: #53209c !important;
+  background: #d8c7ff !important;
+  box-shadow: inset 0 0 0 1px #ad8be8;
+}
+
+.monthly-register-page .is-off {
+  color: #46515e !important;
+  background: #d9dee5 !important;
+  box-shadow: inset 0 0 0 1px #b8c0ca;
+}
+
+.monthly-register-page .is-unmarked {
+  color: #8b95a2 !important;
+  background: #f7f8fa !important;
+  box-shadow: inset 0 0 0 1px #e1e5ea;
+}
+
+.monthly-register-page .monthly-register-table tbody tr:hover .attendance-code {
+  filter: saturate(1.1) brightness(0.98);
+}

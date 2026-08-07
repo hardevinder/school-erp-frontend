@@ -48,6 +48,23 @@ export default function TeacherDashboard() {
     return h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening";
   }, []);
 
+  const formatAppliedAtIST = (request) => {
+    const value = request?.createdAt || request?.created_at || request?.applied_at;
+    if (!value) return "Time unavailable";
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return "Time unavailable";
+    return `${new Intl.DateTimeFormat("en-IN", {
+      timeZone: "Asia/Kolkata",
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: true,
+    }).format(parsed)} IST`;
+  };
+
   // ------- UI state -------
   const [showNotifications, setShowNotifications] = useState(false);
   const [notifications, setNotifications] = useState([]);
@@ -83,6 +100,7 @@ export default function TeacherDashboard() {
   const [inchargeStudents, setInchargeStudents] = useState([]);
   const [attendanceTodayMarked, setAttendanceTodayMarked] = useState(null); // null=loading
   const [pendingLeave, setPendingLeave] = useState(0);
+  const [pendingLeaveRequests, setPendingLeaveRequests] = useState([]);
   const [newCircularsCount, setNewCircularsCount] = useState(0);
   const [recentCirculars, setRecentCirculars] = useState([]);
   const [assignmentsCount, setAssignmentsCount] = useState(0);
@@ -155,8 +173,17 @@ export default function TeacherDashboard() {
         try {
           const lr = await api.get("/leave");
           const arr = Array.isArray(lr.data) ? lr.data : [];
-          if (!cancelled)
-            setPendingLeave(arr.filter((x) => (x.status || "").toLowerCase() === "pending").length);
+          if (!cancelled) {
+            const pending = arr
+              .filter((x) => (x.status || "").toLowerCase() === "pending")
+              .sort(
+                (a, b) =>
+                  new Date(b.createdAt || b.created_at || 0).getTime() -
+                  new Date(a.createdAt || a.created_at || 0).getTime()
+              );
+            setPendingLeave(pending.length);
+            setPendingLeaveRequests(pending.slice(0, 5));
+          }
         } catch {}
 
         // Circulars (recent + new count in last 48h)
@@ -679,6 +706,54 @@ export default function TeacherDashboard() {
         <KpiCard icon="bi-megaphone" label="New Circulars" value={kpi.newCircularsCount} tone="info" />
         <KpiCard icon="bi-clipboard-check" label="Assignments" value={kpi.assignmentCount} tone="success" />
       </div>
+
+      {pendingLeaveRequests.length > 0 && (
+        <section className="mb-3">
+          <div className="card shadow-sm border-0 rounded-4 overflow-hidden">
+            <div className="card-header bg-white d-flex align-items-center justify-content-between">
+              <div>
+                <h6 className="mb-0">Student Leave Applications</h6>
+                <small className="text-muted">Pending requests from your class students</small>
+              </div>
+              <span className="badge bg-warning text-dark">{pendingLeave} Pending</span>
+            </div>
+            <div className="list-group list-group-flush">
+              {pendingLeaveRequests.map((request) => {
+                const student = request.Student || request.student || {};
+                return (
+                  <div key={request.id} className="list-group-item py-3">
+                    <div className="d-flex flex-wrap justify-content-between align-items-start gap-2">
+                      <div>
+                        <div className="fw-semibold">
+                          {student.name || "Student"}
+                          {student.admission_number ? (
+                            <span className="text-muted fw-normal"> · {student.admission_number}</span>
+                          ) : null}
+                        </div>
+                        <div className="small text-muted mt-1">
+                          Leave for <strong>{request.date || "—"}</strong> · {request.reason || "No reason provided"}
+                        </div>
+                      </div>
+                      <div className="text-md-end">
+                        <span className="badge bg-warning text-dark mb-1">Pending</span>
+                        <div className="small text-primary fw-semibold">
+                          <i className="bi bi-clock-history me-1" />
+                          Applied: {formatAppliedAtIST(request)}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            {pendingLeave > pendingLeaveRequests.length && (
+              <div className="card-footer bg-white text-center small text-muted">
+                Showing latest {pendingLeaveRequests.length} of {pendingLeave} pending requests
+              </div>
+            )}
+          </div>
+        </section>
+      )}
 
       {/* Quick Actions Tiles */}
       {isTeacher && (

@@ -9,7 +9,7 @@ const pickDefaultRole = (roles = []) => {
   const r = roles.map(norm).filter(Boolean);
 
   // ✅ prefer these if present
-  const priority = ["frontoffice", "librarian", "accounts", "hr", "academic_coordinator", "teacher", "student", "admin", "superadmin"];
+  const priority = ["frontoffice", "librarian", "accounts", "hr", "academic_coordinator", "department_hod", "teacher", "student", "admin", "superadmin"];
   for (const p of priority) if (r.includes(p)) return p;
 
   return r[0] || "";

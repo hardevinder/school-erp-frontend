@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import Swal from "sweetalert2";
+import api from "../../api";
 import InventoryPageHeader from "../../components/inventory/InventoryPageHeader";
 import InventoryTransactionForm from "../../components/inventory/InventoryTransactionForm";
 import { inventoryApi } from "../../services/inventoryApi";
@@ -9,6 +10,9 @@ const getEmptyForm = () => ({
   locationId: "",
   quantity: "",
   issuedTo: "",
+  issuedToDepartment: "",
+  dueDate: "",
+  purpose: "",
   referenceNo: "",
   txnDate: new Date().toISOString().split("T")[0],
   remarks: "",
@@ -18,6 +22,7 @@ export default function InventoryIssueStock() {
   const [items, setItems] = useState([]);
   const [locations, setLocations] = useState([]);
   const [users, setUsers] = useState([]);
+  const [departments, setDepartments] = useState([]);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [formValues, setFormValues] = useState(getEmptyForm());
@@ -25,14 +30,16 @@ export default function InventoryIssueStock() {
   const loadMasters = async () => {
     setLoading(true);
     try {
-      const [itemRows, locationRows, userRows] = await Promise.all([
+      const [itemRows, locationRows, userRows, departmentRes] = await Promise.all([
         inventoryApi.getItems(),
         inventoryApi.getLocations(),
         inventoryApi.getEligibleIssueUsers(),
+        api.get("/departments"),
       ]);
       setItems(itemRows || []);
       setLocations(locationRows || []);
       setUsers(userRows || []);
+      setDepartments(departmentRes?.data?.departments || []);
     } catch (err) {
       Swal.fire(
         "Error",
@@ -67,12 +74,20 @@ export default function InventoryIssueStock() {
     label: `${user.name || user.username} (${(user.roles || []).join(", ")})`,
   })), [users]);
 
+  const departmentOptions = useMemo(() => [
+    { value: "", label: "Not linked to a department" },
+    ...departments.map((department) => ({ value: String(department.id), label: department.name })),
+  ], [departments]);
+
   const buildIssuePayload = (form) => {
     return {
       item_id: Number(form.itemId),
       from_location_id: Number(form.locationId),
       quantity: Number(form.quantity),
       issued_to_user_id: Number(form.issuedTo) || null,
+      issued_to_department_id: Number(form.issuedToDepartment) || null,
+      issue_due_date: form.dueDate || null,
+      purpose: form.purpose?.trim() || null,
       reference_no: form.referenceNo?.trim() || null,
       transaction_date: form.txnDate || null,
       remarks: form.remarks?.trim() || null,
@@ -135,6 +150,23 @@ export default function InventoryIssueStock() {
       options: userOptions,
     },
     {
+      name: "issuedToDepartment",
+      label: "Receiver Department (optional)",
+      type: "select",
+      options: departmentOptions,
+    },
+    {
+      name: "dueDate",
+      label: "Expected Return Date",
+      type: "date",
+    },
+    {
+      name: "purpose",
+      label: "Purpose / Event",
+      placeholder: "Science exhibition, sports practice, classroom use...",
+      colClass: "col-md-12",
+    },
+    {
       name: "referenceNo",
       label: "Reference No",
       placeholder: "ISS-001",
@@ -166,7 +198,7 @@ export default function InventoryIssueStock() {
     <div className="container-fluid px-3 py-3">
       <InventoryPageHeader
         title="Issue Stock"
-        subtitle="Issue items from the selected location"
+        subtitle="Issue items with department ownership, purpose and return tracking"
         actions={
           <button className="btn btn-light rounded-4" onClick={loadMasters}>
             Refresh Masters
@@ -188,7 +220,7 @@ export default function InventoryIssueStock() {
 
           <InventoryTransactionForm
             title="Issue Stock"
-            subtitle="Issue to an eligible user; Student and Driver roles are excluded"
+            subtitle="The receiver will see this item in Department Management and can request return"
             initialValues={formValues}
             fields={fields}
             saving={saving}

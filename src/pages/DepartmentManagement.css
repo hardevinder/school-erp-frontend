@@ -1,0 +1,55 @@
+.department-page { background: #f5f7fb; min-height: 100vh; }
+.department-hero { background: linear-gradient(135deg, #172554, #1d4ed8 58%, #0ea5e9); color: #fff; border-radius: 22px; padding: 24px; display: flex; align-items: center; justify-content: space-between; gap: 24px; box-shadow: 0 20px 50px rgba(29,78,216,.18); }
+.department-eyebrow { text-transform: uppercase; letter-spacing: .16em; font-size: .72rem; font-weight: 800; opacity: .8; }
+.department-selector { min-width: 280px; }
+.department-selector label { font-size: .78rem; font-weight: 700; margin-bottom: 6px; }
+.department-tabs { display: flex; gap: 8px; overflow-x: auto; padding: 16px 2px; }
+.department-tabs button { border: 1px solid #dbe3f0; background: #fff; border-radius: 999px; white-space: nowrap; padding: 9px 14px; color: #334155; font-weight: 700; }
+.department-tabs button.active { background: #1d4ed8; color: #fff; border-color: #1d4ed8; box-shadow: 0 8px 20px rgba(29,78,216,.2); }
+.department-card { background: #fff; border: 1px solid #e5eaf2; border-radius: 18px; padding: 18px; box-shadow: 0 10px 30px rgba(15,23,42,.05); }
+.department-card-header { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #eef2f7; padding-bottom: 12px; margin-bottom: 12px; }
+.department-card-header h5 { margin: 0; font-weight: 800; color: #172554; }
+.department-metric { background: #fff; border: 1px solid #e5eaf2; border-left-width: 4px; border-radius: 16px; padding: 16px; display: flex; align-items: center; gap: 12px; height: 100%; box-shadow: 0 8px 24px rgba(15,23,42,.04); }
+.department-metric-icon { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 12px; background: #f8fafc; font-size: 1.25rem; }
+.department-metric-value { font-size: 1.45rem; line-height: 1; font-weight: 900; color: #0f172a; }
+.department-metric-label { margin-top: 5px; font-size: .78rem; color: #64748b; font-weight: 700; }
+.department-list-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 0; border-bottom: 1px solid #eef2f7; }
+.department-list-row:last-child { border-bottom: 0; }
+.department-empty { color: #94a3b8; text-align: center; padding: 34px 12px; }
+.department-empty i { display: block; font-size: 2rem; margin-bottom: 8px; }
+.department-loader { min-height: 60vh; display: grid; place-content: center; justify-items: center; gap: 12px; color: #475569; }
+.department-title-row { display: flex; justify-content: space-between; gap: 20px; align-items: start; margin: 6px 2px 16px; }
+.department-title-row h3 { color: #172554; margin: 0; font-weight: 900; }
+.department-title-row p { color: #64748b; margin: 4px 0 0; }
+.department-subject-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; max-height: 330px; overflow: auto; }
+.department-subject-grid label { border: 1px solid #e2e8f0; border-radius: 10px; padding: 8px; cursor: pointer; font-size: .85rem; }
+.department-subject-grid label.selected { border-color: #2563eb; background: #eff6ff; color: #1d4ed8; font-weight: 700; }
+.department-sticky { top: 82px !important; }
+.department-event { padding: 16px 0; border-bottom: 1px solid #e5eaf2; }
+.department-event:last-child { border-bottom: 0; }
+.department-event h5 { color: #172554; font-weight: 850; margin: 2px 0 6px; }
+.department-event-type { color: #2563eb; font-size: .72rem; font-weight: 900; letter-spacing: .08em; }
+.department-duty-strip { margin-top: 12px; padding: 10px; background: #f8fafc; border-radius: 10px; display: flex; flex-wrap: wrap; gap: 8px; font-size: .82rem; }
+.department-duty-strip span { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 4px 8px; }
+.department-achievement { display: flex; gap: 14px; padding: 16px 0; border-bottom: 1px solid #e5eaf2; }
+.department-achievement:last-child { border-bottom: 0; }
+.department-trophy { width: 46px; height: 46px; flex: 0 0 46px; border-radius: 14px; display: grid; place-items: center; background: #fff7ed; color: #f59e0b; font-size: 1.3rem; }
+.annual-report-paper { background: #fff; max-width: 1000px; margin: 0 auto; box-shadow: 0 16px 50px rgba(15,23,42,.12); }
+.annual-report-cover { min-height: 520px; padding: 80px 50px; display: grid; place-content: center; text-align: center; color: #fff; background: linear-gradient(145deg, #172554, #1d4ed8); }
+.annual-report-cover h1 { font-size: 3rem; font-weight: 900; margin: 24px 0 10px; }
+.annual-report-school { letter-spacing: .25em; font-weight: 900; opacity: .8; }
+.annual-report-section { padding: 50px; page-break-before: always; }
+.annual-report-section h2 { color: #172554; font-weight: 900; border-bottom: 3px solid #2563eb; padding-bottom: 10px; }
+.annual-report-section h4 { color: #1d4ed8; margin-top: 28px; font-weight: 800; }
+.annual-report-stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin: 24px 0; }
+.annual-report-stats span { background: #eff6ff; border-radius: 10px; padding: 12px; font-size: .78rem; color: #475569; }
+.annual-report-stats strong { display: block; font-size: 1.35rem; color: #172554; }
+.annual-report-entry { padding: 14px 0; border-bottom: 1px solid #e2e8f0; }
+.annual-report-entry h5 { margin: 0 0 4px; color: #0f172a; font-weight: 800; }
+@media (max-width: 767px) { .department-hero { align-items: stretch; flex-direction: column; border-radius: 16px; } .department-selector { min-width: 0; } .department-subject-grid { grid-template-columns: 1fr; } .annual-report-stats { grid-template-columns: repeat(2, 1fr); } .annual-report-section { padding: 26px 18px; } .annual-report-cover h1 { font-size: 2rem; } }
+@media print { body * { visibility: hidden !important; } #department-annual-report, #department-annual-report * { visibility: visible !important; } #department-annual-report { position: absolute; left: 0; top: 0; width: 100%; box-shadow: none; } .no-print { display: none !important; } .annual-report-cover { min-height: 95vh; } }
+.department-inventory-table th { white-space: nowrap; color: #475569; font-size: .78rem; text-transform: uppercase; letter-spacing: .035em; }
+.department-inventory-table td { vertical-align: middle; }
+.department-stock-pill { display: inline-flex; align-items: center; border-radius: 999px; padding: 6px 10px; font-weight: 800; white-space: nowrap; }
+.department-stock-pill.ok { background: #ecfdf5; color: #047857; }
+.department-stock-pill.low { background: #fef2f2; color: #b91c1c; }

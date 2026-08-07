@@ -23,6 +23,7 @@ const buildPhotoURL = (photo) => {
 const MarkAttendance = () => {
   const [students, setStudents] = useState([]);
   const [attendance, setAttendance] = useState({});
+  const [savedAttendance, setSavedAttendance] = useState({});
   const [recordIds, setRecordIds] = useState({});
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split("T")[0]);
   const [mode, setMode] = useState("create"); // "create" or "edit"
@@ -87,6 +88,7 @@ const MarkAttendance = () => {
             recordIdMap[record.studentId] = record.id;
           });
           setAttendance(attendanceMap);
+          setSavedAttendance(attendanceMap);
           setRecordIds(recordIdMap);
         } else {
           setMode("create");
@@ -95,6 +97,7 @@ const MarkAttendance = () => {
             initialAttendance[student.id] = "present";
           });
           setAttendance(initialAttendance);
+          setSavedAttendance({});
           setRecordIds({});
         }
       } catch (error) {
@@ -105,6 +108,7 @@ const MarkAttendance = () => {
           initialAttendance[student.id] = "present";
         });
         setAttendance(initialAttendance);
+        setSavedAttendance({});
         setRecordIds({});
       }
     },
@@ -146,6 +150,16 @@ const MarkAttendance = () => {
   }, [students, attendance]);
 
   const totalStudents = students.length;
+
+  const hasUnsavedChanges = useMemo(() => {
+    if (mode === "create") return true;
+
+    return students.some(
+      (student) =>
+        (attendance[student.id] || "present") !==
+        (savedAttendance[student.id] || "present")
+    );
+  }, [attendance, savedAttendance, students, mode]);
 
   const filteredStudents = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -396,12 +410,22 @@ const MarkAttendance = () => {
 
         <div className="d-flex align-items-center gap-2">
           {mode === "edit" && (
-            <span className="badge text-bg-info">
-              Editing existing records
+            <span className={`badge ${hasUnsavedChanges ? "text-bg-warning" : "text-bg-success"}`}>
+              {hasUnsavedChanges ? "Changes not saved" : "Attendance already marked ✓"}
             </span>
           )}
-          <button className="btn btn-primary btn-sm" onClick={handleSubmit} disabled={loading}>
-            {loading ? "Submitting..." : mode === "create" ? "Submit" : "Update"}
+          <button
+            className="btn btn-primary btn-sm"
+            onClick={handleSubmit}
+            disabled={loading || (mode === "edit" && !hasUnsavedChanges)}
+          >
+            {loading
+              ? "Submitting..."
+              : mode === "create"
+              ? "Submit"
+              : hasUnsavedChanges
+              ? "Update"
+              : "Marked"}
           </button>
         </div>
       </div>
@@ -501,8 +525,18 @@ const MarkAttendance = () => {
               All Halfday
             </button>
           </div>
-          <button className="btn btn-primary btn-sm" onClick={handleSubmit} disabled={loading}>
-            {loading ? "Submitting..." : mode === "create" ? "Submit" : "Update"}
+          <button
+            className="btn btn-primary btn-sm"
+            onClick={handleSubmit}
+            disabled={loading || (mode === "edit" && !hasUnsavedChanges)}
+          >
+            {loading
+              ? "Submitting..."
+              : mode === "create"
+              ? "Submit"
+              : hasUnsavedChanges
+              ? "Update"
+              : "Marked ✓"}
           </button>
         </div>
       </div>

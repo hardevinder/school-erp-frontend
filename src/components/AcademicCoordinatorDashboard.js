@@ -99,6 +99,7 @@ export default function Dashboard() {
   const openTeacherAssignment = () => navigate("/teacher-assignment");
   const openSyllabusApproval = () => navigate("/syllabus-approval");
   const openAdmissionSyllabusAssignee = () => navigate("/admission-syllabus-assignee");
+  const openMonthlyAttendanceRegister = () => navigate("/monthly-attendance-register");
 
   const closeAttendanceDetail = () =>
     setAttendanceDetail({
@@ -440,6 +441,18 @@ export default function Dashboard() {
           </div>
 
           <div className="row g-3">
+            <QuickActionCard
+              accent="green"
+              icon="bi-calendar2-check"
+              eyebrow="Attendance Analytics"
+              title="Monthly Attendance Register"
+              description="View every student's day-wise monthly attendance with working days and totals."
+              badges={["All Classes", "Daily Register", "Excel Export"]}
+              buttonText="Open Register"
+              buttonClass="btn-success"
+              onClick={openMonthlyAttendanceRegister}
+              featured
+            />
             <QuickActionCard
               accent="blue"
               icon="bi-calendar3"

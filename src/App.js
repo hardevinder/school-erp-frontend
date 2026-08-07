@@ -93,6 +93,8 @@ import ViewCirculars from "./pages/ViewCirculars";
 import StudentCirculars from "./pages/StudentCirculars";
 import StudentUserAccounts from "./pages/StudentUserAccounts";
 import Departments from "./pages/Departments";
+import DepartmentManagement from "./pages/DepartmentManagement";
+import StudentActivitiesAchievements from "./pages/StudentActivitiesAchievements";
 import EmployeeManagement from "./pages/EmployeeManagement";
 import EmployeeUserAccounts from "./pages/EmployeeUserAccounts";
 import LeaveTypeManagement from "./pages/LeaveTypeManagement";
@@ -102,6 +104,7 @@ import HRLeaveRequests from "./pages/HRLeaveRequests";
 import EmployeeAttendance from "./pages/EmployeeAttendance";
 import EmployeeAttendanceCalendar from "./pages/EmployeeAttendanceCalendar";
 import EmployeeAttendanceSummary from "./pages/EmployeeAttendanceSummary";
+import EmployeeMonthlyAttendanceRegister from "./pages/EmployeeMonthlyAttendanceRegister";
 import PayrollManagement from "./pages/PayrollManagement";
 import MyPayslips from "./pages/MyPayslips";
 import ExamSchemeManagement from "./pages/ExamSchemeManagement";
@@ -115,6 +118,8 @@ import AnswerScriptManagement from "./pages/AnswerScriptManagement";
 import ExamManagement from "./pages/ExamManagement";
 import RollNumberManagement from "./pages/RollNumberManagement";
 import MarksEntry from "./pages/MarksEntry";
+import MarksAccessManagement from "./pages/MarksAccessManagement";
+import MonthlyAttendanceRegister from "./pages/MonthlyAttendanceRegister";
 import ReportCardHealthEntry from "./pages/ReportCardHealthEntry";
 import ReportBuilder from "./pages/ReportBuilder";
 import ClasswiseResultSummary from "./pages/ClasswiseResultSummary";
@@ -226,6 +231,7 @@ const MY_LIBRARY_ROLES = [
   "principal",
   "academic_coordinator",
   "teacher",
+  "department_hod",
   "student",
   "hr",
   "accounts",
@@ -1048,6 +1054,14 @@ function App() {
           <Route path="/combined-circulars" element={<CombinedCirculars />} />
           <Route path="/view-circulars" element={<ViewCirculars />} />
           <Route path="/student-circulars" element={<StudentCirculars />} />
+          <Route
+            path="/student/activities-achievements"
+            element={
+              <RequireRole roles={["student"]}>
+                <StudentActivitiesAchievements />
+              </RequireRole>
+            }
+          />
 
           {/* Users */}
           <Route path="/users" element={<UserManagement />} />
@@ -1066,6 +1080,24 @@ function App() {
 
           {/* Departments / Employees */}
           <Route path="/departments" element={<Departments />} />
+          <Route
+            path="/department-management"
+            element={
+              <RequireRole
+                roles={[
+                  "superadmin",
+                  "admin",
+                  "principal",
+                  "academic_coordinator",
+                  "hr",
+                  "teacher",
+                  "department_hod",
+                ]}
+              >
+                <DepartmentManagement />
+              </RequireRole>
+            }
+          />
           <Route path="/employees" element={<EmployeeManagement />} />
           <Route path="/employee-user-accounts" element={<EmployeeUserAccounts />} />
 
@@ -1079,6 +1111,7 @@ function App() {
           <Route path="/employee-attendance" element={<EmployeeAttendance />} />
           <Route path="/my-attendance-calendar" element={<EmployeeAttendanceCalendar />} />
           <Route path="/employee-attendance-summary" element={<EmployeeAttendanceSummary />} />
+          <Route path="/employee-monthly-attendance-register" element={<EmployeeMonthlyAttendanceRegister />} />
           <Route
             path="/payroll"
             element={
@@ -1151,6 +1184,14 @@ function App() {
           <Route path="/attendance-calendar" element={<AttendanceCalendar />} />
           <Route path="/leave-requests" element={<TeacherLeaveRequests />} />
           <Route path="/attendance-summary" element={<AttendanceSummary />} />
+          <Route
+            path="/monthly-attendance-register"
+            element={
+              <RequireRole roles={["academic_coordinator", "coordinator", "principal", "admin", "superadmin", "super_admin"]}>
+                <MonthlyAttendanceRegister />
+              </RequireRole>
+            }
+          />
 
           {/* Assignments */}
           <Route path="/assignments" element={<Assignments />} />
@@ -1193,6 +1234,14 @@ function App() {
           />
           <Route path="/roll-numbers" element={<RollNumberManagement />} />
           <Route path="/marks-entry" element={<MarksEntry />} />
+          <Route
+            path="/marks-access-management"
+            element={
+              <RequireRole roles={["examination", "admin", "superadmin", "super_admin"]}>
+                <MarksAccessManagement />
+              </RequireRole>
+            }
+          />
 
           <Route
             path="/report-card-health"

@@ -82,6 +82,7 @@ const MY_LIBRARY_ROLES = [
   "principal",
   "academic_coordinator",
   "teacher",
+  "department_hod",
   "student",
   "hr",
   "accounts",
@@ -148,7 +149,8 @@ export default function Sidebar({ headerHeight = 56 }) {
   const isAdmin = isSuperAdmin || roleLower === "admin";
   const isPrincipal = roleLower === "principal";
   const isAcademic = roleLower === "academic_coordinator";
-  const isTeacher = roleLower === "teacher";
+  const isDepartmentHod = roleLower === "department_hod";
+  const isTeacher = roleLower === "teacher" || isDepartmentHod;
   const isStudent = roleLower === "student";
   const isHR = roleLower === "hr";
   const isAccounts = roleLower === "accounts" || roleLower === "account";
@@ -367,6 +369,7 @@ export default function Sidebar({ headerHeight = 56 }) {
           { key: "co-scholastic-entry", label: "Co-Scholastic Entry", icon: "bi-stars", path: "/co-scholastic-entry", roles: ["examination"] },
           { key: "roll-numbers", label: "Roll Numbers", icon: "bi-list-ol", path: "/roll-numbers", roles: ["examination"] },
           { key: "marks-entry", label: "Marks Entry", icon: "bi-pencil-square", path: "/marks-entry", roles: ["examination"] },
+          { key: "marks-access-management", label: "Marks Access & Tracking", icon: "bi-person-check", path: "/marks-access-management", roles: ["examination"] },
           { key: "classwise-result-summary", label: "Result Summary", icon: "bi-bar-chart", path: "/reports/classwise-result-summary", roles: ["examination"] },
           { key: "final-result-summary", label: "Final Result Summary", icon: "bi-bar-chart-line", path: "/reports/final-result-summary", roles: ["examination"] },
           { key: "report-card-formats", label: "Report Card Formats", icon: "bi-file-earmark-font", path: "/report-card-formats", roles: ["examination"] },
@@ -994,6 +997,8 @@ export default function Sidebar({ headerHeight = 56 }) {
           { key: "sections", label: "Sections", icon: "bi-grid", path: "/sections" },
           { key: "sessions", label: "Sessions", icon: "bi-calendar4-week", path: "/sessions" },
           { key: "students", label: "Students", icon: "bi-people", path: "/students" },
+          { key: "monthly-attendance-register", label: "Monthly Attendance", icon: "bi-calendar2-check", path: "/monthly-attendance-register" },
+          { key: "department-management", label: "Department Management", icon: "bi-building-gear", path: "/department-management", roles: ["admin", "superadmin"] },
           { key: "ptm-management-admin", label: "PTM Management", icon: "bi-people-fill", path: "/ptm-management", roles: ["admin", "superadmin"] },
           { key: "online-classes-admin", label: "Online Classes", icon: "bi-camera-video", path: "/online-classes" },
           { key: "assessments-admin", label: "Assessments & Tests", icon: "bi-clipboard2-check", path: "/assessments" },
@@ -1145,8 +1150,10 @@ export default function Sidebar({ headerHeight = 56 }) {
         items: [
           { key: "subjects", label: "Subjects", icon: "bi-book", path: "/subjects" },
           { key: "students", label: "Students", icon: "bi-people", path: "/students" },
+          { key: "monthly-attendance-register", label: "Monthly Attendance", icon: "bi-calendar2-check", path: "/monthly-attendance-register" },
           { key: "teacherAssignment", label: "Teacher Assignment", icon: "bi-person-check", path: "/teacher-assignment" },
           { key: "inchargeAssignment", label: "Incharge Assignment", icon: "bi-person-badge", path: "/incharge-assignment" },
+          { key: "department-management", label: "Department Management", icon: "bi-building-gear", path: "/department-management", roles: ["academic_coordinator"] },
           { key: "ptm-management-coordinator", label: "PTM Management", icon: "bi-people-fill", path: "/ptm-management" },
           { key: "online-classes-coordinator", label: "Online Classes", icon: "bi-camera-video", path: "/online-classes" },
           { key: "assessments-coordinator", label: "Assessments & Tests", icon: "bi-clipboard2-check", path: "/assessments" },
@@ -1215,6 +1222,7 @@ export default function Sidebar({ headerHeight = 56 }) {
         heading: "HR Management",
         items: [
           { key: "departments", label: "Departments", icon: "bi-diagram-3", path: "/departments" },
+          { key: "department-management", label: "Department Management", icon: "bi-building-gear", path: "/department-management", roles: ["hr"] },
           { key: "employees", label: "Employees", icon: "bi-person-badge", path: "/employees" },
           { key: "employee-user-accounts", label: "Employee Login Accounts", icon: "bi-person-plus", path: "/employee-user-accounts" },
           { key: "leave-types", label: "Leave Types", icon: "bi-journals", path: "/leave-types" },
@@ -1251,6 +1259,7 @@ export default function Sidebar({ headerHeight = 56 }) {
           { key: "teacher-timetable-display", label: "Timetable", icon: "bi-table", path: "/teacher-timetable-display" },
           { key: "combined-teacher-substitution", label: "My Substitutions", icon: "bi-arrow-repeat", path: "/combined-teacher-substitution" },
           { key: "lesson-plan", label: "Lesson Plan", icon: "bi-journal-text", path: "/lesson-plan" },
+          { key: "department-management", label: "Department Management", icon: "bi-building-gear", path: "/department-management", roles: ["teacher", "department_hod"] },
           { key: "online-classes", label: "Online Classes", icon: "bi-camera-video", path: "/online-classes" },
           { key: "assessments", label: "Assessments & Tests", icon: "bi-clipboard2-check", path: "/assessments" },
           { key: "lms-assignments", label: "LMS Assignments", icon: "bi-journal-check", path: "/assessments?assessment_type=assignment" },
@@ -1301,6 +1310,7 @@ export default function Sidebar({ headerHeight = 56 }) {
           { key: "my-assignments", label: "Legacy Assignments", icon: "bi-archive", path: "/my-assignments", roles: ["student"] },
           { key: "student-diary", label: "Diary", icon: "bi-journal-text", path: "/student-diary", roles: ["student"] },
           { key: "student-circulars", label: "Circulars", icon: "bi-megaphone", path: "/student-circulars", roles: ["student"] },
+          { key: "student-activities-achievements", label: "Activities & Achievements", icon: "bi-trophy", path: "/student/activities-achievements", roles: ["student"] },
           { key: "student-timetable-display", label: "Timetable", icon: "bi-clock-history", path: "/student-timetable-display", roles: ["student"] },
           { key: "student-online-classes", label: "Online Classes", icon: "bi-camera-video", path: "/online-classes", roles: ["student"] },
           { key: "student-assessments", label: "Tests & Results", icon: "bi-clipboard2-check", path: "/assessments", roles: ["student"] },
@@ -1388,9 +1398,10 @@ export default function Sidebar({ headerHeight = 56 }) {
 
   const PRIMARY_BY_ROLE = {
     admin: ["dashboard", "transactions", "studentDue", "inventory-dashboard-admin", "opening-balances"],
-    academic_coordinator: ["dashboard", "combined-timetable", "students", "exam-schemes"],
+    academic_coordinator: ["dashboard", "monthly-attendance-register", "combined-timetable", "students", "exam-schemes"],
     teacher: ["dashboard", "mark-attendance", "teacher-timetable-display", "my-library"],
-    student: ["student-home", "student-diary", "student-attendance", "my-library"],
+    department_hod: ["department-management", "dashboard", "lesson-plan", "teacher-timetable-display"],
+    student: ["student-home", "student-activities-achievements", "student-diary", "student-attendance", "my-library"],
     hr: ["dashboard", "employees", "employee-attendance", "payroll"],
     superadmin: ["dashboard", "users", "transactions", "inventory-dashboard-admin", "opening-balances"],
     accounts: ["accounts-dashboard", "transactions", "inventory-dashboard-accounts", "studentDue", "dayWiseReport"],

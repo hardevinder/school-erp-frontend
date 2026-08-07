@@ -35,6 +35,23 @@ export default function HRDashboard() {
     return dd.toISOString().split("T")[0];
   };
 
+  const fmtAppliedAtIST = (leave) => {
+    const value = leave?.createdAt || leave?.created_at;
+    if (!value) return "Time unavailable";
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return "Time unavailable";
+    return new Intl.DateTimeFormat("en-IN", {
+      timeZone: "Asia/Kolkata",
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: true,
+    }).format(parsed) + " IST";
+  };
+
   const prettyStatus = (st) => String(st || "—").replace(/_/g, " ");
   const normalizeStatus = (st) => String(st || "").trim().toLowerCase();
 
@@ -350,6 +367,7 @@ export default function HRDashboard() {
   const goToday = () => setDate(new Date().toISOString().split("T")[0]);
 
   const openMessages = () => navigate("/messages");
+  const openMonthlyAttendanceRegister = () => navigate("/employee-monthly-attendance-register");
 
   const latestLeave = pendingLeaves[0] || null;
   const latestEmpName = latestLeave?.employee?.name || "—";
@@ -401,6 +419,11 @@ export default function HRDashboard() {
 
       {/* QUICK ACTIONS */}
       <div className="row g-3 mb-4">
+        <div className="col-12 col-md-6 col-xl-3">
+          <button type="button" className="card shadow-sm rounded-4 border-0 h-100 w-100 text-start overflow-hidden quick-action-card" onClick={openMonthlyAttendanceRegister} style={{ background: "linear-gradient(135deg, #059669, #0d9488)", color: "white", minHeight: 128, cursor: "pointer" }}>
+            <div className="card-body"><div className="d-flex align-items-start justify-content-between gap-3"><div><div className="d-inline-flex align-items-center justify-content-center rounded-4 mb-3" style={{ width: 48, height: 48, background: "rgba(255,255,255,0.18)" }}><i className="bi bi-calendar2-check fs-4" /></div><div className="text-uppercase small opacity-75 mb-1">Attendance Analytics</div><div className="fw-bold fs-5">Monthly Register</div><div className="small opacity-75 mt-1">Day-wise attendance for every employee</div></div><span className="badge bg-light text-success">OPEN</span></div></div>
+          </button>
+        </div>
         <div className="col-12 col-md-6 col-xl-3">
           <button
             type="button"
@@ -520,6 +543,10 @@ export default function HRDashboard() {
                         <span className="fw-semibold">Reason:</span>{" "}
                         {latestLeave.reason || "—"}
                       </div>
+                      <div className="mt-2 small text-primary fw-semibold">
+                        <i className="bi bi-clock-history me-1" />
+                        Applied: {fmtAppliedAtIST(latestLeave)}
+                      </div>
                     </>
                   )}
                 </div>
@@ -590,6 +617,9 @@ export default function HRDashboard() {
                           {r?.leaveType?.name || "Leave"} · {fmtDate(r.start_date)} →{" "}
                           {fmtDate(r.end_date)}
                           {r.is_without_pay ? " · WOP" : ""}
+                        </div>
+                        <div className="small text-primary">
+                          <i className="bi bi-clock me-1" />Applied: {fmtAppliedAtIST(r)}
                         </div>
                       </div>
                       <span className="badge bg-warning text-dark">Pending</span>

@@ -1,0 +1,127 @@
+.marks-access-page {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.marks-access-page > h3 {
+  margin-bottom: 0 !important;
+}
+
+.marks-access-page .marks-access-card {
+  position: relative;
+  z-index: 0;
+  flex: 0 0 auto;
+  margin: 0;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.marks-access-page .marks-access-list-wrap {
+  position: relative;
+  height: 430px;
+  overflow-x: hidden;
+  overflow-y: scroll;
+  scrollbar-gutter: stable;
+}
+
+.marks-access-page .marks-audit-list-wrap {
+  position: relative;
+  height: 330px;
+  overflow-x: hidden;
+  overflow-y: scroll;
+  scrollbar-gutter: stable;
+}
+
+.marks-access-page .marks-table-horizontal {
+  width: 100%;
+  min-width: 0;
+  overflow-x: scroll;
+  overflow-y: visible;
+}
+
+.marks-access-page .marks-table-horizontal table {
+  margin-bottom: 0;
+}
+
+.marks-access-page .marks-access-table {
+  min-width: 1520px;
+}
+
+.marks-access-page .marks-audit-table {
+  min-width: 1200px;
+}
+
+.marks-access-page .marks-access-actions {
+  display: flex;
+  gap: 0.4rem;
+  min-width: 260px;
+}
+
+.marks-access-page .marks-table-vertical::-webkit-scrollbar,
+.marks-access-page .marks-table-horizontal::-webkit-scrollbar {
+  width: 13px;
+  height: 13px;
+}
+
+.marks-access-page .marks-table-vertical::-webkit-scrollbar-track,
+.marks-access-page .marks-table-horizontal::-webkit-scrollbar-track {
+  background: #e9ecef;
+  border-radius: 8px;
+}
+
+.marks-access-page .marks-table-vertical::-webkit-scrollbar-thumb,
+.marks-access-page .marks-table-horizontal::-webkit-scrollbar-thumb {
+  background: #8b98a5;
+  border: 3px solid #e9ecef;
+  border-radius: 8px;
+}
+
+.marks-access-page .marks-table-vertical::-webkit-scrollbar-thumb:hover,
+.marks-access-page .marks-table-horizontal::-webkit-scrollbar-thumb:hover {
+  background: #66727e;
+}
+
+.marks-access-page .marks-table-vertical,
+.marks-access-page .marks-table-horizontal {
+  scrollbar-color: #8b98a5 #e9ecef;
+  scrollbar-width: auto;
+}
+
+.marks-table-toolbar {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid #dee2e6;
+  background: #f8f9fa;
+}
+
+.marks-table-toolbar > div {
+  width: min(620px, 100%);
+}
+
+.marks-record-count {
+  flex: 0 0 auto;
+  padding: 0.55rem 0.75rem;
+  font-size: 0.82rem;
+}
+
+@media (max-width: 767.98px) {
+  .marks-table-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .marks-record-count {
+    align-self: flex-start;
+  }
+}
+
+.marks-access-page .marks-table-horizontal thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #fff;
+}

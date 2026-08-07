@@ -111,6 +111,7 @@ const MarksEntry = () => {
 
   const [sessions, setSessions] = useState([]);
   const [classExamSubjects, setClassExamSubjects] = useState([]);
+  const [accessibleSchedules, setAccessibleSchedules] = useState([]);
   const [exams, setExams] = useState([]);
   const [subjects, setSubjects] = useState([]);
   const [sections, setSections] = useState([]);
@@ -148,9 +149,69 @@ const MarksEntry = () => {
 
   useEffect(() => {
     loadSessions();
-    loadClassExamSubjects();
-    loadSections();
+    loadMarksScope();
   }, []);
+
+  useEffect(() => {
+    const sessionRows = accessibleSchedules.filter(
+      (row) => !filters.session_id || Number(row.session_id) === Number(filters.session_id)
+    );
+    const classMap = new Map();
+    sessionRows.forEach((row) => {
+      if (!classMap.has(Number(row.class_id))) {
+        classMap.set(Number(row.class_id), {
+          class_id: row.class_id,
+          class_name: row.class_name,
+        });
+      }
+    });
+    setClassExamSubjects([...classMap.values()]);
+
+    const sectionMap = new Map();
+    sessionRows
+      .filter((row) => !filters.class_id || Number(row.class_id) === Number(filters.class_id))
+      .forEach((row) => {
+        if (!sectionMap.has(Number(row.section_id))) {
+          sectionMap.set(Number(row.section_id), {
+            id: row.section_id,
+            section_name: row.section_name,
+          });
+        }
+      });
+    setSections([...sectionMap.values()]);
+
+    const examMap = new Map();
+    sessionRows
+      .filter(
+        (row) =>
+          Number(row.class_id) === Number(filters.class_id) &&
+          (!filters.section_id || Number(row.section_id) === Number(filters.section_id))
+      )
+      .forEach((row) => {
+        if (!examMap.has(Number(row.exam_id))) {
+          examMap.set(Number(row.exam_id), { exam_id: row.exam_id, exam_name: row.exam_name });
+        }
+      });
+    setExams([...examMap.values()]);
+
+    const subjectMap = new Map();
+    sessionRows
+      .filter(
+        (row) =>
+          Number(row.class_id) === Number(filters.class_id) &&
+          Number(row.section_id) === Number(filters.section_id) &&
+          Number(row.exam_id) === Number(filters.exam_id)
+      )
+      .forEach((row) => {
+        if (!subjectMap.has(Number(row.subject_id))) {
+          subjectMap.set(Number(row.subject_id), {
+            subject_id: row.subject_id,
+            subject_name: row.subject_name,
+          });
+        }
+      });
+    setSubjects([...subjectMap.values()]);
+  }, [accessibleSchedules, filters.session_id, filters.class_id, filters.section_id, filters.exam_id]);
 
   useEffect(() => {
     const { session_id, class_id, section_id, exam_id, subject_id } = filters;
@@ -194,21 +255,12 @@ const MarksEntry = () => {
     }
   };
 
-  const loadClassExamSubjects = async () => {
+  const loadMarksScope = async () => {
     try {
-      const res = await api.get("/exams/class-exam-subjects");
-      setClassExamSubjects(asArray(res.data));
+      const res = await api.get("/marks-access/my-scope");
+      setAccessibleSchedules(asArray(res?.data?.schedules));
     } catch (err) {
-      showApiError("Error", err, "Failed to load class-exam-subject data");
-    }
-  };
-
-  const loadSections = async () => {
-    try {
-      const res = await api.get("/sections");
-      setSections(asArray(res.data));
-    } catch (err) {
-      showApiError("Error", err, "Failed to load sections");
+      showApiError("Error", err, "Failed to load your marks access");
     }
   };
 
@@ -237,11 +289,7 @@ const MarksEntry = () => {
       subject_id: "",
     }));
 
-    const selectedClass = asArray(classExamSubjects).find(
-      (c) => Number(c.class_id) === Number(class_id)
-    );
-
-    setExams(asArray(selectedClass?.exams));
+    setExams([]);
     setSubjects([]);
     resetMarksData();
   };
@@ -255,15 +303,7 @@ const MarksEntry = () => {
       subject_id: "",
     }));
 
-    const selectedClass = asArray(classExamSubjects).find(
-      (c) => Number(c.class_id) === Number(filters.class_id)
-    );
-
-    const selectedExam = asArray(selectedClass?.exams).find(
-      (ex) => Number(ex.exam_id) === Number(exam_id)
-    );
-
-    setSubjects(asArray(selectedExam?.subjects));
+    setSubjects([]);
     resetMarksData();
   };
 
@@ -273,6 +313,7 @@ const MarksEntry = () => {
     setFilters((prev) => ({
       ...prev,
       [name]: value,
+      ...(name === "section_id" ? { exam_id: "", subject_id: "" } : {}),
     }));
 
     resetMarksData();
@@ -360,6 +401,54 @@ const MarksEntry = () => {
   const handleMarksChange = (studentId, componentId, value) => {
     const key = `${studentId}_${componentId}`;
     setMarks((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const getMarksValidationMessage = (value, component) => {
+    if (value === "" || value === null || value === undefined) return "";
+
+    const numeric = Number(value);
+    const maximum = getComponentMaximum(component);
+
+    if (!Number.isFinite(numeric) || numeric < 0) {
+      return "Marks must be a valid non-negative number.";
+    }
+    if (maximum !== null && numeric > maximum) {
+      return `Marks cannot exceed ${maximum}.`;
+    }
+
+    return "";
+  };
+
+  const handleMarksKeyDown = async (event, studentIndex, component) => {
+    if (event.key !== "Enter") return;
+
+    event.preventDefault();
+    const currentInput = event.currentTarget;
+    const validationMessage = getMarksValidationMessage(
+      currentInput.value,
+      component
+    );
+
+    if (validationMessage) {
+      await Swal.fire({
+        icon: "warning",
+        title: "Invalid marks",
+        text: validationMessage,
+      });
+      currentInput.focus();
+      currentInput.select();
+      return;
+    }
+
+    for (let index = studentIndex + 1; index < students.length; index += 1) {
+      const nextKey = `${students[index].id}_${component.component_id}`;
+      const nextInput = inputRefs.current[nextKey];
+      if (nextInput && !nextInput.disabled) {
+        nextInput.focus();
+        nextInput.select();
+        break;
+      }
+    }
   };
 
   const handleAttendanceChange = (studentId, componentId, value) => {
@@ -932,7 +1021,7 @@ const MarksEntry = () => {
                 </thead>
 
                 <tbody>
-                  {students.map((student) => (
+                  {students.map((student, studentIndex) => (
                     <tr key={student.id}>
                       <td>{student.roll_number || "-"}</td>
                       <td>{student.name}</td>
@@ -940,6 +1029,10 @@ const MarksEntry = () => {
                       {components.map((component) => {
                         const key = `${student.id}_${component.component_id}`;
                         const att = attendance[key] || "P";
+                        const validationMessage = getMarksValidationMessage(
+                          marks[key],
+                          component
+                        );
 
                         return (
                           <React.Fragment key={key}>
@@ -970,7 +1063,9 @@ const MarksEntry = () => {
                                   inputRefs.current[key] = el;
                                 }}
                                 type="number"
-                                className="form-control"
+                                className={`form-control${
+                                  validationMessage ? " is-invalid" : ""
+                                }`}
                                 value={marks[key] ?? ""}
                                 min="0"
                                 step="0.01"
@@ -984,6 +1079,11 @@ const MarksEntry = () => {
                                     e.target.value
                                   )
                                 }
+                                onKeyDown={(e) =>
+                                  handleMarksKeyDown(e, studentIndex, component)
+                                }
+                                aria-invalid={Boolean(validationMessage)}
+                                title={validationMessage || undefined}
                               />
                             </td>
                           </React.Fragment>

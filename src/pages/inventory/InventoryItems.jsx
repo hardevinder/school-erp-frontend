@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import Swal from "sweetalert2";
+import api from "../../api";
 import InventoryPageHeader from "../../components/inventory/InventoryPageHeader";
 import InventoryTableToolbar from "../../components/inventory/InventoryTableToolbar";
 import InventoryModal from "../../components/inventory/InventoryModal";
@@ -10,6 +11,7 @@ const emptyForm = {
   name: "",
   code: "",
   categoryId: "",
+  departmentId: "",
   unit: "",
   minStock: "",
   description: "",
@@ -19,6 +21,7 @@ const emptyForm = {
 export default function InventoryItems() {
   const [rows, setRows] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [departments, setDepartments] = useState([]);
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [loading, setLoading] = useState(true);
@@ -31,13 +34,15 @@ export default function InventoryItems() {
     setLoading(true);
     setError("");
     try {
-      const [itemRows, categoryRows] = await Promise.all([
+      const [itemRows, categoryRows, departmentRes] = await Promise.all([
         inventoryApi.getItems(),
         inventoryApi.getCategories(),
+        api.get("/departments"),
       ]);
 
       setRows(itemRows);
       setCategories(categoryRows);
+      setDepartments(departmentRes?.data?.departments || []);
     } catch (err) {
       setError(err?.response?.data?.message || err?.message || "Failed to load items");
     } finally {
@@ -55,6 +60,11 @@ export default function InventoryItems() {
       value: row?.id,
     }));
   }, [categories]);
+
+  const departmentOptions = useMemo(() => [
+    { label: "Common / School Inventory", value: "" },
+    ...departments.map((row) => ({ label: row.name, value: row.id })),
+  ], [departments]);
 
   const filteredRows = useMemo(() => {
     return rows.filter((row) => {
@@ -81,6 +91,8 @@ export default function InventoryItems() {
         ...form,
         categoryId: form.categoryId || form.category_id || "",
         category_id: form.categoryId || form.category_id || "",
+        departmentId: form.departmentId || form.department_id || "",
+        department_id: form.departmentId || form.department_id || null,
       };
 
       if (editingRow?.id) await inventoryApi.updateItem(editingRow.id, payload);
@@ -174,6 +186,7 @@ export default function InventoryItems() {
                   <th>Item</th>
                   <th>Code</th>
                   <th>Category</th>
+                  <th>Owner Department</th>
                   <th>Unit</th>
                   <th>Min Stock</th>
                   <th>Status</th>
@@ -183,7 +196,7 @@ export default function InventoryItems() {
               <tbody>
                 {filteredRows.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="text-center text-muted py-4">
+                    <td colSpan={9} className="text-center text-muted py-4">
                       No items found.
                     </td>
                   </tr>
@@ -201,6 +214,7 @@ export default function InventoryItems() {
                         </td>
                         <td>{inventoryUtils.getCode(row)}</td>
                         <td>{inventoryUtils.getCategoryName(row)}</td>
+                        <td>{row?.department?.name || "Common / School"}</td>
                         <td>{row?.unit || row?.uom || "—"}</td>
                         <td>{inventoryUtils.getMinStock(row)}</td>
                         <td>
@@ -216,6 +230,7 @@ export default function InventoryItems() {
                                   name: row?.name || row?.item_name || "",
                                   code: row?.code || row?.item_code || "",
                                   categoryId: row?.categoryId || row?.category_id || row?.category?.id || "",
+                                  departmentId: row?.departmentId || row?.department_id || row?.department?.id || "",
                                   unit: row?.unit || row?.uom || "",
                                   minStock: row?.minStock || row?.min_stock || row?.reorder_level || "",
                                   description: row?.description || "",
@@ -262,6 +277,13 @@ export default function InventoryItems() {
             required: true,
             options: categoryOptions,
             placeholder: "Select category",
+          },
+          {
+            name: "departmentId",
+            label: "Owner Department",
+            type: "select",
+            options: departmentOptions,
+            placeholder: "Common / School Inventory",
           },
           { name: "unit", label: "Unit", placeholder: "pcs / box / book / kg" },
           { name: "minStock", label: "Minimum Stock", type: "number", min: "0", step: "1" },

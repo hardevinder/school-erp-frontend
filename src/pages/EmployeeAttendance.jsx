@@ -127,11 +127,25 @@ export default function EmployeeAttendance() {
 
   // { [empId]: { status, remarks, in_time, out_time } }
   const [attendance, setAttendance] = useState({});
+  const [savedAttendance, setSavedAttendance] = useState({});
+  const [isSaving, setIsSaving] = useState(false);
   const [attendanceOptions, setAttendanceOptions] = useState(DEFAULT_OPTIONS);
 
   // Bulk time controls
   const [bulkInTime, setBulkInTime] = useState("");
   const [bulkOutTime, setBulkOutTime] = useState("");
+
+  // Multi-day Present/Holiday controls
+  const [showRange, setShowRange] = useState(false);
+  const [rangeForm, setRangeForm] = useState(() => ({
+    start_date: getTodayLocalDate(),
+    end_date: getTodayLocalDate(),
+    status: "holiday",
+    remarks: "",
+    exclude_sundays: true,
+    overwrite_existing: false,
+  }));
+  const [isRangeSaving, setIsRangeSaving] = useState(false);
 
   // Modal calendar state
   const [showCal, setShowCal] = useState(false);
@@ -181,12 +195,27 @@ export default function EmployeeAttendance() {
   }, []);
 
   useEffect(() => {
+    setAttendance({});
+    setSavedAttendance({});
     fetchMarkedAttendance(date);
   }, [date]);
 
   useEffect(() => {
     fetchAttendanceOptions();
   }, []);
+
+  useEffect(() => {
+    const eligible = employees.filter((employee) => {
+      const joiningDate = String(employee?.joining_date || "").slice(0, 10);
+      return !joiningDate || joiningDate <= date;
+    });
+
+    setFiltered(
+      selectedDept === "all"
+        ? eligible
+        : eligible.filter((employee) => employee?.department?.name === selectedDept)
+    );
+  }, [date, employees, selectedDept]);
 
   const fetchEmployees = async () => {
     try {
@@ -199,8 +228,6 @@ export default function EmployeeAttendance() {
       );
 
       setEmployees(active);
-      setFiltered(active);
-
       const uniqueDepts = [
         ...new Set(active.map((e) => e?.department?.name).filter(Boolean)),
       ];
@@ -252,6 +279,7 @@ export default function EmployeeAttendance() {
       }
 
       setAttendance(mapped);
+      setSavedAttendance(mapped);
     } catch (err) {
       console.error("fetchMarkedAttendance error:", err);
       Swal.fire("Error", "Failed to fetch existing attendance", "error");
@@ -318,14 +346,6 @@ export default function EmployeeAttendance() {
 
   const handleDeptFilter = (dept) => {
     setSelectedDept(dept);
-
-    const base = employees;
-
-    setFiltered(
-      dept === "all"
-        ? base
-        : base.filter((e) => e?.department?.name === dept)
-    );
   };
 
   /* =========================
@@ -418,6 +438,67 @@ export default function EmployeeAttendance() {
     setBulkOutTime("");
   };
 
+  const handleRangeSubmit = async () => {
+    const scopedEmployees = employees.filter(
+      (employee) =>
+        selectedDept === "all" || employee?.department?.name === selectedDept
+    );
+
+    if (!rangeForm.start_date || !rangeForm.end_date) {
+      Swal.fire("Info", "Please select both start and end dates.", "info");
+      return;
+    }
+    if (rangeForm.start_date > rangeForm.end_date) {
+      Swal.fire("Invalid range", "End date cannot be before start date.", "warning");
+      return;
+    }
+    if (rangeForm.status === "present" && rangeForm.end_date > getTodayLocalDate()) {
+      Swal.fire("Invalid range", "Present attendance cannot be marked for future dates.", "warning");
+      return;
+    }
+    if (!scopedEmployees.length) {
+      Swal.fire("Info", "There are no active employees in this scope.", "info");
+      return;
+    }
+
+    const statusLabel = rangeForm.status === "holiday" ? "Holiday" : "Present";
+    const scopeLabel = selectedDept === "all" ? "all departments" : selectedDept;
+    const confirmation = await Swal.fire({
+      icon: "question",
+      title: `Mark range as ${statusLabel}?`,
+      html: `${rangeForm.start_date} to ${rangeForm.end_date}<br><strong>${scopedEmployees.length}</strong> employee(s) in ${scopeLabel}.`,
+      showCancelButton: true,
+      confirmButtonText: `Mark ${statusLabel}`,
+      confirmButtonColor: rangeForm.status === "holiday" ? "#495057" : "#198754",
+    });
+    if (!confirmation.isConfirmed) return;
+
+    try {
+      setIsRangeSaving(true);
+      const response = await api.post("/employee-attendance/mark-range", {
+        ...rangeForm,
+        employee_ids: scopedEmployees.map((employee) => employee.id),
+      });
+      const result = response?.data || {};
+      await fetchMarkedAttendance(date);
+      await Swal.fire({
+        icon: "success",
+        title: "Range updated",
+        html: `${result.message || "Attendance updated."}<br>${result.preserved_existing || 0} existing record(s) preserved.`,
+      });
+      setShowRange(false);
+    } catch (err) {
+      console.error("handleRangeSubmit error:", err);
+      Swal.fire(
+        "Error",
+        err?.response?.data?.message || "Failed to mark attendance range",
+        "error"
+      );
+    } finally {
+      setIsRangeSaving(false);
+    }
+  };
+
   const handleSubmit = async () => {
     const missingTimesForPresent = filtered.some((e) => {
       const rec = attendance[e.id];
@@ -462,15 +543,15 @@ export default function EmployeeAttendance() {
     };
 
     try {
+      setIsSaving(true);
       const res = await api.post("/employee-attendance/mark", payload);
 
-      Swal.fire(
+      await fetchMarkedAttendance(date);
+      await Swal.fire(
         "Success",
         res?.data?.message || "Attendance saved",
         "success"
       );
-
-      fetchMarkedAttendance(date);
     } catch (err) {
       console.error("handleSubmit error:", err);
 
@@ -479,8 +560,47 @@ export default function EmployeeAttendance() {
         err?.response?.data?.message || "Failed to mark attendance",
         "error"
       );
+    } finally {
+      setIsSaving(false);
     }
   };
+
+  const hasExistingAttendance = useMemo(
+    () =>
+      Object.values(savedAttendance).some((record) =>
+        Boolean(normalizeStatus(record?.status))
+      ),
+    [savedAttendance]
+  );
+
+  const hasUnsavedChanges = useMemo(() => {
+    const ids = new Set([
+      ...Object.keys(attendance),
+      ...Object.keys(savedAttendance),
+    ]);
+
+    return [...ids].some((id) => {
+      const current = attendance[id] || {};
+      const saved = savedAttendance[id] || {};
+
+      return (
+        normalizeStatus(current.status) !== normalizeStatus(saved.status) ||
+        String(current.remarks || "") !== String(saved.remarks || "") ||
+        String(current.in_time || "") !== String(saved.in_time || "") ||
+        String(current.out_time || "") !== String(saved.out_time || "")
+      );
+    });
+  }, [attendance, savedAttendance]);
+
+  const submitButtonLabel = isSaving
+    ? "Saving..."
+    : hasExistingAttendance && !hasUnsavedChanges
+    ? "Marked ✓"
+    : hasExistingAttendance
+    ? "Update Attendance"
+    : "Submit Attendance";
+
+  const submitDisabled = isSaving || !hasUnsavedChanges;
 
   // Counters should reflect only currently visible employees
   const visibleIds = useMemo(() => new Set(filtered.map((e) => e.id)), [filtered]);
@@ -681,8 +801,32 @@ export default function EmployeeAttendance() {
         </div>
 
         <div className="d-flex flex-wrap gap-2">
-          <button className="btn btn-primary" onClick={handleSubmit}>
-            Submit Attendance
+          {hasExistingAttendance && (
+            <span
+              className={`badge align-self-center ${
+                hasUnsavedChanges ? "text-bg-warning" : "text-bg-success"
+              }`}
+            >
+              {hasUnsavedChanges
+                ? "Changes not saved"
+                : "Attendance already marked ✓"}
+            </span>
+          )}
+          <button
+            className="btn btn-primary"
+            onClick={handleSubmit}
+            disabled={submitDisabled}
+          >
+            {submitButtonLabel}
+          </button>
+
+          <button
+            type="button"
+            className="btn btn-outline-success"
+            onClick={() => setShowRange((value) => !value)}
+          >
+            <i className="bi bi-calendar-range me-1" />
+            Mark Date Range
           </button>
 
           <button className="btn btn-success" onClick={markAllPresent}>
@@ -718,6 +862,124 @@ export default function EmployeeAttendance() {
           </button>
         </div>
       </div>
+
+      {showRange && (
+        <div className="card border-success shadow-sm mb-3 range-attendance-card">
+          <div className="card-header bg-success-subtle d-flex justify-content-between align-items-center">
+            <div>
+              <div className="fw-semibold">Mark multiple dates</div>
+              <small className="text-muted">
+                Applies to {selectedDept === "all" ? "all active employees" : `${selectedDept} employees`}.
+              </small>
+            </div>
+            <button
+              type="button"
+              className="btn-close"
+              aria-label="Close"
+              onClick={() => setShowRange(false)}
+            />
+          </div>
+          <div className="card-body">
+            <div className="row g-3 align-items-end">
+              <div className="col-sm-6 col-lg-2">
+                <label className="form-label">From</label>
+                <input
+                  type="date"
+                  className="form-control"
+                  max={rangeForm.status === "present" ? getTodayLocalDate() : undefined}
+                  value={rangeForm.start_date}
+                  onChange={(event) =>
+                    setRangeForm((current) => ({ ...current, start_date: event.target.value }))
+                  }
+                />
+              </div>
+              <div className="col-sm-6 col-lg-2">
+                <label className="form-label">To</label>
+                <input
+                  type="date"
+                  className="form-control"
+                  max={rangeForm.status === "present" ? getTodayLocalDate() : undefined}
+                  value={rangeForm.end_date}
+                  onChange={(event) =>
+                    setRangeForm((current) => ({ ...current, end_date: event.target.value }))
+                  }
+                />
+              </div>
+              <div className="col-sm-6 col-lg-2">
+                <label className="form-label">Mark as</label>
+                <select
+                  className="form-select"
+                  value={rangeForm.status}
+                  onChange={(event) =>
+                    setRangeForm((current) => ({ ...current, status: event.target.value }))
+                  }
+                >
+                  <option value="holiday">Holiday</option>
+                  <option value="present">Present</option>
+                </select>
+              </div>
+              <div className="col-sm-6 col-lg-3">
+                <label className="form-label">Remarks</label>
+                <input
+                  type="text"
+                  maxLength={255}
+                  className="form-control"
+                  placeholder="e.g. Summer vacation"
+                  value={rangeForm.remarks}
+                  onChange={(event) =>
+                    setRangeForm((current) => ({ ...current, remarks: event.target.value }))
+                  }
+                />
+              </div>
+              <div className="col-lg-3">
+                <button
+                  type="button"
+                  className="btn btn-success w-100"
+                  disabled={isRangeSaving}
+                  onClick={handleRangeSubmit}
+                >
+                  {isRangeSaving ? "Marking…" : "Apply to Date Range"}
+                </button>
+              </div>
+            </div>
+            <div className="d-flex flex-wrap gap-4 mt-3">
+              <div className="form-check">
+                <input
+                  id="range-exclude-sundays"
+                  type="checkbox"
+                  className="form-check-input"
+                  checked={rangeForm.exclude_sundays}
+                  onChange={(event) =>
+                    setRangeForm((current) => ({ ...current, exclude_sundays: event.target.checked }))
+                  }
+                />
+                <label className="form-check-label" htmlFor="range-exclude-sundays">
+                  Exclude Sundays
+                </label>
+              </div>
+              <div className="form-check">
+                <input
+                  id="range-overwrite-existing"
+                  type="checkbox"
+                  className="form-check-input"
+                  checked={rangeForm.overwrite_existing}
+                  onChange={(event) =>
+                    setRangeForm((current) => ({ ...current, overwrite_existing: event.target.checked }))
+                  }
+                />
+                <label className="form-check-label" htmlFor="range-overwrite-existing">
+                  Replace attendance already marked in this range
+                </label>
+              </div>
+            </div>
+            {!rangeForm.overwrite_existing && (
+              <small className="text-muted d-block mt-2">
+                Existing present, absent, or leave entries will be kept unchanged.
+              </small>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Status counters */}
       <div className="row mb-3 g-2">
@@ -864,7 +1126,7 @@ export default function EmployeeAttendance() {
             {!filtered.length && (
               <tr>
                 <td colSpan="7" className="text-center text-muted py-4">
-                  No active employees found.
+                  No employees had joined by the selected date.
                 </td>
               </tr>
             )}
@@ -874,8 +1136,12 @@ export default function EmployeeAttendance() {
 
       {/* Bottom submit */}
       <div className="d-flex flex-wrap gap-2 mt-3">
-        <button className="btn btn-primary" onClick={handleSubmit}>
-          Submit Attendance
+        <button
+          className="btn btn-primary"
+          onClick={handleSubmit}
+          disabled={submitDisabled}
+        >
+          {submitButtonLabel}
         </button>
 
         <button className="btn btn-outline-dark" onClick={markAllHoliday}>
