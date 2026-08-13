@@ -319,6 +319,61 @@ const MarksEntry = () => {
     resetMarksData();
   };
 
+  const manageOptionalSubjectStudents = async () => {
+    const { session_id, class_id, section_id, subject_id } = filters;
+    if (!session_id || !class_id || !section_id || !subject_id) return;
+
+    try {
+      const response = await api.get("/marks-entry/student-subject-selection", {
+        params: { session_id, class_id, section_id, subject_id },
+      });
+      const rows = asArray(response.data?.students);
+      const checkedCount = rows.filter((student) => student.is_opted).length;
+      const result = await Swal.fire({
+        title: "Optional subject students",
+        width: 720,
+        html: `
+          <div style="text-align:left">
+            <p style="color:#667085;margin-bottom:12px">Select only the students who opted for this subject. Marks Entry will hide unchecked students.</p>
+            <label style="display:flex;gap:8px;align-items:center;padding:10px 12px;background:#f8fafc;border-radius:8px;font-weight:600">
+              <input type="checkbox" id="optionalSelectAll" ${checkedCount === rows.length ? "checked" : ""}> Select all students
+            </label>
+            <div id="optionalStudentList" style="max-height:380px;overflow:auto;margin-top:8px;border:1px solid #e5e7eb;border-radius:8px">
+              ${rows.map((student) => `
+                <label style="display:flex;gap:10px;align-items:center;padding:10px 12px;border-bottom:1px solid #f0f1f3">
+                  <input class="optional-student-check" type="checkbox" value="${student.id}" ${student.is_opted ? "checked" : ""}>
+                  <span><strong>${escapeHtml(student.name || "Student")}</strong><small style="display:block;color:#667085">Roll: ${escapeHtml(student.roll_number || "-")} · Admission: ${escapeHtml(student.admission_number || "-")}</small></span>
+                </label>`).join("") || '<p style="padding:20px;text-align:center;color:#667085">No students found.</p>'}
+            </div>
+          </div>`,
+        showCancelButton: true,
+        confirmButtonText: "Save selection",
+        didOpen: () => {
+          const selectAll = document.getElementById("optionalSelectAll");
+          selectAll?.addEventListener("change", () => {
+            document.querySelectorAll(".optional-student-check").forEach((checkbox) => {
+              checkbox.checked = selectAll.checked;
+            });
+          });
+        },
+        preConfirm: () => [...document.querySelectorAll(".optional-student-check:checked")].map((checkbox) => Number(checkbox.value)),
+      });
+      if (!result.isConfirmed) return;
+
+      await api.put("/marks-entry/student-subject-selection", {
+        session_id,
+        class_id,
+        section_id,
+        subject_id,
+        opted_student_ids: result.value,
+      });
+      await Swal.fire("Updated", `${result.value.length} student(s) selected for this subject.`, "success");
+      if (examScheduleId) await fetchMarksEntryData();
+    } catch (error) {
+      showApiError("Unable to update students", error, "Failed to update optional-subject students");
+    }
+  };
+
   const fetchMarksEntryData = async () => {
     const { session_id, class_id, section_id, exam_id, subject_id } = filters;
 
@@ -835,6 +890,14 @@ const MarksEntry = () => {
 
           <div className="d-flex flex-wrap gap-2 mb-3">
             <button
+              className="btn btn-outline-secondary"
+              onClick={manageOptionalSubjectStudents}
+              disabled={!filters.subject_id || loading}
+            >
+              <i className="bi bi-people me-1" aria-hidden="true" />
+              Manage optional students
+            </button>
+            <button
               className="btn btn-success"
               onClick={saveMarksEntry}
               disabled={!examScheduleId || loading || allComponentsLocked}
@@ -1068,7 +1131,7 @@ const MarksEntry = () => {
                                 }`}
                                 value={marks[key] ?? ""}
                                 min="0"
-                                step="0.01"
+                                step="0.5"
                                 max={getComponentMaximum(component) ?? undefined}
                                 disabled={component.is_locked || att !== "P"}
                                 onFocus={() => setActiveStudentId(student.id)}

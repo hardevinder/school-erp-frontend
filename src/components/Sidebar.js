@@ -370,7 +370,7 @@ export default function Sidebar({ headerHeight = 56 }) {
           { key: "roll-numbers", label: "Roll Numbers", icon: "bi-list-ol", path: "/roll-numbers", roles: ["examination"] },
           { key: "marks-entry", label: "Marks Entry", icon: "bi-pencil-square", path: "/marks-entry", roles: ["examination"] },
           { key: "marks-access-management", label: "Marks Access & Tracking", icon: "bi-person-check", path: "/marks-access-management", roles: ["examination"] },
-          { key: "classwise-result-summary", label: "Result Summary", icon: "bi-bar-chart", path: "/reports/classwise-result-summary", roles: ["examination"] },
+          { key: "classwise-result-summary", label: "Class Result", icon: "bi-bar-chart", path: "/reports/classwise-result-summary", roles: ["examination"] },
           { key: "final-result-summary", label: "Final Result Summary", icon: "bi-bar-chart-line", path: "/reports/final-result-summary", roles: ["examination"] },
           { key: "report-card-formats", label: "Report Card Formats", icon: "bi-file-earmark-font", path: "/report-card-formats", roles: ["examination"] },
           { key: "assign-report-card-format", label: "Assign Report Format", icon: "bi-link", path: "/assign-report-card-format", roles: ["examination"] },
@@ -1280,7 +1280,7 @@ export default function Sidebar({ headerHeight = 56 }) {
         items: [
           { key: "roll-numbers", label: "Roll Numbers", icon: "bi-list-ol", path: "/roll-numbers" },
           { key: "marks-entry", label: "Marks Entry", icon: "bi-pencil-square", path: "/marks-entry" },
-          { key: "classwise-result-summary", label: "Result Summary", icon: "bi-bar-chart", path: "/reports/classwise-result-summary" },
+          { key: "classwise-result-summary", label: "Class Result", icon: "bi-bar-chart", path: "/reports/classwise-result-summary" },
           { key: "final-result-summary", label: "Final Result Summary", icon: "bi-bar-chart-line", path: "/reports/final-result-summary" },
           { key: "coscholastic-entry", label: "Co-Scholastic Entry", icon: "bi-stars", path: "/co-scholastic-entry" },
           { key: "student-remarks-entry", label: "Student Remarks Entry", icon: "bi-chat-square-text", path: "/student-remarks-entry" },

@@ -158,33 +158,116 @@ const SummaryTile = ({ title, value, className }) => (
   </div>
 );
 
+const summarizeMarkedAttendance = (records = []) => {
+  const marked = records.filter((record) =>
+    ["present", "absent", "leave"].includes(
+      String(record?.status || "").trim().toLowerCase()
+    )
+  );
+  const present = marked.filter(
+    (record) => String(record.status).toLowerCase() === "present"
+  ).length;
+  const absent = marked.filter(
+    (record) => String(record.status).toLowerCase() === "absent"
+  ).length;
+  const leave = marked.filter(
+    (record) => String(record.status).toLowerCase() === "leave"
+  ).length;
+
+  return {
+    marked: marked.length,
+    present,
+    absent,
+    leave,
+    percentage: marked.length ? Math.round((present / marked.length) * 100) : 0,
+  };
+};
+
 /* ========================================================
    Attendance Summary Cards
    ======================================================== */
-const AttendanceSummaryCards = ({ attendanceRecords, currentMonth, studentName, studentClassName }) => {
-  const monthlyRecords = attendanceRecords.filter((r) => moment(r.date).isSame(currentMonth, "month"));
-  const presentCount = monthlyRecords.filter((r) => (r.status || "").toLowerCase() === "present").length;
-  const absentCount  = monthlyRecords.filter((r) => (r.status || "").toLowerCase() === "absent").length;
-  const leaveCount   = monthlyRecords.filter((r) => (r.status || "").toLowerCase() === "leave").length;
-  const total = monthlyRecords.length;
-  const percentPresence = total > 0 ? Math.round((presentCount / total) * 100) : 0;
+const AttendanceSummaryCards = ({ attendanceRecords, currentMonth }) => {
+  const monthStart = currentMonth.clone().startOf("month");
+  const monthEnd = currentMonth.clone().endOf("month");
+  const monthlySummary = summarizeMarkedAttendance(
+    attendanceRecords.filter((record) => moment(record.date).isSame(currentMonth, "month"))
+  );
+  const previousSummary = summarizeMarkedAttendance(
+    attendanceRecords.filter((record) => moment(record.date).isBefore(monthStart, "day"))
+  );
+  const cumulativeSummary = summarizeMarkedAttendance(
+    attendanceRecords.filter((record) => !moment(record.date).isAfter(monthEnd, "day"))
+  );
+
+  const comparisonColumns = [
+    { label: "Previous months", hint: `Before ${currentMonth.format("MMM YYYY")}`, data: previousSummary },
+    { label: "Selected month", hint: currentMonth.format("MMM YYYY"), data: monthlySummary },
+    { label: "Till this month", hint: `Through ${currentMonth.format("MMM YYYY")}`, data: cumulativeSummary },
+  ];
 
   return (
-    <div className="row g-3 align-items-stretch mb-2">
-      <SummaryTile title="Total" value={total} className="summary-total" />
-      <SummaryTile title="Present" value={presentCount} className="summary-present" />
-      <SummaryTile title="Absent" value={absentCount} className="summary-absent" />
-      <SummaryTile title="Leave" value={leaveCount} className="summary-leave" />
-      <div className="col-12 col-md-4 mb-3">
-        <div className="card text-white summary-card summary-percent h-100">
-          <div className="card-body d-flex flex-column justify-content-center text-center">
-            <div className="fw-semibold small text-uppercase opacity-75 mb-1">% Presence</div>
-            <div className="display-5 fw-bold">{percentPresence}%</div>
-            <div className="small opacity-75">for {currentMonth.format("MMM YYYY")}</div>
+    <>
+      <div className="row g-3 align-items-stretch mb-2">
+        <SummaryTile title="Marked" value={monthlySummary.marked} className="summary-total" />
+        <SummaryTile title="Present" value={monthlySummary.present} className="summary-present" />
+        <SummaryTile title="Absent" value={monthlySummary.absent} className="summary-absent" />
+        <SummaryTile title="Leave" value={monthlySummary.leave} className="summary-leave" />
+        <div className="col-12 col-md-4 mb-3">
+          <div className="card text-white summary-card summary-percent h-100">
+            <div className="card-body d-flex flex-column justify-content-center text-center">
+              <div className="fw-semibold small text-uppercase opacity-75 mb-1">Marked Attendance %</div>
+              <div className="display-5 fw-bold">{monthlySummary.percentage}%</div>
+              <div className="small opacity-75">
+                {monthlySummary.present} present out of {monthlySummary.marked} marked
+              </div>
+            </div>
           </div>
         </div>
       </div>
-    </div>
+
+      <div className="card border-0 shadow-sm rounded-4 mb-4 overflow-hidden">
+        <div className="card-header bg-white border-0 px-3 px-md-4 pt-3">
+          <h5 className="mb-1">Attendance progression</h5>
+          <p className="small text-muted mb-0">Percentages use marked records only.</p>
+        </div>
+        <div className="card-body p-2 p-md-3">
+          <div className="table-responsive">
+            <table className="table table-bordered align-middle text-center mb-0">
+              <thead className="table-light">
+                <tr>
+                  <th className="text-start">Measure</th>
+                  {comparisonColumns.map((column) => (
+                    <th key={column.label}>
+                      {column.label}
+                      <span className="d-block fw-normal small text-muted">{column.hint}</span>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {[
+                  ["Marked", "marked"],
+                  ["Present", "present"],
+                  ["Absent", "absent"],
+                  ["Leave", "leave"],
+                ].map(([label, key]) => (
+                  <tr key={key}>
+                    <th className="text-start">{label}</th>
+                    {comparisonColumns.map((column) => <td key={column.label}>{column.data[key]}</td>)}
+                  </tr>
+                ))}
+                <tr className="table-primary">
+                  <th className="text-start">Attendance %</th>
+                  {comparisonColumns.map((column) => (
+                    <td key={column.label} className="fw-bold">{column.data.percentage}%</td>
+                  ))}
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </>
   );
 };
 

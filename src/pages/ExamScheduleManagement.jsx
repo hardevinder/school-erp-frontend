@@ -38,6 +38,15 @@ const ExamScheduleManagement = () => {
   });
 
   const [showModal, setShowModal] = useState(false);
+  const [copySourceClassId, setCopySourceClassId] = useState(null);
+  const [showClassCopyModal, setShowClassCopyModal] = useState(false);
+  const [classCopyData, setClassCopyData] = useState({
+    from_session_id: "",
+    from_class_id: "",
+    to_session_id: "",
+    to_class_id: "",
+    overwrite: false,
+  });
   const fileInputRef = useRef(null);
 
   const examById = useMemo(() => {
@@ -167,6 +176,66 @@ const ExamScheduleManagement = () => {
     }
   };
 
+  const openClassCopyModal = () => {
+    const selectedClass =
+      filters.class_id === "" || filters.class_id === null || filters.class_id === undefined
+        ? ""
+        : String(filters.class_id);
+    setClassCopyData({
+      from_session_id: filters.session_id ? String(filters.session_id) : "",
+      from_class_id: selectedClass,
+      to_session_id: filters.session_id ? String(filters.session_id) : "",
+      to_class_id: "",
+      overwrite: false,
+    });
+    setShowClassCopyModal(true);
+  };
+
+  const handleClassCopySubmit = async () => {
+    const data = classCopyData;
+    const missingClass = (value) =>
+      value === "" || value === null || value === undefined;
+    if (!data.from_session_id || missingClass(data.from_class_id) ||
+        !data.to_session_id || missingClass(data.to_class_id)) {
+      return Swal.fire("Required", "Select From/To Session and Class.", "warning");
+    }
+    if (String(data.from_session_id) === String(data.to_session_id) &&
+        String(data.from_class_id) === String(data.to_class_id)) {
+      return Swal.fire("Invalid Target", "Source and target cannot be the same.", "warning");
+    }
+
+    const sourceName = classes.find((c) => String(c.id) === String(data.from_class_id))?.class_name;
+    const targetName = classes.find((c) => String(c.id) === String(data.to_class_id))?.class_name;
+    const confirm = await Swal.fire({
+      title: "Copy Full Class Schedule?",
+      html: `<b>${sourceName || data.from_class_id}</b> → <b>${targetName || data.to_class_id}</b><br/><br/>
+        All sections, exams, subjects, dates and times will be copied.${
+          data.overwrite ? "<br/><b>Existing target-class schedules will be deleted first.</b>" : "<br/>Existing duplicates will be skipped."
+        }`,
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "Copy Full Schedule",
+    });
+    if (!confirm.isConfirmed) return;
+
+    setShowClassCopyModal(false);
+    try {
+      Swal.fire({ title: "Copying full class schedule...", allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+      const response = await api.post("/exam-schedules/copy-class", {
+        from_session_id: Number(data.from_session_id),
+        from_class_id: Number(data.from_class_id),
+        to_session_id: Number(data.to_session_id),
+        to_class_id: Number(data.to_class_id),
+        overwrite: data.overwrite,
+      });
+      await Swal.fire("Copied", `${response.data.created || 0} created; ${response.data.skipped || 0} skipped.`, "success");
+      fetchSchedules();
+    } catch (err) {
+      Swal.fire("Error", err?.response?.data?.message || "Failed to copy full class schedule", "error");
+      setShowClassCopyModal(true);
+    }
+  };
+
   const markDirty = (id) => {
     setDirtyIds((prev) => {
       const next = new Set(prev);
@@ -239,6 +308,7 @@ const ExamScheduleManagement = () => {
   const closeModal = () => setShowModal(false);
 
   const openAddModal = () => {
+    setCopySourceClassId(null);
     setFormData({
       id: null,
       session_id: filters.session_id || "",
@@ -255,6 +325,7 @@ const ExamScheduleManagement = () => {
   };
 
   const handleEdit = (schedule) => {
+    setCopySourceClassId(null);
     setFormData({
       id: schedule.id,
       session_id: schedule.session_id || schedule.session?.id || "",
@@ -271,14 +342,17 @@ const ExamScheduleManagement = () => {
   };
 
   const handleDuplicate = (schedule) => {
+    const sourceClassId =
+      schedule.class_id ?? schedule.class?.id ?? "";
+    setCopySourceClassId(String(sourceClassId));
     setFormData({
       id: null,
-      session_id: schedule.session_id || schedule.session?.id || "",
-      term_id: schedule.term_id || schedule.term?.id || "",
-      exam_id: schedule.exam_id || schedule.exam?.id || "",
-      class_id: schedule.class_id || schedule.class?.id || "",
-      section_id: schedule.section_id || schedule.section?.id || "",
-      subject_id: schedule.subject_id || schedule.subject?.id || "",
+      session_id: schedule.session_id ?? schedule.session?.id ?? "",
+      term_id: schedule.term_id ?? schedule.term?.id ?? "",
+      exam_id: schedule.exam_id ?? schedule.exam?.id ?? "",
+      class_id: "",
+      section_id: schedule.section_id ?? schedule.section?.id ?? "",
+      subject_id: schedule.subject_id ?? schedule.subject?.id ?? "",
       exam_date: schedule.exam_date || "",
       start_time: schedule.start_time || "",
       end_time: schedule.end_time || "",
@@ -365,6 +439,66 @@ const ExamScheduleManagement = () => {
     }
   };
 
+  const handleDeleteAllDisplayed = async () => {
+    const displayedIds = schedules
+      .map((schedule) => Number(schedule.id))
+      .filter((id) => Number.isInteger(id) && id > 0);
+
+    if (!displayedIds.length) {
+      return Swal.fire("Nothing to Delete", "No schedules are displayed.", "info");
+    }
+
+    const confirm = await Swal.fire({
+      title: `Delete all ${displayedIds.length} displayed schedules?`,
+      html: `<div style="text-align:left">
+        This permanently deletes only the rows in the current displayed list.
+        ${dirtyIds.size ? `<br/><br/><b>${dirtyIds.size} unsaved edited row(s) will also be deleted.</b>` : ""}
+      </div>`,
+      icon: "warning",
+      input: "text",
+      inputPlaceholder: "Type DELETE ALL",
+      showCancelButton: true,
+      confirmButtonText: "Delete All Displayed",
+      confirmButtonColor: "#d33",
+      preConfirm: (value) => {
+        if ((value || "").trim().toUpperCase() !== "DELETE ALL") {
+          Swal.showValidationMessage("Please type DELETE ALL exactly.");
+          return false;
+        }
+        return true;
+      },
+    });
+
+    if (!confirm.isConfirmed) return;
+
+    try {
+      Swal.fire({
+        title: "Deleting displayed schedules...",
+        allowOutsideClick: false,
+        didOpen: () => Swal.showLoading(),
+      });
+
+      const response = await api.delete("/exam-schedules/displayed", {
+        data: { ids: displayedIds },
+      });
+      const deleted = response?.data?.deleted ?? 0;
+
+      await Swal.fire(
+        "Deleted",
+        `${deleted} displayed schedule(s) deleted successfully.`,
+        "success"
+      );
+      fetchSchedules();
+    } catch (err) {
+      console.error(err);
+      Swal.fire(
+        "Error",
+        err?.response?.data?.error || "Failed to delete displayed schedules",
+        "error"
+      );
+    }
+  };
+
   const handleExport = async () => {
     try {
       const response = await api.get("/exam-schedules/export", {
@@ -431,6 +565,9 @@ const ExamScheduleManagement = () => {
         <h2 className="m-0">📘 Exam Schedule Management</h2>
 
         <div className="d-flex gap-2 flex-wrap">
+          <Button variant="outline-primary" onClick={openClassCopyModal}>
+            🏫 Copy Full Class Schedule
+          </Button>
           <Button
             variant="outline-info"
             onClick={handleGenerateFromScheme}
@@ -557,6 +694,14 @@ const ExamScheduleManagement = () => {
 
       <div className="d-flex justify-content-between mb-3 flex-wrap gap-2">
         <div className="d-flex gap-2 flex-wrap">
+          <Button
+            variant="outline-danger"
+            onClick={handleDeleteAllDisplayed}
+            disabled={!schedules.length}
+            title={schedules.length ? "Delete every row in the displayed list" : "No rows displayed"}
+          >
+            🗑️ Delete All Displayed
+          </Button>
           <Button variant="outline-success" onClick={handleExport}>
             ⬇️ Export Excel
           </Button>
@@ -680,7 +825,11 @@ const ExamScheduleManagement = () => {
       <Modal show={showModal} onHide={closeModal} size="lg" centered scrollable>
         <Modal.Header closeButton>
           <Modal.Title>
-            {formData.id ? "✏️ Edit Schedule" : "➕ Add / Duplicate Schedule"}
+            {formData.id
+              ? "✏️ Edit Schedule"
+              : copySourceClassId !== null
+                ? "📄 Copy Schedule to Class"
+                : "➕ Add Schedule"}
           </Modal.Title>
         </Modal.Header>
 
@@ -744,19 +893,49 @@ const ExamScheduleManagement = () => {
                 </Form.Group>
               </div>
 
+              {copySourceClassId !== null && (
+                <div className="col-12 col-md-6 col-lg-4">
+                  <Form.Group className="mb-2">
+                    <Form.Label>From Class</Form.Label>
+                    <Form.Control
+                      value={
+                        classes.find((c) => String(c.id) === copySourceClassId)
+                          ?.class_name || copySourceClassId
+                      }
+                      disabled
+                      readOnly
+                    />
+                  </Form.Group>
+                </div>
+              )}
+
               <div className="col-12 col-md-6 col-lg-4">
                 <Form.Group className="mb-2">
-                  <Form.Label>Class</Form.Label>
+                  <Form.Label>
+                    {copySourceClassId !== null ? "Copy To Class" : "Class"}
+                  </Form.Label>
                   <Form.Select
                     name="class_id"
                     value={formData.class_id}
                     onChange={handleFormChange}
                     disabled={!!formData.id}
                   >
-                    <option value="">Select Class</option>
+                    <option value="">
+                      {copySourceClassId !== null ? "Select Target Class" : "Select Class"}
+                    </option>
                     {classes.map((c) => (
-                      <option key={c.id} value={c.id}>
+                      <option
+                        key={c.id}
+                        value={c.id}
+                        disabled={
+                          copySourceClassId !== null &&
+                          String(c.id) === copySourceClassId
+                        }
+                      >
                         {c.class_name}
+                        {copySourceClassId !== null && String(c.id) === copySourceClassId
+                          ? " (Source)"
+                          : ""}
                       </option>
                     ))}
                   </Form.Select>
@@ -849,8 +1028,56 @@ const ExamScheduleManagement = () => {
             Cancel
           </Button>
           <Button variant="primary" onClick={handleSubmit}>
-            {formData.id ? "Update" : "Save"}
+            {formData.id
+              ? "Update"
+              : copySourceClassId !== null
+                ? "Copy Schedule"
+                : "Save"}
           </Button>
+        </Modal.Footer>
+      </Modal>
+
+      <Modal show={showClassCopyModal} onHide={() => setShowClassCopyModal(false)} centered>
+        <Modal.Header closeButton>
+          <Modal.Title>🏫 Copy Full Class Schedule</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <div className="row g-3">
+            {[
+              ["from_session_id", "From Session", sessions, "name"],
+              ["from_class_id", "From Class", classes, "class_name"],
+              ["to_session_id", "To Session", sessions, "name"],
+              ["to_class_id", "To Class", classes, "class_name"],
+            ].map(([name, label, options, labelKey]) => (
+              <div className="col-12 col-md-6" key={name}>
+                <Form.Label>{label}</Form.Label>
+                <Form.Select
+                  value={classCopyData[name]}
+                  onChange={(e) => setClassCopyData((previous) => ({ ...previous, [name]: e.target.value }))}
+                >
+                  <option value="">Select {label}</option>
+                  {options.map((option) => (
+                    <option key={option.id} value={String(option.id)}>{option[labelKey]}</option>
+                  ))}
+                </Form.Select>
+              </div>
+            ))}
+            <div className="col-12">
+              <Form.Check
+                type="checkbox"
+                label="Overwrite target class schedule (delete target first)"
+                checked={classCopyData.overwrite}
+                onChange={(e) => setClassCopyData((previous) => ({ ...previous, overwrite: e.target.checked }))}
+              />
+              <div className="text-muted mt-2">
+                Sections, exams, subjects, dates and times are preserved from the source class.
+              </div>
+            </div>
+          </div>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={() => setShowClassCopyModal(false)}>Cancel</Button>
+          <Button variant="primary" onClick={handleClassCopySubmit}>Copy Full Schedule</Button>
         </Modal.Footer>
       </Modal>
     </div>

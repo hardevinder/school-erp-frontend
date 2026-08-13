@@ -60,6 +60,7 @@ const emptySchemeForm = (defaults = {}) => ({
 // Sortable row component
 function SortableRow({
   scheme,
+  reorderEnabled,
   onEdit,
   onDelete,
   onToggleLock,
@@ -68,6 +69,7 @@ function SortableRow({
   const { attributes, listeners, setNodeRef, transform, transition } =
     useSortable({
       id: scheme.id.toString(),
+      disabled: !reorderEnabled,
     });
 
   const style = { transform: CSS.Transform.toString(transform), transition };
@@ -87,10 +89,14 @@ function SortableRow({
       <td
         {...attributes}
         {...listeners}
-        style={{ cursor: "grab", width: 40 }}
-        title="Drag to reorder"
+        style={{ cursor: reorderEnabled ? "grab" : "not-allowed", width: 40 }}
+        title={
+          reorderEnabled
+            ? "Drag to reorder in Marks Entry"
+            : "Select one session, class, subject and term to reorder"
+        }
       >
-        ☰
+        {reorderEnabled ? "☰" : "—"}
       </td>
 
       <td>{scheme.session?.name || "-"}</td>
@@ -205,7 +211,13 @@ const ExamSchemeManagement = () => {
     session_id: "",
     class_id: "",
     subject_id: "",
+    term_id: "",
+    component_id: "",
   });
+
+  const [evaluationMode, setEvaluationMode] = useState(null);
+  const [evaluationModeLoading, setEvaluationModeLoading] = useState(false);
+  const [evaluationModeSaving, setEvaluationModeSaving] = useState(false);
 
   const [formData, setFormData] = useState(() => emptySchemeForm());
 
@@ -271,6 +283,13 @@ const ExamSchemeManagement = () => {
     [components, formData.component_id]
   );
   const isGradeFormComponent = safeMode(selectedFormComponent?.component_type) === "GRADE";
+  const hasExactSchemeContext = Boolean(
+    filters.session_id &&
+      filters.class_id &&
+      filters.subject_id &&
+      filters.term_id
+  );
+  const reorderEnabled = hasExactSchemeContext && !filters.component_id;
 
   useEffect(() => {
     fetchDropdowns();
@@ -308,24 +327,92 @@ const ExamSchemeManagement = () => {
       if (filters.session_id) params.session_id = filters.session_id;
       if (filters.class_id) params.class_id = filters.class_id;
       if (filters.subject_id) params.subject_id = filters.subject_id;
+      if (filters.term_id) params.term_id = filters.term_id;
+      if (filters.component_id) params.component_id = filters.component_id;
 
       const res = await api.get("/exam-schemes", { params });
-      setSchemes(res.data || []);
+      const returnedSchemes = Array.isArray(res.data) ? res.data : [];
+      const filteredSchemes = filters.component_id
+        ? returnedSchemes.filter(
+            (scheme) =>
+              String(scheme.component_id ?? scheme.component?.id) ===
+              String(filters.component_id)
+          )
+        : returnedSchemes;
+      setSchemes(filteredSchemes);
     } catch (err) {
       Swal.fire("Error", "Unable to load exam schemes.", "error");
     }
   };
 
-  const handleFilterChange = (e) =>
+  const handleFilterChange = (e) => {
+    setEvaluationMode(null);
     setFilters({ ...filters, [e.target.name]: e.target.value });
+  };
 
-  const applyFilters = () => fetchSchemes();
+  const fetchEvaluationMode = async () => {
+    if (!hasExactSchemeContext) {
+      setEvaluationMode(null);
+      return;
+    }
+
+    try {
+      setEvaluationModeLoading(true);
+      const res = await api.get("/exam-schemes/eval-mode", {
+        params: {
+          session_id: filters.session_id,
+          class_id: filters.class_id,
+          subject_id: filters.subject_id,
+          term_id: filters.term_id,
+        },
+      });
+      setEvaluationMode(safeMode(res?.data?.evaluation_mode));
+    } catch (e) {
+      setEvaluationMode(null);
+      const message = e?.response?.data?.message || "Unable to load evaluation mode.";
+      Swal.fire("Error", message, "error");
+    } finally {
+      setEvaluationModeLoading(false);
+    }
+  };
+
+  const applyFilters = async () => {
+    await fetchSchemes();
+    await fetchEvaluationMode();
+  };
+
+  const saveEvaluationMode = async () => {
+    if (!hasExactSchemeContext || !evaluationMode) return;
+
+    try {
+      setEvaluationModeSaving(true);
+      await api.post("/exam-schemes/eval-mode", {
+        session_id: Number(filters.session_id),
+        class_id: Number(filters.class_id),
+        subject_id: Number(filters.subject_id),
+        term_id: Number(filters.term_id),
+        evaluation_mode: evaluationMode,
+      });
+      await fetchSchemes();
+      Swal.fire(
+        "Saved",
+        `${evaluationMode === "GRADE" ? "Grade" : "Marks"} Entry will be used for this subject and term.`,
+        "success"
+      );
+    } catch (e) {
+      const message = e?.response?.data?.message || "Unable to save evaluation mode.";
+      Swal.fire("Error", message, "error");
+    } finally {
+      setEvaluationModeSaving(false);
+    }
+  };
 
   const handleDeleteAllSchemes = async () => {
     const sessionId = filters.session_id ? String(filters.session_id) : "";
     const classId = filters.class_id ? String(filters.class_id) : "";
     const subjectId = filters.subject_id ? String(filters.subject_id) : "";
-    const isFilteredLocal = !!(sessionId || classId || subjectId);
+    const componentId = filters.component_id ? String(filters.component_id) : "";
+    const isFilteredLocal = !!(sessionId || classId || subjectId || componentId);
 
     if (!isFilteredLocal) {
       return Swal.fire(
@@ -347,22 +434,28 @@ const ExamSchemeManagement = () => {
       subjectId && subjectById.get(subjectId)
         ? subjectById.get(subjectId).name
         : "All Subjects";
+    const component = components.find((item) => String(item.id) === componentId);
+    const componentName = component
+      ? `${component.abbreviation ? `${component.abbreviation} - ` : ""}${component.name}`
+      : "All Components";
 
     const scopeHtml = `
       <div style="text-align:left">
-        <div><b>This will delete schemes matching current filters:</b></div>
+        <div><b>This will delete all unlocked schemes currently displayed:</b></div>
         <div><b>Session:</b> ${sessionName}</div>
         <div><b>Class:</b> ${className}</div>
         <div><b>Subject:</b> ${subjectName}</div>
+        <div><b>Component:</b> ${componentName}</div>
+        <div><b>Displayed rows:</b> ${schemes.length}</div>
         <hr/>
         <div style="font-size:13px;color:#666">
-          Locked schemes will be skipped by the backend.
+          Locked schemes will be skipped. Schemes outside this displayed list will not be touched.
         </div>
       </div>
     `;
 
     const c1 = await Swal.fire({
-      title: "⚠️ Confirm Delete Filtered Schemes",
+      title: "⚠️ Delete All Displayed Schemes?",
       html: scopeHtml,
       icon: "warning",
       showCancelButton: true,
@@ -372,16 +465,16 @@ const ExamSchemeManagement = () => {
     if (!c1.isConfirmed) return;
 
     const c2 = await Swal.fire({
-      title: "Type DELETE to confirm",
+      title: "Type ALL to confirm",
       input: "text",
-      inputPlaceholder: "DELETE",
+      inputPlaceholder: "ALL",
       icon: "warning",
       showCancelButton: true,
       confirmButtonText: "Delete Now",
       confirmButtonColor: "#d33",
       preConfirm: (val) => {
-        if ((val || "").trim().toUpperCase() !== "DELETE") {
-          Swal.showValidationMessage("Please type DELETE exactly.");
+        if ((val || "").trim().toUpperCase() !== "ALL") {
+          Swal.showValidationMessage("Please type ALL exactly.");
         }
         return val;
       },
@@ -396,21 +489,19 @@ const ExamSchemeManagement = () => {
         didOpen: () => Swal.showLoading(),
       });
 
-      const res = await api.delete("/exam-schemes", {
-        params: {
-          session_id: sessionId || undefined,
-          class_id: classId || undefined,
-          subject_id: subjectId || undefined,
-        },
-      });
-
-      const deleted = res?.data?.deleted ?? 0;
-      const lockedSkipped = res?.data?.locked_skipped ?? 0;
+      const unlockedSchemes = schemes.filter((scheme) => !scheme.is_locked);
+      const lockedSkipped = schemes.length - unlockedSchemes.length;
+      const results = await Promise.allSettled(
+        unlockedSchemes.map((scheme) => api.delete(`/exam-schemes/${scheme.id}`))
+      );
+      const deleted = results.filter((result) => result.status === "fulfilled").length;
+      const failed = results.length - deleted;
 
       await Swal.fire(
         "Deleted ✅",
         `${deleted} unlocked scheme(s) removed successfully.${
           lockedSkipped ? ` ${lockedSkipped} locked scheme(s) were skipped.` : ""
+        }${failed ? ` ${failed} scheme(s) could not be deleted.` : ""
         }`,
         "success"
       );
@@ -630,10 +721,13 @@ const ExamSchemeManagement = () => {
   };
 
   const handleDragEnd = async ({ active, over }) => {
+    if (!reorderEnabled) return;
     if (!over || active.id === over.id) return;
 
     const oldIndex = schemes.findIndex((s) => s.id.toString() === active.id);
     const newIndex = schemes.findIndex((s) => s.id.toString() === over.id);
+
+    if (oldIndex < 0 || newIndex < 0) return;
 
     const reordered = arrayMove(schemes, oldIndex, newIndex);
     setSchemes(reordered);
@@ -646,7 +740,8 @@ const ExamSchemeManagement = () => {
         })),
       });
     } catch (e) {
-      Swal.fire("Error", "Failed to update order.", "error");
+      const message = e?.response?.data?.error || "Failed to update order.";
+      Swal.fire("Error", message, "error");
       fetchSchemes();
     }
   };
@@ -776,9 +871,14 @@ const ExamSchemeManagement = () => {
   };
 
   const openClassCopyModal = () => {
+    const selectedClassId =
+      filters.class_id === "" || filters.class_id === null || filters.class_id === undefined
+        ? ""
+        : String(filters.class_id);
+
     setClassCopyData({
       from_session_id: filters.session_id ? String(filters.session_id) : "",
-      from_class_id: filters.class_id ? String(filters.class_id) : "",
+      from_class_id: selectedClassId,
       to_session_id: filters.session_id ? String(filters.session_id) : "",
       to_class_ids: [],
       overwrite: false,
@@ -795,7 +895,7 @@ const ExamSchemeManagement = () => {
     if (!from_session_id) {
       return Swal.fire("Warning", "Please select From Session.", "warning");
     }
-    if (!from_class_id) {
+    if (from_class_id === "" || from_class_id === null || from_class_id === undefined) {
       return Swal.fire("Warning", "Please select From Class.", "warning");
     }
     if (!to_session_id) {
@@ -1035,7 +1135,9 @@ const ExamSchemeManagement = () => {
   const isFiltered = !!(
     filters.session_id ||
     filters.class_id ||
-    filters.subject_id
+    filters.subject_id ||
+    filters.term_id ||
+    filters.component_id
   );
 
   return (
@@ -1061,9 +1163,9 @@ const ExamSchemeManagement = () => {
           <Button
             variant="outline-danger"
             onClick={handleDeleteAllSchemes}
-            disabled={!isFiltered}
+            disabled={!isFiltered || !schemes.length}
           >
-            🧨 Delete Filtered Schemes
+            🧨 Delete All Displayed
           </Button>
 
           <Button variant="success" onClick={() => openModal()}>
@@ -1117,6 +1219,36 @@ const ExamSchemeManagement = () => {
             ))}
           </select>
 
+          <select
+            name="term_id"
+            value={filters.term_id}
+            onChange={handleFilterChange}
+            className="form-control"
+          >
+            <option value="">All Terms</option>
+            {terms.map((term) => (
+              <option key={term.id} value={String(term.id)}>
+                {term.name}
+              </option>
+            ))}
+          </select>
+
+          <select
+            name="component_id"
+            value={filters.component_id}
+            onChange={handleFilterChange}
+            className="form-control"
+          >
+            <option value="">All Components</option>
+            {components.map((component) => (
+              <option key={component.id} value={String(component.id)}>
+                {component.abbreviation
+                  ? `${component.abbreviation} - ${component.name}`
+                  : component.name}
+              </option>
+            ))}
+          </select>
+
           <Button variant="primary" onClick={applyFilters}>
             Apply Filters
           </Button>
@@ -1126,6 +1258,51 @@ const ExamSchemeManagement = () => {
           Tip: Grade/Marks type is controlled from the <b>Assessment Components</b> page.
         </div>
       </div>
+
+      <div className="card mb-3 border-primary">
+        <div className="card-body py-3">
+          <div className="d-flex align-items-end justify-content-between flex-wrap gap-3">
+            <div>
+              <div className="fw-semibold">Marks Entry Mode</div>
+              <div className="small text-muted">
+                Select one session, class, subject and term, then apply filters to edit the mode.
+              </div>
+            </div>
+            <div className="d-flex align-items-end gap-2 flex-wrap">
+              <div>
+                <label className="form-label small mb-1">Evaluation mode</label>
+                <select
+                  className="form-select"
+                  value={evaluationMode || ""}
+                  onChange={(event) => setEvaluationMode(event.target.value)}
+                  disabled={!hasExactSchemeContext || evaluationModeLoading}
+                >
+                  <option value="">{evaluationModeLoading ? "Loading..." : "Apply exact filters first"}</option>
+                  <option value="MARKS">Marks Entry</option>
+                  <option value="GRADE">Grade Entry</option>
+                </select>
+              </div>
+              <Button
+                variant="primary"
+                onClick={saveEvaluationMode}
+                disabled={!hasExactSchemeContext || !evaluationMode || evaluationModeSaving}
+              >
+                {evaluationModeSaving ? "Saving..." : "Save Entry Mode"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {reorderEnabled ? (
+        <div className="alert alert-info py-2">
+          Drag components using <b>☰</b>. This order is used on the Marks Entry screen.
+        </div>
+      ) : (
+        <div className="alert alert-secondary py-2">
+          Select exactly one session, class, subject and term (with All Components) to reorder components.
+        </div>
+      )}
 
       {/* Table */}
       <div className="card mb-3">
@@ -1162,6 +1339,7 @@ const ExamSchemeManagement = () => {
                     <SortableRow
                       key={s.id}
                       scheme={s}
+                      reorderEnabled={reorderEnabled}
                       onEdit={openModal}
                       onDelete={handleDelete}
                       onToggleLock={handleToggleLock}

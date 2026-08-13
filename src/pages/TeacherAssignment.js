@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import api from "../api"; // Custom Axios instance
 import Swal from "sweetalert2";
 import "./TeacherAssignment.css";
@@ -37,12 +37,12 @@ const normalizeTeacher = (t) => {
 const TeacherAssignment = () => {
   const [assignments, setAssignments] = useState([]);
   const [classes, setClasses] = useState([]);
-  const [sections, setSections] = useState([]);
   const [subjects, setSubjects] = useState([]);
-  const [teachers, setTeachers] = useState([]);
 
-  const [searchClass, setSearchClass] = useState("");
-  const [searchTeacher, setSearchTeacher] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [classFilter, setClassFilter] = useState("");
+  const [subjectFilter, setSubjectFilter] = useState("");
+  const [teacherFilter, setTeacherFilter] = useState("");
 
   // ---- Fetchers that also return data (so callers can use fresh arrays immediately) ----
   const fetchAssignments = async () => {
@@ -61,7 +61,6 @@ const TeacherAssignment = () => {
   const fetchSections = async () => {
     const response = await api.get("/sections");
     const data = response.data || [];
-    setSections(data);
     return data;
   };
 
@@ -80,7 +79,6 @@ const TeacherAssignment = () => {
       ? response.data
       : response.data?.teachers || [];
     const norm = raw.map(normalizeTeacher).filter((t) => t.id != null);
-    setTeachers(norm);
     return norm;
   };
 
@@ -308,15 +306,81 @@ const TeacherAssignment = () => {
     });
   };
 
+  const assignmentText = (assignment) =>
+    `${assignment.Class?.class_name || "Unknown"} - ${
+      assignment.Section?.section_name || "Unknown"
+    } | ${assignment.Subject?.name || "Unknown"} | ${
+      assignment.Teacher?.name || "Unknown"
+    }`;
+
+  const copyText = async (text, successMessage) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      Swal.fire({
+        icon: "success",
+        title: "Copied",
+        text: successMessage,
+        timer: 1300,
+        showConfirmButton: false,
+      });
+    } catch (error) {
+      Swal.fire("Copy failed", "Your browser did not allow clipboard access.", "error");
+    }
+  };
+
   // ---- Filtering ----
-  const filteredAssignments = assignments.filter((assignment) => {
-    const className = assignment.Class?.class_name?.toLowerCase() || "";
-    const teacherName = assignment.Teacher?.name?.toLowerCase() || "";
-    return (
-      className.includes(searchClass.toLowerCase()) &&
-      teacherName.includes(searchTeacher.toLowerCase())
-    );
-  });
+  const filteredAssignments = useMemo(() => {
+    const query = searchTerm.trim().toLowerCase();
+    return assignments.filter((assignment) => {
+      const classId = assignment.Class?.id;
+      const subjectId = assignment.Subject?.id;
+      const teacherId = assignment.Teacher?.id;
+      const searchableText = [
+        assignment.Class?.class_name,
+        assignment.Section?.section_name,
+        assignment.Subject?.name,
+        assignment.Teacher?.name,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      return (
+        (!query || searchableText.includes(query)) &&
+        (!classFilter || String(classId) === classFilter) &&
+        (!subjectFilter || String(subjectId) === subjectFilter) &&
+        (!teacherFilter || String(teacherId) === teacherFilter)
+      );
+    });
+  }, [assignments, searchTerm, classFilter, subjectFilter, teacherFilter]);
+
+  const hasActiveFilters = Boolean(
+    searchTerm || classFilter || subjectFilter || teacherFilter
+  );
+
+  const teacherFilterOptions = useMemo(() => {
+    const uniqueTeachers = new Map();
+    assignments.forEach((assignment) => {
+      if (assignment.Teacher?.id != null) {
+        uniqueTeachers.set(String(assignment.Teacher.id), assignment.Teacher.name || "Unknown");
+      }
+    });
+    return [...uniqueTeachers.entries()].sort((a, b) => a[1].localeCompare(b[1]));
+  }, [assignments]);
+
+  const clearFilters = () => {
+    setSearchTerm("");
+    setClassFilter("");
+    setSubjectFilter("");
+    setTeacherFilter("");
+  };
+
+  const copyVisibleAssignments = () => {
+    const text = filteredAssignments
+      .map((assignment, index) => `${index + 1}. ${assignmentText(assignment)}`)
+      .join("\n");
+    copyText(text, `${filteredAssignments.length} assignment(s) copied.`);
+  };
 
   // ---- Initial Load + Polling ----
   useEffect(() => {
@@ -340,40 +404,79 @@ const TeacherAssignment = () => {
   }, []);
 
   return (
-    <div className="container mt-4">
-      <h1>Teacher Assignment Management</h1>
+    <div className="container teacher-assignment-page">
+      <section className="assignment-hero">
+        <div>
+          <span className="assignment-eyebrow">Academic setup</span>
+          <h1>Teacher Assignments</h1>
+          <p>Manage who teaches each subject across classes and sections.</p>
+        </div>
+        <button className="btn assignment-add-btn" onClick={handleAdd}>
+          <i className="bi bi-plus-lg" aria-hidden="true" />
+          Add assignment
+        </button>
+      </section>
 
-      {/* Filters */}
-      <div className="row mb-3">
-        <div className="col-md-6 mb-2 mb-md-0">
-          <input
-            type="text"
-            className="form-control"
-            placeholder="Search by Class"
-            value={searchClass}
-            onChange={(e) => setSearchClass(e.target.value)}
-            aria-label="Search by Class"
-          />
+      <section className="assignment-filters" aria-label="Assignment filters">
+        <div className="filter-heading">
+          <div>
+            <h2>Find assignments</h2>
+            <p>Search or narrow the list using one or more filters.</p>
+          </div>
+          {hasActiveFilters && (
+            <button className="clear-filters" type="button" onClick={clearFilters}>
+              <i className="bi bi-x-circle" aria-hidden="true" /> Clear filters
+            </button>
+          )}
         </div>
-        <div className="col-md-6">
-          <input
-            type="text"
-            className="form-control"
-            placeholder="Search by Teacher"
-            value={searchTeacher}
-            onChange={(e) => setSearchTeacher(e.target.value)}
-            aria-label="Search by Teacher"
-          />
+        <div className="filter-grid">
+          <label className="filter-field filter-search">
+            <span>Search</span>
+            <div className="input-with-icon">
+              <i className="bi bi-search" aria-hidden="true" />
+              <input
+                type="search"
+                className="form-control"
+                placeholder="Class, section, subject or teacher"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+          </label>
+          <label className="filter-field">
+            <span>Class</span>
+            <select className="form-select" value={classFilter} onChange={(e) => setClassFilter(e.target.value)}>
+              <option value="">All classes</option>
+              {classes.map((item) => <option key={item.id} value={item.id}>{item.class_name}</option>)}
+            </select>
+          </label>
+          <label className="filter-field">
+            <span>Subject</span>
+            <select className="form-select" value={subjectFilter} onChange={(e) => setSubjectFilter(e.target.value)}>
+              <option value="">All subjects</option>
+              {subjects.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+            </select>
+          </label>
+          <label className="filter-field">
+            <span>Teacher</span>
+            <select className="form-select" value={teacherFilter} onChange={(e) => setTeacherFilter(e.target.value)}>
+              <option value="">All teachers</option>
+              {teacherFilterOptions.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+            </select>
+          </label>
         </div>
+      </section>
+
+      <div className="assignment-toolbar">
+        <p><strong>{filteredAssignments.length}</strong> of {assignments.length} assignments</p>
+        <button className="btn copy-visible-btn" disabled={!filteredAssignments.length} onClick={copyVisibleAssignments}>
+          <i className="bi bi-copy" aria-hidden="true" /> Copy visible
+        </button>
       </div>
 
-      <button className="btn btn-success mb-3" onClick={handleAdd}>
-        Add Teacher Assignment
-      </button>
-
       {/* Desktop / Tablet (md and up): Table */}
-      <div className="table-responsive d-none d-md-block">
-        <table className="table table-striped align-middle">
+      <div className="table-responsive assignment-table-wrap d-none d-md-block">
+        <table className="table assignment-table align-middle">
           <thead>
             <tr>
               <th>#</th>
@@ -381,7 +484,7 @@ const TeacherAssignment = () => {
               <th>Section</th>
               <th className="wrap">Subject</th>
               <th className="wrap">Teacher</th>
-              <th style={{ width: 180 }}>Actions</th>
+              <th style={{ width: 220 }}>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -409,17 +512,20 @@ const TeacherAssignment = () => {
                   </td>
                   <td className="actions-cell">
                     <div className="actions-stack">
+                      <button className="btn btn-light btn-sm" title="Copy assignment" aria-label="Copy assignment" onClick={() => copyText(assignmentText(assignment), "Assignment copied.")}>
+                        <i className="bi bi-copy" aria-hidden="true" />
+                      </button>
                       <button
-                        className="btn btn-primary btn-sm"
+                        className="btn btn-outline-primary btn-sm"
                         onClick={() => handleEdit(assignment)}
                       >
-                        Edit
+                        <i className="bi bi-pencil" aria-hidden="true" /> Edit
                       </button>
                       <button
                         className="btn btn-danger btn-sm"
                         onClick={() => handleDelete(assignment)}
                       >
-                        Delete
+                        <i className="bi bi-trash3" aria-hidden="true" /> Delete
                       </button>
                     </div>
                   </td>
@@ -427,8 +533,10 @@ const TeacherAssignment = () => {
               ))
             ) : (
               <tr>
-                <td colSpan="6" className="text-center">
-                  No teacher assignments found.
+                <td colSpan="6" className="assignment-empty">
+                  <i className="bi bi-search" aria-hidden="true" />
+                  <strong>No assignments found</strong>
+                  <span>Try changing or clearing your filters.</span>
                 </td>
               </tr>
             )}
@@ -441,7 +549,12 @@ const TeacherAssignment = () => {
         {filteredAssignments.length > 0 ? (
           filteredAssignments.map((assignment, index) => (
             <div key={assignment.id} className="assignment-card">
-              <p className="index-line">#{index + 1}</p>
+              <div className="card-heading">
+                <span className="index-line">#{index + 1}</span>
+                <button className="card-copy" aria-label="Copy assignment" onClick={() => copyText(assignmentText(assignment), "Assignment copied.")}>
+                  <i className="bi bi-copy" aria-hidden="true" /> Copy
+                </button>
+              </div>
               <div className="kv">
                 <span className="k">Class:</span>
                 <span className="v">{assignment.Class?.class_name || "Unknown"}</span>
@@ -461,22 +574,26 @@ const TeacherAssignment = () => {
 
               <div className="actions-stack mt-2">
                 <button
-                  className="btn btn-primary btn-sm"
+                  className="btn btn-outline-primary btn-sm"
                   onClick={() => handleEdit(assignment)}
                 >
-                  Edit
+                  <i className="bi bi-pencil" aria-hidden="true" /> Edit
                 </button>
                 <button
                   className="btn btn-danger btn-sm"
                   onClick={() => handleDelete(assignment)}
                 >
-                  Delete
+                  <i className="bi bi-trash3" aria-hidden="true" /> Delete
                 </button>
               </div>
             </div>
           ))
         ) : (
-          <p className="text-center">No teacher assignments found.</p>
+          <div className="assignment-empty mobile-empty">
+            <i className="bi bi-search" aria-hidden="true" />
+            <strong>No assignments found</strong>
+            <span>Try changing or clearing your filters.</span>
+          </div>
         )}
       </div>
     </div>

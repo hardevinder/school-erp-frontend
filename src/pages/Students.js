@@ -383,6 +383,7 @@ const Students = () => {
   // UI state
   const [search, setSearch] = useState("");
   const [selectedClass, setSelectedClass] = useState("");
+  const [selectedSection, setSelectedSection] = useState("");
   const [selectedStatus, setSelectedStatus] = useState("");
   const [selectedSessionFilter, setSelectedSessionFilter] = useState("");
   const [hasSiblingFilter, setHasSiblingFilter] = useState("");
@@ -2066,17 +2067,27 @@ const Students = () => {
           !q || searchableFields.some((v) => normalizeSearchText(v).includes(q));
 
         const classMatch = !selectedClass || String(stu.class_id) === String(selectedClass);
+        const sectionMatch =
+          !selectedSection || String(stu.section_id) === String(selectedSection);
         const statusMatch = !selectedStatus || stu.status === selectedStatus;
         const hasSibling = studentHasSibling(stu);
         let siblingMatch = true;
         if (hasSiblingFilter === "has") siblingMatch = hasSibling;
         if (hasSiblingFilter === "no") siblingMatch = !hasSibling;
 
-        return textMatch && classMatch && statusMatch && siblingMatch;
+        return textMatch && classMatch && sectionMatch && statusMatch && siblingMatch;
       })
       .slice()
       .sort(compareAdmissionNumberAsc);
-  }, [students, search, selectedClass, selectedStatus, hasSiblingFilter, admissionTypes]);
+  }, [
+    students,
+    search,
+    selectedClass,
+    selectedSection,
+    selectedStatus,
+    hasSiblingFilter,
+    admissionTypes,
+  ]);
 
   const totalCount = filteredStudents.length;
   const enabledCount = filteredStudents.filter((s) => s.status === "enabled").length;
@@ -2523,6 +2534,20 @@ const Students = () => {
               ))}
             </select>
 
+            <select
+              className="form-select form-select-sm"
+              style={{ maxWidth: 160 }}
+              value={selectedSection}
+              onChange={(e) => setSelectedSection(e.target.value)}
+            >
+              <option value="">All Sections</option>
+              {sections.map((section) => (
+                <option key={section.id} value={section.id}>
+                  {section.section_name || section.name}
+                </option>
+              ))}
+            </select>
+
             {!isCompact && (
               <>
                 <select
@@ -2568,6 +2593,7 @@ const Students = () => {
               onClick={() => {
                 setSearch("");
                 setSelectedClass("");
+                setSelectedSection("");
                 setSelectedStatus("");
                 setSelectedSessionFilter("");
                 setHasSiblingFilter("");

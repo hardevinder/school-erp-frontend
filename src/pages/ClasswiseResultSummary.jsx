@@ -1,13 +1,19 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState } from "react";
 import api from "../api";
 import Swal from "sweetalert2";
 import "bootstrap/dist/css/bootstrap.min.css";
-import { Modal, Button } from "react-bootstrap";
+
+const getComponentsFromResponse = (data) => {
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.components)) return data.components;
+  return [];
+};
 
 const ClasswiseResultSummary = () => {
   const [classExamSubjects, setClassExamSubjects] = useState([]);
   const [sections, setSections] = useState([]);
   const [filters, setFilters] = useState({
+    session_id: "",
     class_id: "",
     section_id: "",
     exam_id: "",
@@ -17,8 +23,11 @@ const ClasswiseResultSummary = () => {
   });
 
   const [exams, setExams] = useState([]);
+  const [sessions, setSessions] = useState([]);
   const [subjects, setSubjects] = useState([]);
   const [reportData, setReportData] = useState(null);
+  const [reportLoading, setReportLoading] = useState(false);
+  const [school, setSchool] = useState(null);
 
   const [displayMode, setDisplayMode] = useState("actual"); // "actual" | "weighted" | "both"
   const [numberFormat, setNumberFormat] = useState({
@@ -26,23 +35,44 @@ const ClasswiseResultSummary = () => {
     rounding: "none", // "none" | "floor" | "ceiling"
   });
 
-  const [pdfOrientation, setPdfOrientation] = useState("portrait");
-  const [headerHTML, setHeaderHTML] = useState("");
-  const [footerHTML, setFooterHTML] = useState("");
-
-  const [showPdfModal, setShowPdfModal] = useState(false);
-  const [studentsPerPage, setStudentsPerPage] = useState(20);
-
-  const reportRef = useRef();
 
   useEffect(() => {
-    loadClassExamSubjects();
+    loadSessions();
     loadSections();
+    loadSchool();
   }, []);
 
-  const loadClassExamSubjects = async () => {
+  const loadSchool = async () => {
     try {
-      const res = await api.get("/exams/class-exam-subjects");
+      const res = await api.get("/schools");
+      const rows = Array.isArray(res.data) ? res.data : res.data?.schools || res.data?.data || [];
+      setSchool(Array.isArray(rows) ? rows[0] || null : rows || null);
+    } catch {
+      setSchool(null);
+    }
+  };
+
+  const loadSessions = async () => {
+    try {
+      const res = await api.get("/sessions");
+      const rows = Array.isArray(res.data) ? res.data : res.data?.sessions || [];
+      setSessions(rows);
+
+      const active =
+        rows.find((s) => s?.is_active || s?.is_current || s?.status === "active") || rows[0];
+      const session_id = active?.id ? String(active.id) : "";
+      setFilters((prev) => ({ ...prev, session_id }));
+      await loadClassExamSubjects(session_id);
+    } catch (err) {
+      Swal.fire("Error", "Failed to load sessions", "error");
+    }
+  };
+
+  const loadClassExamSubjects = async (session_id) => {
+    try {
+      const res = await api.get("/exams/class-exam-subjects", {
+        params: session_id ? { session_id } : {},
+      });
       setClassExamSubjects(res.data || []);
     } catch (err) {
       Swal.fire("Error", "Failed to load class-exam-subjects", "error");
@@ -64,10 +94,10 @@ const ClasswiseResultSummary = () => {
       (subjectsList || []).map(async (s) => {
         try {
           const res = await api.get("/exam-schemes/components", {
-            params: { class_id, subject_id: s.id, exam_id },
+            params: { session_id: filters.session_id, class_id, subject_id: s.id, exam_id },
           });
 
-          const comps = res.data || [];
+          const comps = getComponentsFromResponse(res.data);
           return {
             subject_id: String(s.id),
             availableComponents: comps,
@@ -93,6 +123,7 @@ const ClasswiseResultSummary = () => {
     setReportData(null);
 
     setFilters({
+      session_id: filters.session_id,
       class_id,
       section_id: "",
       exam_id: "",
@@ -100,6 +131,23 @@ const ClasswiseResultSummary = () => {
       sum: false,
       includeGrades: false,
     });
+  };
+
+  const handleSessionChange = async (e) => {
+    const session_id = e.target.value;
+    setFilters({
+      session_id,
+      class_id: "",
+      section_id: "",
+      exam_id: "",
+      subjectComponents: [{ subject_id: "", component_ids: [], availableComponents: [] }],
+      sum: false,
+      includeGrades: false,
+    });
+    setExams([]);
+    setSubjects([]);
+    setReportData(null);
+    await loadClassExamSubjects(session_id);
   };
 
   // ✅ UPDATED: auto add all subjects + preselect all components
@@ -155,13 +203,14 @@ const ClasswiseResultSummary = () => {
     try {
       const res = await api.get("/exam-schemes/components", {
         params: {
+          session_id: filters.session_id,
           class_id: filters.class_id,
           subject_id,
           exam_id: filters.exam_id,
         },
       });
 
-      const comps = res.data || [];
+      const comps = getComponentsFromResponse(res.data);
       setFilters((prev) => {
         const updated = [...prev.subjectComponents];
         updated[index] = {
@@ -245,15 +294,148 @@ const ClasswiseResultSummary = () => {
     return formatted.toFixed(dp);
   };
 
+  const getReportMeta = () => {
+    const selectedSession = sessions.find((s) => String(s.id) === String(filters.session_id));
+    const selectedClass = classExamSubjects.find(
+      (c) => String(c.class_id) === String(filters.class_id)
+    );
+    const selectedExam = selectedClass?.exams?.find(
+      (e) => String(e.exam_id) === String(filters.exam_id)
+    );
+    const selectedSection = sections.find((s) => String(s.id) === String(filters.section_id));
+
+    return {
+      schoolName: school?.name || school?.school_name || "School",
+      schoolAddress: school?.address || school?.school_address || "",
+      sessionName: selectedSession?.name || selectedSession?.session_name || "-",
+      className: selectedClass?.class_name || "-",
+      sectionName: selectedSection?.section_name || selectedSection?.name || "-",
+      examName: selectedExam?.exam_name || "-",
+      termName: selectedExam?.term_name || selectedExam?.term?.name || "-",
+    };
+  };
+
+  const getDisplayedMark = (student, group, component) => {
+    const result = student.components?.find(
+      (item) =>
+        Number(item.component_id) === Number(component.component_id) &&
+        Number(item.subject_id) === Number(group.subject_id)
+    );
+    if (result?.attendance && result.attendance !== "P") return result.attendance;
+    if (displayMode === "actual") return result?.marks ?? "";
+    if (displayMode === "weighted") return result?.weighted_marks ?? "";
+    return result?.marks == null
+      ? ""
+      : `${formatNumber(result.marks)} (${formatNumber(result.weighted_marks)})`;
+  };
+
+  const handleExportExcel = async () => {
+    if (!reportData?.students?.length || !reportData?.subjectComponentGroups?.length) {
+      return Swal.fire("No Report", "Generate a report before exporting to Excel.", "warning");
+    }
+
+    const meta = getReportMeta();
+    const subjectHeaders = ["Roll No", "Student Name"];
+    const componentHeaders = ["", ""];
+    reportData.subjectComponentGroups.forEach((group) => {
+      group.components.forEach((component) => {
+        subjectHeaders.push(group.subject_name);
+        componentHeaders.push(component.abbreviation || component.name);
+      });
+      if (filters.sum) {
+        subjectHeaders.push(group.subject_name);
+        componentHeaders.push("Total");
+      }
+      if (filters.includeGrades) {
+        subjectHeaders.push(group.subject_name);
+        componentHeaders.push("Grade");
+      }
+    });
+    if (filters.sum) {
+      subjectHeaders.push("Grand Result");
+      componentHeaders.push("Total");
+    }
+    if (filters.includeGrades) {
+      subjectHeaders.push("Grand Result", "Grand Result");
+      componentHeaders.push("Percentage", "Grade");
+    }
+
+    const rows = reportData.students.map((student) => {
+      const row = [student.roll_number ?? "", student.name || ""];
+      reportData.subjectComponentGroups.forEach((group) => {
+        group.components.forEach((component) => row.push(getDisplayedMark(student, group, component)));
+        if (filters.sum) {
+          row.push(
+            displayMode === "actual"
+              ? student.subject_totals_raw?.[group.subject_id] ?? ""
+              : displayMode === "weighted"
+              ? student.subject_totals_weighted?.[group.subject_id] ?? ""
+              : `${formatNumber(student.subject_totals_raw?.[group.subject_id])} (${formatNumber(
+                  student.subject_totals_weighted?.[group.subject_id]
+                )})`
+          );
+        }
+        if (filters.includeGrades) row.push(student.subject_grades?.[group.subject_id] || "-");
+      });
+      if (filters.sum) {
+        row.push(
+          displayMode === "actual"
+            ? student.total_raw
+            : displayMode === "weighted"
+            ? student.total_weighted
+            : `${formatNumber(student.total_raw)} (${formatNumber(student.total_weighted)})`
+        );
+      }
+      if (filters.includeGrades) {
+        row.push(
+          displayMode === "weighted"
+            ? student.grand_percent_weighted
+            : student.grand_percent_raw
+        );
+        row.push(
+          displayMode === "weighted"
+            ? student.total_grade_weighted || "-"
+            : student.total_grade_raw || "-"
+        );
+      }
+      return row;
+    });
+
+    const safeName = `${meta.className}_${meta.sectionName}_${meta.examName}`.replace(/[^a-z0-9_-]+/gi, "_");
+    try {
+      const response = await api.post(
+        "/student-result-report/generate-excel",
+        {
+          meta,
+          subjectHeaders,
+          componentHeaders,
+          rows,
+          fileName: `Result_Summary_${safeName}`,
+        },
+        { responseType: "blob" }
+      );
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `Result_Summary_${safeName}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      Swal.fire("Error", "Failed to generate the formatted Excel report.", "error");
+    }
+  };
+
   const fetchReport = async () => {
-    const { class_id, section_id, exam_id, subjectComponents, sum, includeGrades } = filters;
+    const { session_id, class_id, section_id, exam_id, subjectComponents, sum, includeGrades } = filters;
 
     // ✅ only keep valid selected subjects (after user removals/unchecks)
     const validSC = (subjectComponents || []).filter(
       (sc) => sc.subject_id && sc.component_ids && sc.component_ids.length > 0
     );
 
-    if (!class_id || !section_id || !exam_id || validSC.length === 0) {
+    if (!session_id || !class_id || !section_id || !exam_id || validSC.length === 0) {
       return Swal.fire(
         "Missing Fields",
         "Please select all filters and keep at least one subject with one component.",
@@ -262,7 +444,10 @@ const ClasswiseResultSummary = () => {
     }
 
     try {
+      setReportLoading(true);
+      setReportData(null);
       const payload = {
+        session_id,
         class_id,
         section_id,
         exam_id,
@@ -276,72 +461,22 @@ const ClasswiseResultSummary = () => {
       };
 
       const res = await api.post("/marks-entry/report-summary", payload);
-      setReportData(
-        res.data || {
-          students: [],
-          subjectComponentGroups: [],
-          summary: { components: {}, total: {} },
-        }
-      );
+      const nextReport = {
+        ...(res.data || {}),
+        students: Array.isArray(res.data?.students) ? res.data.students : [],
+        subjectComponentGroups: Array.isArray(res.data?.subjectComponentGroups)
+          ? res.data.subjectComponentGroups
+          : [],
+        summary: res.data?.summary || { components: {}, total: {} },
+      };
+      setReportData(nextReport);
     } catch (err) {
-      Swal.fire("Error", "Failed to fetch report", "error");
+      const message = err?.response?.data?.message || err?.message || "Failed to fetch report";
+      Swal.fire("Error", message, "error");
+    } finally {
+      setReportLoading(false);
     }
   };
-
-  // ✅ FIXED: open + download with .pdf extension correctly
- const handleExportPDF = async () => {
-  if (!reportRef.current) return Swal.fire("Error", "Report not found.", "error");
-
-  try {
-    const headerHTMLWithBreaks = headerHTML.replace(/\n/g, "<br/>");
-    const footerHTMLWithBreaks = footerHTML.replace(/\n/g, "<br/>");
-
-    const htmlContent = `
-      <h3 style="text-align:center;">${headerHTMLWithBreaks}</h3>
-      ${reportRef.current.innerHTML}
-      <div class="footer" style="margin-top:20px; text-align:right; font-size:12px;">
-        ${footerHTMLWithBreaks}
-      </div>
-    `;
-
-    const res = await api.post(
-      "/student-result-report/generate-pdf",
-      {
-        html: htmlContent,
-        filters,
-        fileName: "ClasswiseResultSummary",
-        orientation: pdfOrientation,
-      },
-      { responseType: "blob" }
-    );
-
-    const blob = new Blob([res.data], {
-      type: res.headers?.["content-type"] || "application/pdf",
-    });
-
-    const url = window.URL.createObjectURL(blob);
-
-    // ✅ like Students.js: open first
-    const win = window.open(url, "_blank");
-
-    // ✅ if popup blocked, then download with proper .pdf filename
-    if (!win) {
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `ClasswiseResultSummary_${new Date().toISOString().split("T")[0]}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-    }
-
-    // cleanup
-    setTimeout(() => window.URL.revokeObjectURL(url), 60_000);
-  } catch (err) {
-    console.error(err);
-    Swal.fire("Error", "Failed to generate PDF", "error");
-  }
-};
-
 
   return (
     <div className="container mt-4">
@@ -352,6 +487,18 @@ const ClasswiseResultSummary = () => {
           <h5 className="card-title">Filters</h5>
 
           <div className="row g-3">
+            <div className="col-md-3">
+              <label>Session</label>
+              <select className="form-select" value={filters.session_id} onChange={handleSessionChange}>
+                <option value="">Select Session</option>
+                {sessions.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name || s.session_name}{s.is_active ? " (Active)" : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             <div className="col-md-3">
               <label>Class</label>
               <select className="form-select" value={filters.class_id} onChange={handleClassChange}>
@@ -501,34 +648,6 @@ const ClasswiseResultSummary = () => {
                   </select>
                 </div>
 
-                <div className="col-md-2 mt-2">
-                  <label className="fw-bold small mb-1">PDF Orientation:</label>
-                  <select
-                    className="form-select form-select-sm"
-                    value={pdfOrientation}
-                    onChange={(e) => setPdfOrientation(e.target.value)}
-                  >
-                    <option value="portrait">Portrait</option>
-                    <option value="landscape">Landscape</option>
-                  </select>
-                </div>
-
-                <div className="col-md-2 mt-2">
-                  <label className="fw-bold small mb-1">Students per page:</label>
-                  <select
-                    className="form-select form-select-sm"
-                    value={studentsPerPage}
-                    onChange={(e) => setStudentsPerPage(parseInt(e.target.value))}
-                  >
-                    {[10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30].map(
-                      (n) => (
-                        <option key={n} value={n}>
-                          {n}
-                        </option>
-                      )
-                    )}
-                  </select>
-                </div>
               </div>
             </div>
           </div>
@@ -587,26 +706,54 @@ const ClasswiseResultSummary = () => {
             <button className="btn btn-success me-2" onClick={addSubject}>
               ➕ Add Subject
             </button>
-            <button className="btn btn-primary" onClick={fetchReport}>
-              🔍 Generate Report
+            <button className="btn btn-primary" onClick={fetchReport} disabled={reportLoading}>
+              {reportLoading ? "Generating..." : "🔍 Generate Report"}
             </button>
           </div>
         </div>
       </div>
 
-      {reportData && reportData.students?.length > 0 && (
+      {reportData && reportData.students.length === 0 && (
+        <div className="alert alert-warning">
+          No enabled students were found for the selected class and section.
+        </div>
+      )}
+
+      {reportData && reportData.students.length > 0 && reportData.subjectComponentGroups.length === 0 && (
+        <div className="alert alert-warning">
+          No matching exam schedule or assessment components were found for the selected filters.
+        </div>
+      )}
+
+      {reportData &&
+        reportData.students.length > 0 &&
+        reportData.subjectComponentGroups.length > 0 && (
         <>
           <div className="text-end mb-3">
-            <button className="btn btn-danger" onClick={() => setShowPdfModal(true)}>
-              🖨️ Export PDF
+            <button className="btn btn-success me-2" onClick={handleExportExcel}>
+              📊 Export Excel
             </button>
           </div>
 
-          <div ref={reportRef} className="card">
+          <div className="card">
             <div className="card-body">
-              <h5 className="card-title">Report Data</h5>
+              <div className="report-screen-title text-center">
+                <h3 className="mb-1">{getReportMeta().schoolName}</h3>
+                {getReportMeta().schoolAddress && (
+                  <div className="small mb-1">{getReportMeta().schoolAddress}</div>
+                )}
+                <h5 className="mb-1">Classwise Result Summary</h5>
+                <div className="small">
+                  <strong>Session:</strong> {getReportMeta().sessionName} &nbsp; | &nbsp;
+                  <strong>Class:</strong> {getReportMeta().className} - {getReportMeta().sectionName}
+                </div>
+                <div className="small">
+                  <strong>Term:</strong> {getReportMeta().termName} &nbsp; | &nbsp;
+                  <strong>Exam:</strong> {getReportMeta().examName}
+                </div>
+              </div>
               <div className="table-responsive">
-                <table className="table table-bordered text-center align-middle">
+                <table className="table table-bordered text-center align-middle result-report-table">
                   <thead>
                     <tr>
                       <th rowSpan="2">Roll No</th>
@@ -680,7 +827,7 @@ const ClasswiseResultSummary = () => {
                   </thead>
 
                   <tbody>
-                    {reportData.students.map((stu, index) => (
+                    {reportData.students.map((stu) => (
                       <React.Fragment key={stu.id}>
                         <tr>
                           <td>{stu.roll_number}</td>
@@ -766,26 +913,6 @@ const ClasswiseResultSummary = () => {
                           )}
                         </tr>
 
-                        {(index + 1) % studentsPerPage === 0 && (
-                          <tr className="page-break">
-                        <td
-                              colSpan={
-                                2 +
-                                reportData.subjectComponentGroups.reduce(
-                                  (sum, g) =>
-                                    sum +
-                                    g.components.length +
-                                    (filters.sum ? 1 : 0) +
-                                    (filters.includeGrades ? 1 : 0), // subject grade = 1 column (OK)
-                                  0
-                                ) +
-                                (filters.sum ? 1 : 0) +            // grand total marks = 1 column (only if sum)
-                                (filters.includeGrades ? 2 : 0)    // ✅ grand total %age + grade = 2 columns
-                              }
-                            />
-
-                          </tr>
-                        )}
                       </React.Fragment>
                     ))}
 
@@ -865,44 +992,6 @@ const ClasswiseResultSummary = () => {
             </div>
           </div>
 
-          <Modal show={showPdfModal} onHide={() => setShowPdfModal(false)}>
-            <Modal.Header closeButton>
-              <Modal.Title>Customize PDF Header & Footer</Modal.Title>
-            </Modal.Header>
-            <Modal.Body>
-              <label className="fw-bold">Header</label>
-              <textarea
-                className="form-control"
-                rows={5}
-                style={{ direction: "ltr", whiteSpace: "pre-wrap" }}
-                value={headerHTML}
-                onChange={(e) => setHeaderHTML(e.target.value)}
-              />
-
-              <label className="fw-bold mt-3">Footer</label>
-              <textarea
-                className="form-control"
-                rows={5}
-                style={{ direction: "ltr", whiteSpace: "pre-wrap" }}
-                value={footerHTML}
-                onChange={(e) => setFooterHTML(e.target.value)}
-              />
-            </Modal.Body>
-            <Modal.Footer>
-              <Button variant="secondary" onClick={() => setShowPdfModal(false)}>
-                Cancel
-              </Button>
-              <Button
-                variant="primary"
-                onClick={() => {
-                  setShowPdfModal(false);
-                  handleExportPDF();
-                }}
-              >
-                Generate PDF
-              </Button>
-            </Modal.Footer>
-          </Modal>
         </>
       )}
     </div>

@@ -21,7 +21,7 @@ const getRecordDate = (record) => {
 };
 
 const getRecordClassId = (record) => {
-  return record?.classId || record?.class_id || record?.class?.id || null;
+  return record?.classId ?? record?.class_id ?? record?.class?.id ?? null;
 };
 
 const getClassName = (record, classes) => {
@@ -31,7 +31,7 @@ const getClassName = (record, classes) => {
     record?.class?.class_name ||
     record?.className ||
     classes.find((c) => Number(c.id) === Number(classId))?.class_name ||
-    String(classId || "-")
+    String(classId ?? "-")
   );
 };
 
@@ -191,7 +191,7 @@ const HolidayMarking = () => {
         };
       }
 
-      if (classId && !grouped[key].classIds.includes(classId)) {
+      if (classId !== null && classId !== undefined && !grouped[key].classIds.includes(classId)) {
         grouped[key].classIds.push(classId);
       }
 

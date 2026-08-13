@@ -79,13 +79,21 @@ const MarkAttendance = () => {
     async (date) => {
       try {
         const { data } = await api.get(`/attendance/date/${date}`);
-        if (Array.isArray(data) && data.length > 0) {
+        const inchargeStudentIds = new Set(students.map((student) => String(student.id)));
+        const scopedRecords = Array.isArray(data)
+          ? data.filter((record) =>
+              inchargeStudentIds.has(String(record.studentId ?? record.student_id))
+            )
+          : [];
+
+        if (scopedRecords.length > 0) {
           setMode("edit");
           const attendanceMap = {};
           const recordIdMap = {};
-          data.forEach((record) => {
-            attendanceMap[record.studentId] = record.status;
-            recordIdMap[record.studentId] = record.id;
+          scopedRecords.forEach((record) => {
+            const studentId = record.studentId ?? record.student_id;
+            attendanceMap[studentId] = record.status;
+            recordIdMap[studentId] = record.id;
           });
           setAttendance(attendanceMap);
           setSavedAttendance(attendanceMap);

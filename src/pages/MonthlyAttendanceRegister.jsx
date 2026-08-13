@@ -131,8 +131,8 @@ export default function MonthlyAttendanceRegister() {
 
   const exportCsv = () => {
     if (!report) return;
-    const headers = ["Roll Number", "Admission Number", "Student Name", "Father Name", ...report.days.map((day) => `${day.day} ${day.weekday}`), "Working Days", "Present", "Absent", "Leave", "Late", "Half Day", "Unmarked", "Attendance %"];
-    const csvRows = visibleStudents.map((student) => [student.roll_number, student.admission_number, student.name, student.father_name, ...report.days.map((day) => student.attendance?.[day.date] || "—"), report.working_days, student.totals.present, student.totals.absent, student.totals.leave, student.totals.late, student.totals.halfday, student.totals.unmarked, student.attendance_percentage]);
+    const headers = ["Roll Number", "Admission Number", "Student Name", "Father Name", ...report.days.map((day) => `${day.day} ${day.weekday}`), "Working Days", "Marked", "Present", "Absent", "Leave", "Late", "Half Day", "Unmarked", "Month Attendance %", "Previous Marked", "Previous Present", "Previous Attendance %", "Till Month Marked", "Till Month Present", "Till Month Attendance %"];
+    const csvRows = visibleStudents.map((student) => [student.roll_number, student.admission_number, student.name, student.father_name, ...report.days.map((day) => student.attendance?.[day.date] || "—"), report.working_days, student.totals.marked, student.totals.present, student.totals.absent, student.totals.leave, student.totals.late, student.totals.halfday, student.totals.unmarked, student.attendance_percentage, student.previous_totals?.marked || 0, student.previous_totals?.present || 0, student.previous_totals?.attendance_percentage || 0, student.cumulative_totals?.marked || 0, student.cumulative_totals?.present || 0, student.cumulative_totals?.attendance_percentage || 0]);
     const escape = (value) => `"${String(value ?? "").replace(/"/g, '""')}"`;
     const blob = new Blob([[headers, ...csvRows].map((row) => row.map(escape).join(",")).join("\n")], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
@@ -174,7 +174,28 @@ export default function MonthlyAttendanceRegister() {
         <section className="card border-0 shadow-sm register-card">
           <div className="register-toolbar"><div><h5>Student Attendance Register</h5><small>{visibleStudents.length} of {report.total_students} students</small></div><div className="register-actions"><div className="input-group"><span className="input-group-text"><i className="bi bi-search" /></span><input className="form-control" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search student, roll or admission no." /></div><button className="btn btn-outline-success" onClick={exportCsv}><i className="bi bi-file-earmark-spreadsheet me-2" />Export Excel</button></div></div>
           <div className="attendance-legend">{Object.entries(report.legend || {}).map(([code, label]) => <span key={code}><b className={codeClass(code)}>{code}</b>{label}</span>)}</div>
-          <div className="monthly-register-scroll"><table className="table monthly-register-table"><thead><tr><th className="sticky-col col-roll">Roll No.</th><th className="sticky-col col-admission">Admission No.</th><th className="sticky-col col-student">Student Name</th><th className="sticky-col col-father">Father Name</th>{report.days.map((day) => <th key={day.date} className={`day-column ${!day.is_working_day ? "non-working" : ""}`} title={day.description || day.weekday}><span>{day.day}</span><small>{day.weekday}</small></th>)}<th>WD</th><th>P</th><th>A</th><th>L</th><th>LT</th><th>HD</th><th>UM</th><th>%</th></tr></thead><tbody>{visibleStudents.map((student) => <tr key={student.id}><td className="sticky-col col-roll">{student.roll_number || "—"}</td><td className="sticky-col col-admission">{student.admission_number || "—"}</td><td className="sticky-col col-student student-name">{student.name || "—"}</td><td className="sticky-col col-father">{student.father_name || "—"}</td>{report.days.map((day) => { const code = student.attendance?.[day.date] || "—"; return <td key={day.date} className={`attendance-code ${codeClass(code)}`}>{code}</td>; })}<td className="total-cell">{report.working_days}</td><td className="total-cell text-success">{student.totals.present}</td><td className="total-cell text-danger">{student.totals.absent}</td><td className="total-cell text-warning">{student.totals.leave}</td><td>{student.totals.late}</td><td>{student.totals.halfday}</td><td>{student.totals.unmarked}</td><td><span className={`percentage-pill ${student.attendance_percentage >= 75 ? "good" : "low"}`}>{student.attendance_percentage}%</span></td></tr>)}{!visibleStudents.length && <tr><td colSpan={(report.days?.length || 0) + 12} className="text-center py-5 text-muted">No matching students found.</td></tr>}</tbody></table></div>
+          <div className="monthly-register-scroll">
+            <table className="table monthly-register-table">
+              <thead><tr>
+                <th className="sticky-col col-roll">Roll No.</th><th className="sticky-col col-admission">Admission No.</th><th className="sticky-col col-student">Student Name</th><th className="sticky-col col-father">Father Name</th>
+                {report.days.map((day) => <th key={day.date} className={`day-column ${!day.is_working_day ? "non-working" : ""}`} title={day.description || day.weekday}><span>{day.day}</span><small>{day.weekday}</small></th>)}
+                <th>WD</th><th title="Marked days">MK</th><th>P</th><th>A</th><th>L</th><th>LT</th><th>HD</th><th>UM</th><th title="Selected month, marked days only">Month %</th>
+                <th className="carry-column" title="Previous months: Present / Marked">Previous P/MK</th><th className="carry-column" title="Previous months, marked days only">Previous %</th>
+                <th className="cumulative-column" title="Through selected month: Present / Marked">Till Month P/MK</th><th className="cumulative-column" title="Through selected month, marked days only">Till Month %</th>
+              </tr></thead>
+              <tbody>
+                {visibleStudents.map((student) => <tr key={student.id}>
+                  <td className="sticky-col col-roll">{student.roll_number || "—"}</td><td className="sticky-col col-admission">{student.admission_number || "—"}</td><td className="sticky-col col-student student-name">{student.name || "—"}</td><td className="sticky-col col-father">{student.father_name || "—"}</td>
+                  {report.days.map((day) => { const code = student.attendance?.[day.date] || "—"; return <td key={day.date} className={`attendance-code ${codeClass(code)}`}>{code}</td>; })}
+                  <td className="total-cell">{report.working_days}</td><td className="total-cell">{student.totals.marked}</td><td className="total-cell text-success">{student.totals.present}</td><td className="total-cell text-danger">{student.totals.absent}</td><td className="total-cell text-warning">{student.totals.leave}</td><td>{student.totals.late}</td><td>{student.totals.halfday}</td><td>{student.totals.unmarked}</td>
+                  <td><Percent value={student.attendance_percentage} /></td>
+                  <td className="carry-column total-cell">{student.previous_totals?.present || 0}/{student.previous_totals?.marked || 0}</td><td className="carry-column"><Percent value={student.previous_totals?.attendance_percentage || 0} /></td>
+                  <td className="cumulative-column total-cell">{student.cumulative_totals?.present || 0}/{student.cumulative_totals?.marked || 0}</td><td className="cumulative-column"><Percent value={student.cumulative_totals?.attendance_percentage || 0} /></td>
+                </tr>)}
+                {!visibleStudents.length && <tr><td colSpan={(report.days?.length || 0) + 17} className="text-center py-5 text-muted">No matching students found.</td></tr>}
+              </tbody>
+            </table>
+          </div>
         </section>
       </>}
     </div>
@@ -182,3 +203,4 @@ export default function MonthlyAttendanceRegister() {
 }
 
 function Summary({ icon, label, value, tone }) { return <div className={`summary-card tone-${tone}`}><div className="summary-icon"><i className={`bi ${icon}`} /></div><div><small>{label}</small><strong>{value}</strong></div></div>; }
+function Percent({ value = 0 }) { return <span className={`percentage-pill ${Number(value) >= 75 ? "good" : "low"}`}>{value}%</span>; }

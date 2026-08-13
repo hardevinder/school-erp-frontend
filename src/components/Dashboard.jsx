@@ -270,6 +270,7 @@ const Dashboard = () => {
 
   // Data states
   const [reportData, setReportData] = useState([]); // session day-wise
+  const [feeOutlook, setFeeOutlook] = useState(null);
   const [dayWiseSummary, setDayWiseSummary] = useState([]);
   const [classWiseCount, setClassWiseCount] = useState([]);
   const [casteCategories, setCasteCategories] = useState([
@@ -299,6 +300,7 @@ const Dashboard = () => {
     day: false,
     class: false,
     cr: false,
+    finance: false,
   });
   const [error, setError] = useState("");
   const [autoRefresh, setAutoRefresh] = useState(true);
@@ -309,6 +311,7 @@ const Dashboard = () => {
   const pieRef = useRef(null);
   const lineRef = useRef(null);
   const barRef = useRef(null);
+  const financeRef = useRef(null);
   const genderPieRef = useRef(null);
   const casteBarRef = useRef(null);
   const religionBarRef = useRef(null);
@@ -425,16 +428,38 @@ const Dashboard = () => {
     }
   }, []);
 
+  const fetchFeeOutlook = useCallback(async () => {
+    if (!selectedSessionId) return;
+    setLoading((state) => ({ ...state, finance: true }));
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+      const response = await api.get("/reports/student-total-due", {
+        params: { session_id: selectedSessionId, tillDate: today },
+      });
+      setFeeOutlook(response.data || null);
+      setError("");
+      setLastUpdated(new Date());
+    } catch (e) {
+      console.error("Error fetching fee outlook:", e);
+      setFeeOutlook(null);
+      setError("Failed to fetch session fee outlook.");
+    } finally {
+      setLoading((state) => ({ ...state, finance: false }));
+    }
+  }, [selectedSessionId]);
+
   const refreshAll = useCallback(() => {
     fetchSessionDayWise();
     fetchClassWiseCount();
     fetchCasteReligion();
     fetchRecentEnquiries();
+    fetchFeeOutlook();
   }, [
     fetchSessionDayWise,
     fetchClassWiseCount,
     fetchCasteReligion,
     fetchRecentEnquiries,
+    fetchFeeOutlook,
   ]);
 
   // Load data when a session is chosen
@@ -462,6 +487,7 @@ const Dashboard = () => {
       fetchRecentEnquiries,
       POLLING_INTERVAL * 2
     );
+    timersRef.current.finance = setInterval(fetchFeeOutlook, POLLING_INTERVAL * 4);
 
     return () => {
       Object.values(timersRef.current || {}).forEach(clearInterval);
@@ -472,6 +498,7 @@ const Dashboard = () => {
     fetchClassWiseCount,
     fetchCasteReligion,
     fetchRecentEnquiries,
+    fetchFeeOutlook,
     selectedSessionId,
   ]);
 
@@ -512,6 +539,53 @@ const Dashboard = () => {
     (sum, c) => sum + (c.totalFine || 0),
     0
   );
+  const pendingTillDate = Number(feeOutlook?.grandTotals?.totalDueTillDate || 0);
+  const pendingWholeSession = Number(feeOutlook?.grandTotals?.totalDueAllTime || 0);
+  const receivedSession = totalFeeReceived + totalVanFee;
+  const expectedSessionCollection = receivedSession + pendingWholeSession;
+  const futureSessionPending = Math.max(pendingWholeSession - pendingTillDate, 0);
+  const collectionProgress = expectedSessionCollection > 0
+    ? Math.min((receivedSession / expectedSessionCollection) * 100, 100)
+    : 0;
+
+  const pendingByType = useMemo(() => {
+    const tillDate = String(feeOutlook?.tillDate || new Date().toISOString().slice(0, 10)).slice(0, 10);
+    return (feeOutlook?.data || []).reduce((totals, student) => {
+      (student?.heads || []).forEach((head) => {
+        const bucket = head?.isTransport ? totals.van : totals.academic;
+        const remaining = Math.max(Number(head?.remaining || 0), 0);
+        const fine = Math.max(Number(head?.fine ?? head?.fineAmount ?? 0), 0);
+        const whole = remaining + fine;
+        bucket.whole += whole;
+        const dueDate = head?.dueDate ? String(head.dueDate).slice(0, 10) : "";
+        const isDue = head?.isOpeningBalance || (dueDate && dueDate <= tillDate);
+        if (isDue) bucket.till += whole;
+      });
+      return totals;
+    }, { academic: { till: 0, whole: 0 }, van: { till: 0, whole: 0 } });
+  }, [feeOutlook]);
+
+  const financeChartData = useMemo(() => ({
+    labels: ["Collected", "Pending till date", "Future session due"],
+    datasets: [{
+      data: [receivedSession, pendingTillDate, futureSessionPending],
+      backgroundColor: ["#10b981", "#ef4444", "#f59e0b"],
+      borderColor: ["#059669", "#dc2626", "#d97706"],
+      borderWidth: 2,
+      hoverOffset: 10,
+    }],
+  }), [receivedSession, pendingTillDate, futureSessionPending]);
+
+  const financeChartOptions = useMemo(() => ({
+    responsive: true,
+    maintainAspectRatio: false,
+    cutout: "70%",
+    plugins: {
+      legend: { position: "bottom", labels: { usePointStyle: true, padding: 18, font: { family: "'Inter', sans-serif", size: 12 } } },
+      tooltip: { callbacks: { label: (context) => `${context.label}: ${formatCurrency(context.raw)}` } },
+      valueLabel: { enabled: false },
+    },
+  }), []);
 
   // Enrollments (class-wise count) — always display by classId/order, not alphabetically
   const sortedClassWiseCount = useMemo(
@@ -1378,6 +1452,90 @@ const Dashboard = () => {
             </div>
           </div>
         </div>
+
+        <section className="mb-4">
+          <div className="d-flex align-items-end justify-content-between flex-wrap gap-2 mb-3">
+            <div>
+              <span className="badge rounded-pill bg-success-subtle text-success border border-success-subtle mb-2">Revenue Intelligence</span>
+              <h4 className="fw-bold mb-1">Session Collection Outlook</h4>
+              <div className="text-muted small">Collected, currently overdue and upcoming session receivables in one reconciled view.</div>
+            </div>
+            <div className="small text-muted"><i className="bi bi-calendar-check me-1" />As on {new Date().toLocaleDateString("en-IN")}</div>
+          </div>
+
+          <div className="row g-3 mb-3">
+            {[
+              { label: "Pending Till Date", value: pendingTillDate, icon: "bi-hourglass-split", color: "#dc2626", soft: "#fff1f2", note: "Due as of today" },
+              { label: "Whole Session Pending", value: pendingWholeSession, icon: "bi-calendar2-range", color: "#d97706", soft: "#fff7ed", note: "Current + future installments" },
+              { label: "Expected Session Collection", value: expectedSessionCollection, icon: "bi-bullseye", color: "#2563eb", soft: "#eff6ff", note: "Received + net pending" },
+              { label: "Collection Progress", value: collectionProgress, icon: "bi-graph-up-arrow", color: "#059669", soft: "#ecfdf5", note: `${formatCurrency(receivedSession)} collected`, percent: true },
+            ].map((card) => (
+              <div className="col-12 col-sm-6 col-xl-3" key={card.label}>
+                <div className="card border-0 shadow-sm h-100 overflow-hidden" style={{ borderRadius: 18, background: `linear-gradient(145deg, #fff, ${card.soft})` }}>
+                  <div className="card-body p-4">
+                    <div className="d-flex justify-content-between align-items-start gap-3">
+                      <div><div className="small text-uppercase fw-semibold text-muted mb-2" style={{ letterSpacing: ".04em" }}>{card.label}</div><div className="h3 fw-bold mb-1" style={{ color: card.color }}>{loading.finance ? "…" : card.percent ? `${card.value.toFixed(1)}%` : formatCurrency(card.value)}</div><div className="small text-muted">{card.note}</div></div>
+                      <div className="d-grid place-items-center rounded-4 flex-shrink-0" style={{ width: 48, height: 48, display: "grid", placeItems: "center", color: card.color, background: card.soft }}><i className={`bi ${card.icon} fs-4`} /></div>
+                    </div>
+                    {card.percent && <div className="progress mt-3" style={{ height: 7, background: "#dbe7e2" }}><div className="progress-bar" style={{ width: `${card.value}%`, background: card.color }} /></div>}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="row g-3 mb-3">
+            {[
+              { title: "Academic Fee", icon: "bi-mortarboard-fill", color: "#4338ca", gradient: "linear-gradient(135deg,#eef2ff,#ffffff)", data: pendingByType.academic, received: totalFeeReceived },
+              { title: "Van Fee", icon: "bi-truck-front-fill", color: "#047857", gradient: "linear-gradient(135deg,#ecfdf5,#ffffff)", data: pendingByType.van, received: totalVanFee },
+            ].map((item) => {
+              const sessionTotal = item.received + item.data.whole;
+              const receivedPercent = sessionTotal > 0 ? (item.received / sessionTotal) * 100 : 0;
+              const pendingPercent = sessionTotal > 0 ? (item.data.whole / sessionTotal) * 100 : 0;
+              const totalTillDate = item.received + item.data.till;
+              return (
+              <div className="col-12 col-lg-6" key={item.title}>
+                <div className="card border-0 shadow-sm h-100" style={{ borderRadius: 18, background: item.gradient, borderLeft: `5px solid ${item.color}` }}>
+                  <div className="card-body p-4">
+                    <div className="d-flex align-items-center justify-content-between mb-3">
+                      <div className="d-flex align-items-center gap-3"><div className="rounded-4 d-grid" style={{ width: 48, height: 48, placeItems: "center", color: item.color, background: "rgba(255,255,255,.8)", boxShadow: "0 5px 18px rgba(15,23,42,.08)" }}><i className={`bi ${item.icon} fs-4`} /></div><div><div className="fw-bold fs-5">{item.title}</div><div className="small text-muted">Net receivable after concessions and receipts</div></div></div>
+                      <span className="badge rounded-pill bg-white text-dark border">{selectedSessionName || "Session"}</span>
+                    </div>
+                    <div className="bg-white bg-opacity-75 rounded-4 border p-3 mb-3">
+                      <div className="d-flex justify-content-between align-items-center mb-2 small"><span className="fw-semibold" style={{ color: item.color }}>Received {receivedPercent.toFixed(1)}%</span><span className="fw-semibold text-danger">Pending {pendingPercent.toFixed(1)}%</span></div>
+                      <div className="progress" style={{ height: 10, background: "#fee2e2" }}><div className="progress-bar" role="progressbar" aria-label={`${item.title} received percentage`} style={{ width: `${receivedPercent}%`, background: item.color }} /></div>
+                    </div>
+                    <div className="row g-2">
+                      <div className="col-6 col-xl-3"><div className="rounded-3 bg-white bg-opacity-75 border p-3 h-100"><div className="small text-muted mb-1">Received</div><div className="fw-bold" style={{ color: item.color }}>{loading.report ? "…" : formatCurrency(item.received)}</div></div></div>
+                      <div className="col-6 col-xl-3"><div className="rounded-3 bg-white bg-opacity-75 border p-3 h-100"><div className="small text-muted mb-1">Pending Till Date</div><div className="fw-bold text-danger">{loading.finance ? "…" : formatCurrency(item.data.till)}</div></div></div>
+                      <div className="col-6 col-xl-3"><div className="rounded-3 bg-white bg-opacity-75 border p-3 h-100"><div className="small text-muted mb-1">Total Till Date</div><div className="fw-bold text-dark">{loading.finance ? "…" : formatCurrency(totalTillDate)}</div></div></div>
+                      <div className="col-6 col-xl-3"><div className="rounded-3 bg-white bg-opacity-75 border p-3 h-100"><div className="small text-muted mb-1">Session Pending</div><div className="fw-bold" style={{ color: "#d97706" }}>{loading.finance ? "…" : formatCurrency(item.data.whole)}</div></div></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              );
+            })}
+          </div>
+
+          <div className="card border-0 shadow-sm" style={{ borderRadius: 20, overflow: "hidden" }}>
+            <div className="row g-0 align-items-stretch">
+              <div className="col-12 col-lg-5 p-4 p-xl-5" style={{ background: "linear-gradient(145deg,#0f172a,#1e3a5f)", color: "white" }}>
+                <div className="text-uppercase small text-info mb-2 fw-semibold" style={{ letterSpacing: ".1em" }}>Financial health</div>
+                <h4 className="fw-bold">Collection vs Receivables</h4>
+                <p className="text-white-50 mb-4">A clear view of cash collected, overdue fees, and installments that become due later in the session.</p>
+                <div className="d-flex justify-content-between border-bottom border-light border-opacity-25 py-3"><span className="text-white-50">Academic received</span><strong>{formatCurrency(totalFeeReceived)}</strong></div>
+                <div className="d-flex justify-content-between border-bottom border-light border-opacity-25 py-3"><span className="text-white-50">Van received</span><strong>{formatCurrency(totalVanFee)}</strong></div>
+                <div className="d-flex justify-content-between py-3"><span className="text-white-50">Future installments</span><strong>{formatCurrency(futureSessionPending)}</strong></div>
+              </div>
+              <div className="col-12 col-lg-7 p-4 bg-white">
+                <div className="position-relative mx-auto" style={{ height: 320, maxWidth: 620 }}>
+                  {loading.finance && !feeOutlook ? <div className="h-100 d-flex align-items-center justify-content-center text-muted"><span className="spinner-border spinner-border-sm me-2" />Preparing collection outlook…</div> : <Doughnut ref={financeRef} data={financeChartData} options={financeChartOptions} />}
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
 
         <SectionHeader
           badge="Fee Section"

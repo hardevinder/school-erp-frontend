@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import api from "../api";
 import Swal from "sweetalert2";
 import "bootstrap/dist/css/bootstrap.min.css";
@@ -19,6 +19,28 @@ const AssessmentComponentManagement = () => {
   const [formData, setFormData] = useState(defaultFormData);
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [search, setSearch] = useState("");
+  const [typeFilter, setTypeFilter] = useState("ALL");
+  const [statusFilter, setStatusFilter] = useState("ALL");
+
+  const filteredComponents = useMemo(() => {
+    const query = search.trim().toLowerCase();
+
+    return components.filter((component) => {
+      const matchesSearch =
+        !query ||
+        String(component.name || "").toLowerCase().includes(query) ||
+        String(component.abbreviation || "").toLowerCase().includes(query);
+      const matchesType =
+        typeFilter === "ALL" || component.component_type === typeFilter;
+      const matchesStatus =
+        statusFilter === "ALL" ||
+        (statusFilter === "ACTIVE" && Boolean(component.is_active)) ||
+        (statusFilter === "INACTIVE" && !component.is_active);
+
+      return matchesSearch && matchesType && matchesStatus;
+    });
+  }, [components, search, typeFilter, statusFilter]);
 
   useEffect(() => {
     fetchComponents();
@@ -322,9 +344,61 @@ const AssessmentComponentManagement = () => {
 
       <div className="card">
         <div className="card-body">
-          <h5 className="card-title">Component List</h5>
+          <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+            <h5 className="card-title mb-0">
+              Component List ({filteredComponents.length}/{components.length})
+            </h5>
 
-          {components.length > 0 ? (
+            <div className="d-flex flex-wrap gap-2">
+              <input
+                type="search"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                className="form-control"
+                style={{ minWidth: 240 }}
+                placeholder="Search name or abbreviation..."
+                aria-label="Search assessment components"
+              />
+
+              <select
+                value={typeFilter}
+                onChange={(event) => setTypeFilter(event.target.value)}
+                className="form-select"
+                aria-label="Filter by component type"
+              >
+                <option value="ALL">All Types</option>
+                <option value="MARKS">Marks</option>
+                <option value="GRADE">Grade</option>
+              </select>
+
+              <select
+                value={statusFilter}
+                onChange={(event) => setStatusFilter(event.target.value)}
+                className="form-select"
+                aria-label="Filter by component status"
+              >
+                <option value="ALL">All Statuses</option>
+                <option value="ACTIVE">Active</option>
+                <option value="INACTIVE">Inactive</option>
+              </select>
+
+              {(search || typeFilter !== "ALL" || statusFilter !== "ALL") && (
+                <button
+                  type="button"
+                  className="btn btn-outline-secondary"
+                  onClick={() => {
+                    setSearch("");
+                    setTypeFilter("ALL");
+                    setStatusFilter("ALL");
+                  }}
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+          </div>
+
+          {filteredComponents.length > 0 ? (
             <div className="table-responsive">
               <table className="table table-striped table-bordered align-middle">
                 <thead className="table-light">
@@ -342,7 +416,7 @@ const AssessmentComponentManagement = () => {
                 </thead>
 
                 <tbody>
-                  {components.map((comp, index) => (
+                  {filteredComponents.map((comp, index) => (
                     <tr key={comp.id}>
                       <td>{index + 1}</td>
                       <td>{comp.name}</td>
@@ -387,7 +461,11 @@ const AssessmentComponentManagement = () => {
               </table>
             </div>
           ) : (
-            <p>No components found.</p>
+            <p className="text-muted mb-0">
+              {components.length
+                ? "No components match the selected filters."
+                : "No components found."}
+            </p>
           )}
         </div>
       </div>
@@ -396,4 +474,3 @@ const AssessmentComponentManagement = () => {
 };
 
 export default AssessmentComponentManagement;
-

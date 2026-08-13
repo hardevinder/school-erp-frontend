@@ -264,6 +264,14 @@ export default function ExaminationDashboard() {
 
   const reportTiles = [
     {
+      title: "Class Result",
+      sub: "Class-wise subject and component result with Excel export",
+      icon: "bi-bar-chart-fill",
+      badge: "EXCEL",
+      onClick: () => open("/reports/classwise-result-summary"),
+      color: "var(--qa-blue)",
+    },
+    {
       title: "Final Result Summary",
       sub: "Class-wise totals, grades, Excel export and toppers ranking",
       icon: "bi-trophy",

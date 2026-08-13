@@ -157,8 +157,12 @@ export default function TeacherDashboard() {
             const classId = s[0]?.class_id;
             try {
               const att = await api.get(`/attendance/date/${todayStr}/${classId}`);
-              const rows = att.data || [];
-              if (!cancelled) setAttendanceTodayMarked(rows.length > 0);
+              const rows = Array.isArray(att.data) ? att.data : [];
+              const inchargeStudentIds = new Set(s.map((student) => String(student.id)));
+              const markedForIncharge = rows.some((row) =>
+                inchargeStudentIds.has(String(row.studentId ?? row.student_id))
+              );
+              if (!cancelled) setAttendanceTodayMarked(markedForIncharge);
             } catch {
               if (!cancelled) setAttendanceTodayMarked(false);
             }
@@ -526,7 +530,7 @@ export default function TeacherDashboard() {
             badge: "NEW",
           },
 
-          { label: "Result Summary", icon: "bi-bar-chart", path: "/reports/classwise-result-summary", color: "var(--qa-rose)" },
+          { label: "Class Result", icon: "bi-bar-chart", path: "/reports/classwise-result-summary", color: "var(--qa-rose)" },
           { label: "Report Cards", icon: "bi-printer", path: "/report-card-generator", color: "var(--qa-slate)" },
           { label: "Digital Diary", icon: "bi-journal-bookmark", path: "/digital-diary", color: "var(--qa-indigo)" },
 
