@@ -92,6 +92,78 @@ export const documentVaultApi = {
     window.open(url, "_blank", "noopener,noreferrer");
     window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
   },
+
+  async officialCapabilities() {
+    return unwrap(await api.get(`${BASE}/official/capabilities`));
+  },
+
+  async officialMine(scope) {
+    return unwrap(await api.get(`${BASE}/official/me`, { params: scope ? { scope } : {} }));
+  },
+
+  async officialTypes(recipientType, includeInactive = false) {
+    return unwrap(await api.get(`${BASE}/official/types`, {
+      params: {
+        ...(recipientType ? { recipient_type: recipientType } : {}),
+        ...(includeInactive ? { include_inactive: 1 } : {}),
+      },
+    }));
+  },
+
+  async createOfficialType(payload) {
+    return unwrap(await api.post(`${BASE}/official/types`, payload));
+  },
+
+  async updateOfficialType(id, payload) {
+    return unwrap(await api.put(`${BASE}/official/types/${id}`, payload));
+  },
+
+  async officialRecipients(ownerType, q = "") {
+    return unwrap(await api.get(`${BASE}/official/recipients`, { params: { owner_type: ownerType, q, limit: 50 } }));
+  },
+
+  async officialDashboard() {
+    return unwrap(await api.get(`${BASE}/official/dashboard`));
+  },
+
+  async officialIssued(params = {}) {
+    return unwrap(await api.get(`${BASE}/official/issued`, { params }));
+  },
+
+  async issueOfficial(formData) {
+    return unwrap(await api.post(`${BASE}/official/issue`, formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    }));
+  },
+
+  async issueOfficialDraft(id) {
+    return unwrap(await api.patch(`${BASE}/official/${id}/issue`));
+  },
+
+  async acknowledgeOfficial(id, note = "") {
+    return unwrap(await api.patch(`${BASE}/official/${id}/acknowledge`, { note }));
+  },
+
+  async revokeOfficial(id, reason) {
+    return unwrap(await api.patch(`${BASE}/official/${id}/revoke`, { reason }));
+  },
+
+  async officialAudit(id) {
+    return unwrap(await api.get(`${BASE}/official/${id}/audit`));
+  },
+
+  async openOfficial(doc, scope) {
+    const response = await api.get(`${BASE}/official/${doc.id}/download`, {
+      params: scope ? { scope } : {},
+      responseType: "blob",
+    });
+    const blob = new Blob([response.data], {
+      type: response.headers?.["content-type"] || doc.mime_type || "application/octet-stream",
+    });
+    const url = URL.createObjectURL(blob);
+    window.open(url, "_blank", "noopener,noreferrer");
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  },
 };
 
 export default documentVaultApi;

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import documentVaultApi from "../services/documentVaultApi";
+import { OfficialDocumentsManager, OfficialDocumentsMine } from "../components/documentVault/OfficialDocumentsPanel";
 
 const OWNER_LABELS = {
   student: "Students",
@@ -21,6 +22,17 @@ const managerScopesForRole = (role) => {
   if (["hr", "academic_coordinator", "coordinator"].includes(role)) return ["employee"];
   if (["transport", "transport_admin", "transporter"].includes(role)) return ["driver", "conductor"];
   return [];
+};
+
+const officialIssueScopesForRole = (role) => {
+  if (["superadmin", "super_admin", "admin", "principal"].includes(role)) return ["student", "employee", "driver", "conductor"];
+  const scopes = new Set();
+  if (role === "hr") { scopes.add("employee"); scopes.add("driver"); scopes.add("conductor"); }
+  if (["academic_coordinator", "coordinator"].includes(role)) { scopes.add("student"); scopes.add("employee"); }
+  if (["accounts", "account", "accountant"].includes(role)) { scopes.add("student"); scopes.add("employee"); }
+  if (["transport", "transport_admin", "transporter"].includes(role)) { scopes.add("driver"); scopes.add("conductor"); }
+  if (["examination", "frontoffice", "front_office"].includes(role)) scopes.add("student");
+  return [...scopes];
 };
 
 const selfScopeForRole = (role) => {
@@ -402,7 +414,9 @@ export default function DocumentVault() {
   const role = useMemo(() => roleNow(), []);
   const managerScopes = useMemo(() => managerScopesForRole(role), [role]);
   const selfScope = useMemo(() => selfScopeForRole(role), [role]);
+  const officialIssueScopes = useMemo(() => officialIssueScopesForRole(role), [role]);
   const isManager = managerScopes.length > 0;
+  const isOfficialIssuer = officialIssueScopes.length > 0;
   const [tab, setTab] = useState(isManager ? "overview" : "my");
   const [myVault, setMyVault] = useState(null);
   const [myLoading, setMyLoading] = useState(false);
@@ -486,8 +500,9 @@ export default function DocumentVault() {
   };
 
   const navTabs = [
-    ...(selfScope ? [["my", "My Documents", "bi-person-vcard"]] : []),
+    ...(selfScope ? [["my", "My Uploaded Documents", "bi-person-vcard"], ["issued-to-me", "Issued to Me", "bi-envelope-paper"]] : []),
     ...(isManager ? [["overview", "Overview", "bi-speedometer2"], ["people", "People & Verification", "bi-people"], ["types", "Document Types", "bi-sliders"]] : []),
+    ...(isOfficialIssuer ? [["official-issue", "Official Letters", "bi-file-earmark-text"]] : []),
   ];
 
   return (
@@ -497,7 +512,7 @@ export default function DocumentVault() {
           <div>
             <div className="text-uppercase small fw-bold opacity-75 mb-1">Secure Digital Records</div>
             <h2 className="fw-bold mb-2"><i className="bi bi-shield-lock-fill me-2" />Document Vault</h2>
-            <div className="opacity-75">Students, teachers, staff and transport documents with verification, expiry tracking and secure access.</div>
+            <div className="opacity-75">Secure uploads plus school-issued official letters, acknowledgement tracking, verification, expiry monitoring and audit history.</div>
           </div>
           <div className="d-flex gap-2 flex-wrap">
             <span className="badge rounded-pill bg-white text-primary px-3 py-2"><i className="bi bi-lock-fill me-1" />Private files</span>
@@ -548,6 +563,10 @@ export default function DocumentVault() {
           )}
         </div>
       )}
+
+      {tab === "issued-to-me" && selfScope && <OfficialDocumentsMine selfScope={selfScope} />}
+
+      {tab === "official-issue" && isOfficialIssuer && <OfficialDocumentsManager />}
 
       {tab === "overview" && isManager && (
         <div>

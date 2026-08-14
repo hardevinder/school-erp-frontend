@@ -153,7 +153,7 @@ export default function Sidebar({ headerHeight = 56 }) {
   const isTeacher = roleLower === "teacher" || isDepartmentHod;
   const isStudent = roleLower === "student";
   const isHR = roleLower === "hr";
-  const isAccounts = roleLower === "accounts" || roleLower === "account";
+  const isAccounts = roleLower === "accounts" || roleLower === "account" || roleLower === "accountant";
   const isFrontoffice = roleLower === "frontoffice";
   const isAdmission = roleLower === "admission";
   const isLibrarian =
@@ -718,6 +718,13 @@ export default function Sidebar({ headerHeight = 56 }) {
             path: "/combined-circulars",
             roles: ["accounts", "account"],
           },
+          {
+            key: "document-vault-accounts",
+            label: "Official Letters & Documents",
+            icon: "bi-file-earmark-lock2",
+            path: "/document-vault",
+            roles: ["accounts", "account", "accountant"],
+          },
         ],
       });
 
@@ -999,6 +1006,7 @@ export default function Sidebar({ headerHeight = 56 }) {
           { key: "users", label: "Users", icon: "bi-person", path: "/users", roles: ["superadmin"] },
           { key: "users-tracking", label: "User Tracking", icon: "bi-activity", path: "/users-tracking", roles: ["admin", "superadmin"] },
           { key: "document-vault-admin", label: "Document Vault", icon: "bi-shield-lock", path: "/document-vault", roles: ["admin", "superadmin"] },
+          { key: "anecdotal-records-admin", label: "Anecdotal Records", icon: "bi-journal-check", path: "/anecdotal-records", roles: ["admin", "superadmin"] },
           { key: "expense-management", label: "Expense Management", icon: "bi-wallet2", path: "/expense-management", roles: ["admin", "superadmin"] },
           { key: "examination-expenses-admin", label: "Examination Expenses", icon: "bi-journal-text", path: "/examination-expenses", roles: ["admin", "superadmin"] },
           { key: "classes", label: "Classes", icon: "bi-list-task", path: "/classes" },
@@ -1163,6 +1171,7 @@ export default function Sidebar({ headerHeight = 56 }) {
           { key: "inchargeAssignment", label: "Incharge Assignment", icon: "bi-person-badge", path: "/incharge-assignment" },
           { key: "department-management", label: "Department Management", icon: "bi-building-gear", path: "/department-management", roles: ["academic_coordinator"] },
           { key: "document-vault-coordinator", label: "Document Vault", icon: "bi-shield-check", path: "/document-vault", roles: ["academic_coordinator"] },
+          { key: "anecdotal-records-coordinator", label: "Anecdotal Records", icon: "bi-journal-check", path: "/anecdotal-records", roles: ["academic_coordinator"] },
           { key: "ptm-management-coordinator", label: "PTM Management", icon: "bi-people-fill", path: "/ptm-management" },
           { key: "online-classes-coordinator", label: "Online Classes", icon: "bi-camera-video", path: "/online-classes" },
           { key: "assessments-coordinator", label: "Assessments & Tests", icon: "bi-clipboard2-check", path: "/assessments" },
@@ -1271,6 +1280,7 @@ export default function Sidebar({ headerHeight = 56 }) {
           { key: "lesson-plan", label: "Lesson Plan", icon: "bi-journal-text", path: "/lesson-plan" },
           { key: "department-management", label: "Department Management", icon: "bi-building-gear", path: "/department-management", roles: ["teacher", "department_hod"] },
           { key: "document-vault-teacher", label: "My Documents", icon: "bi-person-vcard", path: "/document-vault", roles: ["teacher", "department_hod"] },
+          { key: "anecdotal-records-teacher", label: "Anecdotal Records", icon: "bi-journal-check", path: "/anecdotal-records", roles: ["teacher", "department_hod"] },
           { key: "online-classes", label: "Online Classes", icon: "bi-camera-video", path: "/online-classes" },
           { key: "assessments", label: "Assessments & Tests", icon: "bi-clipboard2-check", path: "/assessments" },
           { key: "lms-assignments", label: "LMS Assignments", icon: "bi-journal-check", path: "/assessments?assessment_type=assignment" },
@@ -1323,6 +1333,7 @@ export default function Sidebar({ headerHeight = 56 }) {
           { key: "student-circulars", label: "Circulars", icon: "bi-megaphone", path: "/student-circulars", roles: ["student"] },
           { key: "student-activities-achievements", label: "Activities & Achievements", icon: "bi-trophy", path: "/student/activities-achievements", roles: ["student"] },
           { key: "document-vault-student", label: "My Documents", icon: "bi-person-vcard", path: "/document-vault", roles: ["student"] },
+          { key: "anecdotal-records-student", label: "My Growth & Recognition", icon: "bi-stars", path: "/anecdotal-records", roles: ["student"] },
           { key: "student-timetable-display", label: "Timetable", icon: "bi-clock-history", path: "/student-timetable-display", roles: ["student"] },
           { key: "student-online-classes", label: "Online Classes", icon: "bi-camera-video", path: "/online-classes", roles: ["student"] },
           { key: "student-assessments", label: "Tests & Results", icon: "bi-clipboard2-check", path: "/assessments", roles: ["student"] },

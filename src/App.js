@@ -95,6 +95,7 @@ import StudentUserAccounts from "./pages/StudentUserAccounts";
 import Departments from "./pages/Departments";
 import DepartmentManagement from "./pages/DepartmentManagement";
 import DocumentVault from "./pages/DocumentVault";
+import AnecdotalRecords from "./pages/AnecdotalRecords";
 import StudentActivitiesAchievements from "./pages/StudentActivitiesAchievements";
 import EmployeeManagement from "./pages/EmployeeManagement";
 import EmployeeUserAccounts from "./pages/EmployeeUserAccounts";
@@ -1128,6 +1129,20 @@ function App() {
                 ]}
               >
                 <DocumentVault />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="/anecdotal-records"
+            element={
+              <RequireRole
+                roles={[
+                  "superadmin", "super_admin", "admin", "principal",
+                  "academic_coordinator", "coordinator", "department_hod",
+                  "teacher", "counsellor", "counselor", "student", "parent"
+                ]}
+              >
+                <AnecdotalRecords />
               </RequireRole>
             }
           />
