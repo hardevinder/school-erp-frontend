@@ -97,6 +97,8 @@ import DepartmentManagement from "./pages/DepartmentManagement";
 import DocumentVault from "./pages/DocumentVault";
 import AnecdotalRecords from "./pages/AnecdotalRecords";
 import StudentHealthGrowth from "./pages/StudentHealthGrowth";
+import DailyReadiness from "./pages/DailyReadiness";
+import LostFound from "./pages/LostFound";
 import StudentActivitiesAchievements from "./pages/StudentActivitiesAchievements";
 import EmployeeManagement from "./pages/EmployeeManagement";
 import EmployeeUserAccounts from "./pages/EmployeeUserAccounts";
@@ -1152,6 +1154,22 @@ function App() {
             element={
               <RequireRole roles={["superadmin", "super_admin", "admin", "principal", "health_staff", "doctor", "nurse", "medical_officer"]}>
                 <StudentHealthGrowth />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="/daily-readiness"
+            element={
+              <RequireRole roles={["superadmin", "super_admin", "admin", "principal", "academic_coordinator", "coordinator", "teacher", "department_hod", "student", "parent"]}>
+                <DailyReadiness />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="/lost-found"
+            element={
+              <RequireRole roles={["superadmin", "super_admin", "admin", "principal", "academic_coordinator", "coordinator", "teacher", "department_hod", "frontoffice", "student", "parent"]}>
+                <LostFound />
               </RequireRole>
             }
           />
