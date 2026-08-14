@@ -94,7 +94,6 @@ import StudentCirculars from "./pages/StudentCirculars";
 import StudentUserAccounts from "./pages/StudentUserAccounts";
 import Departments from "./pages/Departments";
 import DepartmentManagement from "./pages/DepartmentManagement";
-import DocumentVault from "./pages/DocumentVault";
 import StudentActivitiesAchievements from "./pages/StudentActivitiesAchievements";
 import EmployeeManagement from "./pages/EmployeeManagement";
 import EmployeeUserAccounts from "./pages/EmployeeUserAccounts";
@@ -1096,38 +1095,6 @@ function App() {
                 ]}
               >
                 <DepartmentManagement />
-              </RequireRole>
-            }
-          />
-          <Route
-            path="/document-vault"
-            element={
-              <RequireRole
-                roles={[
-                  "superadmin",
-                  "super_admin",
-                  "admin",
-                  "principal",
-                  "academic_coordinator",
-                  "coordinator",
-                  "department_hod",
-                  "hr",
-                  "teacher",
-                  "student",
-                  "parent",
-                  "driver",
-                  "conductor",
-                  "transport",
-                  "transport_admin",
-                  "transporter",
-                  "accounts",
-                  "account",
-                  "accountant",
-                  "examination",
-                  "frontoffice",
-                ]}
-              >
-                <DocumentVault />
               </RequireRole>
             }
           />

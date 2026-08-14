@@ -456,13 +456,6 @@ export default function Sidebar({ headerHeight = 56 }) {
             path: "/employee-transport-assignments",
             roles: ["transport", "transporter"],
           },
-          {
-            key: "document-vault-transport",
-            label: "Driver Document Vault",
-            icon: "bi-shield-check",
-            path: "/document-vault",
-            roles: ["transport", "transporter"],
-          },
         ],
       });
 
@@ -998,7 +991,6 @@ export default function Sidebar({ headerHeight = 56 }) {
         items: [
           { key: "users", label: "Users", icon: "bi-person", path: "/users", roles: ["superadmin"] },
           { key: "users-tracking", label: "User Tracking", icon: "bi-activity", path: "/users-tracking", roles: ["admin", "superadmin"] },
-          { key: "document-vault-admin", label: "Document Vault", icon: "bi-shield-lock", path: "/document-vault", roles: ["admin", "superadmin"] },
           { key: "expense-management", label: "Expense Management", icon: "bi-wallet2", path: "/expense-management", roles: ["admin", "superadmin"] },
           { key: "examination-expenses-admin", label: "Examination Expenses", icon: "bi-journal-text", path: "/examination-expenses", roles: ["admin", "superadmin"] },
           { key: "classes", label: "Classes", icon: "bi-list-task", path: "/classes" },
@@ -1162,7 +1154,6 @@ export default function Sidebar({ headerHeight = 56 }) {
           { key: "teacherAssignment", label: "Teacher Assignment", icon: "bi-person-check", path: "/teacher-assignment" },
           { key: "inchargeAssignment", label: "Incharge Assignment", icon: "bi-person-badge", path: "/incharge-assignment" },
           { key: "department-management", label: "Department Management", icon: "bi-building-gear", path: "/department-management", roles: ["academic_coordinator"] },
-          { key: "document-vault-coordinator", label: "Document Vault", icon: "bi-shield-check", path: "/document-vault", roles: ["academic_coordinator"] },
           { key: "ptm-management-coordinator", label: "PTM Management", icon: "bi-people-fill", path: "/ptm-management" },
           { key: "online-classes-coordinator", label: "Online Classes", icon: "bi-camera-video", path: "/online-classes" },
           { key: "assessments-coordinator", label: "Assessments & Tests", icon: "bi-clipboard2-check", path: "/assessments" },
@@ -1232,7 +1223,6 @@ export default function Sidebar({ headerHeight = 56 }) {
         items: [
           { key: "departments", label: "Departments", icon: "bi-diagram-3", path: "/departments" },
           { key: "department-management", label: "Department Management", icon: "bi-building-gear", path: "/department-management", roles: ["hr"] },
-          { key: "document-vault-hr", label: "Staff Document Vault", icon: "bi-shield-check", path: "/document-vault", roles: ["hr"] },
           { key: "employees", label: "Employees", icon: "bi-person-badge", path: "/employees" },
           { key: "employee-user-accounts", label: "Employee Login Accounts", icon: "bi-person-plus", path: "/employee-user-accounts" },
           { key: "leave-types", label: "Leave Types", icon: "bi-journals", path: "/leave-types" },
@@ -1270,7 +1260,6 @@ export default function Sidebar({ headerHeight = 56 }) {
           { key: "combined-teacher-substitution", label: "My Substitutions", icon: "bi-arrow-repeat", path: "/combined-teacher-substitution" },
           { key: "lesson-plan", label: "Lesson Plan", icon: "bi-journal-text", path: "/lesson-plan" },
           { key: "department-management", label: "Department Management", icon: "bi-building-gear", path: "/department-management", roles: ["teacher", "department_hod"] },
-          { key: "document-vault-teacher", label: "My Documents", icon: "bi-person-vcard", path: "/document-vault", roles: ["teacher", "department_hod"] },
           { key: "online-classes", label: "Online Classes", icon: "bi-camera-video", path: "/online-classes" },
           { key: "assessments", label: "Assessments & Tests", icon: "bi-clipboard2-check", path: "/assessments" },
           { key: "lms-assignments", label: "LMS Assignments", icon: "bi-journal-check", path: "/assessments?assessment_type=assignment" },
@@ -1322,7 +1311,6 @@ export default function Sidebar({ headerHeight = 56 }) {
           { key: "student-diary", label: "Diary", icon: "bi-journal-text", path: "/student-diary", roles: ["student"] },
           { key: "student-circulars", label: "Circulars", icon: "bi-megaphone", path: "/student-circulars", roles: ["student"] },
           { key: "student-activities-achievements", label: "Activities & Achievements", icon: "bi-trophy", path: "/student/activities-achievements", roles: ["student"] },
-          { key: "document-vault-student", label: "My Documents", icon: "bi-person-vcard", path: "/document-vault", roles: ["student"] },
           { key: "student-timetable-display", label: "Timetable", icon: "bi-clock-history", path: "/student-timetable-display", roles: ["student"] },
           { key: "student-online-classes", label: "Online Classes", icon: "bi-camera-video", path: "/online-classes", roles: ["student"] },
           { key: "student-assessments", label: "Tests & Results", icon: "bi-clipboard2-check", path: "/assessments", roles: ["student"] },
