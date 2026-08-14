@@ -64,6 +64,7 @@ const GROUP_ORDER = {
   Library: 13,
   "Front Office": 14,
   "HR Management": 15,
+  "Health & Wellness": 15.5,
   Certificates: 16,
   Reports: 17,
   "Fee Reports": 18,
@@ -153,6 +154,7 @@ export default function Sidebar({ headerHeight = 56 }) {
   const isTeacher = roleLower === "teacher" || isDepartmentHod;
   const isStudent = roleLower === "student";
   const isHR = roleLower === "hr";
+  const isHealthStaff = ["health_staff", "doctor", "nurse", "medical_officer"].includes(roleLower);
   const isAccounts = roleLower === "accounts" || roleLower === "account" || roleLower === "accountant";
   const isFrontoffice = roleLower === "frontoffice";
   const isAdmission = roleLower === "admission";
@@ -1006,6 +1008,7 @@ export default function Sidebar({ headerHeight = 56 }) {
           { key: "users", label: "Users", icon: "bi-person", path: "/users", roles: ["superadmin"] },
           { key: "users-tracking", label: "User Tracking", icon: "bi-activity", path: "/users-tracking", roles: ["admin", "superadmin"] },
           { key: "document-vault-admin", label: "Document Vault", icon: "bi-shield-lock", path: "/document-vault", roles: ["admin", "superadmin"] },
+          { key: "student-health-admin", label: "Student Health & Growth", icon: "bi-heart-pulse", path: "/student-health", roles: ["admin", "superadmin"] },
           { key: "anecdotal-records-admin", label: "Anecdotal Records", icon: "bi-journal-check", path: "/anecdotal-records", roles: ["admin", "superadmin"] },
           { key: "expense-management", label: "Expense Management", icon: "bi-wallet2", path: "/expense-management", roles: ["admin", "superadmin"] },
           { key: "examination-expenses-admin", label: "Examination Expenses", icon: "bi-journal-text", path: "/examination-expenses", roles: ["admin", "superadmin"] },
@@ -1320,6 +1323,16 @@ export default function Sidebar({ headerHeight = 56 }) {
       });
     }
 
+    // ====== HEALTH STAFF / DOCTOR / NURSE ======
+    if (isHealthStaff) {
+      groups.push({
+        heading: "Health & Wellness",
+        items: [
+          { key: "student-health", label: "Student Health & Growth", icon: "bi-heart-pulse", path: "/student-health", roles: ["health_staff", "doctor", "nurse", "medical_officer"] },
+        ],
+      });
+    }
+
     // ====== STUDENT ======
     if (isStudent) {
       groups.push({
@@ -1370,6 +1383,7 @@ export default function Sidebar({ headerHeight = 56 }) {
     isTeacher,
     isStudent,
     isHR,
+    isHealthStaff,
     isSuperAdmin,
     isAccounts,
     isFrontoffice,

@@ -96,6 +96,7 @@ import Departments from "./pages/Departments";
 import DepartmentManagement from "./pages/DepartmentManagement";
 import DocumentVault from "./pages/DocumentVault";
 import AnecdotalRecords from "./pages/AnecdotalRecords";
+import StudentHealthGrowth from "./pages/StudentHealthGrowth";
 import StudentActivitiesAchievements from "./pages/StudentActivitiesAchievements";
 import EmployeeManagement from "./pages/EmployeeManagement";
 import EmployeeUserAccounts from "./pages/EmployeeUserAccounts";
@@ -1143,6 +1144,14 @@ function App() {
                 ]}
               >
                 <AnecdotalRecords />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="/student-health"
+            element={
+              <RequireRole roles={["superadmin", "super_admin", "admin", "principal", "health_staff", "doctor", "nurse", "medical_officer"]}>
+                <StudentHealthGrowth />
               </RequireRole>
             }
           />
