@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import api from "../api";
 import Swal from "sweetalert2";
 import "./Transportation.css";
+import BusRouteMapModal from "./BusRouteMapModal";
 
 /* ---------------- role helpers ---------------- */
 const getRoleFlags = () => {
@@ -85,6 +86,7 @@ const Buses = () => {
   const [staff, setStaff] = useState([]);
   const [loading, setLoading] = useState({ buses: false, staff: false });
   const [error, setError] = useState("");
+  const [routeMapBus, setRouteMapBus] = useState(null);
 
   const fetchBuses = async () => {
     setLoading((s) => ({ ...s, buses: true }));
@@ -521,7 +523,7 @@ const Buses = () => {
               <th style={{ minWidth: 240 }}>Driver</th>
               <th style={{ minWidth: 240 }}>Conductor</th>
               <th>Active</th>
-              <th style={{ minWidth: 170 }}>Actions</th>
+              <th style={{ minWidth: 260 }}>Actions</th>
             </tr>
           </thead>
 
@@ -553,6 +555,12 @@ const Buses = () => {
                   <td>{bus.active === false ? badge("No", "secondary") : badge("Yes", "success")}</td>
 
                   <td>
+                    <button
+                      className="btn btn-outline-success btn-sm me-2"
+                      onClick={() => setRouteMapBus(bus)}
+                    >
+                      <i className="bi bi-map me-1" />Route Map
+                    </button>
                     <button
                       className="btn btn-primary btn-sm me-2"
                       onClick={() => handleEdit(bus)}
@@ -586,6 +594,9 @@ const Buses = () => {
       </div>
 
       {/* Bootstrap Icons */}
+      {routeMapBus && (
+        <BusRouteMapModal bus={routeMapBus} onClose={() => setRouteMapBus(null)} />
+      )}
       <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" />
     </div>
   );

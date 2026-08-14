@@ -16,6 +16,3 @@
   font-weight: 700;
   text-transform: capitalize;
 }
-
-/* Smart scanned-test evaluation */
-.smart-result-hero{display:flex;gap:18px;align-items:center;padding:16px;border:1px solid #e5e7eb;border-radius:16px;background:#f8faff}.smart-score-ring{--score:0deg;width:112px;height:112px;border-radius:50%;background:conic-gradient(#4f46e5 var(--score),#e5e7eb 0);display:grid;place-items:center;flex:0 0 auto}.smart-score-ring:before{content:"";position:absolute}.smart-score-ring>div{width:82px;height:82px;border-radius:50%;background:white;display:flex;flex-direction:column;align-items:center;justify-content:center}.smart-score-ring strong{font-size:22px}.smart-score-ring small{color:#6b7280}.ai-review-needed{border-left:4px solid #f59e0b}.smart-remedials{padding:14px;border-radius:14px;background:#f7fee7;border:1px solid #d9f99d}.smart-remedials>div+div{margin-top:6px}

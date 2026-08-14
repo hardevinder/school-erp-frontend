@@ -3,19 +3,29 @@ import { Table, Row, Col } from "react-bootstrap";
 import normalizeUploadedUrl from "../../utils/normalizeUploadedUrl";
 import api from "../../api";
 
-const formatDateTimeDDMMYYYY = (value) => {
+const formatDateDDMMYYYY = (value) => {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "—";
-  const datePart = [
+  return [
     String(date.getDate()).padStart(2, "0"),
     String(date.getMonth() + 1).padStart(2, "0"),
     date.getFullYear(),
   ].join("/");
-  const timePart = date.toLocaleTimeString("en-IN", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-  return `${datePart} ${timePart}`;
+};
+
+const getSessionLabel = (item = {}) => {
+  const session = item.Session || item.session;
+  if (session && typeof session === "object") {
+    return session.name || session.session_name || session.label || "—";
+  }
+
+  return (
+    session ||
+    item.session_name ||
+    item.Session_Name ||
+    item.academic_session ||
+    "—"
+  );
 };
 
 const placeholderDataUrl =
@@ -165,7 +175,7 @@ const ReceiptContent = ({ school = {}, receipt = [], slipId = "—", student = {
       </Table>
 
       <h5 className="text-center fw-bold text-dark">
-        Session: {items[0]?.session || "—"}
+        Session: {getSessionLabel(items[0])}
         <br />
         Fee Receipt
       </h5>
@@ -185,7 +195,7 @@ const ReceiptContent = ({ school = {}, receipt = [], slipId = "—", student = {
               <p><strong>Admission No:</strong> {student?.admission_number || "-"}</p>
               <p><strong>Class:</strong> {items[0]?.Class?.class_name || "-"}</p>
               <p><strong>Address:</strong> {student?.address || "-"}</p>
-              <p><strong>Date:</strong> {formatDateTimeDDMMYYYY(items[0]?.DateOfTransaction || Date.now())}</p>
+              <p><strong>Date:</strong> {formatDateDDMMYYYY(items[0]?.DateOfTransaction || Date.now())}</p>
             </td>
           </tr>
         </tbody>

@@ -32,7 +32,17 @@ const getRoleFlags = () => {
   };
 };
 
-const formatDateInput = (date = new Date()) => date.toISOString().split("T")[0];
+const formatDateInput = (date = new Date()) =>
+  [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    String(date.getDate()).padStart(2, "0"),
+  ].join("-");
+
+const formatDateDisplay = (value) => {
+  const match = String(value || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return match ? `${match[3]}/${match[2]}/${match[1]}` : "—";
+};
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -351,7 +361,10 @@ export default function Dashboard() {
                   <h4 className="mb-0 text-white fw-semibold">
                     Welcome back, {displayName}
                   </h4>
-                  <span className="badge bg-light text-dark border">{selectedDate}</span>
+                  <span className="badge bg-light text-dark border">
+                    <i className="bi bi-calendar3 me-1" />
+                    {formatDateDisplay(selectedDate)}
+                  </span>
                   <span className="badge bg-light text-dark border">
                     Updated: {formatTime(lastRefreshed)}
                   </span>
@@ -380,13 +393,17 @@ export default function Dashboard() {
                 <label htmlFor="summaryDate" className="form-label mb-1 small text-white-50">
                   Attendance Date
                 </label>
-                <input
-                  id="summaryDate"
-                  type="date"
-                  className="form-control"
-                  value={selectedDate}
-                  onChange={(e) => setSelectedDate(e.target.value)}
-                />
+                <div className="date-picker-shell">
+                  <span>{formatDateDisplay(selectedDate)}</span>
+                  <i className="bi bi-calendar3" aria-hidden="true" />
+                  <input
+                    id="summaryDate"
+                    type="date"
+                    value={selectedDate}
+                    onChange={(e) => e.target.value && setSelectedDate(e.target.value)}
+                    aria-label="Select attendance date"
+                  />
+                </div>
               </div>
 
               <div className="d-flex gap-2 pb-1 flex-wrap">
@@ -420,6 +437,30 @@ export default function Dashboard() {
               </div>
             </div>
           </div>
+        </div>
+      </section>
+
+      {/* AT-A-GLANCE OPERATIONS STRIP */}
+      <section className="operations-strip mb-4" aria-label="Academic operations snapshot">
+        <div className="operation-item">
+          <span className="operation-icon op-blue"><i className="bi bi-people" /></span>
+          <div><small>Students tracked</small><strong>{loading ? "…" : total}</strong></div>
+        </div>
+        <div className="operation-item">
+          <span className="operation-icon op-green"><i className="bi bi-graph-up-arrow" /></span>
+          <div><small>Attendance rate</small><strong>{loading ? "…" : `${overallPresentPct}%`}</strong></div>
+        </div>
+        <div className="operation-item">
+          <span className="operation-icon op-red"><i className="bi bi-person-x" /></span>
+          <div><small>Absent today</small><strong>{loading ? "…" : absent}</strong></div>
+        </div>
+        <div className="operation-item">
+          <span className="operation-icon op-amber"><i className="bi bi-hourglass-split" /></span>
+          <div><small>Pending approvals</small><strong>{loadingSyllPending ? "…" : syllPendingCount ?? "—"}</strong></div>
+        </div>
+        <div className="operation-item">
+          <span className="operation-icon op-purple"><i className="bi bi-grid-3x3-gap" /></span>
+          <div><small>Sections reported</small><strong>{loading ? "…" : attendanceSummary?.summary?.length || 0}</strong></div>
         </div>
       </section>
 
@@ -582,7 +623,7 @@ export default function Dashboard() {
         <div className="alert alert-danger d-flex align-items-center rounded-4" role="alert">
           <span className="me-2">⚠️</span>
           <div>
-            Failed to load attendance for <strong>{selectedDate}</strong>. {error}
+            Failed to load attendance for <strong>{formatDateDisplay(selectedDate)}</strong>. {error}
           </div>
           <button className="btn btn-sm btn-light ms-auto" onClick={hardRefresh}>
             Retry
@@ -594,7 +635,7 @@ export default function Dashboard() {
         <EmptyState
           icon="bi-clipboard2-data"
           title="No attendance summary available"
-          message={`No summary available for ${selectedDate}.`}
+          message={`No summary available for ${formatDateDisplay(selectedDate)}.`}
         />
       )}
 
@@ -610,7 +651,7 @@ export default function Dashboard() {
                 </div>
               </div>
               <span className="badge bg-light text-dark border px-3 py-2 rounded-pill">
-                {attendanceSummary.date || selectedDate}
+                {formatDateDisplay(attendanceSummary.date || selectedDate)}
               </span>
             </div>
 
@@ -789,6 +830,62 @@ export default function Dashboard() {
           max-width: 820px;
         }
 
+        .date-picker-shell{
+          position: relative;
+          min-width: 172px;
+          height: 42px;
+          padding: 0 13px;
+          border-radius: 10px;
+          background: #fff;
+          color: #172033;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 14px;
+          font-weight: 650;
+          box-shadow: 0 8px 22px rgba(15,23,42,.14);
+          cursor: pointer;
+        }
+
+        .date-picker-shell input{
+          position: absolute;
+          inset: 0;
+          width: 100%;
+          height: 100%;
+          opacity: 0;
+          cursor: pointer;
+        }
+
+        .operations-strip{
+          display: grid;
+          grid-template-columns: repeat(5, minmax(0, 1fr));
+          background: rgba(255,255,255,.92);
+          border: 1px solid #e5eaf2;
+          border-radius: 18px;
+          padding: 12px;
+          box-shadow: var(--soft-shadow);
+        }
+
+        .operation-item{
+          min-width: 0;
+          display: flex;
+          align-items: center;
+          gap: 11px;
+          padding: 9px 14px;
+          border-right: 1px solid #e9edf4;
+        }
+
+        .operation-item:last-child{ border-right: 0; }
+        .operation-item small{ display:block; color:#718096; font-size:.72rem; }
+        .operation-item strong{ display:block; color:#13213c; font-size:1.15rem; line-height:1.25; }
+        .operation-icon{
+          width: 38px; height: 38px; border-radius: 12px; flex: 0 0 auto;
+          display:grid; place-items:center; font-size:1rem;
+        }
+        .op-blue{background:#e8f1ff;color:#2463b5}.op-green{background:#e8f8ef;color:#17844b}
+        .op-red{background:#fdecec;color:#c12f3a}.op-amber{background:#fff4da;color:#a76600}
+        .op-purple{background:#f1ebff;color:#7243c8}
+
         .section-heading h5{
           color: #0f172a;
         }
@@ -892,6 +989,15 @@ export default function Dashboard() {
           .quick-card-body{
             min-height: auto;
           }
+        }
+        @media (max-width: 1199.98px){
+          .operations-strip{ grid-template-columns: repeat(3, 1fr); }
+          .operation-item:nth-child(3){ border-right: 0; }
+        }
+        @media (max-width: 767.98px){
+          .operations-strip{ grid-template-columns: repeat(2, 1fr); }
+          .operation-item{ border-right: 0; border-bottom: 1px solid #e9edf4; }
+          .operation-item:last-child{ border-bottom: 0; }
         }
       `}</style>
 
@@ -1114,7 +1220,9 @@ function AttendanceDetailModal({ detail, date, onClose }) {
               <h5 className="modal-title mb-1">
                 Class {section.class_name} - Section {section.section_name}
               </h5>
-              <div className="text-muted small">Attendance details for {date}</div>
+              <div className="text-muted small">
+                Attendance details for {formatDateDisplay(date)}
+              </div>
             </div>
             <button type="button" className="btn-close" aria-label="Close" onClick={onClose} />
           </div>

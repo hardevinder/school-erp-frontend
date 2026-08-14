@@ -1,0 +1,18 @@
+.bus-route-backdrop { position: fixed; inset: 0; z-index: 1060; background: rgba(15,23,42,.62); display: grid; place-items: center; padding: 20px; }
+.bus-route-dialog { width: min(1120px, 96vw); height: min(790px, 94vh); background: #fff; border-radius: 16px; box-shadow: 0 24px 70px rgba(0,0,0,.3); overflow: hidden; display: flex; flex-direction: column; }
+.bus-route-dialog > header, .bus-route-dialog > footer { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; }
+.bus-route-dialog > header { border-bottom: 1px solid #e5e7eb; }
+.bus-route-dialog > header h4 { margin: 0; }
+.bus-route-dialog > header span, .bus-route-dialog > footer { color: #64748b; font-size: .86rem; }
+.bus-route-dialog > footer { border-top: 1px solid #e5e7eb; }
+.bus-route-toolbar { padding: 10px 18px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; background: #f8fafc; }
+.bus-route-toolbar input { width: 155px; }
+.bus-route-stat { color: #475569; font-size: .9rem; }
+.bus-route-distance { margin-left: auto; background: #0f172a; color: white; padding: 7px 14px; border-radius: 999px; font-weight: 700; }
+.bus-route-map { flex: 1; min-height: 360px; background: #e2e8f0; }
+.bus-route-loading { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); background: rgba(255,255,255,.94); padding: 12px 18px; border-radius: 10px; box-shadow: 0 5px 25px rgba(0,0,0,.15); }
+.bus-stop-info { min-width: 230px; max-width: 320px; color: #1e293b; line-height: 1.45; padding: 2px; }
+.bus-stop-info strong { display: block; font-size: 1rem; margin-bottom: 7px; color: #0f172a; }
+.bus-stop-info div { margin-top: 3px; font-size: .84rem; }
+.bus-stop-info div span:first-child { font-weight: 600; color: #475569; }
+@media (max-width: 600px) { .bus-route-backdrop { padding: 0; } .bus-route-dialog { width: 100vw; height: 100vh; border-radius: 0; } .bus-route-distance { margin-left: 0; } }
