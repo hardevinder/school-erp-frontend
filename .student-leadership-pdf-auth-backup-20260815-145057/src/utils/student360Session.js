@@ -2,11 +2,7 @@ export const isStudent360Path = () => window.location.pathname.startsWith("/stud
 
 export const getAuthToken = () =>
   (isStudent360Path() && sessionStorage.getItem("student360Token")) ||
-  localStorage.getItem("token") ||
-  localStorage.getItem("authToken") ||
-  sessionStorage.getItem("token") ||
-  sessionStorage.getItem("authToken") ||
-  "";
+  localStorage.getItem("token") || localStorage.getItem("authToken") || "";
 
 export const clearStudent360Session = () => {
   sessionStorage.removeItem("student360Token");

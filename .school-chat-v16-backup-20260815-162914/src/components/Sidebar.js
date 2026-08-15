@@ -1469,17 +1469,6 @@ export default function Sidebar({ headerHeight = 56 }) {
       g.items = g.items.filter(hasAccess);
     }
 
-    // SCHOOL_CHAT_V16_SIDEBAR — preserve existing Codex grouping and append chat to a suitable group.
-    if (["student","teacher","principal","superadmin","super_admin","admin","academic_coordinator","coordinator","hr","accounts","accountant"].includes(roleLower)) {
-      const chatItem = { key: "secure-school-chat", label: "Secure School Chat", icon: "bi-chat-dots-fill", path: "/school-chat" };
-      const targetGroup = groups.find((g) => g.heading === "Daily Work") || groups.find((g) => g.heading === "Main");
-      if (targetGroup) {
-        if (!targetGroup.items.some((i) => i?.path === "/school-chat")) targetGroup.items.push(chatItem);
-      } else {
-        groups.push({ heading: "Daily Work", items: [chatItem] });
-      }
-    }
-
     return sortGroups(cleanGroups(groups));
   }, [
     isAdmin,

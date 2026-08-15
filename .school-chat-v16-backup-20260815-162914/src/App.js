@@ -165,7 +165,6 @@ import Houses from "./pages/Houses";
 import StudentFeeReport from "./pages/StudentFeeReport";
 import RolePermissions from "./pages/RolePermissions";
 import Messages from "./pages/Messages";
-import SecureSchoolChat from "./pages/SecureSchoolChat"; // SCHOOL_CHAT_V16_IMPORT
 
 // ✅ NEW pages
 import TransferCertificates from "./pages/TransferCertificates";
@@ -526,14 +525,6 @@ function App() {
               </RequireRole>
             }
           />
-          <Route
-            path="/school-chat"
-            element={
-              <RequireRole roles={["student","teacher","principal","superadmin","super_admin","admin","academic_coordinator","coordinator","hr","accounts","accountant"]}>
-                <SecureSchoolChat />
-              </RequireRole>
-            }
-          /> {/* SCHOOL_CHAT_V16_ROUTE */}
           <Route path="/admin/messages" element={<Navigate to="/messages" replace />} />
 
           {/* ✅ NEW: Transport Dashboard (direct route) */}

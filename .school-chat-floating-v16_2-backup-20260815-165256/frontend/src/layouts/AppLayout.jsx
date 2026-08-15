@@ -3,7 +3,6 @@ import { Outlet, useLocation } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import "../components/Sidebar.css";
 import Navbar from "../components/Navbar.jsx";
-import SchoolChatFloatingButton from "../components/SchoolChatFloatingButton"; // SCHOOL_CHAT_FLOATING_V16_2_IMPORT
 
 export default function AppLayout() {
   const [headerHeight, setHeaderHeight] = useState(56);
@@ -52,9 +51,6 @@ export default function AppLayout() {
       <main className="app-content" style={{ paddingTop: headerHeight + 8 }}>
         <Outlet />
       </main>
-
-      {/* SCHOOL_CHAT_FLOATING_V16_2_MOUNT */}
-      <SchoolChatFloatingButton />
     </>
   );
 }

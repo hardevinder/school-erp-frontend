@@ -127,6 +127,10 @@ function DetailModal({ requestId, onClose, onChanged }) {
   const [busy, setBusy] = useState("");
   const load = useCallback(async () => { try { setError(""); const d = await parentConsentApi.request(requestId); setData(d.request); } catch (e) { setError(msg(e)); } }, [requestId]);
   useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    const requestedId = Number(searchParams.get("requestId") || 0);
+    if (requestedId > 0) setDetailId(requestedId);
+  }, [searchParams]);
 
   const act = async (key, fn) => { setBusy(key); setError(""); try { await fn(); await load(); onChanged?.(); } catch (e) { setError(msg(e)); } finally { setBusy(""); } };
   if (!requestId) return null;
@@ -148,10 +152,6 @@ export default function ParentConsents() {
   const [requests, setRequests] = useState([]);
   const [catalog, setCatalog] = useState({ classes: [], sections: [] });
   const [detailId, setDetailId] = useState(null);
-  useEffect(() => {
-    const requestedId = Number(searchParams.get("requestId") || 0);
-    if (requestedId > 0) setDetailId(requestedId);
-  }, [searchParams]);
 
   const load = useCallback(async () => {
     setLoading(true); setError("");

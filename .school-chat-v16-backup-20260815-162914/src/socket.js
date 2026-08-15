@@ -3,8 +3,7 @@ import { io } from "socket.io-client";
 
 /** Always read fresh values from storage (in case they change after login/renewal) */
 function getToken() {
-  // SCHOOL_CHAT_V16_TOKEN
-  return localStorage.getItem("token") || sessionStorage.getItem("token") || localStorage.getItem("authToken") || sessionStorage.getItem("authToken");
+  return localStorage.getItem("token");
 }
 function getAdmissionNumber() {
   return localStorage.getItem("admissionNumber");
