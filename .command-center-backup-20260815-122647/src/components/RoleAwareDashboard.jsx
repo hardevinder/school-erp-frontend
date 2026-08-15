@@ -68,11 +68,8 @@ export default function RoleAwareDashboard() {
     case "accounts":
       return <Navigate to="/accounts-dashboard" replace />;
 
-    // ✅ Principal leadership cockpit
-    case "principal":
-      return <Navigate to="/command-center" replace />;
-
     // ✅ Inventory roles
+    case "principal":
     case "inventoryadmin":
     case "storeincharge":
     case "labincharge":

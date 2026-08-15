@@ -149,7 +149,7 @@ export default function Sidebar({ headerHeight = 56 }) {
   const isSuperAdmin = roleLower === "superadmin" || roleLower === "super_admin";
   const isAdmin = isSuperAdmin || roleLower === "admin";
   const isPrincipal = roleLower === "principal";
-  const isAcademic = roleLower === "academic_coordinator" || roleLower === "coordinator";
+  const isAcademic = roleLower === "academic_coordinator";
   const isDepartmentHod = roleLower === "department_hod";
   const isTeacher = roleLower === "teacher" || isDepartmentHod;
   const isStudent = roleLower === "student";
@@ -168,7 +168,7 @@ export default function Sidebar({ headerHeight = 56 }) {
   const isLabIncharge = roleLower === "labincharge";
 
   const isInventoryRole =
-    isInventoryAdmin || isStoreIncharge || isLabIncharge;
+    isInventoryAdmin || isStoreIncharge || isLabIncharge || isPrincipal;
 
   const inventoryViewRoles = [
     "superadmin",
@@ -196,7 +196,30 @@ export default function Sidebar({ headerHeight = 56 }) {
 
   const [q, setQ] = useState("");
 
-  const [activeMenuGroup, setActiveMenuGroup] = useState("");
+  const [openGroups, setOpenGroups] = useState(() => {
+    try {
+      const saved = localStorage.getItem(`sidebarOpenGroups:${roleLower || "default"}`);
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        `sidebarOpenGroups:${roleLower || "default"}`,
+        JSON.stringify(openGroups)
+      );
+    } catch {}
+  }, [openGroups, roleLower]);
+
+  const toggleGroup = (heading) => {
+    setOpenGroups((prev) => ({
+      ...prev,
+      [heading]: !(prev[heading] ?? true),
+    }));
+  };
 
   const menuGroups = useMemo(() => {
     const groups = [];
@@ -296,76 +319,6 @@ export default function Sidebar({ headerHeight = 56 }) {
             path: "/inventory/stock-report",
             roles: ["principal", "inventoryadmin", "storeincharge", "labincharge"],
           },
-        ],
-      });
-    }
-
-
-    // ====== PRINCIPAL / SCHOOL COMMAND CENTER ======
-    if (isPrincipal) {
-      groups.push({
-        heading: "Main",
-        items: [
-          { key: "command-center", label: "School Command Center", icon: "bi-command", path: "/command-center" },
-          { key: "school-ai-principal", label: "Ask School AI", icon: "bi-stars", path: "/school-ai" }, // SCHOOL_AI_SIDEBAR_V12
-          { key: "principal-action-inbox", label: "My Actions & Approvals", icon: "bi-inboxes-fill", path: "/action-inbox" },
-          { key: "principal-parent-consents", label: "Parent Consent & Acknowledgement", icon: "bi-pen", path: "/parent-consents" },
-          { key: "principal-calendar", label: "Academic Calendar", icon: "bi-calendar-event", path: "/academic-calendar" },
-          { key: "principal-circulars", label: "Circulars", icon: "bi-megaphone", path: "/combined-circulars" },
-        ],
-      });
-
-      groups.push({
-        heading: "Management",
-        items: [
-          { key: "principal-students", label: "Students", icon: "bi-people", path: "/students" },
-          { key: "principal-teacher-performance", label: "Teacher Performance Intelligence", icon: "bi-graph-up-arrow", path: "/teacher-performance" },
-          { key: "principal-departments", label: "Department Management", icon: "bi-building-gear", path: "/department-management" },
-          { key: "principal-documents", label: "Document Vault", icon: "bi-shield-lock", path: "/document-vault" },
-          { key: "principal-anecdotal", label: "Anecdotal Records", icon: "bi-journal-check", path: "/anecdotal-records" },
-          { key: "principal-health", label: "Student Health & Growth", icon: "bi-heart-pulse", path: "/student-health" },
-          { key: "principal-readiness", label: "Daily Readiness & Hygiene", icon: "bi-clipboard2-check", path: "/daily-readiness" },
-          { key: "principal-lost-found", label: "Lost & Found", icon: "bi-search", path: "/lost-found" },
-          { key: "principal-discipline", label: "Disciplinary Actions", icon: "bi-exclamation-octagon", path: "/disciplinary-actions" },
-        ],
-      });
-
-      groups.push({
-        heading: "Academic",
-        items: [
-          { key: "principal-assessments", label: "Assessments & Tests", icon: "bi-clipboard2-check", path: "/assessments" },
-          { key: "principal-online-classes", label: "Online Classes", icon: "bi-camera-video", path: "/online-classes" },
-          { key: "principal-diary-monitor", label: "Digital Diary Monitor", icon: "bi-journal-richtext", path: "/coordinator-digital-diaries" },
-          { key: "principal-ptm", label: "PTM Management", icon: "bi-people-fill", path: "/ptm-management" },
-          { key: "principal-syllabus", label: "Syllabus Progress", icon: "bi-list-check", path: "/syllabus-breakdown" },
-          { key: "principal-syllabus-approval", label: "Syllabus Approval", icon: "bi-check2-square", path: "/syllabus-approval" },
-        ],
-      });
-
-      groups.push({
-        heading: "Examination",
-        items: [
-          { key: "principal-exam-dashboard", label: "Examination Dashboard", icon: "bi-ui-checks-grid", path: "/exam-dashboard" },
-          { key: "principal-exam-schedules", label: "Exam Schedule", icon: "bi-calendar2-check", path: "/exam-schedules" },
-          { key: "principal-exam-seating", label: "Seating & Invigilation", icon: "bi-grid-3x3-gap", path: "/exam-seating" },
-          { key: "principal-answer-scripts", label: "Answer Script Management", icon: "bi-journal-check", path: "/answer-script-management" },
-        ],
-      });
-
-      groups.push({
-        heading: "Transport",
-        items: [
-          { key: "principal-live-bus", label: "Live Bus Tracking", icon: "bi-geo-alt-fill", path: "/live-bus-tracking" },
-          { key: "principal-transport-dashboard", label: "Transport Dashboard", icon: "bi-bus-front", path: "/transport-dashboard" },
-        ],
-      });
-
-      groups.push({
-        heading: "Inventory",
-        items: [
-          { key: "principal-inventory", label: "Inventory Dashboard", icon: "bi-box-seam", path: "/inventory" },
-          { key: "principal-inventory-items", label: "Inventory Items", icon: "bi-box2", path: "/inventory/items" },
-          { key: "principal-inventory-report", label: "Stock Report", icon: "bi-bar-chart-line", path: "/inventory/stock-report" },
         ],
       });
     }
@@ -1052,10 +1005,6 @@ export default function Sidebar({ headerHeight = 56 }) {
         heading: "Main",
         items: [
           { key: "dashboard", label: "Dashboard", icon: "bi-speedometer2", path: "/dashboard" },
-          { key: "command-center-admin", label: "School Command Center", icon: "bi-command", path: "/command-center" },
-          { key: "school-ai-admin", label: "Ask School AI", icon: "bi-stars", path: "/school-ai", roles: ["admin", "superadmin"] },
-          { key: "action-inbox-admin", label: "My Actions & Approvals", icon: "bi-inboxes-fill", path: "/action-inbox", roles: ["admin", "superadmin"] },
-          { key: "parent-consents-admin", label: "Parent Consent & Acknowledgement", icon: "bi-pen", path: "/parent-consents", roles: ["admin", "superadmin"] },
           { key: "combined-circulars", label: "Circulars", icon: "bi-megaphone", path: "/combined-circulars" },
         ],
       });
@@ -1221,10 +1170,6 @@ export default function Sidebar({ headerHeight = 56 }) {
         heading: "Main",
         items: [
           { key: "dashboard", label: "Dashboard", icon: "bi-speedometer2", path: "/dashboard" },
-          { key: "command-center-academic", label: "School Command Center", icon: "bi-command", path: "/command-center" },
-          { key: "school-ai-academic", label: "Ask School AI", icon: "bi-stars", path: "/school-ai", roles: ["academic_coordinator", "coordinator"] },
-          { key: "action-inbox-academic", label: "My Actions & Approvals", icon: "bi-inboxes-fill", path: "/action-inbox", roles: ["academic_coordinator", "coordinator"] },
-          { key: "parent-consents-academic", label: "Parent Consent & Acknowledgement", icon: "bi-pen", path: "/parent-consents", roles: ["academic_coordinator", "coordinator"] },
           { key: "circulars", label: "Circulars", icon: "bi-megaphone", path: "/combined-circulars" },
         ],
       });
@@ -1303,10 +1248,6 @@ export default function Sidebar({ headerHeight = 56 }) {
         heading: "Main",
         items: [
           { key: "dashboard", label: "Dashboard", icon: "bi-speedometer2", path: "/dashboard" },
-          { key: "command-center-hr", label: "School Command Center", icon: "bi-command", path: "/command-center" },
-          { key: "school-ai-hr", label: "Ask School AI", icon: "bi-stars", path: "/school-ai", roles: ["hr"] },
-          { key: "action-inbox-hr", label: "My Actions & Approvals", icon: "bi-inboxes-fill", path: "/action-inbox", roles: ["hr"] },
-          { key: "parent-consents-hr", label: "Parent Consent & Acknowledgement", icon: "bi-pen", path: "/parent-consents", roles: ["hr"] },
           { key: "combined-circulars", label: "Circulars", icon: "bi-megaphone", path: "/combined-circulars" },
         ],
       });
@@ -1340,7 +1281,6 @@ export default function Sidebar({ headerHeight = 56 }) {
         heading: "Main",
         items: [
           { key: "dashboard", label: "Dashboard", icon: "bi-speedometer2", path: "/dashboard" },
-          { key: "action-inbox-teacher", label: "My Actions", icon: "bi-inboxes-fill", path: "/action-inbox", roles: ["teacher", "department_hod"] },
           { key: "view-circulars", label: "Circulars", icon: "bi-megaphone", path: "/view-circulars" },
         ],
       });
@@ -1498,16 +1438,6 @@ export default function Sidebar({ headerHeight = 56 }) {
   const isPathActive = (path) =>
     location.pathname === path || location.pathname.startsWith(path + "/");
 
-  // Route changes may also come from dashboard cards or quick-access links.
-  // Keep the secondary panel closed unless a sidebar category is clicked explicitly.
-  useEffect(() => {
-    setActiveMenuGroup("");
-  }, [location.pathname]);
-
-  const selectedGroup =
-    filteredGroups.find((group) => group.heading === activeMenuGroup) ||
-    (q ? filteredGroups[0] : null);
-
   const handleMenuClick = (item) => {
     navigate(item.path);
   };
@@ -1541,7 +1471,7 @@ export default function Sidebar({ headerHeight = 56 }) {
     librarian: ["library-dashboard", "library-books", "library-issue-return", "library-members"],
     library: ["library-dashboard", "library-books", "library-issue-return", "library-members"],
     libraryadmin: ["library-dashboard", "library-books", "library-issue-return", "library-members"],
-    principal: ["command-center", "principal-teacher-performance", "principal-exam-dashboard", "principal-live-bus", "principal-students"],
+    principal: ["inventory-dashboard-main", "inventory-items", "inventory-transactions", "inventory-stock-report"],
     inventoryadmin: ["inventory-dashboard-main", "inventory-items", "inventory-receive-stock", "inventory-transactions"],
     storeincharge: ["inventory-dashboard-main", "inventory-items", "inventory-receive-stock", "inventory-issue-stock"],
     labincharge: ["inventory-dashboard-main", "inventory-items", "inventory-transactions", "inventory-stock-report"],
@@ -1550,10 +1480,6 @@ export default function Sidebar({ headerHeight = 56 }) {
   const primaryKeys = PRIMARY_BY_ROLE[roleLower] || allItems.slice(0, 4).map((i) => i.key);
   const primaryItems = allItems.filter((i) => primaryKeys.includes(i.key)).slice(0, 5);
   const moreItems = allItems.filter((i) => !primaryKeys.includes(i.key));
-  const dashboardItem =
-    primaryKeys.map((key) => allItems.find((item) => item.key === key)).find(Boolean) ||
-    allItems.find((item) => /dashboard|home|command-center/.test(item.key || "")) ||
-    allItems[0];
 
   if (isMobile) {
     return (
@@ -1591,62 +1517,64 @@ export default function Sidebar({ headerHeight = 56 }) {
           />
         </div>
 
-        <nav className="sidebar-category-nav mt-1" aria-label="Menu categories">
-          {dashboardItem && (
-            <button
-              type="button"
-              className={`sidebar-category sidebar-dashboard-link ${
-                isPathActive(dashboardItem.path) ? "route-active selected" : ""
-              }`}
-              onClick={() => {
-                setActiveMenuGroup("");
-                handleMenuClick(dashboardItem);
-              }}
-              title={!isExpanded ? "Dashboard" : undefined}
-            >
-              <span
-                className="sidebar-category-icon"
-                style={{ backgroundImage: sidebarGradients[0] }}
-              >
-                <i className="bi bi-speedometer2" aria-hidden="true" />
-              </span>
-              <span className="sidebar-category-label">Dashboard</span>
-              <span className="sidebar-category-direct">Direct</span>
-              <i className="bi bi-arrow-up-right sidebar-category-arrow" aria-hidden="true" />
-            </button>
-          )}
-
+        <nav className="mt-1">
           {filteredGroups.map((group, gi) => {
-            const containsActiveRoute = group.items.some((item) => isPathActive(item.path));
-            const selected = selectedGroup?.heading === group.heading;
-            const groupIcon = group.items[0]?.icon || "bi-grid";
+            const isOpen = openGroups[group.heading] ?? true;
 
             return (
-              <button
-                key={group.heading}
-                type="button"
-                className={`sidebar-category ${selected ? "selected" : ""} ${
-                  containsActiveRoute ? "route-active" : ""
-                }`}
-                onClick={() =>
-                  setActiveMenuGroup((current) =>
-                    current === group.heading && !q ? "" : group.heading
-                  )
-                }
-                aria-expanded={selected}
-                aria-controls="sidebar-submenu-panel"
-                title={!isExpanded ? group.heading : undefined}
-              >
-                <span
-                  className="sidebar-category-icon"
-                  style={{ backgroundImage: sidebarGradients[gi % sidebarGradients.length] }}
-                >
-                  <i className={`bi ${groupIcon}`} aria-hidden="true" />
-                </span>
-                <span className="sidebar-category-label">{group.heading}</span>
-                <span className="sidebar-category-count">{group.items.length}</span>
-                <i className="bi bi-chevron-right sidebar-category-arrow" aria-hidden="true" />
-              </button>
+              <div key={gi} className="sidebar-group">
+                {isExpanded ? (
+                  <button
+                    type="button"
+                    className="group-toggle w-100 d-flex align-items-center justify-content-between px-3 mt-3 mb-1"
+                    onClick={() => toggleGroup(group.heading)}
+                    style={{
+                      background: "transparent",
+                      border: "none",
+                      color: "inherit",
+                    }}
+                  >
+                    <span className="group-heading text-uppercase mb-0">{group.heading}</span>
+                    <i className={`bi ${isOpen ? "bi-chevron-down" : "bi-chevron-right"}`} />
+                  </button>
+                ) : (
+                  <div className="group-divider my-2" />
+                )}
+
+                {(!isExpanded || isOpen) && (
+                  <ul className="nav flex-column">
+                    {group.items.map((item, ii) => {
+                      const active = isPathActive(item.path);
+                      const gradient = sidebarGradients[ii % sidebarGradients.length];
+
+                      return (
+                        <li
+                          key={item.key}
+                          className={`nav-item sidebar-item ${active ? "active" : ""}`}
+                          onClick={() => handleMenuClick(item)}
+                          title={!isExpanded ? item.label : undefined}
+                          role="button"
+                          tabIndex={0}
+                          onKeyDown={(e) =>
+                            (e.key === "Enter" || e.key === " ") && handleMenuClick(item)
+                          }
+                          style={{ "--item-gradient": gradient }}
+                        >
+                          <span className="active-indicator" />
+                          <div className={`item-content ${isExpanded ? "expanded" : "collapsed"}`}>
+                            <i
+                              className={`bi ${item.icon} item-icon`}
+                              aria-hidden="true"
+                              style={{ color: palette[ii % palette.length] }}
+                            />
+                            <span className="item-label">{item.label}</span>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
             );
           })}
 
@@ -1656,62 +1584,7 @@ export default function Sidebar({ headerHeight = 56 }) {
         </nav>
       </aside>
 
-      {selectedGroup && (
-        <section
-          id="sidebar-submenu-panel"
-          className="sidebar-submenu-panel"
-          style={asideStyle}
-          aria-label={`${selectedGroup.heading} menu`}
-        >
-          <div className="sidebar-submenu-header">
-            <div>
-              <div className="sidebar-submenu-eyebrow">Navigation</div>
-              <h2>{selectedGroup.heading}</h2>
-              <p>{selectedGroup.items.length} available options</p>
-            </div>
-            <button
-              type="button"
-              className="sidebar-submenu-close"
-              onClick={() => setActiveMenuGroup("")}
-              aria-label="Close submenu"
-            >
-              <i className="bi bi-x-lg" />
-            </button>
-          </div>
-
-          <div className="sidebar-submenu-list">
-            {selectedGroup.items.map((item, ii) => {
-              const active = isPathActive(item.path);
-              return (
-                <button
-                  key={item.key}
-                  type="button"
-                  className={`sidebar-submenu-item ${active ? "active" : ""}`}
-                  onClick={() => handleMenuClick(item)}
-                >
-                  <span
-                    className="sidebar-submenu-icon"
-                    style={{ color: palette[ii % palette.length] }}
-                  >
-                    <i className={`bi ${item.icon}`} aria-hidden="true" />
-                  </span>
-                  <span className="sidebar-submenu-copy">
-                    <span className="sidebar-submenu-label">{item.label}</span>
-                    <span className="sidebar-submenu-path">{item.path}</span>
-                  </span>
-                  <i className="bi bi-arrow-right-short sidebar-submenu-arrow" aria-hidden="true" />
-                </button>
-              );
-            })}
-          </div>
-        </section>
-      )}
-
-      <div
-        className={`sidebar-scrim ${selectedGroup ? "submenu-open" : ""}`}
-        onClick={() => setActiveMenuGroup("")}
-        aria-hidden="true"
-      />
+      <div className="sidebar-scrim" aria-hidden="true" />
     </>
   );
 }

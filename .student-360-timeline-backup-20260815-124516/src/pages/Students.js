@@ -35,7 +35,6 @@ const getPermissionFlags = () => {
 
   const isAdmin = roles.includes("admin");
   const isSuperadmin = roles.includes("superadmin");
-  const isPrincipal = roles.includes("principal");
   const isAccounts = roles.includes("accounts");
   const isFrontoffice = roles.includes("frontoffice");
   const isCoordinator = roles.includes("academic_coordinator") || roles.includes("coordinator");
@@ -66,7 +65,6 @@ const getPermissionFlags = () => {
     permissions,
     isAdmin,
     isSuperadmin,
-    isPrincipal,
     isAccounts,
     isFrontoffice,
     isCoordinator,
@@ -317,7 +315,6 @@ const Students = () => {
   const {
     isAdmin,
     isSuperadmin,
-    isPrincipal,
     canManageStudents,
     canAddStudents,
     canEditStudents,
@@ -387,8 +384,7 @@ const Students = () => {
   const [search, setSearch] = useState("");
   const [selectedClass, setSelectedClass] = useState("");
   const [selectedSection, setSelectedSection] = useState("");
-  // Keep active and inactive records segregated. Active is the default view.
-  const [selectedStatus, setSelectedStatus] = useState("enabled");
+  const [selectedStatus, setSelectedStatus] = useState("");
   const [selectedSessionFilter, setSelectedSessionFilter] = useState("");
   const [hasSiblingFilter, setHasSiblingFilter] = useState("");
   const [importing, setImporting] = useState(false);
@@ -2050,7 +2046,7 @@ const Students = () => {
     });
   };
 
-  const studentsMatchingFilters = useMemo(() => {
+  const filteredStudents = useMemo(() => {
     const q = normalizeSearchText(search);
 
     return students
@@ -2073,12 +2069,13 @@ const Students = () => {
         const classMatch = !selectedClass || String(stu.class_id) === String(selectedClass);
         const sectionMatch =
           !selectedSection || String(stu.section_id) === String(selectedSection);
+        const statusMatch = !selectedStatus || stu.status === selectedStatus;
         const hasSibling = studentHasSibling(stu);
         let siblingMatch = true;
         if (hasSiblingFilter === "has") siblingMatch = hasSibling;
         if (hasSiblingFilter === "no") siblingMatch = !hasSibling;
 
-        return textMatch && classMatch && sectionMatch && siblingMatch;
+        return textMatch && classMatch && sectionMatch && statusMatch && siblingMatch;
       })
       .slice()
       .sort(compareAdmissionNumberAsc);
@@ -2087,18 +2084,14 @@ const Students = () => {
     search,
     selectedClass,
     selectedSection,
+    selectedStatus,
     hasSiblingFilter,
     admissionTypes,
   ]);
 
-  const filteredStudents = useMemo(
-    () => studentsMatchingFilters.filter((stu) => stu.status === selectedStatus),
-    [studentsMatchingFilters, selectedStatus]
-  );
-
-  const enabledCount = studentsMatchingFilters.filter((s) => s.status === "enabled").length;
-  const disabledCount = studentsMatchingFilters.filter((s) => s.status === "disabled").length;
-  const totalCount = enabledCount + disabledCount;
+  const totalCount = filteredStudents.length;
+  const enabledCount = filteredStudents.filter((s) => s.status === "enabled").length;
+  const disabledCount = filteredStudents.filter((s) => s.status === "disabled").length;
 
   const handleSiblingClick = async (token) => {
     if (!token) return;
@@ -2513,27 +2506,6 @@ const Students = () => {
 
       {/* Filters + table */}
       <div className="card border-0 shadow-sm" style={{ borderRadius: 18, overflow: "hidden" }}>
-        <div className="students-status-tabs" role="tablist" aria-label="Student status">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={selectedStatus === "enabled"}
-            className={`students-status-tab ${selectedStatus === "enabled" ? "active" : ""}`}
-            onClick={() => setSelectedStatus("enabled")}
-          >
-            Active Students <span>{enabledCount}</span>
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={selectedStatus === "disabled"}
-            className={`students-status-tab ${selectedStatus === "disabled" ? "active" : ""}`}
-            onClick={() => setSelectedStatus("disabled")}
-          >
-            Inactive Students <span>{disabledCount}</span>
-          </button>
-        </div>
-
         {/* ✅ compact filter bar + hides extra filters in compact mode */}
         <div className="card-header bg-white border-0 py-3">
           <div className="d-flex flex-wrap gap-2 align-items-center students-filters-row">
@@ -2593,6 +2565,17 @@ const Students = () => {
                 </select>
 
                 <select
+                  className="form-select form-select-sm d-none d-md-block"
+                  style={{ maxWidth: 150 }}
+                  value={selectedStatus}
+                  onChange={(e) => setSelectedStatus(e.target.value)}
+                >
+                  <option value="">All Status</option>
+                  <option value="enabled">Active</option>
+                  <option value="disabled">Inactive</option>
+                </select>
+
+                <select
                   className="form-select form-select-sm d-none d-lg-block"
                   style={{ maxWidth: 160 }}
                   value={hasSiblingFilter}
@@ -2611,7 +2594,7 @@ const Students = () => {
                 setSearch("");
                 setSelectedClass("");
                 setSelectedSection("");
-                setSelectedStatus("enabled");
+                setSelectedStatus("");
                 setSelectedSessionFilter("");
                 setHasSiblingFilter("");
               }}
@@ -2944,7 +2927,7 @@ const Students = () => {
 
                                   {openActionMenuId === stu.id && (
                                     <div className="students-more-menu" onClick={(e) => e.stopPropagation()}>
-                                      {(isAdmin || isSuperadmin || isPrincipal) && (
+                                      {(isAdmin || isSuperadmin) && (
                                         <button
                                           type="button"
                                           className="students-more-item"

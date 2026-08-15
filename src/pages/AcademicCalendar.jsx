@@ -16,6 +16,7 @@ const getRoleFlags = () => {
     isAdmin: norm.includes("admin"),
     isSuperadmin: norm.includes("superadmin"),
     isFrontoffice: norm.includes("frontoffice"),
+    isHR: norm.includes("hr"),
     isCoordinator:
       norm.includes("coordinator") ||
       norm.includes("academic_coordinator") ||
@@ -34,6 +35,18 @@ const EVENT_TYPES = [
   "SYLLABUS_DEADLINE",
   "RESULT",
   "OTHER",
+];
+
+const PERFORMANCE_DAY_TYPES = [
+  ["", "AUTO (infer from event type)"],
+  ["TEACHING", "Teaching Day"],
+  ["NON_TEACHING", "Non-Teaching Working Day"],
+  ["HOLIDAY", "Holiday"],
+  ["EXAM", "Exam / No Regular Teaching"],
+  ["ACTIVITY", "Activity / Event"],
+  ["PTM", "PTM"],
+  ["TRAINING", "Training"],
+  ["OTHER", "Other Working Day"],
 ];
 
 /* ---------------- Small Helpers ---------------- */
@@ -67,8 +80,8 @@ const safeJsonParse = (s) => {
 };
 
 const AcademicCalendar = () => {
-  const { isAdmin, isSuperadmin, isFrontoffice, isCoordinator } = useMemo(getRoleFlags, []);
-  const canUse = isAdmin || isSuperadmin || isFrontoffice || isCoordinator;
+  const { isAdmin, isSuperadmin, isFrontoffice, isCoordinator, isHR } = useMemo(getRoleFlags, []);
+  const canUse = isAdmin || isSuperadmin || isFrontoffice || isCoordinator || isHR;
 
   /* ---------------- Lists / Masters ---------------- */
   const [schools, setSchools] = useState([]);
@@ -122,6 +135,7 @@ const AcademicCalendar = () => {
     start_time: "",
     end_time: "",
     class_scope: "ALL",
+    day_type: "",
     is_working_day: true,
     is_public_holiday: false,
     exam_name: "",
@@ -365,7 +379,8 @@ const AcademicCalendar = () => {
       const type = String(ev.type || "").toLowerCase();
       const exam = String(ev.exam_name || "").toLowerCase();
       const scope = String(ev.class_scope || "").toLowerCase();
-      return title.includes(s) || desc.includes(s) || type.includes(s) || exam.includes(s) || scope.includes(s);
+      const dayType = String(ev.day_type || "").toLowerCase();
+      return title.includes(s) || desc.includes(s) || type.includes(s) || exam.includes(s) || scope.includes(s) || dayType.includes(s);
     });
   }, [events, eventSearch]);
 
@@ -390,6 +405,7 @@ const AcademicCalendar = () => {
       start_time: ev.start_time || "",
       end_time: ev.end_time || "",
       class_scope: ev.class_scope || "ALL",
+      day_type: ev.day_type || "",
       is_working_day: ev.is_working_day !== undefined ? !!ev.is_working_day : true,
       is_public_holiday: ev.is_public_holiday !== undefined ? !!ev.is_public_holiday : false,
       exam_name: ev.exam_name || "",
@@ -428,6 +444,7 @@ const AcademicCalendar = () => {
         start_time: eventForm.start_time || null,
         end_time: eventForm.end_time || null,
         class_scope: eventForm.class_scope || "ALL",
+        day_type: eventForm.day_type || null,
         is_working_day: !!eventForm.is_working_day,
         is_public_holiday: !!eventForm.is_public_holiday,
         exam_name: eventForm.exam_name || null,
@@ -844,6 +861,7 @@ const AcademicCalendar = () => {
                       <th>Type</th>
                       <th>Title</th>
                       <th>Scope</th>
+                      <th>Day Type</th>
                       <th>Working</th>
                       <th style={{ width: 220 }}>Actions</th>
                     </tr>
@@ -862,6 +880,7 @@ const AcademicCalendar = () => {
                           {ev.exam_name ? <span className="text-muted"> • {ev.exam_name}</span> : null}
                         </td>
                         <td>{ev.class_scope || "ALL"}</td>
+                        <td><span className="badge text-bg-light border">{ev.day_type || "AUTO"}</span></td>
                         <td>
                           <span className={ev.is_working_day ? "badge bg-success" : "badge bg-danger"}>
                             {ev.is_working_day ? "YES" : "NO"}
@@ -927,7 +946,7 @@ const AcademicCalendar = () => {
 
               <div className="modal-body">
                 <div className="row g-3">
-                  <div className="col-12 col-lg-3">
+                  <div className="col-12 col-lg-2">
                     <label className="form-label">Type</label>
                     <select className="form-select" value={eventForm.type} onChange={(e) => setEventForm((p) => ({ ...p, type: e.target.value }))}>
                       {EVENT_TYPES.map((t) => (
@@ -938,7 +957,15 @@ const AcademicCalendar = () => {
                     </select>
                   </div>
 
-                  <div className="col-12 col-lg-6">
+                  <div className="col-12 col-lg-3">
+                    <label className="form-label">Teaching / Performance Day</label>
+                    <select className="form-select" value={eventForm.day_type || ""} onChange={(e) => setEventForm((p) => ({ ...p, day_type: e.target.value }))}>
+                      {PERFORMANCE_DAY_TYPES.map(([value, label]) => <option key={value || "AUTO"} value={value}>{label}</option>)}
+                    </select>
+                    <div className="form-text">Can apply to ALL or only the class scope below.</div>
+                  </div>
+
+                  <div className="col-12 col-lg-4">
                     <label className="form-label">Title *</label>
                     <input
                       className="form-control"

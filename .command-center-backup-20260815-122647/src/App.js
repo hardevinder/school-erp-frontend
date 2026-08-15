@@ -100,10 +100,6 @@ import StudentHealthGrowth from "./pages/StudentHealthGrowth";
 import DailyReadiness from "./pages/DailyReadiness";
 import LostFound from "./pages/LostFound";
 import TeacherPerformance from "./pages/TeacherPerformance";
-import SchoolCommandCenter from "./pages/SchoolCommandCenter";
-import ParentConsents from "./pages/ParentConsents";
-import UnifiedActionInbox from "./pages/UnifiedActionInbox";
-import SchoolAiAssistant from "./pages/SchoolAiAssistant"; // SCHOOL_AI_IMPORT_V12
 import StudentActivitiesAchievements from "./pages/StudentActivitiesAchievements";
 import EmployeeManagement from "./pages/EmployeeManagement";
 import EmployeeUserAccounts from "./pages/EmployeeUserAccounts";
@@ -451,30 +447,6 @@ function App() {
         {/* Protected App w/ Layout (TopBar + Sidebar) */}
         <Route element={<AppLayout key={activeAdmission} />}>
           <Route path="/dashboard" element={<RoleAwareDashboard />} />
-          <Route
-            path="/command-center"
-            element={
-              <RequireRole roles={["principal", "admin", "superadmin", "super_admin", "academic_coordinator", "coordinator", "hr"]}>
-                <SchoolCommandCenter />
-              </RequireRole>
-            }
-          />
-          <Route
-            path="/action-inbox"
-            element={
-              <RequireRole roles={["principal", "admin", "superadmin", "super_admin", "academic_coordinator", "coordinator", "department_hod", "teacher", "hr", "accounts", "account", "accountant", "frontoffice", "transport", "examination", "health_staff", "doctor", "nurse", "medical_officer", "counsellor", "counselor"]}>
-                <UnifiedActionInbox />
-              </RequireRole>
-            }
-          />
-          <Route
-            path="/school-ai"
-            element={
-              <RequireRole roles={["principal", "admin", "superadmin", "super_admin", "academic_coordinator", "coordinator", "hr"]}>
-                <SchoolAiAssistant />
-              </RequireRole>
-            }
-          /> {/* SCHOOL_AI_APP_ROUTE_V12 */}
           <Route path="/edit-profile" element={<EditProfile />} />
 
           {/* ✅ Messages / Fee Reminder / Student-Teacher Chat */}
@@ -504,7 +476,7 @@ function App() {
           <Route
             path="/transport-dashboard"
             element={
-              <RequireRole roles={["transport", "admin", "superadmin", "principal", "accounts"]}>
+              <RequireRole roles={["transport", "admin", "superadmin", "accounts"]}>
                 <TransportDashboard />
               </RequireRole>
             }
@@ -571,13 +543,13 @@ function App() {
             element={
               <RequirePermission
                 permissions={["students_view"]}
-                fallbackRoles={["admin", "superadmin", "principal", "accounts", "frontoffice"]}
+                fallbackRoles={["admin", "superadmin", "accounts", "frontoffice"]}
               >
                 <Student />
               </RequirePermission>
             }
           />
-          <Route path="/student-360/:studentId" element={<RequireRole roles={["admin", "superadmin", "principal"]}><Student360Portal /></RequireRole>} />
+          <Route path="/student-360/:studentId" element={<RequireRole roles={["admin", "superadmin"]}><Student360Portal /></RequireRole>} />
 
           <Route
             path="/student-id-cards"
@@ -866,7 +838,7 @@ function App() {
           <Route
             path="/transport-staff"
             element={
-              <RequireRole roles={["transport", "transport_admin", "admin", "superadmin", "principal", "accounts"]}>
+              <RequireRole roles={["transport", "transport_admin", "admin", "superadmin", "accounts"]}>
                 <TransportStaff />
               </RequireRole>
             }
@@ -1204,18 +1176,9 @@ function App() {
           />
 
           <Route
-            path="/parent-consents"
-            element={
-              <RequireRole roles={["superadmin", "super_admin", "admin", "principal", "hr", "academic_coordinator", "coordinator"]}>
-                <ParentConsents />
-              </RequireRole>
-            }
-          />
-
-          <Route
             path="/teacher-performance"
             element={
-              <RequireRole roles={["superadmin", "super_admin", "admin", "principal", "hr", "academic_coordinator", "coordinator", "teacher", "department_hod"]}>
+              <RequireRole roles={["superadmin", "super_admin", "admin", "hr", "academic_coordinator", "coordinator", "teacher", "department_hod"]}>
                 <TeacherPerformance />
               </RequireRole>
             }
@@ -1264,7 +1227,7 @@ function App() {
           <Route
             path="/online-classes"
             element={
-              <RequireRole roles={["superadmin", "admin", "principal", "academic_coordinator", "teacher", "student", "parent"]}>
+              <RequireRole roles={["superadmin", "admin", "academic_coordinator", "teacher", "student", "parent"]}>
                 <OnlineClasses />
               </RequireRole>
             }
@@ -1572,7 +1535,7 @@ function App() {
           <Route
             path="/live-bus-tracking"
             element={
-              <RequireRole roles={["transport", "admin", "superadmin", "principal"]}>
+              <RequireRole roles={["transport", "admin", "superadmin"]}>
                 <LiveBusTracking />
               </RequireRole>
             }

@@ -10,9 +10,8 @@ import StudentTimetableDisplay from "./StudentTimeTableDisplay";
 import StudentDiary from "./StudentDiary";
 import LibraryManagement from "./LibraryManagement";
 import { clearStudent360Session } from "../utils/student360Session";
-import Student360Timeline from "./Student360Timeline";
 
-const tabs = [["overview", "Overview"], ["timeline", "360° Timeline"], ["fees", "Fees"], ["attendance", "Attendance"], ["assignments", "Assignments"], ["diary", "Diary"], ["circulars", "Circulars"], ["timetable", "Timetable"], ["library", "Library"]];
+const tabs = [["overview", "Overview"], ["fees", "Fees"], ["attendance", "Attendance"], ["assignments", "Assignments"], ["diary", "Diary"], ["circulars", "Circulars"], ["timetable", "Timetable"], ["library", "Library"]];
 
 export default function Student360Portal() {
   const { studentId } = useParams();
@@ -47,7 +46,7 @@ export default function Student360Portal() {
   if (loading) return <div className="container py-5 text-center">Opening student portal…</div>;
   if (error) return <div className="container py-4"><div className="alert alert-danger">{error}</div></div>;
 
-  const views = { overview: <StudentDashboard />, timeline: <Student360Timeline />, fees: <StudentFeePage />, attendance: <StudentAttendance />, assignments: <StudentSideAssignment />, diary: <StudentDiary />, circulars: <StudentCirculars />, timetable: <StudentTimetableDisplay />, library: <LibraryManagement studentView /> };
+  const views = { overview: <StudentDashboard />, fees: <StudentFeePage />, attendance: <StudentAttendance />, assignments: <StudentSideAssignment />, diary: <StudentDiary />, circulars: <StudentCirculars />, timetable: <StudentTimetableDisplay />, library: <LibraryManagement studentView /> };
   const routeToTab = { "/student-fee": "fees", "/student-attendance": "attendance", "/my-assignments": "assignments", "/student-diary": "diary", "/student-circulars": "circulars", "/student-timetable-display": "timetable", "/my-library": "library" };
   const handleNavigation = (event) => {
     const anchor = event.target.closest("a[href]");
