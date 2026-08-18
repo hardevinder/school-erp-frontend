@@ -179,7 +179,7 @@ export default function SchoolCommandCenter() {
           icon="bi-graph-up-arrow"
           label="Teacher Performance Watch"
           value={fmt(data?.teacher_performance?.below_threshold)}
-          meta={`${fmt(data?.teacher_performance?.snapshots)} current-month snapshots • watch below ${fmt(data?.teacher_performance?.threshold)}`}
+          meta={`${fmt(data?.teacher_performance?.snapshots)} snapshots • avg learning growth ${data?.teacher_performance?.teaching_result?.average_growth_points == null ? "building" : `${Number(data.teacher_performance.teaching_result.average_growth_points) >= 0 ? "+" : ""}${Number(data.teacher_performance.teaching_result.average_growth_points).toFixed(1)} pts`}`}
           onClick={() => navigate("/teacher-performance")}
           tone="rose"
         />
@@ -224,7 +224,7 @@ export default function SchoolCommandCenter() {
         )}
 
         <section className="cc-card">
-          <div className="cc-card-head"><div><span className="cc-eyebrow">Teacher Pulse</span><h3>Performance Watch</h3></div><button className="btn btn-sm btn-outline-primary" onClick={() => navigate("/teacher-performance")}>Open</button></div>
+          <div className="cc-card-head"><div><span className="cc-eyebrow">Teacher Pulse</span><h3>Performance & Learning Growth</h3><small>{data?.teacher_performance?.teaching_result?.teachers ? `${fmt(data.teacher_performance.teaching_result.positive_growth_teachers)}/${fmt(data.teacher_performance.teaching_result.teachers)} teachers showing positive learning growth` : "Teaching-result evidence builds automatically from assessments and exams."}</small></div><button className="btn btn-sm btn-outline-primary" onClick={() => navigate("/teacher-performance")}>Open</button></div>
           {(data?.teacher_performance?.lowest || []).length ? (
             <div className="cc-teacher-list">
               {data.teacher_performance.lowest.map((teacher) => (

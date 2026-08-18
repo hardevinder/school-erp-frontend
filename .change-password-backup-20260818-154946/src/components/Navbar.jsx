@@ -683,16 +683,6 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
                   </Link>
                 </li>
                 <li>
-                  <Link
-                    className="dropdown-item"
-                    to="/change-password"
-                    onClick={() => setDropdownOpen(false)}
-                  >
-                    <i className="bi bi-key me-2" />
-                    Change Password
-                  </Link>
-                </li> {/* CHANGE_PASSWORD_NAVBAR_V1 */}
-                <li>
                   <hr className="dropdown-divider" />
                 </li>
                 <li>

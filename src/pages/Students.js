@@ -1292,8 +1292,9 @@ const Students = () => {
       cancelButtonText: "Cancel",
       focusConfirm: false,
       showLoaderOnConfirm: true,
+      allowOutsideClick: false,
       customClass: { popup: "student-swal" },
-      preConfirm: () => {
+      preConfirm: async () => {
         const rawRouteVal = document.getElementById("f_route_id")?.value;
         const routeVal = rawRouteVal === "" ? null : Number(rawRouteVal);
 
@@ -1387,7 +1388,22 @@ const Students = () => {
           return false;
         }
 
-        return payload;
+        try {
+          if (isEdit) {
+            await api.put(`/students/edit/${s.id}`, payload);
+          } else {
+            await api.post("/students/add", payload);
+          }
+          return payload;
+        } catch (err) {
+          console.error("showStudentForm submit:", err);
+          const message =
+            err.response?.data?.error ||
+            err.response?.data?.message ||
+            "Failed to save student record";
+          Swal.showValidationMessage(message);
+          return false;
+        }
       },
       didOpen: () => {
         const closeBtn = document.getElementById("studentSwalCloseBtn");
@@ -1663,21 +1679,14 @@ const Students = () => {
     });
 
     if (!popup.isConfirmed) return;
-    const payload = popup.value;
-
-    try {
-      if (isEdit) {
-        await api.put(`/students/edit/${s.id}`, payload);
-        Swal.fire("Success", "Student record updated successfully", "success");
-      } else {
-        await api.post("/students/add", payload);
-        Swal.fire("Success", "New student added successfully", "success");
-      }
-      fetchStudents();
-    } catch (err) {
-      console.error("showStudentForm submit:", err);
-      Swal.fire("Error", err.response?.data?.error || "Failed to save student record", "error");
-    }
+    Swal.fire(
+      "Success",
+      isEdit
+        ? "Student record updated successfully"
+        : "New student added successfully",
+      "success"
+    );
+    fetchStudents();
   };
 
   const handleAdd = () => {

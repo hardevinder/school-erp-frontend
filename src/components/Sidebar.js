@@ -197,6 +197,7 @@ export default function Sidebar({ headerHeight = 56 }) {
   const [q, setQ] = useState("");
 
   const [activeMenuGroup, setActiveMenuGroup] = useState("");
+  const [submenuQuery, setSubmenuQuery] = useState("");
 
   const menuGroups = useMemo(() => {
     const groups = [];
@@ -1528,8 +1529,21 @@ export default function Sidebar({ headerHeight = 56 }) {
     setActiveMenuGroup("");
   }, [location.pathname]);
 
+  useEffect(() => {
+    setSubmenuQuery("");
+  }, [activeMenuGroup]);
+
   const selectedGroup =
     filteredGroups.find((group) => group.heading === activeMenuGroup) || null;
+
+  const selectedSubmenuItems = useMemo(() => {
+    if (!selectedGroup) return [];
+    const search = submenuQuery.trim().toLowerCase();
+    if (!search) return selectedGroup.items;
+    return selectedGroup.items.filter((item) =>
+      `${item.label || ""} ${item.path || ""}`.toLowerCase().includes(search)
+    );
+  }, [selectedGroup, submenuQuery]);
 
   const handleMenuClick = (item) => {
     navigate(item.path);
@@ -1603,15 +1617,31 @@ export default function Sidebar({ headerHeight = 56 }) {
           </button>
         </div>
 
-        <div className="px-3 py-2">
-          <input
-            type="search"
-            className="form-control form-control-sm"
-            placeholder="Search menu..."
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            aria-label="Search menu"
-          />
+        <div className="sidebar-search-wrap">
+          <div className={`sidebar-search ${q ? "has-value" : ""}`}>
+            <i className="bi bi-search sidebar-search-icon" aria-hidden="true" />
+            <input
+              type="search"
+              placeholder="Find a menu"
+              value={q}
+              onChange={(e) => {
+                setQ(e.target.value);
+                setActiveMenuGroup("");
+              }}
+              aria-label="Search sidebar menu"
+            />
+            {q && (
+              <button
+                type="button"
+                className="sidebar-search-clear"
+                onClick={() => setQ("")}
+                aria-label="Clear menu search"
+                title="Clear search"
+              >
+                <i className="bi bi-x" aria-hidden="true" />
+              </button>
+            )}
+          </div>
         </div>
 
         <nav className="sidebar-category-nav mt-1" aria-label="Menu categories">
@@ -1690,7 +1720,9 @@ export default function Sidebar({ headerHeight = 56 }) {
             <div>
               <div className="sidebar-submenu-eyebrow">Navigation</div>
               <h2>{selectedGroup.heading}</h2>
-              <p>{selectedGroup.items.length} available options</p>
+              <p>
+                {selectedSubmenuItems.length} of {selectedGroup.items.length} available options
+              </p>
             </div>
             <button
               type="button"
@@ -1702,8 +1734,31 @@ export default function Sidebar({ headerHeight = 56 }) {
             </button>
           </div>
 
+          <div className="sidebar-submenu-search-wrap">
+            <div className={`sidebar-submenu-search ${submenuQuery ? "has-value" : ""}`}>
+              <i className="bi bi-search" aria-hidden="true" />
+              <input
+                type="search"
+                value={submenuQuery}
+                onChange={(event) => setSubmenuQuery(event.target.value)}
+                placeholder={`Search ${selectedGroup.heading}`}
+                aria-label={`Search ${selectedGroup.heading} submenu`}
+                autoFocus
+              />
+              {submenuQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSubmenuQuery("")}
+                  aria-label="Clear submenu search"
+                >
+                  <i className="bi bi-x-lg" aria-hidden="true" />
+                </button>
+              )}
+            </div>
+          </div>
+
           <div className="sidebar-submenu-list">
-            {selectedGroup.items.map((item, ii) => {
+            {selectedSubmenuItems.map((item, ii) => {
               const active = isPathActive(item.path);
               return (
                 <button
@@ -1726,6 +1781,11 @@ export default function Sidebar({ headerHeight = 56 }) {
                 </button>
               );
             })}
+            {selectedSubmenuItems.length === 0 && (
+              <div className="sidebar-submenu-empty">
+                No options match “{submenuQuery}”.
+              </div>
+            )}
           </div>
         </section>
       )}

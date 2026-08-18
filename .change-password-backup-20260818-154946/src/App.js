@@ -10,7 +10,6 @@ import AppLayout from "./layouts/AppLayout";
 import Login from "./components/Login";
 import RoleAwareDashboard from "./components/RoleAwareDashboard";
 import EditProfile from "./components/EditProfile";
-import ChangePassword from "./pages/ChangePassword"; // CHANGE_PASSWORD_WEB_V1
 import Chat from "./components/Chat";
 import ChatContainer from "./components/chat/ChatContainer";
 import ExaminationDashboard from "./components/ExaminationDashboard";
@@ -505,7 +504,6 @@ function App() {
             }
           /> {/* HOUSE_DUTY_ROUTE_V15 */}
           <Route path="/edit-profile" element={<EditProfile />} />
-          <Route path="/change-password" element={<ChangePassword />} /> {/* CHANGE_PASSWORD_WEB_ROUTE_V1 */}
 
           {/* ✅ Messages / Fee Reminder / Student-Teacher Chat */}
           <Route

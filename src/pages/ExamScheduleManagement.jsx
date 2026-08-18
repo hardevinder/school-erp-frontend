@@ -8,6 +8,7 @@ const ExamScheduleManagement = () => {
   const [schedules, setSchedules] = useState([]);
   const [draftRows, setDraftRows] = useState([]);
   const [dirtyIds, setDirtyIds] = useState(new Set());
+  const [publishing, setPublishing] = useState(false);
 
   const [sessions, setSessions] = useState([]);
   const [exams, setExams] = useState([]);
@@ -40,6 +41,21 @@ const ExamScheduleManagement = () => {
   const [showModal, setShowModal] = useState(false);
   const [copySourceClassId, setCopySourceClassId] = useState(null);
   const [showClassCopyModal, setShowClassCopyModal] = useState(false);
+  const [showBulkModal, setShowBulkModal] = useState(false);
+  const [bulkSaving, setBulkSaving] = useState(false);
+  const [bulkSubjectSearch, setBulkSubjectSearch] = useState("");
+  const [schemeSubjectsByClass, setSchemeSubjectsByClass] = useState({});
+  const [bulkData, setBulkData] = useState({
+    session_id: "",
+    term_id: "",
+    exam_id: "",
+    exam_date: "",
+    start_time: "",
+    end_time: "",
+    class_ids: [],
+    section_ids: [],
+    subject_keys: [],
+  });
   const [classCopyData, setClassCopyData] = useState({
     from_session_id: "",
     from_class_id: "",
@@ -115,6 +131,143 @@ const ExamScheduleManagement = () => {
 
   const handleFilterChange = (e) => {
     setFilters((p) => ({ ...p, [e.target.name]: e.target.value }));
+  };
+
+  useEffect(() => {
+    const loadSchemeSubjects = async () => {
+      if (!bulkData.session_id || !bulkData.term_id || !bulkData.class_ids.length) {
+        setSchemeSubjectsByClass({});
+        return;
+      }
+      try {
+        const results = await Promise.all(
+          bulkData.class_ids.map(async (classId) => {
+            const response = await api.get("/exam-schemes", {
+              params: {
+                session_id: bulkData.session_id,
+                term_id: bulkData.term_id,
+                class_id: classId,
+              },
+            });
+            const unique = new Map();
+            (response.data || []).forEach((row) => {
+              const subject = row.subject || subjects.find((item) => String(item.id) === String(row.subject_id));
+              if (subject?.id !== undefined) unique.set(String(subject.id), subject);
+            });
+            return [String(classId), [...unique.values()]];
+          })
+        );
+        setSchemeSubjectsByClass(Object.fromEntries(results));
+      } catch (error) {
+        console.error(error);
+        setSchemeSubjectsByClass({});
+        Swal.fire("Error", "Could not load subjects from the selected exam schemes.", "error");
+      }
+    };
+    loadSchemeSubjects();
+  }, [bulkData.session_id, bulkData.term_id, bulkData.class_ids, subjects]);
+
+  const openBulkModal = () => {
+    setBulkSubjectSearch("");
+    setBulkData({
+      session_id: filters.session_id || "",
+      term_id: filters.term_id || "",
+      exam_id: filters.exam_id || "",
+      exam_date: "",
+      start_time: "",
+      end_time: "",
+      class_ids: filters.class_id !== "" ? [String(filters.class_id)] : [],
+      section_ids: filters.section_id !== "" ? [String(filters.section_id)] : [],
+      subject_keys: [],
+    });
+    setShowBulkModal(true);
+  };
+
+  const toggleBulkClass = (classId) => {
+    const id = String(classId);
+    setBulkData((previous) => {
+      const selected = previous.class_ids.includes(id);
+      const classSectionIds = sections
+        .filter((section) => String(section.class_id) === id)
+        .map((section) => String(section.id));
+      return {
+        ...previous,
+        class_ids: selected
+          ? previous.class_ids.filter((value) => value !== id)
+          : [...previous.class_ids, id],
+        section_ids: selected
+          ? previous.section_ids.filter((value) => !classSectionIds.includes(value))
+          : [...new Set([...previous.section_ids, ...classSectionIds])],
+        subject_keys: selected
+          ? previous.subject_keys.filter((key) => !key.startsWith(`${id}:`))
+          : previous.subject_keys,
+      };
+    });
+  };
+
+  const toggleBulkValue = (field, value) => {
+    const id = String(value);
+    setBulkData((previous) => ({
+      ...previous,
+      [field]: previous[field].includes(id)
+        ? previous[field].filter((item) => item !== id)
+        : [...previous[field], id],
+    }));
+  };
+
+  const bulkItems = useMemo(() => {
+    const items = [];
+    bulkData.class_ids.forEach((classId) => {
+      const classSections = sections.filter(
+        (section) =>
+          String(section.class_id) === String(classId) &&
+          bulkData.section_ids.includes(String(section.id))
+      );
+      const subjectIds = bulkData.subject_keys
+        .filter((key) => key.startsWith(`${classId}:`))
+        .map((key) => key.split(":")[1]);
+      classSections.forEach((section) => {
+        subjectIds.forEach((subjectId) => items.push({
+          class_id: Number(classId),
+          section_id: Number(section.id),
+          subject_id: Number(subjectId),
+        }));
+      });
+    });
+    return items;
+  }, [bulkData.class_ids, bulkData.section_ids, bulkData.subject_keys, sections]);
+
+  const handleBulkSubmit = async () => {
+    const required = ["session_id", "term_id", "exam_id", "exam_date", "start_time", "end_time"];
+    if (required.some((field) => !bulkData[field]) || !bulkItems.length) {
+      return Swal.fire("Required", "Select session, term, exam, date/time and at least one class, section and subject.", "warning");
+    }
+    if (bulkData.start_time >= bulkData.end_time) {
+      return Swal.fire("Invalid Time", "End time must be after start time.", "warning");
+    }
+    try {
+      setBulkSaving(true);
+      const response = await api.post("/exam-schedules/bulk", {
+        session_id: Number(bulkData.session_id),
+        term_id: Number(bulkData.term_id),
+        exam_id: Number(bulkData.exam_id),
+        exam_date: bulkData.exam_date,
+        start_time: bulkData.start_time,
+        end_time: bulkData.end_time,
+        items: bulkItems,
+      });
+      setShowBulkModal(false);
+      await fetchSchedules();
+      await Swal.fire(
+        "Schedules Created",
+        `${response.data.created || 0} created; ${response.data.skipped || 0} existing row(s) skipped.`,
+        "success"
+      );
+    } catch (error) {
+      Swal.fire("Error", error.response?.data?.error || "Failed to create schedules", "error");
+    } finally {
+      setBulkSaving(false);
+    }
   };
 
   const handleGenerateFromScheme = async () => {
@@ -552,12 +705,62 @@ const ExamScheduleManagement = () => {
     }
   };
 
+  const hasSelection = (value) =>
+    value !== "" && value !== null && value !== undefined;
   const canGenerate =
-    !!filters.session_id &&
-    !!filters.term_id &&
-    !!filters.exam_id &&
-    !!filters.class_id &&
-    !!filters.section_id;
+    hasSelection(filters.session_id) &&
+    hasSelection(filters.term_id) &&
+    hasSelection(filters.exam_id) &&
+    hasSelection(filters.class_id) &&
+    hasSelection(filters.section_id);
+
+  const canPublish = canGenerate && schedules.length > 0 && !dirtyIds.size;
+  const isPublished = schedules.length > 0 && schedules.every((row) => row.is_published);
+  const publishDisabledReason = !canGenerate
+    ? "Select Session, Term, Exam, Class and Section"
+    : !schedules.length
+      ? "No schedule rows are available for this selection"
+      : dirtyIds.size
+        ? "Save all date/time changes first"
+        : "";
+
+  const handlePublication = async (publish) => {
+    if (!canPublish) return;
+    const action = publish ? "Publish" : "Unpublish";
+    const confirmation = await Swal.fire({
+      title: `${action} date sheet?`,
+      text: publish
+        ? "Students in this class-section will see it immediately and receive a notification."
+        : "It will be removed from the student app immediately.",
+      icon: "question",
+      showCancelButton: true,
+      confirmButtonText: action,
+    });
+    if (!confirmation.isConfirmed) return;
+
+    try {
+      setPublishing(true);
+      const response = await api.put("/exam-schedules/publication", {
+        ...filters,
+        publish,
+      });
+      await fetchSchedules();
+      const sent = Number(response.data?.notifications_sent || 0);
+      Swal.fire(
+        "Done",
+        publish ? `Date sheet published. ${sent} notification(s) sent.` : "Date sheet unpublished.",
+        "success"
+      );
+    } catch (error) {
+      Swal.fire(
+        "Error",
+        error.response?.data?.message || `Failed to ${action.toLowerCase()} date sheet`,
+        "error"
+      );
+    } finally {
+      setPublishing(false);
+    }
+  };
 
   return (
     <div className="container mt-4">
@@ -589,6 +792,19 @@ const ExamScheduleManagement = () => {
           >
             💾 Save All Dates/Times {dirtyIds.size ? `(${dirtyIds.size})` : ""}
           </Button>
+          <Button
+            variant={isPublished ? "outline-danger" : "dark"}
+            onClick={() => handlePublication(!isPublished)}
+            disabled={!canPublish || publishing}
+            title={publishDisabledReason}
+          >
+            {publishing ? "Please wait…" : isPublished ? "🔒 Unpublish Date Sheet" : "📣 Publish Date Sheet"}
+          </Button>
+          {publishDisabledReason && (
+            <span className="small text-muted align-self-center">
+              {publishDisabledReason}
+            </span>
+          )}
         </div>
       </div>
 
@@ -683,6 +899,9 @@ const ExamScheduleManagement = () => {
               </div>
 
               <div className="d-flex gap-2">
+                <Button variant="success" onClick={openBulkModal}>
+                  🗓️ Create Multiple Schedules
+                </Button>
                 <Button variant="primary" onClick={openAddModal} title="Manual Add (optional)">
                   ➕ Add Schedule
                 </Button>
@@ -742,6 +961,7 @@ const ExamScheduleManagement = () => {
                     <th style={{ width: 160 }}>Date</th>
                     <th style={{ width: 130 }}>Start</th>
                     <th style={{ width: 130 }}>End</th>
+                    <th style={{ width: 105 }}>Status</th>
                     <th style={{ width: 190 }}>Actions</th>
                   </tr>
                 </thead>
@@ -783,6 +1003,12 @@ const ExamScheduleManagement = () => {
                         </td>
 
                         <td>
+                          <span className={`badge ${s.is_published ? "bg-success" : "bg-secondary"}`}>
+                            {s.is_published ? "Published" : "Draft"}
+                          </span>
+                        </td>
+
+                        <td>
                           <Button
                             variant="outline-info"
                             size="sm"
@@ -821,6 +1047,170 @@ const ExamScheduleManagement = () => {
           )}
         </div>
       </div>
+
+      <Modal show={showBulkModal} onHide={() => !bulkSaving && setShowBulkModal(false)} size="xl" centered scrollable>
+        <Modal.Header closeButton={!bulkSaving}>
+          <Modal.Title>🗓️ Bulk Schedule Builder</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <div className="alert alert-light border py-2">
+            Choose one date and time, then select classes, their sections, and the subjects to schedule.
+          </div>
+
+          <div className="row g-3">
+            {[
+              ["session_id", "Session", sessions, "name"],
+              ["term_id", "Term", terms, "name"],
+              ["exam_id", "Exam", exams, "name"],
+            ].map(([field, label, options, labelKey]) => (
+              <div className="col-12 col-md-4" key={field}>
+                <Form.Label>{label} *</Form.Label>
+                <Form.Select
+                  value={bulkData[field]}
+                  onChange={(event) => setBulkData((previous) => ({
+                    ...previous,
+                    [field]: event.target.value,
+                    ...(field === "session_id" || field === "term_id" ? { subject_keys: [] } : {}),
+                  }))}
+                >
+                  <option value="">Select {label}</option>
+                  {options.map((option) => (
+                    <option key={option.id} value={String(option.id)}>{option[labelKey]}</option>
+                  ))}
+                </Form.Select>
+              </div>
+            ))}
+
+            <div className="col-12 col-md-4">
+              <Form.Label>Exam Date *</Form.Label>
+              <Form.Control type="date" value={bulkData.exam_date} onChange={(event) => setBulkData((previous) => ({ ...previous, exam_date: event.target.value }))} />
+            </div>
+            <div className="col-6 col-md-4">
+              <Form.Label>Start Time *</Form.Label>
+              <Form.Control type="time" value={bulkData.start_time} onChange={(event) => setBulkData((previous) => ({ ...previous, start_time: event.target.value }))} />
+            </div>
+            <div className="col-6 col-md-4">
+              <Form.Label>End Time *</Form.Label>
+              <Form.Control type="time" value={bulkData.end_time} onChange={(event) => setBulkData((previous) => ({ ...previous, end_time: event.target.value }))} />
+            </div>
+
+            <div className="col-12">
+              <div className="d-flex justify-content-between align-items-center mb-2">
+                <Form.Label className="m-0 fw-semibold">1. Classes *</Form.Label>
+                <span className="badge bg-primary">{bulkData.class_ids.length} selected</span>
+              </div>
+              <div className="d-flex flex-wrap gap-2 border rounded p-3">
+                {classes.map((item) => (
+                  <Button
+                    type="button"
+                    size="sm"
+                    key={item.id}
+                    variant={bulkData.class_ids.includes(String(item.id)) ? "primary" : "outline-secondary"}
+                    onClick={() => toggleBulkClass(item.id)}
+                  >
+                    {bulkData.class_ids.includes(String(item.id)) ? "✓ " : ""}{item.class_name}
+                  </Button>
+                ))}
+              </div>
+            </div>
+
+            <div className="col-12">
+              <div className="d-flex justify-content-between align-items-center mb-2">
+                <Form.Label className="m-0 fw-semibold">2. Sections *</Form.Label>
+                <span className="badge bg-primary">{bulkData.section_ids.length} selected</span>
+              </div>
+              <div className="row g-2 border rounded p-2">
+                {bulkData.class_ids.length ? bulkData.class_ids.map((classId) => {
+                  const selectedClass = classes.find((item) => String(item.id) === classId);
+                  const classSections = sections.filter((item) => String(item.class_id) === classId);
+                  return (
+                    <div className="col-12 col-md-6 col-lg-4" key={classId}>
+                      <div className="fw-semibold mb-1">{selectedClass?.class_name}</div>
+                      <div className="d-flex flex-wrap gap-3">
+                        {classSections.map((section) => (
+                          <Form.Check
+                            key={section.id}
+                            type="checkbox"
+                            label={section.section_name}
+                            checked={bulkData.section_ids.includes(String(section.id))}
+                            onChange={() => toggleBulkValue("section_ids", section.id)}
+                          />
+                        ))}
+                        {!classSections.length && <span className="small text-muted">No sections found</span>}
+                      </div>
+                    </div>
+                  );
+                }) : <div className="text-muted">Select classes first.</div>}
+              </div>
+            </div>
+
+            <div className="col-12">
+              <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+                <Form.Label className="m-0 fw-semibold">3. Subjects from Exam Scheme *</Form.Label>
+                <Form.Control
+                  type="search"
+                  placeholder="Filter subjects..."
+                  value={bulkSubjectSearch}
+                  onChange={(event) => setBulkSubjectSearch(event.target.value)}
+                  style={{ maxWidth: 280 }}
+                />
+              </div>
+              <div className="row g-3 border rounded p-2" style={{ maxHeight: 300, overflowY: "auto" }}>
+                {bulkData.class_ids.length ? bulkData.class_ids.map((classId) => {
+                  const selectedClass = classes.find((item) => String(item.id) === classId);
+                  const availableSubjects = (schemeSubjectsByClass[classId] || []).filter((subject) =>
+                    subject.name?.toLowerCase().includes(bulkSubjectSearch.trim().toLowerCase())
+                  );
+                  return (
+                    <div className="col-12 col-md-6" key={classId}>
+                      <div className="d-flex justify-content-between mb-2">
+                        <span className="fw-semibold">{selectedClass?.class_name}</span>
+                        {!!availableSubjects.length && (
+                          <button
+                            type="button"
+                            className="btn btn-link btn-sm p-0"
+                            onClick={() => setBulkData((previous) => {
+                              const visibleKeys = availableSubjects.map((subject) => `${classId}:${subject.id}`);
+                              const allSelected = visibleKeys.every((key) => previous.subject_keys.includes(key));
+                              return {
+                                ...previous,
+                                subject_keys: allSelected
+                                  ? previous.subject_keys.filter((key) => !visibleKeys.includes(key))
+                                  : [...new Set([...previous.subject_keys, ...visibleKeys])],
+                              };
+                            })}
+                          >
+                            Select/Clear all
+                          </button>
+                        )}
+                      </div>
+                      {availableSubjects.map((subject) => {
+                        const key = `${classId}:${subject.id}`;
+                        return <Form.Check key={key} className="mb-1" type="checkbox" label={subject.name} checked={bulkData.subject_keys.includes(key)} onChange={() => toggleBulkValue("subject_keys", key)} />;
+                      })}
+                      {!availableSubjects.length && (
+                        <div className="small text-muted">
+                          {bulkData.session_id && bulkData.term_id ? "No matching subjects in the exam scheme." : "Select session and term to load subjects."}
+                        </div>
+                      )}
+                    </div>
+                  );
+                }) : <div className="text-muted">Select classes first.</div>}
+              </div>
+            </div>
+          </div>
+
+          <div className={`alert mt-3 mb-0 ${bulkItems.length ? "alert-success" : "alert-warning"}`}>
+            <b>{bulkItems.length}</b> schedule row(s) will be created. Existing matching rows will be skipped safely.
+          </div>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" disabled={bulkSaving} onClick={() => setShowBulkModal(false)}>Cancel</Button>
+          <Button variant="success" disabled={bulkSaving || !bulkItems.length} onClick={handleBulkSubmit}>
+            {bulkSaving ? "Creating…" : `Create ${bulkItems.length} Schedule(s)`}
+          </Button>
+        </Modal.Footer>
+      </Modal>
 
       <Modal show={showModal} onHide={closeModal} size="lg" centered scrollable>
         <Modal.Header closeButton>

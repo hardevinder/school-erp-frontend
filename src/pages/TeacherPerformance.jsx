@@ -1,5 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import teacherPerformanceApi from "../services/teacherPerformanceApi";
+import {
+  ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+  BarChart, Bar, PieChart, Pie, Cell,
+} from "recharts";
 
 const currentMonth = () => new Date().toISOString().slice(0, 7);
 const today = () => new Date().toISOString().slice(0, 10);
@@ -37,12 +41,153 @@ function ScoreRing({ score = 0, delta = 0, provisional = false }) {
   );
 }
 
-function ComponentCard({ c }) {
+function componentCalculation(c) {
+  const m = c?.metrics || {};
+  if (c?.details?.calculation) return c.details.calculation;
+  if (c?.score == null) return c?.reasons?.[0] || "This component is not applicable for the selected period.";
+
+  switch (c?.code) {
+    case "ATTENDANCE":
+      return `Attendance score is the average attendance credit across ${Number(m.scorable_days || 0)} scorable day(s). Approved leave/excluded days are removed from the denominator. Final score: ${Number(c.score).toFixed(1)}%.`;
+    case "DIARY":
+      return `${Number(m.matched_diary_entries || 0)} matched diary teaching-day(s) ÷ ${Number(m.expected_class_subject_days || 0)} expected teaching-day(s) × 100 = ${Number(c.score).toFixed(1)}%.`;
+    case "LESSON_PLAN":
+      return `${Number(m.credited_plans || 0).toFixed(1)} credited plan(s) ÷ ${Number(m.expected_weekly_class_subject_plans || 0)} expected weekly class-subject plan(s) × 100 = ${Number(c.score).toFixed(1)}%.`;
+    case "SYLLABUS":
+      return `${Number(m.completed_due_items || 0)} completed due syllabus item(s) ÷ ${Number(m.due_items || 0)} due item(s) × 100 = ${Number(c.score).toFixed(1)}%.`;
+    case "ASSESSMENT":
+      return `${Number(m.evaluated_or_published || 0)} completed assessment credit(s) ÷ ${Number(m.effective_expected || 0)} expected credit(s) × 100 = ${Number(c.score).toFixed(1)}%.`;
+    case "STUDENT_PROGRESS":
+      return `Teaching Result ${Number(c.score).toFixed(1)}/100 is based on comparable same-class/section/subject student growth. Within each comparable group: learning growth 45%, proficiency/pass improvement 20%, weak-student recovery 20% when applicable, consistency 10%, and evidence coverage 5%.`;
+    case "SUBSTITUTION":
+      return `${Number(m.inferred_completed || 0).toFixed(1)} inferred completion credit(s) ÷ ${Number(m.scorable || 0)} scorable substitution(s) × 100 = ${Number(c.score).toFixed(1)}%.`;
+    case "DUTY":
+    case "ACHIEVEMENT":
+      return `Score is the average of ${Number(m.rated_entries || 0)} approved rated entr${Number(m.rated_entries || 0) === 1 ? "y" : "ies"} = ${Number(c.score).toFixed(1)}%.`;
+    default:
+      return `Rule-based score for this component = ${Number(c.score).toFixed(1)}%.`;
+  }
+}
+
+function metricLabel(key) {
+  return String(key || "")
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (m) => m.toUpperCase());
+}
+
+function metricValue(value) {
+  if (value == null || value === "") return "—";
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  if (typeof value === "number") return Number.isInteger(value) ? String(value) : Number(value).toFixed(2).replace(/\.?0+$/, "");
+  return String(value);
+}
+
+function ComponentDetailsModal({ component: c, onClose }) {
+  if (!c) return null;
+  const score = c?.score == null ? null : Number(c.score);
+  const metrics = Object.entries(c?.metrics || {});
+  const assessmentRows = c?.details?.assessments || [];
+
+  return <>
+    <div className="modal-backdrop fade show" style={{ zIndex: 1050 }} onClick={onClose} />
+    <div className="modal fade show d-block" tabIndex="-1" role="dialog" aria-modal="true" style={{ zIndex: 1055 }}>
+      <div className="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div className="modal-content border-0 shadow">
+          <div className="modal-header">
+            <div>
+              <h5 className="modal-title mb-1">{c.label}</h5>
+              <div className="small text-muted">How this score was calculated • Weight {Number(c.weight || 0).toFixed(0)}%</div>
+            </div>
+            <button type="button" className="btn-close" aria-label="Close" onClick={onClose} />
+          </div>
+
+          <div className="modal-body">
+            <div className="row g-3 mb-3">
+              <div className="col-md-3">
+                <div className="border rounded p-3 h-100 bg-light">
+                  <div className="small text-muted text-uppercase fw-semibold">Component Score</div>
+                  <div className={`display-6 fw-bold ${score == null ? "text-secondary" : score >= 85 ? "text-success" : score >= 70 ? "text-primary" : score >= 55 ? "text-warning" : "text-danger"}`}>
+                    {score == null ? "N/A" : score.toFixed(1)}
+                  </div>
+                  <div className="small text-muted">{score == null ? "Not applicable in this period" : "out of 100"}</div>
+                </div>
+              </div>
+              <div className="col-md-9">
+                <div className="border rounded p-3 h-100">
+                  <div className="small text-muted text-uppercase fw-semibold mb-1">Calculation</div>
+                  <div className="fw-semibold">{componentCalculation(c)}</div>
+                  {c?.details?.target_note && <div className="small text-muted mt-2">{c.details.target_note}</div>}
+                  <div className="small text-muted mt-2">
+                    If a component is N/A, it is excluded from the applicable-weight denominator rather than being treated as zero.
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {!!metrics.length && <>
+              <h6 className="mb-2">Key figures</h6>
+              <div className="row g-2 mb-4">
+                {metrics.map(([k, v]) => <div className="col-6 col-md-4 col-xl-3" key={k}>
+                  <div className="border rounded p-2 h-100">
+                    <div className="small text-muted">{metricLabel(k)}</div>
+                    <div className="fw-semibold">{metricValue(v)}</div>
+                  </div>
+                </div>)}
+              </div>
+            </>}
+
+            {!!c?.reasons?.length && <>
+              <h6 className="mb-2">Why the system gave this score</h6>
+              <ul className="mb-4">
+                {c.reasons.map((r, i) => <li key={`${i}-${r}`} className="mb-1">{r}</li>)}
+              </ul>
+            </>}
+
+            {c?.code === "ASSESSMENT" && <>
+              <div className="d-flex justify-content-between align-items-end gap-2 flex-wrap mb-2">
+                <div>
+                  <h6 className="mb-1">Assessment-wise completion evidence</h6>
+                  <div className="small text-muted">This is the exact evidence behind Assessments & Results.</div>
+                </div>
+                <span className="badge text-bg-light border">{assessmentRows.length} assessment record(s)</span>
+              </div>
+              <div className="table-responsive">
+                <table className="table table-sm table-hover align-middle">
+                  <thead className="table-light">
+                    <tr><th>Date</th><th>Assessment</th><th>Type</th><th>Mode</th><th>Status</th><th>Due?</th><th>Credit</th></tr>
+                  </thead>
+                  <tbody>
+                    {assessmentRows.map((r) => <tr key={r.id}>
+                      <td>{r.date}</td>
+                      <td className="fw-semibold">{r.assessment}</td>
+                      <td>{r.type}</td>
+                      <td>{r.mode}</td>
+                      <td><span className={`badge ${["EVALUATED","RESULT_PUBLISHED"].includes(r.status) ? "text-bg-success" : r.status === "DRAFT" ? "text-bg-secondary" : "text-bg-warning"}`}>{String(r.status || "-").replaceAll("_", " ")}</span></td>
+                      <td>{r.due}</td>
+                      <td className="fw-semibold">{r.credit}</td>
+                    </tr>)}
+                    {!assessmentRows.length && <tr><td colSpan="7" className="text-center text-muted py-4">No assessment records found for this period.</td></tr>}
+                  </tbody>
+                </table>
+              </div>
+            </>}
+          </div>
+
+          <div className="modal-footer">
+            <button type="button" className="btn btn-secondary" onClick={onClose}>Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </>;
+}
+
+function ComponentCard({ c, onOpen }) {
   const score = c?.score == null ? null : Number(c.score);
   const tone = score == null ? "secondary" : score >= 85 ? "success" : score >= 70 ? "primary" : score >= 55 ? "warning" : "danger";
   return (
     <div className="card border-0 shadow-sm h-100">
-      <div className="card-body">
+      <div className="card-body d-flex flex-column">
         <div className="d-flex justify-content-between gap-2">
           <div>
             <div className="fw-semibold">{c.label}</div>
@@ -55,6 +200,9 @@ function ComponentCard({ c }) {
         </div>
         {!!c?.reasons?.length && <div className="small text-muted mt-3">{c.reasons[0]}</div>}
         {!!c?.metrics && <div className="small mt-2 text-secondary">{Object.entries(c.metrics).slice(0, 3).map(([k, v]) => <span className="me-3" key={k}><b>{String(k).replaceAll("_", " ")}:</b> {String(v)}</span>)}</div>}
+        <button type="button" className="btn btn-sm btn-link px-0 mt-auto pt-3 text-decoration-none text-start" onClick={() => onOpen?.(c)}>
+          View details / How calculated →
+        </button>
       </div>
     </div>
   );
@@ -78,12 +226,95 @@ function TrendStrip({ rows = [] }) {
   );
 }
 
+
+function MetricTile({ label, value, note, tone = "primary" }) {
+  return <div className="col-6 col-xl-3"><div className="card border-0 shadow-sm h-100"><div className="card-body">
+    <div className="small text-muted text-uppercase fw-semibold">{label}</div>
+    <div className={`h3 mb-1 text-${tone}`}>{value}</div>
+    {note && <div className="small text-muted">{note}</div>}
+  </div></div></div>;
+}
+
+function TeachingResultAnalytics({ analytics }) {
+  const groups = useMemo(() => analytics?.groups || [], [analytics]);
+  const [selectedKey, setSelectedKey] = useState(groups?.[0]?.key || "");
+  useEffect(() => {
+    if (!groups.length) { setSelectedKey(""); return; }
+    if (!groups.some((g) => g.key === selectedKey)) setSelectedKey(groups[0].key);
+  }, [analytics, groups, selectedKey]);
+  if (!analytics?.applicable || !groups.length) {
+    return <div className="card border-0 shadow-sm mb-4"><div className="card-body">
+      <div className="d-flex gap-3 align-items-center"><span className="fs-2">📈</span><div><h5 className="mb-1">Teaching Result & Student Growth</h5><div className="text-muted">Graphs will appear after at least two comparable result points exist for the same class, section and subject. Smart Assessments and formal exam results are both supported.</div></div></div>
+    </div></div>;
+  }
+  const summary = analytics.summary || {};
+  const selected = groups.find((g) => g.key === selectedKey) || groups[0];
+  const groupChart = groups.map((g) => ({
+    name: `${g.class_name}${g.section_name ? `-${g.section_name}` : ""} ${g.subject_name}`,
+    growth: Number(g.growth_points || 0),
+    score: Number(g.teaching_score || 0),
+    pass: Number(g.latest_pass_percent || 0),
+  }));
+  const distribution = [
+    { name: "Improved", value: Number(selected?.improved_students || 0), fill: "#198754" },
+    { name: "Stable", value: Number(selected?.stable_students || 0), fill: "#0d6efd" },
+    { name: "Needs support", value: Number(selected?.declined_students || 0), fill: "#fd7e14" },
+  ].filter((x) => x.value > 0);
+  const growth = Number(summary.growth_points || 0);
+  const passGrowth = Number(summary.pass_growth_points || 0);
+
+  return <div className="mb-4">
+    <div className="d-flex justify-content-between align-items-end gap-3 flex-wrap mb-3">
+      <div><h4 className="mb-1">Teaching Result & Student Growth</h4><div className="text-muted">Same-cohort learning growth from formal examinations + Smart Assessments. Raw marks from unrelated classes are never compared.</div></div>
+      <span className="badge text-bg-light border fs-6">{Number(summary.formal_exam_events || 0)} exam • {Number(summary.smart_assessment_events || 0)} assessment evidence points</span>
+    </div>
+    <div className="row g-3 mb-3">
+      <MetricTile label="Teaching Result" value={`${Number(analytics.teaching_score || 0).toFixed(1)}/100`} note={`${Number(summary.comparable_groups || 0)} comparable teaching group(s)`} tone={Number(analytics.teaching_score || 0) >= 70 ? "success" : "warning"} />
+      <MetricTile label="Learning Growth" value={`${growth >= 0 ? "+" : ""}${growth.toFixed(1)} pts`} note="Weighted same-student improvement" tone={growth >= 0 ? "success" : "danger"} />
+      <MetricTile label="Latest Pass Rate" value={`${Number(summary.latest_pass_percent || 0).toFixed(1)}%`} note={`${passGrowth >= 0 ? "+" : ""}${passGrowth.toFixed(1)} pts vs baseline`} tone="primary" />
+      <MetricTile label="Students Improved" value={Number(summary.improved_students || 0)} note={`${Number(summary.recovered_students || 0)} weak student record(s) recovered`} tone="success" />
+    </div>
+
+    <div className="card border-0 shadow-sm mb-3"><div className="card-body">
+      <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3"><div><h5 className="mb-0">Learning Growth Trend</h5><div className="small text-muted">Assessment / exam progression for the selected class-subject.</div></div>
+        <select className="form-select" style={{maxWidth: 360}} value={selected?.key || ""} onChange={(e)=>setSelectedKey(e.target.value)}>
+          {groups.map((g)=><option key={g.key} value={g.key}>{g.class_name}{g.section_name ? `-${g.section_name}` : ""} • {g.subject_name}</option>)}
+        </select>
+      </div>
+      <div style={{height: 310}}>
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={selected?.timeline || []} margin={{ top: 8, right: 20, left: 0, bottom: 35 }}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="label" angle={-18} textAnchor="end" height={70} interval={0} tick={{fontSize: 11}} />
+            <YAxis domain={[0, 100]} unit="%" />
+            <Tooltip formatter={(v, n)=>[`${Number(v).toFixed(1)}%`, n === 'average' ? 'Class Average' : 'Pass Rate']} labelFormatter={(label, payload)=>`${label}${payload?.[0]?.payload?.date ? ` • ${payload[0].payload.date}` : ''}`} />
+            <Legend />
+            <Line type="monotone" dataKey="average" name="Class Average" stroke="#0d6efd" strokeWidth={3} dot={{r: 5}} activeDot={{r: 7}} />
+            <Line type="monotone" dataKey="pass_percent" name="Pass Rate" stroke="#198754" strokeWidth={2} strokeDasharray="5 4" dot={{r: 4}} />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+      <div className="small text-muted mt-2">Baseline: <b>{selected?.baseline?.label}</b> ({selected?.baseline?.date}) → Latest: <b>{selected?.latest?.label}</b> ({selected?.latest?.date}) • Growth <b className={Number(selected?.growth_points || 0) >= 0 ? 'text-success' : 'text-danger'}>{Number(selected?.growth_points || 0) >= 0 ? '+' : ''}{Number(selected?.growth_points || 0).toFixed(1)} pts</b></div>
+    </div></div>
+
+    <div className="row g-3 mb-3">
+      <div className="col-xl-7"><div className="card border-0 shadow-sm h-100"><div className="card-body"><h5>Class / Subject Comparison</h5><div className="small text-muted mb-2">Growth points and teaching-result score across assigned groups.</div><div style={{height: 280}}><ResponsiveContainer width="100%" height="100%"><BarChart data={groupChart} margin={{top: 10,right: 20,left: 0,bottom: 60}}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="name" angle={-20} textAnchor="end" height={80} interval={0} tick={{fontSize: 10}} /><YAxis /><Tooltip /><Legend /><Bar dataKey="growth" name="Growth points" fill="#20c997" radius={[5,5,0,0]} /><Bar dataKey="score" name="Teaching score" fill="#6f42c1" radius={[5,5,0,0]} /></BarChart></ResponsiveContainer></div></div></div></div>
+      <div className="col-xl-5"><div className="card border-0 shadow-sm h-100"><div className="card-body"><h5>Student Progress Mix</h5><div className="small text-muted mb-2">{selected?.class_name}{selected?.section_name ? `-${selected.section_name}` : ''} • {selected?.subject_name}</div><div style={{height: 240}}><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={distribution} dataKey="value" nameKey="name" innerRadius={55} outerRadius={90} paddingAngle={3} label={({name,value})=>`${name}: ${value}`}>{distribution.map((entry)=><Cell key={entry.name} fill={entry.fill} />)}</Pie><Tooltip /></PieChart></ResponsiveContainer></div><div className="small text-muted text-center">Evidence coverage {Number(selected?.evidence_coverage || 0).toFixed(1)}% • {Number(selected?.matched_students || 0)} matched students</div></div></div></div>
+    </div>
+
+    <div className="card border-0 shadow-sm"><div className="card-body"><div className="d-flex justify-content-between align-items-center mb-2"><div><h5 className="mb-0">Student-wise Learning Impact</h5><div className="small text-muted">Private teacher/management view — not shown as a teacher score to parents or students.</div></div><span className="badge text-bg-light border">Pass benchmark {Number(analytics?.pass_benchmark ?? 40).toFixed(0)}%</span></div>
+      <div className="table-responsive" style={{maxHeight: 420}}><table className="table table-sm align-middle"><thead className="table-light sticky-top"><tr><th>Student</th><th>Previous</th><th>Latest</th><th>Growth</th><th>Status</th></tr></thead><tbody>{(selected?.students || []).map((r)=><tr key={r.student_id}><td><b>{r.student_name}</b><div className="small text-muted">{r.admission_number ? `Adm ${r.admission_number}` : r.roll_number ? `Roll ${r.roll_number}` : `ID ${r.student_id}`}</div></td><td>{Number(r.baseline_percent || 0).toFixed(1)}%</td><td>{Number(r.latest_percent || 0).toFixed(1)}%</td><td className={Number(r.growth_points || 0) >= 2 ? 'text-success fw-semibold' : Number(r.growth_points || 0) <= -2 ? 'text-danger fw-semibold' : ''}>{Number(r.growth_points || 0) > 0 ? '+' : ''}{Number(r.growth_points || 0).toFixed(1)}</td><td><span className={`badge ${r.status==='IMPROVED'?'text-bg-success':r.status==='DECLINED'?'text-bg-warning':'text-bg-primary'}`}>{r.status==='DECLINED'?'NEEDS SUPPORT':r.status}</span></td></tr>)}</tbody></table></div>
+    </div></div>
+  </div>;
+}
+
 export default function TeacherPerformance() {
   const [cap, setCap] = useState({});
   const [teachers, setTeachers] = useState([]);
   const [teacherId, setTeacherId] = useState("");
   const [month, setMonth] = useState(currentMonth());
   const [dashboard, setDashboard] = useState(null);
+  const [detailComponent, setDetailComponent] = useState(null);
   const [trend, setTrend] = useState([]);
   const [team, setTeam] = useState([]);
   const [weights, setWeights] = useState([]);
@@ -115,6 +346,7 @@ export default function TeacherPerformance() {
       teacherPerformanceApi.trend({ ...params, period_key: month, limit: 40 }),
     ]);
     setDashboard(d.data?.data || null);
+    setDetailComponent(null);
     setTrend(t.data?.snapshots || []);
     setAiInsight("");
     setAiSource("");
@@ -146,7 +378,11 @@ export default function TeacherPerformance() {
           const tr = await teacherPerformanceApi.teachers();
           const list = tr.data?.teachers || [];
           setTeachers(list);
-          if (list.length) setTeacherId(String(list[0].id));
+          if (list.length) {
+            const requestedTeacher = new URLSearchParams(window.location.search).get("teacher_user_id");
+            const initial = requestedTeacher && list.some((t) => String(t.id) === String(requestedTeacher)) ? requestedTeacher : String(list[0].id);
+            setTeacherId(String(initial));
+          }
         }
       } catch (e) { setError(errMsg(e)); }
       finally { setBusy(false); }
@@ -293,7 +529,8 @@ export default function TeacherPerformance() {
             </div></div>
           </div>
         </div>
-        <div className="row g-3 mb-4">{(dashboard.components || []).map((c) => <div className="col-md-6 col-xxl-4" key={c.code}><ComponentCard c={c} /></div>)}</div>
+        <TeachingResultAnalytics analytics={dashboard.teaching_result} />
+        <div className="row g-3 mb-4">{(dashboard.components || []).map((c) => <div className="col-md-6 col-xxl-4" key={c.code}><ComponentCard c={c} onOpen={setDetailComponent} /></div>)}</div>
         <div className="row g-3">
           <div className="col-xl-7"><div className="card border-0 shadow-sm h-100"><div className="card-body"><div className="d-flex justify-content-between align-items-center mb-3"><h5 className="mb-0">Score Movement</h5><span className="small text-muted">Snapshots for {month}</span></div><TrendStrip rows={trend} /></div></div></div>
           <div className="col-xl-5"><div className="card border-0 shadow-sm h-100"><div className="card-body"><div className="d-flex justify-content-between gap-2"><h5>AI Growth Insight</h5><button className="btn btn-sm btn-outline-primary" onClick={generateInsight} disabled={busy}>Generate</button></div>{aiInsight ? <><div style={{ whiteSpace: "pre-wrap" }}>{aiInsight}</div><div className="small text-muted mt-3">{aiSource === "openai" ? "AI explanation from ERP evidence" : "Smart fallback insight"} • score itself is rule-based</div></> : <div className="text-muted">Generate a short evidence-based explanation, strengths and next actions. AI cannot change the score.</div>}</div></div></div>
@@ -302,7 +539,7 @@ export default function TeacherPerformance() {
 
       {isManager && tab === "team" && <div className="card border-0 shadow-sm"><div className="card-body">
         <div className="d-flex justify-content-between align-items-center mb-3"><div><h5 className="mb-0">Management Overview</h5><div className="small text-muted">For support and appraisal review — not a public teacher leaderboard.</div></div><button className="btn btn-outline-primary" onClick={loadTeam}>Recalculate Team</button></div>
-        <div className="table-responsive"><table className="table align-middle"><thead><tr><th>Teacher</th><th>Score</th><th>Coverage</th><th>Support Opportunity</th></tr></thead><tbody>{team.map((r) => <tr key={r.teacher?.id}><td><b>{r.teacher?.name}</b><div className="small text-muted">{r.teacher?.designation}</div></td><td>{r.error ? <span className="text-danger">Error</span> : <span className="fw-bold">{Number(r.overall_score).toFixed(1)}</span>}</td><td>{r.error ? "-" : `${Number(r.coverage_percent || 0).toFixed(1)}%`}</td><td>{r.weakest_component?.label || (r.error ? r.error : "Evidence building")}</td></tr>)}</tbody></table></div>
+        <div className="table-responsive"><table className="table align-middle"><thead><tr><th>Teacher</th><th>Professional Score</th><th>Teaching Result</th><th>Growth</th><th>Pass %</th><th>Coverage</th><th>Support Opportunity</th></tr></thead><tbody>{team.map((r) => <tr key={r.teacher?.id}><td><b>{r.teacher?.name}</b><div className="small text-muted">{r.teacher?.designation}</div></td><td>{r.error ? <span className="text-danger">Error</span> : <span className="fw-bold">{Number(r.overall_score).toFixed(1)}</span>}</td><td>{r.teaching_result ? <b>{Number(r.teaching_result.teaching_score || 0).toFixed(1)}</b> : <span className="text-muted">Building</span>}</td><td className={Number(r.teaching_result?.growth_points || 0) >= 0 ? 'text-success' : 'text-danger'}>{r.teaching_result?.growth_points == null ? '-' : `${Number(r.teaching_result.growth_points) >= 0 ? '+' : ''}${Number(r.teaching_result.growth_points).toFixed(1)}`}</td><td>{r.teaching_result?.latest_pass_percent == null ? '-' : `${Number(r.teaching_result.latest_pass_percent).toFixed(1)}%`}</td><td>{r.error ? "-" : `${Number(r.coverage_percent || 0).toFixed(1)}%`}</td><td>{r.weakest_component?.label || (r.error ? r.error : "Evidence building")}</td></tr>)}</tbody></table></div>
       </div></div>}
 
       {isManager && tab === "weights" && <div className="row g-3">
@@ -381,6 +618,7 @@ export default function TeacherPerformance() {
           </div></div></div>
         </div>
       </>}
+      <ComponentDetailsModal component={detailComponent} onClose={() => setDetailComponent(null)} />
     </div>
   );
 }
