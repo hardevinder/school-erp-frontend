@@ -24,7 +24,6 @@ const MarkAttendance = () => {
   const [students, setStudents] = useState([]);
   const [attendance, setAttendance] = useState({});
   const [savedAttendance, setSavedAttendance] = useState({});
-  const [recordIds, setRecordIds] = useState({});
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split("T")[0]);
   const [mode, setMode] = useState("create"); // "create" or "edit"
   const [loading, setLoading] = useState(false);
@@ -89,15 +88,12 @@ const MarkAttendance = () => {
         if (scopedRecords.length > 0) {
           setMode("edit");
           const attendanceMap = {};
-          const recordIdMap = {};
           scopedRecords.forEach((record) => {
             const studentId = record.studentId ?? record.student_id;
             attendanceMap[studentId] = record.status;
-            recordIdMap[studentId] = record.id;
           });
           setAttendance(attendanceMap);
           setSavedAttendance(attendanceMap);
-          setRecordIds(recordIdMap);
         } else {
           setMode("create");
           const initialAttendance = {};
@@ -106,7 +102,6 @@ const MarkAttendance = () => {
           });
           setAttendance(initialAttendance);
           setSavedAttendance({});
-          setRecordIds({});
         }
       } catch (error) {
         console.error("Error fetching attendance for date:", error);
@@ -117,7 +112,6 @@ const MarkAttendance = () => {
         });
         setAttendance(initialAttendance);
         setSavedAttendance({});
-        setRecordIds({});
       }
     },
     [students]
@@ -205,67 +199,29 @@ const MarkAttendance = () => {
   const selectedMoment = moment(selectedDate, "YYYY-MM-DD");
   const today = moment().startOf("day");
 
-  // ---- Submit handler (CREATE/UPDATE with bulk + fallback) ----
+  // ---- Submit the complete class atomically in one request ----
   const handleSubmit = async () => {
     setLoading(true);
     try {
-      const allRecords = students.map((s) => ({
+      const records = students.map((s) => ({
         studentId: s.id,
         status: attendance[s.id] || "present",
-        date: selectedDate,
-        id: recordIds[s.id] || null,
       }));
 
-      if (mode === "create") {
-        const newRecords = allRecords.map(({ studentId, status }) => ({ studentId, status }));
-        try {
-          await api.post("/attendance/bulk", { date: selectedDate, records: newRecords });
-        } catch (bulkErr) {
-          for (const rec of newRecords) {
-            // eslint-disable-next-line no-await-in-loop
-            await api.post("/attendance", { ...rec, date: selectedDate });
-          }
-        }
-        Swal.fire("Success", "Attendance submitted.", "success");
-      } else {
-        const toUpdate = allRecords.filter((r) => !!r.id);
-        const toCreate = allRecords.filter((r) => !r.id);
-
-        if (toUpdate.length) {
-          try {
-            await api.put("/attendance/bulk", {
-              date: selectedDate,
-              records: toUpdate.map((r) => ({ id: r.id, status: r.status })),
-            });
-          } catch (bulkUpdateErr) {
-            for (const r of toUpdate) {
-              // eslint-disable-next-line no-await-in-loop
-              await api.put(`/attendance/${r.id}`, { status: r.status });
-            }
-          }
-        }
-
-        if (toCreate.length) {
-          try {
-            await api.post("/attendance/bulk", {
-              date: selectedDate,
-              records: toCreate.map((r) => ({ studentId: r.studentId, status: r.status })),
-            });
-          } catch (bulkCreateErr) {
-            for (const r of toCreate) {
-              // eslint-disable-next-line no-await-in-loop
-              await api.post("/attendance", { studentId: r.studentId, status: r.status, date: selectedDate });
-            }
-          }
-        }
-
-        Swal.fire("Saved", "Attendance updated.", "success");
-      }
+      const { data } = await api.post("/attendance/bulk", {
+        date: selectedDate,
+        records,
+      });
+      Swal.fire(
+        mode === "create" ? "Success" : "Saved",
+        `${data?.saved ?? records.length} student attendance records saved.`,
+        "success"
+      );
 
       await fetchAttendanceForDate(selectedDate);
     } catch (err) {
       console.error("Save attendance failed:", err);
-      Swal.fire("Error", "Failed to save attendance.", "error");
+      Swal.fire("Error", err?.response?.data?.message || "Failed to save attendance.", "error");
     } finally {
       setLoading(false);
     }

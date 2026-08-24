@@ -226,6 +226,14 @@ const ExamScheduleManagement = () => {
       const subjectIds = bulkData.subject_keys
         .filter((key) => key.startsWith(`${classId}:`))
         .map((key) => key.split(":")[1]);
+      if (!classSections.length) {
+        subjectIds.forEach((subjectId) => items.push({
+          class_id: Number(classId),
+          section_id: null,
+          subject_id: Number(subjectId),
+        }));
+        return;
+      }
       classSections.forEach((section) => {
         subjectIds.forEach((subjectId) => items.push({
           class_id: Number(classId),
@@ -240,7 +248,7 @@ const ExamScheduleManagement = () => {
   const handleBulkSubmit = async () => {
     const required = ["session_id", "term_id", "exam_id", "exam_date", "start_time", "end_time"];
     if (required.some((field) => !bulkData[field]) || !bulkItems.length) {
-      return Swal.fire("Required", "Select session, term, exam, date/time and at least one class, section and subject.", "warning");
+      return Swal.fire("Required", "Select session, term, exam, date/time and at least one class and subject.", "warning");
     }
     if (bulkData.start_time >= bulkData.end_time) {
       return Swal.fire("Invalid Time", "End time must be after start time.", "warning");
@@ -259,8 +267,8 @@ const ExamScheduleManagement = () => {
       setShowBulkModal(false);
       await fetchSchedules();
       await Swal.fire(
-        "Schedules Created",
-        `${response.data.created || 0} created; ${response.data.skipped || 0} existing row(s) skipped.`,
+        "Schedules Saved",
+        `${response.data.created || 0} created; ${response.data.updated || 0} existing row(s) updated.`,
         "success"
       );
     } catch (error) {
@@ -532,7 +540,6 @@ const ExamScheduleManagement = () => {
       !term_id ||
       !exam_id ||
       !class_id ||
-      !section_id ||
       !subject_id ||
       !exam_date ||
       !start_time ||
@@ -551,7 +558,7 @@ const ExamScheduleManagement = () => {
       term_id: Number(term_id),
       exam_id: Number(exam_id),
       class_id: Number(class_id),
-      section_id: Number(section_id),
+      section_id: section_id === "" ? null : Number(section_id),
       subject_id: Number(subject_id),
     };
 
@@ -712,12 +719,12 @@ const ExamScheduleManagement = () => {
     hasSelection(filters.term_id) &&
     hasSelection(filters.exam_id) &&
     hasSelection(filters.class_id) &&
-    hasSelection(filters.section_id);
+    (hasSelection(filters.section_id) || !sections.length);
 
   const canPublish = canGenerate && schedules.length > 0 && !dirtyIds.size;
   const isPublished = schedules.length > 0 && schedules.every((row) => row.is_published);
   const publishDisabledReason = !canGenerate
-    ? "Select Session, Term, Exam, Class and Section"
+    ? `Select Session, Term, Exam, Class${sections.length ? " and Section" : ""}`
     : !schedules.length
       ? "No schedule rows are available for this selection"
       : dirtyIds.size
@@ -730,7 +737,7 @@ const ExamScheduleManagement = () => {
     const confirmation = await Swal.fire({
       title: `${action} date sheet?`,
       text: publish
-        ? "Students in this class-section will see it immediately and receive a notification."
+        ? `Students in this ${sections.length ? "class-section" : "class"} will see it immediately and receive a notification.`
         : "It will be removed from the student app immediately.",
       icon: "question",
       showCancelButton: true,
@@ -1136,7 +1143,11 @@ const ExamScheduleManagement = () => {
                             onChange={() => toggleBulkValue("section_ids", section.id)}
                           />
                         ))}
-                        {!classSections.length && <span className="small text-muted">No sections found</span>}
+                        {!classSections.length && (
+                          <span className="small text-success">
+                            No sections configured — a class-level schedule will be created.
+                          </span>
+                        )}
                       </div>
                     </div>
                   );
@@ -1201,7 +1212,7 @@ const ExamScheduleManagement = () => {
           </div>
 
           <div className={`alert mt-3 mb-0 ${bulkItems.length ? "alert-success" : "alert-warning"}`}>
-            <b>{bulkItems.length}</b> schedule row(s) will be created. Existing matching rows will be skipped safely.
+            <b>{bulkItems.length}</b> schedule row(s) will be saved. Existing matching rows will be updated safely.
           </div>
         </Modal.Body>
         <Modal.Footer>
@@ -1341,7 +1352,9 @@ const ExamScheduleManagement = () => {
                     onChange={handleFormChange}
                     disabled={!!formData.id}
                   >
-                    <option value="">Select Section</option>
+                    <option value="">
+                      {sections.length ? "Select Section (optional)" : "No Section (class-level)"}
+                    </option>
                     {sections.map((s) => (
                       <option key={s.id} value={s.id}>
                         {s.section_name}

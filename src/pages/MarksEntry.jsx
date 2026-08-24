@@ -47,6 +47,11 @@ const escapeHtml = (value) =>
 
 const attendanceOptions = ["P", "A", "L", "ACT", "LA", "ML", "X"];
 const defaultGradeOptions = ["G", "B", "Y", "R"];
+const CLASS_LEVEL_SECTION = "__class__";
+const sectionMatches = (rowSectionId, selectedSectionId) =>
+  selectedSectionId === CLASS_LEVEL_SECTION
+    ? rowSectionId === null || rowSectionId === undefined || rowSectionId === ""
+    : Number(rowSectionId) === Number(selectedSectionId);
 
 const getApiErrorMessage = (err, fallback = "Something went wrong") => {
   const status = err?.response?.status;
@@ -118,6 +123,7 @@ const MarksEntry = () => {
 
   const [students, setStudents] = useState([]);
   const [components, setComponents] = useState([]);
+  const [selectedComponentIds, setSelectedComponentIds] = useState([]);
 
   const [marks, setMarks] = useState({});
   const [attendance, setAttendance] = useState({});
@@ -136,6 +142,7 @@ const MarksEntry = () => {
   const resetMarksData = () => {
     setStudents([]);
     setComponents([]);
+    setSelectedComponentIds([]);
     setMarks({});
     setAttendance({});
     setExamScheduleId(null);
@@ -171,10 +178,11 @@ const MarksEntry = () => {
     sessionRows
       .filter((row) => !filters.class_id || Number(row.class_id) === Number(filters.class_id))
       .forEach((row) => {
-        if (!sectionMap.has(Number(row.section_id))) {
-          sectionMap.set(Number(row.section_id), {
-            id: row.section_id,
-            section_name: row.section_name,
+        const sectionKey = row.section_id == null ? CLASS_LEVEL_SECTION : String(row.section_id);
+        if (!sectionMap.has(sectionKey)) {
+          sectionMap.set(sectionKey, {
+            id: sectionKey,
+            section_name: row.section_name || "Class Level (No Section)",
           });
         }
       });
@@ -185,7 +193,7 @@ const MarksEntry = () => {
       .filter(
         (row) =>
           Number(row.class_id) === Number(filters.class_id) &&
-          (!filters.section_id || Number(row.section_id) === Number(filters.section_id))
+          (!filters.section_id || sectionMatches(row.section_id, filters.section_id))
       )
       .forEach((row) => {
         if (!examMap.has(Number(row.exam_id))) {
@@ -199,7 +207,7 @@ const MarksEntry = () => {
       .filter(
         (row) =>
           Number(row.class_id) === Number(filters.class_id) &&
-          Number(row.section_id) === Number(filters.section_id) &&
+          sectionMatches(row.section_id, filters.section_id) &&
           Number(row.exam_id) === Number(filters.exam_id)
       )
       .forEach((row) => {
@@ -258,7 +266,29 @@ const MarksEntry = () => {
   const loadMarksScope = async () => {
     try {
       const res = await api.get("/marks-access/my-scope");
-      setAccessibleSchedules(asArray(res?.data?.schedules));
+      const schedules = asArray(res?.data?.schedules);
+      setAccessibleSchedules(schedules);
+
+      // A teacher may have marks access only in a session other than the
+      // school's default/current session. Keep the selected session when it
+      // has accessible schedules; otherwise move to the teacher's latest
+      // available scope so the Class dropdown is not incorrectly empty.
+      if (schedules.length > 0) {
+        setFilters((current) => {
+          const selectedSessionIsAccessible = schedules.some(
+            (row) =>
+              String(row.session_id) === String(current.session_id || "")
+          );
+          if (selectedSessionIsAccessible) return current;
+          return {
+            session_id: String(schedules[0].session_id ?? ""),
+            class_id: "",
+            section_id: "",
+            exam_id: "",
+            subject_id: "",
+          };
+        });
+      }
     } catch (err) {
       showApiError("Error", err, "Failed to load your marks access");
     }
@@ -396,6 +426,9 @@ const MarksEntry = () => {
 
       setStudents(fetchedStudents);
       setComponents(fetchedComponents);
+      setSelectedComponentIds(
+        fetchedComponents.map((component) => String(component.component_id))
+      );
       setExamScheduleId(
         res?.data?.exam_schedule_id || res?.data?.examScheduleId || null
       );
@@ -528,12 +561,14 @@ const MarksEntry = () => {
     }
 
     const editableComponents = components.filter(
-      (component) => !component.is_locked
+      (component) =>
+        selectedComponentIds.includes(String(component.component_id)) &&
+        !component.is_locked
     );
     if (!editableComponents.length) {
       Swal.fire(
-        "Locked",
-        "All components are locked. Unlock the assessment scheme before editing marks.",
+        "Select a component",
+        "Select at least one unlocked component to save.",
         "warning"
       );
       return;
@@ -734,6 +769,23 @@ const MarksEntry = () => {
     return labels.length > 0 ? labels : defaultGradeOptions;
   }, [gradeOptions]);
 
+  const selectedComponents = useMemo(
+    () =>
+      components.filter((component) =>
+        selectedComponentIds.includes(String(component.component_id))
+      ),
+    [components, selectedComponentIds]
+  );
+
+  const toggleComponent = (componentId) => {
+    const id = String(componentId);
+    setSelectedComponentIds((current) =>
+      current.includes(id)
+        ? current.filter((selectedId) => selectedId !== id)
+        : [...current, id]
+    );
+  };
+
   const hasLockedComponents = useMemo(
     () => components.some((component) => component.is_locked),
     [components]
@@ -845,7 +897,7 @@ const MarksEntry = () => {
               >
                 <option value="">Select Section</option>
                 {sections.map((s, idx) => (
-                  <option key={idx} value={s.id || s.section_id}>
+                  <option key={idx} value={s.id ?? s.section_id ?? CLASS_LEVEL_SECTION}>
                     {s.section_name || s.name}
                   </option>
                 ))}
@@ -900,7 +952,12 @@ const MarksEntry = () => {
             <button
               className="btn btn-success"
               onClick={saveMarksEntry}
-              disabled={!examScheduleId || loading || allComponentsLocked}
+              disabled={
+                !examScheduleId ||
+                loading ||
+                allComponentsLocked ||
+                !selectedComponents.some((component) => !component.is_locked)
+              }
             >
               Save
             </button>
@@ -932,6 +989,61 @@ const MarksEntry = () => {
               />
             </label>
           </div>
+
+          {components.length > 0 && (
+            <div className="border rounded-3 bg-light p-3 mb-3">
+              <div className="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+                <div>
+                  <div className="fw-semibold">Components to enter</div>
+                  <div className="small text-muted">
+                    Choose one or more components. Only selected components will be shown and saved.
+                  </div>
+                </div>
+                <div className="btn-group btn-group-sm" role="group" aria-label="Component selection actions">
+                  <button
+                    type="button"
+                    className="btn btn-outline-primary"
+                    onClick={() =>
+                      setSelectedComponentIds(
+                        components.map((component) => String(component.component_id))
+                      )
+                    }
+                  >
+                    Select all
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-outline-secondary"
+                    onClick={() => setSelectedComponentIds([])}
+                  >
+                    Clear
+                  </button>
+                </div>
+              </div>
+              <div className="d-flex flex-wrap gap-2">
+                {components.map((component) => {
+                  const id = String(component.component_id);
+                  const selected = selectedComponentIds.includes(id);
+                  const label = component.abbreviation || component.name || "Component";
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      className={`btn btn-sm ${selected ? "btn-primary" : "btn-outline-secondary"}`}
+                      aria-pressed={selected}
+                      onClick={() => toggleComponent(id)}
+                    >
+                      {selected ? "✓ " : ""}{label}
+                      {component.is_locked ? " 🔒" : ""}
+                    </button>
+                  );
+                })}
+              </div>
+              {selectedComponents.length === 0 && (
+                <div className="small text-danger mt-2">Select at least one component to continue.</div>
+              )}
+            </div>
+          )}
 
           {hasLockedComponents && (
             <div className="alert alert-warning py-2">
@@ -970,7 +1082,7 @@ const MarksEntry = () => {
                     <th rowSpan="2" style={{ minWidth: 220 }}>
                       Student Name
                     </th>
-                    {components.map((component) => (
+                    {selectedComponents.map((component) => (
                       <th
                         key={component.component_id}
                         colSpan="2"
@@ -981,7 +1093,7 @@ const MarksEntry = () => {
                     ))}
                   </tr>
                   <tr>
-                    {components.map((component) => (
+                    {selectedComponents.map((component) => (
                       <React.Fragment key={component.component_id}>
                         <th style={{ minWidth: 110 }}>Attendance</th>
                         <th style={{ minWidth: 150 }}>Grade</th>
@@ -996,7 +1108,7 @@ const MarksEntry = () => {
                       <td>{student.roll_number || "-"}</td>
                       <td>{student.name}</td>
 
-                      {components.map((component) => {
+                      {selectedComponents.map((component) => {
                         const key = `${student.id}_${component.component_id}`;
                         const att = gradeAttendance[key] || "P";
 
@@ -1063,7 +1175,7 @@ const MarksEntry = () => {
                     <th rowSpan="2" style={{ minWidth: 220 }}>
                       Student Name
                     </th>
-                    {components.map((component) => (
+                    {selectedComponents.map((component) => (
                       <th
                         key={component.component_id}
                         colSpan="2"
@@ -1074,7 +1186,7 @@ const MarksEntry = () => {
                     ))}
                   </tr>
                   <tr>
-                    {components.map((component) => (
+                    {selectedComponents.map((component) => (
                       <React.Fragment key={component.component_id}>
                         <th style={{ minWidth: 110 }}>Attendance</th>
                         <th style={{ minWidth: 120 }}>Marks</th>
@@ -1089,7 +1201,7 @@ const MarksEntry = () => {
                       <td>{student.roll_number || "-"}</td>
                       <td>{student.name}</td>
 
-                      {components.map((component) => {
+                      {selectedComponents.map((component) => {
                         const key = `${student.id}_${component.component_id}`;
                         const att = attendance[key] || "P";
                         const validationMessage = getMarksValidationMessage(

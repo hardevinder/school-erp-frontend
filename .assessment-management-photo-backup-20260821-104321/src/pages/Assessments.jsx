@@ -7,19 +7,7 @@ const unwrap = (response) => response?.data?.data ?? response?.data ?? [];
 const asList = (value) => Array.isArray(value) ? value : value?.rows || [];
 const readJson = (key, fallback = []) => { try { return JSON.parse(localStorage.getItem(key) || JSON.stringify(fallback)); } catch (_) { return fallback; } };
 const roleSet = () => new Set([...readJson("roles"), localStorage.getItem("role")].filter(Boolean).map((v) => String(v).toLowerCase()));
-const createRoles = new Set(["teacher", "admin", "superadmin", "super_admin"]);
-const managementViewRoles = new Set(["principal", "academic_coordinator", "coordinator"]);
-const permissionSet = () => new Set(readJson("permissions").map((v) => String(v).toLowerCase()));
-const API_BASE = (process.env.REACT_APP_API_URL || "http://localhost:3000").replace(/\/+$/, "");
-const studentPhotoSrc = (student) => {
-  const raw = student?.photo_url || student?.photo;
-  if (!raw) return "";
-  const value = String(raw).replace(/\\/g, "/");
-  if (/^(https?:|data:)/i.test(value)) return value;
-  if (value.startsWith("/")) return `${API_BASE}${value}`;
-  if (value.startsWith("uploads/")) return `${API_BASE}/${value}`;
-  return `${API_BASE}/uploads/photoes/students/${encodeURIComponent(value)}`;
-};
+const teacherRoles = new Set(["teacher", "admin", "superadmin", "super_admin", "academic_coordinator", "coordinator", "principal"]);
 const emptyQuestion = (index = 0) => ({ question_type: "mcq", question_text: "", options: ["", "", "", ""], correct_answer: 0, marks: 1, difficulty: "medium", explanation: "", topic: "", sort_order: index });
 const emptyForm = {
   online_class_id: "", class_id: "", section_id: "", subject_id: "", title: "", description: "", instructions: "Attempt all questions.",
@@ -38,19 +26,15 @@ async function openBlob(url, filename) {
 }
 
 export default function Assessments() {
-  const roles = useMemo(roleSet, []); const permissions = useMemo(permissionSet, []); const location = useLocation(); const navigate = useNavigate();
-  const canCreate = [...roles].some((r) => createRoles.has(r)) || permissions.has("assessment.manage_all");
-  const isManagementViewer = [...roles].some((r) => managementViewRoles.has(r));
-  const isStudent = roles.has("student");
+  const roles = useMemo(roleSet, []); const location = useLocation(); const navigate = useNavigate();
+  const canManage = [...roles].some((r) => teacherRoles.has(r)); const isStudent = roles.has("student");
   const query = useMemo(() => new URLSearchParams(location.search), [location.search]);
   const assessmentTypeFilter = query.get("assessment_type") || "";
   const assignmentOnly = assessmentTypeFilter === "assignment";
   const pageTitle = assignmentOnly ? "Assignments" : "Assessments & Tests";
   const pageSubtitle = assignmentOnly
     ? "Create, publish, collect scanned work, evaluate and publish assignment results."
-    : isManagementViewer
-      ? "School-wide assessment intelligence, student results, scanned papers and AI review visibility."
-      : "Online quizzes, scanned answer sheets, AI papers and published results.";
+    : "Online quizzes, scanned answer sheets, AI papers and published results.";
   const newAssessmentData = useCallback(() => ({
     ...emptyForm,
     assessment_type: assessmentTypeFilter || "test",
@@ -63,17 +47,17 @@ export default function Assessments() {
     setLoading(true);
     try {
       const params = {}; if (query.get("online_class_id")) params.online_class_id = query.get("online_class_id"); if (assessmentTypeFilter) params.assessment_type = assessmentTypeFilter;
-      const calls = [api.get("/api/assessments", { params })]; if (canCreate) calls.push(api.get("/api/assessments/options"));
-      const result = await Promise.all(calls); setRows(asList(unwrap(result[0]))); if (canCreate) setOptions(asList(unwrap(result[1])));
+      const calls = [api.get("/api/assessments", { params })]; if (canManage) calls.push(api.get("/api/assessments/options"));
+      const result = await Promise.all(calls); setRows(asList(unwrap(result[0]))); if (canManage) setOptions(asList(unwrap(result[1])));
     } catch (error) { flash("danger", error.response?.data?.message || "Could not load assessments."); }
     finally { setLoading(false); }
-  }, [assessmentTypeFilter, canCreate, flash, query]);
+  }, [assessmentTypeFilter, canManage, flash, query]);
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
-    if (!canCreate || query.get("create") !== "1") return;
+    if (!canManage || query.get("create") !== "1") return;
     setBuilder({ mode: "create", data: newAssessmentData() });
     const clean = new URLSearchParams(query); clean.delete("create"); navigate({ pathname: location.pathname, search: clean.toString() ? `?${clean}` : "" }, { replace: true });
-  }, [canCreate, location.pathname, navigate, newAssessmentData, query]);
+  }, [canManage, location.pathname, navigate, newAssessmentData, query]);
 
   const refreshDetail = async (id) => unwrap(await api.get(`/api/assessments/${id}`));
   const editAssessment = async (row) => {
@@ -112,11 +96,10 @@ export default function Assessments() {
       <div className="d-flex gap-2">
         {(query.get("online_class_id") || assessmentTypeFilter) && <button className="btn btn-outline-secondary" onClick={() => navigate("/assessments")}>Show all</button>}
         {!assignmentOnly && <button className="btn btn-outline-primary" onClick={() => navigate("/assessments?assessment_type=assignment")}><i className="bi bi-journal-check me-2" />Assignments</button>}
-        {canCreate && <button className="btn btn-primary" onClick={() => setBuilder({ mode: "create", data: newAssessmentData() })}><i className="bi bi-plus-lg me-2" />{assignmentOnly ? "Create Assignment" : "Create Assessment"}</button>}
+        {canManage && <button className="btn btn-primary" onClick={() => setBuilder({ mode: "create", data: newAssessmentData() })}><i className="bi bi-plus-lg me-2" />{assignmentOnly ? "Create Assignment" : "Create Assessment"}</button>}
       </div>
     </div>
     {notice && <div className={`alert alert-${notice.type} alert-dismissible`}>{notice.text}<button className="btn-close" onClick={() => setNotice(null)} /></div>}
-    {isManagementViewer && <div className="assessment-management-banner mb-4"><div><i className="bi bi-bar-chart-line-fill" /><div><strong>Management Assessment View</strong><span>View school-wide tests, student pictures, scores, AI findings and scanned answer sheets. Teacher marks remain read-only unless your role has assessment management permission.</span></div></div></div>}
     <div className="assessment-summary-grid mb-4">
       <Summary icon="bi-files" label="Total" value={rows.length} />
       <Summary icon="bi-broadcast" label="Published" value={rows.filter((r) => r.status === "published").length} />
@@ -136,11 +119,11 @@ export default function Assessments() {
         </div>
         <div className="card-footer bg-white border-0 pt-0"><div className="d-flex flex-wrap gap-2">
           <button className="btn btn-sm btn-outline-secondary" onClick={() => openBlob(`/api/assessments/${row.id}/pdf`, `${row.title}.pdf`)}><i className="bi bi-file-pdf me-1" />Paper</button>
-          {row.can_view_submissions && <button className="btn btn-sm btn-outline-dark" onClick={() => openBlob(`/api/assessments/${row.id}/pdf?answer_key=1`, `${row.title}-answer-key.pdf`)}>Answer Key</button>}
+          {row.can_manage && <button className="btn btn-sm btn-outline-dark" onClick={() => openBlob(`/api/assessments/${row.id}/pdf?answer_key=1`, `${row.title}-answer-key.pdf`)}>Answer Key</button>}
           {row.can_manage && ["draft", "scheduled"].includes(row.status) && <button className="btn btn-sm btn-outline-primary" onClick={() => editAssessment(row)}>Edit</button>}
           {row.can_manage && ["draft", "scheduled"].includes(row.status) && <button className="btn btn-sm btn-primary" onClick={() => mutate(row, "publish", `Publish “${row.title}” now?`)}>Publish</button>}
           {row.can_manage && row.status === "published" && <button className="btn btn-sm btn-outline-danger" onClick={() => mutate(row, "close", "Close submissions for this assessment?")}>Close</button>}
-          {row.can_view_submissions && !["draft", "scheduled", "cancelled"].includes(row.status) && <button className="btn btn-sm btn-outline-success" onClick={() => openSubmissions(row)}><i className="bi bi-people me-1" />{row.can_manage ? "Submissions" : "Student Results"}</button>}
+          {row.can_manage && !["draft", "scheduled", "cancelled"].includes(row.status) && <button className="btn btn-sm btn-outline-success" onClick={() => openSubmissions(row)}>Submissions</button>}
           {row.can_manage && ["closed", "evaluated", "result_published"].includes(row.status) && <button className="btn btn-sm btn-success" onClick={() => mutate(row, "results/publish", "Publish all evaluated results to students and parents?")}>Publish Results</button>}
           {row.can_manage && !["cancelled", "result_published"].includes(row.status) && <button className="btn btn-sm btn-link text-danger" onClick={() => cancel(row)}>Cancel</button>}
           {isStudent && row.status === "published" && row.mode === "online" && !["submitted", "evaluated"].includes(row.enrollment?.status) && <button className="btn btn-sm btn-primary" onClick={() => startAttempt(row)}>{row.assessment_type === "assignment" ? "Open Assignment" : "Attempt Test"}</button>}
@@ -292,48 +275,12 @@ function TeacherScanButton({ assessment, row, onDone, onError }) {
   </label>;
 }
 
-function StudentAvatar({ student, size = 42 }) {
-  const src = studentPhotoSrc(student);
-  const initials = String(student?.name || "?").trim().slice(0, 1).toUpperCase() || "?";
-  return <div className="assessment-student-avatar" style={{ width: size, height: size }}>
-    {src ? <img src={src} alt={student?.name || "Student"} onError={(e) => { e.currentTarget.style.display = "none"; e.currentTarget.nextElementSibling.style.display = "grid"; }} /> : null}
-    <span style={{ display: src ? "none" : "grid" }}>{initials}</span>
-  </div>;
-}
-
 function SubmissionsModal({ state, onClose, onChanged, onError }) {
   const [selected, setSelected] = useState(null);
-  const readOnly = !state.assessment.can_manage;
-  const total = Number(state.assessment.total_marks || 0);
-  const percentages = state.rows.map((row) => row.percentage != null ? Number(row.percentage) : (row.obtained_marks != null && total > 0 ? Number(row.obtained_marks) / total * 100 : null)).filter((v) => Number.isFinite(v));
-  const submitted = state.rows.filter((row) => ["submitted", "evaluated"].includes(row.status)).length;
-  const evaluated = state.rows.filter((row) => row.obtained_marks != null || row.status === "evaluated").length;
-  const aiReview = state.rows.filter((row) => row.latestAttempt?.teacher_review_required).length;
-  const below50 = percentages.filter((v) => v < 50).length;
-  const average = percentages.length ? percentages.reduce((a, b) => a + b, 0) / percentages.length : null;
-  return <Modal title={`${readOnly ? "Student Results" : "Submissions"} — ${state.assessment.title}`} large onClose={onClose}>
-    <div className="assessment-submission-dashboard p-3 pb-0">
-      <div className="assessment-result-metrics">
-        <MiniMetric label="Students" value={state.rows.length} icon="bi-people" />
-        <MiniMetric label="Submitted" value={submitted} icon="bi-send-check" />
-        <MiniMetric label="Evaluated" value={evaluated} icon="bi-patch-check" />
-        <MiniMetric label="Class Average" value={average == null ? "—" : `${average.toFixed(1)}%`} icon="bi-graph-up" />
-        <MiniMetric label="Below 50%" value={below50} icon="bi-exclamation-circle" />
-        <MiniMetric label="AI Review Pending" value={aiReview} icon="bi-stars" />
-      </div>
-      {readOnly && <div className="small text-muted mt-2"><i className="bi bi-eye me-1" />Read-only management view. Open any student to see the scanned paper, AI reasoning, marks, remarks and remedials.</div>}
-    </div>
-    <div className="table-responsive p-3"><table className="table align-middle"><thead><tr><th>Student</th><th>Status</th><th>AI</th><th>Submitted</th><th>Marks</th><th>Score</th><th /></tr></thead><tbody>{state.rows.map((row) => {
-      const pct = row.percentage != null ? Number(row.percentage) : (row.obtained_marks != null && total > 0 ? Number(row.obtained_marks) / total * 100 : null);
-      return <tr key={row.id}><td><div className="d-flex align-items-center gap-2"><StudentAvatar student={row.student} /><div><strong>{row.student?.name}</strong><small className="d-block text-muted">{row.student?.admission_number || ""}</small></div></div></td><td><span className={`assessment-status status-${row.status}`}>{row.status}</span></td><td>{row.latestAttempt?.ai_evaluation_status && row.latestAttempt.ai_evaluation_status !== "not_started" ? <span className="badge text-bg-light">{row.latestAttempt.ai_evaluation_status.replaceAll("_", " ")}</span> : "—"}</td><td>{fmt(row.submitted_at)}</td><td>{row.obtained_marks == null ? "—" : `${row.obtained_marks}/${state.assessment.total_marks}`}</td><td>{pct == null ? "—" : <strong>{pct.toFixed(1)}%</strong>}</td><td className="text-end"><div className="d-flex justify-content-end gap-2">{!readOnly && <TeacherScanButton assessment={state.assessment} row={row} onDone={onChanged} onError={onError} />}<button className="btn btn-sm btn-outline-primary" disabled={!row.latestAttempt} onClick={() => setSelected(row)}>{readOnly ? "View Result" : "Review"}</button></div></td></tr>;
-    })}</tbody></table></div>
-    {selected && <GradePanel assessment={state.assessment} enrollment={selected} readOnly={readOnly} onClose={() => setSelected(null)} onSaved={async () => { setSelected(null); await onChanged(); }} onError={onError} />}
-  </Modal>;
+  return <Modal title={`Submissions — ${state.assessment.title}`} large onClose={onClose}><div className="table-responsive p-3"><table className="table align-middle"><thead><tr><th>Student</th><th>Status</th><th>AI</th><th>Submitted</th><th>Marks</th><th /></tr></thead><tbody>{state.rows.map((row) => <tr key={row.id}><td><strong>{row.student?.name}</strong><small className="d-block text-muted">{row.student?.admission_number || ""}</small></td><td><span className={`assessment-status status-${row.status}`}>{row.status}</span></td><td>{row.latestAttempt?.ai_evaluation_status && row.latestAttempt.ai_evaluation_status !== "not_started" ? <span className="badge text-bg-light">{row.latestAttempt.ai_evaluation_status.replaceAll("_", " ")}</span> : "—"}</td><td>{fmt(row.submitted_at)}</td><td>{row.obtained_marks == null ? "—" : `${row.obtained_marks}/${state.assessment.total_marks}`}</td><td className="text-end"><div className="d-flex justify-content-end gap-2"><TeacherScanButton assessment={state.assessment} row={row} onDone={onChanged} onError={onError} /><button className="btn btn-sm btn-outline-primary" disabled={!row.latestAttempt} onClick={() => setSelected(row)}>Review</button></div></td></tr>)}</tbody></table></div>{selected && <GradePanel assessment={state.assessment} enrollment={selected} onClose={() => setSelected(null)} onSaved={async () => { setSelected(null); await onChanged(); }} onError={onError} />}</Modal>;
 }
 
-function MiniMetric({ label, value, icon }) { return <div className="assessment-mini-metric"><i className={`bi ${icon}`} /><div><span>{label}</span><strong>{value}</strong></div></div>; }
-
-function GradePanel({ assessment, enrollment, readOnly = false, onClose, onSaved, onError }) {
+function GradePanel({ assessment, enrollment, onClose, onSaved, onError }) {
   const attempt = enrollment.latestAttempt;
   const [answerGrades, setAnswerGrades] = useState(() => (attempt?.answers || []).map((a) => ({ answer_id: a.id, awarded_marks: a.awarded_marks ?? a.ai_awarded_marks ?? 0, teacher_remark: a.teacher_remark || a.ai_remark || "" })));
   const suggestedTotal = answerGrades.reduce((sum, a) => sum + Number(a.awarded_marks || 0), 0);
@@ -341,17 +288,17 @@ function GradePanel({ assessment, enrollment, readOnly = false, onClose, onSaved
   const [feedback, setFeedback] = useState(enrollment.teacher_feedback || attempt?.teacher_feedback || attempt?.ai_summary?.summary || "");
   const [files, setFiles] = useState([]); const [busy, setBusy] = useState(false); const [aiBusy, setAiBusy] = useState(false);
   const updateAnswer = (id, patch) => setAnswerGrades((rows) => rows.map((r) => r.answer_id === id ? { ...r, ...patch } : r));
-  useEffect(() => { if (!readOnly && (attempt?.answers || []).length) setMarks(answerGrades.reduce((sum, a) => sum + Number(a.awarded_marks || 0), 0)); }, [answerGrades, attempt?.answers, readOnly]);
+  useEffect(() => { if ((attempt?.answers || []).length) setMarks(answerGrades.reduce((sum, a) => sum + Number(a.awarded_marks || 0), 0)); }, [answerGrades, attempt?.answers]);
   const rerunAi = async () => { setAiBusy(true); try { await api.post(`/api/assessments/${assessment.id}/submissions/${enrollment.student_id}/ai-evaluate`, {}); await onSaved(); } catch (error) { onError(error.response?.data?.message || "Could not re-run AI evaluation."); } finally { setAiBusy(false); } };
   const submit = async () => { setBusy(true); try { const fd = new FormData(); fd.append("obtained_marks", marks); fd.append("teacher_feedback", feedback); fd.append("answer_grades", JSON.stringify(answerGrades)); files.forEach((f) => fd.append("corrected_files", f)); await api.patch(`/api/assessments/${assessment.id}/submissions/${enrollment.student_id}/grade`, fd); onSaved(); } catch (error) { onError(error.response?.data?.message || "Could not save marks."); } finally { setBusy(false); } };
   const pct = Number(assessment.total_marks) > 0 ? Math.max(0, Math.min(100, Number(marks || 0) / Number(assessment.total_marks) * 100)) : 0;
-  return <div className="grade-panel"><div className="d-flex justify-content-between align-items-center"><div className="d-flex align-items-center gap-3"><StudentAvatar student={enrollment.student} size={56} /><div><h5 className="mb-0">{readOnly ? "Student Result" : "Review"} — {enrollment.student?.name}</h5><small className="text-muted">{enrollment.student?.admission_number}{enrollment.student?.father_name ? ` · Father: ${enrollment.student.father_name}` : ""}</small></div></div><button className="btn-close" onClick={onClose} /></div>
-    <div className="smart-result-hero mt-3"><div className="smart-score-ring" style={{"--score": `${pct * 3.6}deg`}}><div><strong>{Math.round(pct)}%</strong><small>{marks}/{assessment.total_marks}</small></div></div><div className="flex-grow-1"><h6 className="mb-1">AI-assisted {readOnly ? "result insight" : "review"}</h6><div className="small text-muted">Status: {(attempt?.ai_evaluation_status || "not_started").replaceAll("_", " ")}{attempt?.ai_confidence != null ? ` · ${Number(attempt.ai_confidence).toFixed(0)}% confidence` : ""}</div>{attempt?.teacher_review_required && <div className="text-warning small mt-1"><i className="bi bi-exclamation-triangle me-1" />Teacher approval required</div>}<p className="mb-0 mt-2">{attempt?.ai_summary?.summary || "Review the scanned paper and confirmed marks."}</p></div></div>
+  return <div className="grade-panel"><div className="d-flex justify-content-between"><div><h5 className="mb-0">Review {enrollment.student?.name}</h5><small className="text-muted">{enrollment.student?.admission_number}</small></div><button className="btn-close" onClick={onClose} /></div>
+    <div className="smart-result-hero mt-3"><div className="smart-score-ring" style={{"--score": `${pct * 3.6}deg`}}><div><strong>{Math.round(pct)}%</strong><small>{marks}/{assessment.total_marks}</small></div></div><div className="flex-grow-1"><h6 className="mb-1">AI-assisted review</h6><div className="small text-muted">Status: {(attempt?.ai_evaluation_status || "not_started").replaceAll("_", " ")}{attempt?.ai_confidence != null ? ` · ${Number(attempt.ai_confidence).toFixed(0)}% confidence` : ""}</div>{attempt?.teacher_review_required && <div className="text-warning small mt-1"><i className="bi bi-exclamation-triangle me-1" />Teacher approval required</div>}<p className="mb-0 mt-2">{attempt?.ai_summary?.summary || "Review the scanned paper and confirm final marks."}</p></div></div>
     {(attempt?.files || []).map((file) => <button key={file.id} className="btn btn-sm btn-outline-secondary mt-3 me-2" onClick={() => openBlob(`/api/assessments/${assessment.id}/files/${file.id}`, file.original_name)}><i className="bi bi-eye me-1" />{file.original_name}</button>)}
-    {(attempt?.answers || []).map((answer, index) => { const grade = answerGrades.find((g) => g.answer_id === answer.id) || {}; return <div className={`answer-grade mt-3 ${answer.ai_review_required ? "ai-review-needed" : ""}`} key={answer.id}><div className="d-flex justify-content-between gap-2"><strong>Q{index + 1}. {answer.question?.question_text}</strong>{answer.ai_review_required && <span className="badge text-bg-warning">Manual review</span>}</div>{answer.ai_detected_text && <p className="mb-1 mt-2"><span className="text-muted">AI read:</span> {answer.ai_detected_text}</p>}{answer.ai_remark && <p className="mb-2 small text-muted"><strong>Why:</strong> {answer.ai_remark}{answer.ai_confidence != null ? ` · confidence ${Number(answer.ai_confidence).toFixed(0)}%` : ""}</p>}{readOnly ? <div className="assessment-readonly-answer"><span><strong>Marks:</strong> {grade.awarded_marks ?? 0}/{answer.question?.marks ?? "—"}</span><span><strong>Teacher remark:</strong> {grade.teacher_remark || "—"}</span></div> : <div className="row g-2"><Input label={`Marks / ${answer.question?.marks}`} type="number" min="0" max={answer.question?.marks} step="0.5" value={grade.awarded_marks} onChange={(v) => updateAnswer(answer.id, { awarded_marks: v })} /><Input label="Teacher remark / why marks cut" value={grade.teacher_remark} onChange={(v) => updateAnswer(answer.id, { teacher_remark: v })} /></div>}</div>; })}
+    {(attempt?.answers || []).map((answer, index) => { const grade = answerGrades.find((g) => g.answer_id === answer.id) || {}; return <div className={`answer-grade mt-3 ${answer.ai_review_required ? "ai-review-needed" : ""}`} key={answer.id}><div className="d-flex justify-content-between gap-2"><strong>Q{index + 1}. {answer.question?.question_text}</strong>{answer.ai_review_required && <span className="badge text-bg-warning">Manual review</span>}</div>{answer.ai_detected_text && <p className="mb-1 mt-2"><span className="text-muted">AI read:</span> {answer.ai_detected_text}</p>}{answer.ai_remark && <p className="mb-2 small text-muted"><strong>Why:</strong> {answer.ai_remark}{answer.ai_confidence != null ? ` · confidence ${Number(answer.ai_confidence).toFixed(0)}%` : ""}</p>}<div className="row g-2"><Input label={`Marks / ${answer.question?.marks}`} type="number" min="0" max={answer.question?.marks} step="0.5" value={grade.awarded_marks} onChange={(v) => updateAnswer(answer.id, { awarded_marks: v })} /><Input label="Teacher remark / why marks cut" value={grade.teacher_remark} onChange={(v) => updateAnswer(answer.id, { teacher_remark: v })} /></div></div>; })}
     {Array.isArray(attempt?.remedials) && attempt.remedials.length > 0 && <div className="smart-remedials mt-3"><h6><i className="bi bi-stars me-1" />Small remedials</h6>{attempt.remedials.map((r, i) => <div key={i}><strong>{r.topic || "Practice"}:</strong> {r.action}</div>)}</div>}
-    {readOnly ? <div className="assessment-readonly-final mt-3"><div><span>Final Marks</span><strong>{marks}/{assessment.total_marks}</strong></div><div><span>Overall Feedback</span><strong>{feedback || "—"}</strong></div></div> : <div className="row g-3 mt-2"><Input label={`Final Marks / ${assessment.total_marks}`} type="number" min="0" max={assessment.total_marks} step="0.5" value={marks} onChange={setMarks} /><div className="col-12"><label className="form-label">Overall feedback</label><textarea className="form-control" rows="3" value={feedback} onChange={(e) => setFeedback(e.target.value)} /></div><div className="col-12"><label className="form-label">Corrected sheet / feedback file</label><input className="form-control" type="file" multiple onChange={(e) => setFiles(Array.from(e.target.files || []))} /></div></div>}
-    <div className={`d-flex mt-3 ${readOnly ? "justify-content-end" : "justify-content-between"}`}>{readOnly ? <button className="btn btn-primary" onClick={onClose}>Close</button> : <><button className="btn btn-outline-primary" disabled={aiBusy || attempt?.submission_source === "online"} onClick={rerunAi}><i className="bi bi-stars me-1" />{aiBusy ? "Analysing…" : "Re-run AI"}</button><div><button className="btn btn-light me-2" onClick={onClose}>Cancel</button><button className="btn btn-success" disabled={busy} onClick={submit}>{busy ? "Saving…" : "Approve & Save"}</button></div></>}</div>
+    <div className="row g-3 mt-2"><Input label={`Final Marks / ${assessment.total_marks}`} type="number" min="0" max={assessment.total_marks} step="0.5" value={marks} onChange={setMarks} /><div className="col-12"><label className="form-label">Overall feedback</label><textarea className="form-control" rows="3" value={feedback} onChange={(e) => setFeedback(e.target.value)} /></div><div className="col-12"><label className="form-label">Corrected sheet / feedback file</label><input className="form-control" type="file" multiple onChange={(e) => setFiles(Array.from(e.target.files || []))} /></div></div>
+    <div className="d-flex justify-content-between mt-3"><button className="btn btn-outline-primary" disabled={aiBusy || attempt?.submission_source === "online"} onClick={rerunAi}><i className="bi bi-stars me-1" />{aiBusy ? "Analysing…" : "Re-run AI"}</button><div><button className="btn btn-light me-2" onClick={onClose}>Cancel</button><button className="btn btn-success" disabled={busy} onClick={submit}>{busy ? "Saving…" : "Approve & Save"}</button></div></div>
   </div>;
 }
 

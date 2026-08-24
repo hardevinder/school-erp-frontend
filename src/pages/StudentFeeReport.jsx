@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import {
   Container,
   Row,
@@ -11,6 +11,7 @@ import {
   Spinner,
   Card,
   Badge,
+  Form,
 } from "react-bootstrap";
 import api from "../api";
 import Swal from "sweetalert2";
@@ -33,7 +34,10 @@ const formatToDDMMYYYY = (date) => {
 
 const StudentFeeReport = () => {
   const { admissionNumber } = useParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [student, setStudent] = useState(null);
+  const [sessions, setSessions] = useState([]);
+  const [selectedSessionId, setSelectedSessionId] = useState("");
   const [reportData, setReportData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -44,20 +48,75 @@ const StudentFeeReport = () => {
   const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
-    const fetchStudentReport = async () => {
+    const fetchSessions = async () => {
       try {
-        const res = await api.get(`/reports/student/${admissionNumber}`);
+        const res = await api.get("/sessions");
+        const sessionList = Array.isArray(res.data) ? res.data : [];
+        const requestedSessionId = searchParams.get("session_id");
+        const requestedSession = sessionList.find(
+          (session) => String(session.id) === String(requestedSessionId)
+        );
+        const activeSession = sessionList.find(
+          (session) => session.is_active === true || session.isActive === true
+        );
+        const initialSession = requestedSession || activeSession;
+
+        setSessions(sessionList);
+        setSelectedSessionId(initialSession ? String(initialSession.id) : "");
+        if (!initialSession) {
+          setError("No current academic session is configured.");
+          setLoading(false);
+        }
+      } catch (err) {
+        console.error("Error fetching sessions:", err);
+        setError("Failed to load academic sessions. Please try again later.");
+        setLoading(false);
+      }
+    };
+
+    fetchSessions();
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (!selectedSessionId) return;
+
+    const fetchStudentReport = async () => {
+      setLoading(true);
+      setError("");
+      try {
+        const res = await api.get(`/reports/student/${admissionNumber}`, {
+          params: { session_id: selectedSessionId },
+        });
         setStudent(res.data.student || null);
         setReportData(res.data.report || []);
+        setCurrentPage(1);
       } catch (err) {
         console.error("Error fetching student report:", err);
-        setError("Failed to load student report. Please try again later.");
+        setError(
+          err?.response?.data?.error ||
+            "Failed to load student report. Please try again later."
+        );
       } finally {
         setLoading(false);
       }
     };
+
     fetchStudentReport();
-  }, [admissionNumber]);
+  }, [admissionNumber, selectedSessionId]);
+
+  const selectedSession = useMemo(
+    () =>
+      sessions.find(
+        (session) => String(session.id) === String(selectedSessionId)
+      ) || null,
+    [sessions, selectedSessionId]
+  );
+
+  const handleSessionChange = (event) => {
+    const sessionId = event.target.value;
+    setSelectedSessionId(sessionId);
+    setSearchParams(sessionId ? { session_id: sessionId } : {});
+  };
 
   // totals for the top cards
   const { totalFee, totalVan, totalFine } = useMemo(() => {
@@ -71,7 +130,19 @@ const StudentFeeReport = () => {
   }, [reportData]);
 
   const handlePrintReceipt = async (slipId) => {
+    let previewWindow = null;
+    let downloadedBecausePopupBlocked = false;
+
     try {
+      // Open synchronously from the click event so browsers do not block the
+      // receipt tab after the asynchronous API/PDF work completes.
+      previewWindow = window.open("", "_blank");
+      if (previewWindow) {
+        previewWindow.document.title = `Receipt - ${slipId}`;
+        previewWindow.document.body.innerHTML =
+          '<p style="font-family: sans-serif; padding: 24px">Preparing receipt PDF…</p>';
+      }
+
       Swal.fire({
         title: "Preparing receipt PDF…",
         didOpen: () => Swal.showLoading(),
@@ -84,22 +155,104 @@ const StudentFeeReport = () => {
         api.get(`/transactions/slip/${slipId}`),
       ]);
 
-      let receipt = receiptResp.value?.data;
-      if (!Array.isArray(receipt)) receipt = [receipt];
-      const schoolData = Array.isArray(schoolResp.value?.data)
-        ? schoolResp.value.data[0]
-        : schoolResp.value?.data;
+      let receipt = null;
+      if (receiptResp.status === "fulfilled") {
+        const data = receiptResp.value?.data;
+        if (Array.isArray(data)) receipt = data;
+        else if (Array.isArray(data?.data)) receipt = data.data;
+        else if (Array.isArray(data?.receipt)) receipt = data.receipt;
+        else if (data?.data && typeof data.data === "object") {
+          receipt = [data.data];
+        } else if (data && typeof data === "object") {
+          receipt = [data];
+        }
+      }
 
-      const blob = await pdf(
-        <PdfReceiptDocument school={schoolData} receipt={receipt} />
-      ).toBlob();
+      if (!receipt?.length) {
+        throw new Error("Server returned no receipt data.");
+      }
+
+      let schoolData = null;
+      if (schoolResp.status === "fulfilled") {
+        const data = schoolResp.value?.data;
+        if (Array.isArray(data?.schools)) schoolData = data.schools[0] || null;
+        else if (Array.isArray(data)) schoolData = data[0] || null;
+        else if (Array.isArray(data?.data)) schoolData = data.data[0] || null;
+        else if (data?.school) schoolData = data.school;
+        else if (data && typeof data === "object") schoolData = data;
+      }
+
+      schoolData =
+        schoolData ||
+        receipt[0]?.School ||
+        receipt[0]?.school || {
+          name: "Your School",
+          address: "",
+          phone: "",
+          email: "",
+          logo: null,
+        };
+
+      let blob;
+      try {
+        const response = await api.post(
+          "/receipt-pdf/receipt/generate-pdf",
+          {
+            receipt,
+            school: schoolData,
+            fileName: `Receipt-${slipId}`,
+            sessionLabel: selectedSession?.name || "",
+            session_id: selectedSessionId || null,
+          },
+          { responseType: "blob" }
+        );
+        blob = new Blob([response.data], { type: "application/pdf" });
+      } catch (serverPdfError) {
+        console.warn(
+          "Server receipt PDF failed; using browser fallback:",
+          serverPdfError
+        );
+        const receiptStudent = receipt[0]?.Student || receipt[0]?.student || student || {};
+        blob = await pdf(
+          <PdfReceiptDocument
+            school={schoolData}
+            receipt={receipt}
+            slipId={slipId}
+            student={receiptStudent}
+          />
+        ).toBlob();
+      }
+
       const url = URL.createObjectURL(blob);
-      window.open(url, "_blank");
+      if (previewWindow && !previewWindow.closed) {
+        previewWindow.location.replace(url);
+      } else {
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `Receipt-${slipId}.pdf`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        downloadedBecausePopupBlocked = true;
+      }
       setTimeout(() => URL.revokeObjectURL(url), 60 * 1000);
       Swal.close();
+      if (downloadedBecausePopupBlocked) {
+        Swal.fire(
+          "Receipt downloaded",
+          "The receipt tab was blocked by the browser, so the PDF was downloaded instead.",
+          "info"
+        );
+      }
     } catch (err) {
+      if (previewWindow && !previewWindow.closed) previewWindow.close();
       Swal.close();
-      Swal.fire("Error", "Unable to print receipt", "error");
+      console.error("Unable to print receipt:", err);
+      Swal.fire(
+        "Error",
+        err?.response?.data?.message || err?.message || "Unable to print receipt",
+        "error"
+      );
     }
   };
 
@@ -143,7 +296,11 @@ const StudentFeeReport = () => {
 
     // Add student name in file name
     const studentName = student?.name?.replace(/\s+/g, "_") || "Student";
-    const fileName = `${studentName}_Fee_Report_${admissionNumber}.xlsx`;
+    const sessionName = String(selectedSession?.name || "Session").replace(
+      /\s+/g,
+      "_"
+    );
+    const fileName = `${studentName}_Fee_Report_${sessionName}_${admissionNumber}.xlsx`;
 
     const wbout = XLSX.write(workbook, { bookType: "xlsx", type: "array" });
     saveAs(new Blob([wbout], { type: "application/octet-stream" }), fileName);
@@ -204,7 +361,7 @@ const StudentFeeReport = () => {
         >
           <Card.Body>
             <Row className="align-items-center g-3">
-              <Col md={8}>
+              <Col md={7}>
                 <h3 className="mb-1 d-flex align-items-center gap-2">
                   <span
                     style={{
@@ -241,18 +398,34 @@ const StudentFeeReport = () => {
                   )}
                 </p>
               </Col>
-              <Col
-                md={4}
-                className="d-flex justify-content-md-end justify-content-start"
-              >
-                <Button
-                  variant="light"
-                  onClick={exportToExcel}
-                  className="fw-semibold"
-                  style={{ color: "#4f46e5" }}
-                >
-                  📊 Export to Excel
-                </Button>
+              <Col md={5}>
+                <div className="d-flex flex-column flex-sm-row justify-content-md-end align-items-sm-end gap-2">
+                  <Form.Group style={{ minWidth: "190px" }}>
+                    <Form.Label className="small mb-1 text-white">
+                      Academic Session
+                    </Form.Label>
+                    <Form.Select
+                      value={selectedSessionId}
+                      onChange={handleSessionChange}
+                      aria-label="Academic session"
+                    >
+                      {sessions.map((session) => (
+                        <option key={session.id} value={session.id}>
+                          {session.name}
+                          {session.is_active ? " (Current)" : ""}
+                        </option>
+                      ))}
+                    </Form.Select>
+                  </Form.Group>
+                  <Button
+                    variant="light"
+                    onClick={exportToExcel}
+                    className="fw-semibold"
+                    style={{ color: "#4f46e5" }}
+                  >
+                    📊 Export to Excel
+                  </Button>
+                </div>
               </Col>
             </Row>
           </Card.Body>
@@ -305,7 +478,9 @@ const StudentFeeReport = () => {
               <Card.Body>
                 <p className="text-muted mb-1">Fine Collected</p>
                 <h4 className="mb-0">{formatTotalValue(totalFine)}</h4>
-                <small className="text-muted">Across all slips</small>
+                <small className="text-muted">
+                  Session: {selectedSession?.name || "—"}
+                </small>
               </Card.Body>
             </Card>
           </Col>
@@ -315,7 +490,7 @@ const StudentFeeReport = () => {
 
         {reportData.length === 0 ? (
           <Alert variant="info" className="text-center">
-            No records found for this student.
+            No records found for this student in {selectedSession?.name || "this session"}.
           </Alert>
         ) : (
           <>

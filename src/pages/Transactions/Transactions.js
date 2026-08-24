@@ -5762,7 +5762,7 @@ const Transactions = () => {
                     variant="info"
                     onClick={() =>
                       window.open(
-                        `/reports/student/${selectedStudentInfo.admission_number}`,
+                        `/reports/student/${selectedStudentInfo.admission_number}?session_id=${selectedSession}`,
                         "_blank"
                       )
                     }

@@ -6,6 +6,7 @@ import socket, { refreshSocketAuth } from "../socket";
 import "./SecureSchoolChat.css";
 
 const fmt = (v) => v ? new Date(v).toLocaleString("en-IN", { day:"2-digit", month:"short", hour:"2-digit", minute:"2-digit" }) : "";
+const fmtSeen = (v) => v ? new Date(v).toLocaleString("en-IN", { day:"2-digit", month:"short", hour:"2-digit", minute:"2-digit" }) : "";
 const nonce = () => `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 const getRoles = () => {
   const raw = localStorage.getItem("roles") || sessionStorage.getItem("roles") || "[]";
@@ -81,6 +82,12 @@ export default function SecureSchoolChat() {
       socket.emit("schoolchat:typing",{threadId:active.id,isTyping:false});
     }catch(e){setError(e?.response?.data?.message||e.message);}finally{setSending(false);}
   };
+  const quickThumbsUp=async()=>{
+    if(!active?.id||sending)return;setSending(true);setError("");
+    try{
+      await new Promise((resolve,reject)=>socket.emit("schoolchat:send",{threadId:active.id,body:"👍",clientNonce:nonce()},(ack)=>ack?.ok?resolve(ack):reject(new Error(ack?.message||"Send failed"))));
+    }catch(e){setError(e?.response?.data?.message||e.message);}finally{setSending(false);}
+  };
   const startChat=async()=>{
     const [kind,id]=recipientKey.split(":"); if(!kind||!id)return;
     try{const r=await api.post("/api/school-chat/threads",{kind,id:Number(id)});setShowNew(false);setRecipientKey("");await loadThreads();openThread(r.data.thread);}catch(e){setError(e?.response?.data?.message||e.message);}
@@ -90,6 +97,7 @@ export default function SecureSchoolChat() {
   const filtered=threads.filter(t=>!search.trim()||`${t.otherParticipant?.name||""} ${t.lastMessage?.body||""}`.toLowerCase().includes(search.toLowerCase()));
   const grouped=recipients.reduce((m,r)=>{const g=r.group||"People";(m[g] ||= []).push(r);return m;},{});
   const status=(m)=>m.deliveryStatus==="seen"?"Seen":m.deliveryStatus==="delivered"?"Delivered":"Sent";
+  const seenAt=(m)=>m.deliveryStatus==="seen"?(m.receipts||[]).map(r=>r.seenAt).filter(Boolean).sort().at(-1):null;
 
   return <div className="school-chat-page">
     <div className="school-chat-head"><div><h2>Secure School Chat</h2><p>Realtime school communication • attachments • typing • delivered & seen</p></div><div className="d-flex gap-2 align-items-center"><Badge bg="success">Socket Realtime</Badge><Button onClick={()=>setShowNew(true)}>New Chat</Button></div></div>
@@ -106,9 +114,9 @@ export default function SecureSchoolChat() {
       <main className="school-chat-main">
         {!active?<div className="chat-empty"><div>💬</div><h4>Secure School Chat</h4><p>Select a conversation or start a new one.</p><small>{roles.includes("student")?"Students can chat with assigned teachers and authorized school staff.":"Communication is controlled by school roles and assignments."}</small></div>:<>
           <header className="chat-active-head"><div className="chat-avatar large">{(active.otherParticipant?.name||"?").slice(0,1).toUpperCase()}<span className={`presence-dot ${active.online?"online":""}`}/></div><div><b>{active.otherParticipant?.name}</b><div className="small text-muted">{active.online?"Online":"Offline"} • {(active.otherParticipant?.roles||[]).join(", ")}</div></div></header>
-          <section className="chat-messages">{threadLoading?<div className="text-center p-5"><Spinner/></div>:messages.map(m=><div key={m.id} className={`chat-message ${m.own?"mine":"theirs"}`}><div className="chat-bubble">{!m.own&&<div className="chat-sender">{m.sender?.name}</div>}<div>{m.body}</div>{m.attachments?.map(a=><button key={a.id} className="attachment-chip" onClick={()=>download(a)}>📎 {a.name}</button>)}<div className="chat-meta">{fmt(m.createdAt)} {m.own&&<>• {status(m)}</>}</div></div></div>)}<div ref={endRef}/></section>
+          <section className="chat-messages">{threadLoading?<div className="text-center p-5"><Spinner/></div>:messages.map(m=>{const readAt=seenAt(m);return <div key={m.id} className={`chat-message ${m.own?"mine":"theirs"}`}><div className="chat-bubble">{!m.own&&<div className="chat-sender">{m.sender?.name}</div>}<div>{m.body}</div>{m.attachments?.map(a=><button key={a.id} className="attachment-chip" onClick={()=>download(a)}>📎 {a.name}</button>)}<div className="chat-meta">{fmt(m.createdAt)} {m.own&&<>• {readAt?`Seen at ${fmtSeen(readAt)}`:status(m)}</>}</div></div></div>})}<div ref={endRef}/></section>
           <div className="typing-line">{typing}</div>
-          <footer className="chat-compose"><Form.Control type="file" multiple size="sm" onChange={e=>setFiles(Array.from(e.target.files||[]))}/>{files.length>0&&<div className="small text-muted mt-1">{files.map(f=>f.name).join(", ")}</div>}<div className="d-flex gap-2 mt-2"><Form.Control as="textarea" rows={2} placeholder="Type a message…" value={text} onChange={e=>sendTyping(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send();}}}/><Button disabled={sending||(!text.trim()&&!files.length)} onClick={send}>{sending?<Spinner size="sm"/>:"Send"}</Button></div></footer>
+          <footer className="chat-compose"><Form.Control type="file" multiple size="sm" onChange={e=>setFiles(Array.from(e.target.files||[]))}/>{files.length>0&&<div className="small text-muted mt-1">{files.map(f=>f.name).join(", ")}</div>}<div className="d-flex gap-2 mt-2"><Button variant="outline-secondary" title="Quick thumbs up" aria-label="Send thumbs up" disabled={sending} onClick={quickThumbsUp}>👍</Button><Form.Control as="textarea" rows={2} placeholder="Type a message…" value={text} onChange={e=>sendTyping(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send();}}}/><Button disabled={sending||(!text.trim()&&!files.length)} onClick={send}>{sending?<Spinner size="sm"/>:"Send"}</Button></div></footer>
         </>}
       </main>
     </div>
