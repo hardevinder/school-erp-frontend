@@ -1,11 +1,8 @@
 import React, { useEffect } from "react";
-import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import axios from "axios";
 import { onMessage } from "firebase/messaging";
 import { messaging } from "./firebase/firebaseConfig";
-import { ToastContainer, toast } from "react-toastify";
-import "react-toastify/dist/ReactToastify.css";
-import socket from "./socket";
 
 import AppLayout from "./layouts/AppLayout";
 
@@ -14,7 +11,6 @@ import Login from "./components/Login";
 import RoleAwareDashboard from "./components/RoleAwareDashboard";
 import EditProfile from "./components/EditProfile";
 import ChangePassword from "./pages/ChangePassword"; // CHANGE_PASSWORD_WEB_V1
-import SupportTickets from "./pages/SupportTickets"; // EDUBRIDGE_SUPPORT_WEB_V1
 import Chat from "./components/Chat";
 import ChatContainer from "./components/chat/ChatContainer";
 import ExaminationDashboard from "./components/ExaminationDashboard";
@@ -420,41 +416,6 @@ function installGlobalApiShims() {
   }
 }
 
-function SupportNotificationBridge() {
-  const navigate = useNavigate();
-
-  useEffect(() => {
-    const openTicket = (event = {}) => {
-      const ticketNo = String(event.ticketNo || "").trim();
-      navigate(ticketNo ? `/support?ticket=${encodeURIComponent(ticketNo)}` : "/support");
-    };
-
-    const notify = (event = {}) => {
-      const title = event.title || "Support ticket updated";
-      const message = event.message || "Your support ticket has a new update.";
-
-      toast.info(
-        <div><strong>{title}</strong><div>{message}</div></div>,
-        { autoClose: 8000, onClick: () => openTicket(event) }
-      );
-
-      if (document.hidden && "Notification" in window && Notification.permission === "granted") {
-        const notification = new Notification(title, { body: message, tag: `support-${event.ticketNo || "update"}` });
-        notification.onclick = () => {
-          window.focus();
-          openTicket(event);
-          notification.close();
-        };
-      }
-    };
-
-    socket.on("support:updated", notify);
-    return () => socket.off("support:updated", notify);
-  }, [navigate]);
-
-  return <ToastContainer position="top-right" newestOnTop />;
-}
-
 function App() {
   useEffect(() => {
     installGlobalApiShims();
@@ -475,7 +436,6 @@ function App() {
 
   return (
     <Router>
-      <SupportNotificationBridge />
       <Routes>
         {/* Public */}
         <Route path="/" element={<Navigate to="/login" replace />} />
@@ -546,7 +506,6 @@ function App() {
           /> {/* HOUSE_DUTY_ROUTE_V15 */}
           <Route path="/edit-profile" element={<EditProfile />} />
           <Route path="/change-password" element={<ChangePassword />} /> {/* CHANGE_PASSWORD_WEB_ROUTE_V1 */}
-          <Route path="/support" element={<SupportTickets />} /> {/* EDUBRIDGE_SUPPORT_WEB_V1 */}
 
           {/* ✅ Messages / Fee Reminder / Student-Teacher Chat */}
           <Route

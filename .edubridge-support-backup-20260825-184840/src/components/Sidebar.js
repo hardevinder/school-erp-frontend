@@ -73,7 +73,6 @@ const GROUP_ORDER = {
   "Leave Management": 21,
   Disciplinary: 22,
   Quick: 23,
-  Support: 23.5,
   Utilities: 24,
   Student: 25,
 };
@@ -1466,14 +1465,6 @@ export default function Sidebar({ headerHeight = 56 }) {
         ],
       });
     }
-
-    // EDUBRIDGE_SUPPORT_SIDEBAR_V1 — visible to every authenticated role.
-    groups.push({
-      heading: "Support",
-      items: [
-        { key: "edubridge-support", label: "Help & Support", icon: "bi-life-preserver", path: "/support" },
-      ],
-    });
 
     for (const g of groups) {
       g.items = g.items.filter(hasAccess);

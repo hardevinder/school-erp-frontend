@@ -4,10 +4,22 @@ import Sidebar from "../components/Sidebar";
 import "../components/Sidebar.css";
 import Navbar from "../components/Navbar.jsx";
 import SchoolChatFloatingButton from "../components/SchoolChatFloatingButton"; // SCHOOL_CHAT_FLOATING_V16_2_IMPORT
+import DashboardSupportBanner from "../components/DashboardSupportBanner";
+
+const DASHBOARD_PATHS = new Set([
+  "/dashboard",
+  "/command-center",
+  "/accounts-dashboard",
+  "/transport-dashboard",
+  "/inventory",
+  "/library-dashboard",
+  "/exam-dashboard",
+]);
 
 export default function AppLayout() {
   const [headerHeight, setHeaderHeight] = useState(56);
   const location = useLocation();
+  const showDashboardSupport = DASHBOARD_PATHS.has(location.pathname.replace(/\/$/, "") || "/");
 
   useLayoutEffect(() => {
     const measure = () => {
@@ -50,6 +62,7 @@ export default function AppLayout() {
 
       {/* Push content below fixed header */}
       <main className="app-content" style={{ paddingTop: headerHeight + 8 }}>
+        {showDashboardSupport && <DashboardSupportBanner />}
         <Outlet />
       </main>
 
