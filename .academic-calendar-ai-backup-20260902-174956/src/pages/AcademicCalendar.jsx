@@ -2,9 +2,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import api from "../api";
 import Swal from "sweetalert2";
-import CalendarAiImportModal from "../components/calendar/CalendarAiImportModal";
-import CalendarNotesPanel from "../components/calendar/CalendarNotesPanel";
-import "./AcademicCalendar.css";
 
 /* ---------------- Role Helpers ---------------- */
 const getRoleFlags = () => {
@@ -146,9 +143,6 @@ const AcademicCalendar = () => {
   };
 
   const [eventForm, setEventForm] = useState(emptyEventForm);
-  const [showAiImport, setShowAiImport] = useState(false);
-  const [importCalendar, setImportCalendar] = useState(null);
-  const [noteRefreshToken, setNoteRefreshToken] = useState(0);
 
   /* ---------------- Fetch Masters ---------------- */
   const fetchSchools = async () => {
@@ -370,20 +364,6 @@ const AcademicCalendar = () => {
     await fetchEvents(cal.id);
   };
 
-  const openAiImport = (cal) => {
-    if (String(cal?.status || "").toUpperCase() === "PUBLISHED") {
-      return Swal.fire("Calendar is published", "Unpublish it before importing a PDF or handwritten calendar.", "info");
-    }
-    setImportCalendar(cal);
-    setShowAiImport(true);
-  };
-
-  const afterAiImport = async () => {
-    await fetchCalendars();
-    if (activeCalendar?.id) await fetchEvents(activeCalendar.id);
-    setNoteRefreshToken((value) => value + 1);
-  };
-
   useEffect(() => {
     if (!showEventsModal || !activeCalendar?.id) return;
     fetchEvents(activeCalendar.id);
@@ -536,39 +516,60 @@ const AcademicCalendar = () => {
   };
 
   return (
-    <div className="container-fluid px-3 px-xl-4 mt-4 academic-calendar-page">
-      <section className="calendar-hero">
-        <div className="calendar-hero-icon"><i className="bi bi-calendar2-week" /></div>
-        <div>
-          <div className="calendar-eyebrow text-info">ACADEMIC PLANNING</div>
-          <h1>Academic Calendar</h1>
-          <p>Create, import, review, publish and download a documentation-ready school calendar.</p>
-        </div>
-        <div className="calendar-hero-actions">
-          <button className="btn btn-light" onClick={openAddCalendar}><i className="bi bi-plus-lg me-2" />Create Calendar</button>
-          <button className="btn btn-outline-light" onClick={fetchCalendars} disabled={loadingRows}><i className="bi bi-arrow-clockwise me-2" />{loadingRows ? "Loading..." : "Refresh"}</button>
-        </div>
-      </section>
+    <div className="container mt-4">
+      <h1>Academic Calendar</h1>
 
-      <div className="calendar-stats">
-        <div className="calendar-stat"><i className="bi bi-collection" /><div><b>{rows.length}</b><span>Total Calendars</span></div></div>
-        <div className="calendar-stat"><i className="bi bi-send-check" /><div><b>{rows.filter((row) => String(row.status).toUpperCase() === "PUBLISHED").length}</b><span>Published</span></div></div>
-        <div className="calendar-stat"><i className="bi bi-pencil-square" /><div><b>{rows.filter((row) => String(row.status).toUpperCase() === "DRAFT").length}</b><span>Drafts</span></div></div>
-        <div className="calendar-stat"><i className="bi bi-stars" /><div><b>AI</b><span>PDF & Handwriting Import</span></div></div>
-      </div>
+      {/* Top actions */}
+      <div className="d-flex gap-2 align-items-center flex-wrap mb-3">
+        <button className="btn btn-success" onClick={openAddCalendar}>
+          Create Calendar
+        </button>
 
-      <div className="calendar-filter-card">
-        <div className="row g-3 align-items-end">
-          <div className="col-12 col-md-6 col-xl-3"><label className="form-label">School</label><select className="form-select" value={schoolId} onChange={(e) => setSchoolId(e.target.value)}><option value="">All Schools</option>{schools.map((s) => <option key={s.id} value={s.id}>{s.name || `School ${s.id}`}</option>)}</select></div>
-          <div className="col-12 col-md-6 col-xl-2"><label className="form-label">Session</label><input className="form-control" placeholder="2026-2027" value={session} onChange={(e) => setSession(e.target.value)} /></div>
-          <div className="col-12 col-md-6 col-xl-2"><label className="form-label">Status</label><select className="form-select" value={status} onChange={(e) => setStatus(e.target.value)}><option value="">All Status</option><option value="DRAFT">Draft</option><option value="PUBLISHED">Published</option><option value="ARCHIVED">Archived</option></select></div>
-          <div className="col-12 col-md-6 col-xl-4"><label className="form-label">Search</label><input className="form-control" placeholder="Search title or session..." value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === "Enter" && fetchCalendars()} /></div>
-          <div className="col-12 col-xl-1 d-grid"><button className="btn btn-primary" style={{ minHeight: 42 }} onClick={fetchCalendars} disabled={loadingRows}><i className="bi bi-search" /></button></div>
-        </div>
+        <button className="btn btn-outline-secondary" onClick={fetchCalendars} disabled={loadingRows}>
+          {loadingRows ? "Loading..." : "Refresh"}
+        </button>
+
+        <div style={{ flex: 1 }} />
+
+        <select className="form-select" style={{ width: 220 }} value={schoolId} onChange={(e) => setSchoolId(e.target.value)}>
+          <option value="">All Schools</option>
+          {schools.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.name || `School ${s.id}`}
+            </option>
+          ))}
+        </select>
+
+        <input
+          className="form-control"
+          style={{ width: 200 }}
+          placeholder="Academic Session (e.g. 2026-27)"
+          value={session}
+          onChange={(e) => setSession(e.target.value)}
+        />
+
+        <select className="form-select" style={{ width: 170 }} value={status} onChange={(e) => setStatus(e.target.value)}>
+          <option value="">All Status</option>
+          <option value="DRAFT">DRAFT</option>
+          <option value="PUBLISHED">PUBLISHED</option>
+          <option value="ARCHIVED">ARCHIVED</option>
+        </select>
+
+        <input
+          className="form-control"
+          style={{ width: 320 }}
+          placeholder="Search title / session..."
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+        />
+
+        <button className="btn btn-outline-primary" onClick={fetchCalendars} disabled={loadingRows}>
+          Apply
+        </button>
       </div>
 
       {/* Calendars table */}
-      <div className="calendar-table-card"><div className="table-responsive"><table className="table align-middle">
+      <table className="table table-striped">
         <thead>
           <tr>
             <th>#</th>
@@ -591,20 +592,20 @@ const AcademicCalendar = () => {
                 <td>{idx + 1}</td>
                 <td>{cal.school_id ? schoolNameById(cal.school_id) : "—"}</td>
                 <td>{cal.academic_session || "-"}</td>
-                <td className="calendar-title-cell" title={cal.title || ""}>
-                  <b>{cal.title || "Academic Calendar"}</b><span>{cal.remarks || "School academic schedule"}</span>
+                <td title={cal.title || ""} style={{ maxWidth: 260, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  {cal.title || "—"}
                 </td>
                 <td>
                   {prettyDate(cal.start_date)} → {prettyDate(cal.end_date)}
                 </td>
                 <td>
-                  <span className={`${statusBadge(cal.status)} calendar-status-pill`}>{String(cal.status || "DRAFT")}</span>
+                  <span className={statusBadge(cal.status)}>{String(cal.status || "DRAFT")}</span>
                 </td>
                 <td>
-                  <div className="d-flex gap-2 flex-wrap calendar-action-row">
-                    <button className="btn btn-outline-dark btn-sm" onClick={() => openCalendarPdf(cal)} title="Open documentation-ready PDF"><i className="bi bi-file-earmark-pdf me-1" />PDF</button>
-
-                    <button className="btn btn-outline-primary btn-sm" onClick={() => openAiImport(cal)} disabled={!canEdit} title="Import PDF or handwritten calendar"><i className="bi bi-stars me-1" />AI Import</button>
+                  <div className="d-flex gap-2 flex-wrap">
+                    <button className="btn btn-outline-dark btn-sm" onClick={() => openCalendarPdf(cal)}>
+                      PDF
+                    </button>
 
                     <button className="btn btn-outline-info btn-sm" onClick={() => openEvents(cal)}>
                       Events
@@ -639,7 +640,7 @@ const AcademicCalendar = () => {
             </tr>
           )}
         </tbody>
-      </table></div></div>
+      </table>
 
       {/* ---------------- Calendar Modal ---------------- */}
       {showCalModal && (
@@ -819,15 +820,7 @@ const AcademicCalendar = () => {
                     disabled={String(activeCalendar?.status || "").toUpperCase() === "PUBLISHED"}
                     title={String(activeCalendar?.status || "").toUpperCase() === "PUBLISHED" ? "Unpublish to edit events" : ""}
                   >
-                    <i className="bi bi-plus-lg me-1" />Add Event
-                  </button>
-
-                  <button
-                    className="btn btn-primary"
-                    onClick={() => openAiImport(activeCalendar)}
-                    disabled={String(activeCalendar?.status || "").toUpperCase() === "PUBLISHED"}
-                  >
-                    <i className="bi bi-stars me-1" />Import PDF / Handwriting
+                    Add Event
                   </button>
 
                   <button className="btn btn-outline-secondary" onClick={() => fetchEvents(activeCalendar?.id)} disabled={loadingEvents}>
@@ -923,8 +916,6 @@ const AcademicCalendar = () => {
                     )}
                   </tbody>
                 </table>
-
-                <CalendarNotesPanel calendar={activeCalendar} refreshToken={noteRefreshToken} />
 
                 {String(activeCalendar?.status || "").toUpperCase() === "PUBLISHED" && (
                   <div className="alert alert-info mb-0">
@@ -1104,14 +1095,6 @@ const AcademicCalendar = () => {
             </div>
           </div>
         </div>
-      )}
-
-      {showAiImport && importCalendar && (
-        <CalendarAiImportModal
-          calendar={importCalendar}
-          onClose={() => { setShowAiImport(false); setImportCalendar(null); }}
-          onImported={afterAiImport}
-        />
       )}
     </div>
   );

@@ -94,23 +94,6 @@ const getSubTeacherName = (sub) =>
 const getSubTeacherId = (sub) =>
   toNum(sub?.teacherId ?? sub?.Teacher?.id ?? sub?.id ?? sub?.teacher_id);
 
-const ARRANGEMENT_REASONS = [
-  ['ABSENT', 'Absent'],
-  ['ON_LEAVE', 'On Leave'],
-  ['OFFICIAL_DUTY', 'Official Duty'],
-  ['EXAM_DUTY', 'Exam Duty'],
-  ['MEETING', 'Meeting'],
-  ['TRAINING_WORKSHOP', 'Training / Workshop'],
-  ['EVENT_DUTY', 'School Event Duty'],
-  ['COMPETITION_TRIP', 'Competition / Trip Duty'],
-  ['ADMINISTRATIVE_WORK', 'Administrative Work'],
-  ['PERSONAL_PERMISSION', 'Personal Permission'],
-  ['OTHER', 'Other'],
-];
-
-const arrangementReasonLabel = (value) =>
-  ARRANGEMENT_REASONS.find(([key]) => key === value)?.[1] || 'Arrangement';
-
 /* ==== persistence keys ==== */
 const LS_TEACHER = 'ttv:selectedTeacherUserId';
 const LS_DATE = 'ttv:selectedDate';
@@ -147,8 +130,6 @@ const TeacherTimetableView = () => {
   // Teachers stored as { userId, employeeId?, name }
   const [teachers, setTeachers] = useState([]);
   const [teacherSearch, setTeacherSearch] = useState('');
-  const [availableTeacherSearch, setAvailableTeacherSearch] = useState('');
-  const [viewMode, setViewMode] = useState('day'); // day | week
   const [selectedTeacher, setSelectedTeacher] = useState(null); // { userId, employeeId?, name }
 
   const [periods, setPeriods] = useState([]); // [{id, name}]
@@ -159,15 +140,6 @@ const TeacherTimetableView = () => {
 
   const [selectedDay, setSelectedDay] = useState(null); // canonical day
   const [selectedPeriod, setSelectedPeriod] = useState(null); // number
-
-  // Teacher may be present but temporarily unavailable for selected periods.
-  const [arrangementReason, setArrangementReason] = useState('ABSENT');
-  const [arrangementNote, setArrangementNote] = useState('');
-  const [arrangementScope, setArrangementScope] = useState('FULL_DAY');
-  const [affectedPeriodIds, setAffectedPeriodIds] = useState([]);
-  const [activeArrangement, setActiveArrangement] = useState(null);
-  const [arrangementLoading, setArrangementLoading] = useState(false);
-  const [arrangementSaving, setArrangementSaving] = useState(false);
 
   const [availableTeachersWithWorkload, setAvailableTeachersWithWorkload] = useState([]);
 
@@ -323,11 +295,6 @@ const TeacherTimetableView = () => {
     setOriginalSubs({});
     setSelectedDay(null);
     setSelectedPeriod(null);
-    setActiveArrangement(null);
-    setArrangementReason('ABSENT');
-    setArrangementNote('');
-    setArrangementScope('FULL_DAY');
-    setAffectedPeriodIds([]);
   }, [selectedTeacher]);
 
   // Optional: global timetable (kept for future use, not shown in UI)
@@ -362,98 +329,6 @@ const TeacherTimetableView = () => {
 
     return g;
   }, [timetable, periods]);
-
-  // Load the selected teacher's availability/arrangement record for this date.
-  useEffect(() => {
-    if (!selectedTeacher?.userId || !selectedDate) return;
-    let cancelled = false;
-    (async () => {
-      setArrangementLoading(true);
-      try {
-        const res = await fetch(
-          `${API_URL}/teacher-unavailability?teacherId=${encodeURIComponent(selectedTeacher.userId)}&date=${encodeURIComponent(selectedDate)}&status=ACTIVE`,
-          { headers: authHeaders }
-        );
-        if (!res.ok) throw new Error(`GET /teacher-unavailability ${res.status}`);
-        const data = await res.json();
-        const item = (data?.items || [])[0] || null;
-        if (cancelled) return;
-        setActiveArrangement(item);
-        if (item) {
-          setArrangementReason(item.reasonType || 'ABSENT');
-          setArrangementNote(item.reasonNote || '');
-          setArrangementScope(item.scope || 'FULL_DAY');
-          setAffectedPeriodIds(
-            (item.Periods || [])
-              .map((row) => toNum(row?.periodId ?? row?.Period?.id))
-              .filter((id) => id != null)
-          );
-        } else {
-          setArrangementReason('ABSENT');
-          setArrangementNote('');
-          setArrangementScope('FULL_DAY');
-          setAffectedPeriodIds([]);
-        }
-      } catch (e) {
-        console.error('Error loading teacher arrangement:', e);
-        if (!cancelled) setActiveArrangement(null);
-      } finally {
-        if (!cancelled) setArrangementLoading(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [selectedTeacher?.userId, selectedDate, authHeaders]);
-
-  const isPeriodAffected = (periodId) =>
-    arrangementScope === 'FULL_DAY' || affectedPeriodIds.includes(toNum(periodId));
-
-  const toggleAffectedPeriod = (periodId) => {
-    const pid = toNum(periodId);
-    if (!pid) return;
-    setAffectedPeriodIds((prev) =>
-      prev.includes(pid) ? prev.filter((id) => id !== pid) : [...prev, pid]
-    );
-  };
-
-  const saveTeacherArrangement = async ({ silent = false } = {}) => {
-    if (!selectedTeacher?.userId || !selectedDate) {
-      if (!silent) Swal.fire('Select teacher', 'Please choose the teacher to arrange.', 'warning');
-      return null;
-    }
-    if (arrangementScope === 'SELECTED_PERIODS' && affectedPeriodIds.length === 0) {
-      if (!silent) Swal.fire('Select periods', 'Choose at least one affected period.', 'warning');
-      return null;
-    }
-
-    setArrangementSaving(true);
-    try {
-      const res = await fetch(`${API_URL}/teacher-unavailability`, {
-        method: 'POST',
-        headers: authHeaders,
-        body: JSON.stringify({
-          teacherId: selectedTeacher.userId,
-          date: selectedDate,
-          reasonType: arrangementReason,
-          reasonNote: arrangementNote,
-          scope: arrangementScope,
-          periodIds: arrangementScope === 'SELECTED_PERIODS' ? affectedPeriodIds : [],
-        }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error || 'Failed to save teacher arrangement.');
-      setActiveArrangement(data);
-      if (!silent) {
-        Swal.fire('Arrangement saved', `${selectedTeacher.name} • ${arrangementReasonLabel(arrangementReason)}`, 'success');
-      }
-      return data;
-    } catch (e) {
-      console.error('Error saving teacher arrangement:', e);
-      if (!silent) Swal.fire('Could not save arrangement', e.message || 'Please try again.', 'error');
-      return null;
-    } finally {
-      setArrangementSaving(false);
-    }
-  };
 
   // Holidays map
   const holidayByDate = useMemo(() => {
@@ -552,8 +427,6 @@ const TeacherTimetableView = () => {
           .map((t) => ({
             id: toNum(t?.user_id ?? t?.User?.id ?? t?.id),
             name: t?.name ?? t?.User?.name ?? 'Unnamed',
-            photoUrl: t?.photo_url ?? null,
-            teaches: Array.isArray(t?.teaches) ? t.teaches : [],
           }))
           .filter((t) => t.id != null);
 
@@ -569,70 +442,26 @@ const TeacherTimetableView = () => {
               if (!r.ok) return { ...t, weeklyWorkload: 0, dayWorkload: 0 };
               const wl = await r.json();
               const weeklyWorkload = wl?.weeklyWorkload ?? 0;
-              const dayWorkload =
-                wl?.dailyWorkload?.[prettyDay(selectedDay)] ??
-                wl?.dailyWorkload?.[selectedDay] ??
-                0;
+              const dayWorkload = wl?.dailyWorkload?.[selectedDay] ?? 0;
               return { ...t, weeklyWorkload, dayWorkload };
             } catch {
               return { ...t, weeklyWorkload: 0, dayWorkload: 0 };
             }
           })
         );
-        const targetRecords = grid[selectedDay]?.[selectedPeriod] || [];
-        const targetClassIds = new Set(
-          targetRecords
-            .map((r) => toNum(r?.Class?.id ?? r?.classId ?? r?.class_id))
-            .filter((v) => v != null)
-        );
-        const targetSubjectIds = new Set(
-          targetRecords
-            .map((r) => toNum(r?.Subject?.id ?? r?.subjectId ?? r?.subject_id))
-            .filter((v) => v != null)
-        );
-
-        const scored = withWL.map((teacher) => {
-          const teaches = Array.isArray(teacher.teaches) ? teacher.teaches : [];
-          const sameSubject = teaches.some((x) => targetSubjectIds.has(toNum(x?.subjectId)));
-          const sameClass = teaches.some((x) => targetClassIds.has(toNum(x?.classId)));
-          const exactMatch = teaches.some(
-            (x) =>
-              targetSubjectIds.has(toNum(x?.subjectId)) &&
-              targetClassIds.has(toNum(x?.classId))
-          );
-
-          let smartScore = 35;
-          if (sameSubject) smartScore += 40;
-          if (sameClass) smartScore += 15;
-          if (exactMatch) smartScore += 10;
-          smartScore -= Math.min(20, Number(teacher.dayWorkload || 0) * 4);
-          smartScore -= Math.min(12, Math.round(Number(teacher.weeklyWorkload || 0) * 0.6));
-          smartScore = Math.max(1, Math.min(100, Math.round(smartScore)));
-
-          const reasons = [];
-          if (exactMatch) reasons.push('same class & subject');
-          else if (sameSubject) reasons.push('same subject');
-          else if (sameClass) reasons.push('knows this class');
-          if ((teacher.dayWorkload || 0) <= 2) reasons.push('light workload today');
-          if (!reasons.length) reasons.push('available with lower workload');
-
-          return { ...teacher, smartScore, smartReason: reasons.join(' • ') };
-        });
-
-        scored.sort(
+        withWL.sort(
           (a, b) =>
-            b.smartScore - a.smartScore ||
-            a.dayWorkload - b.dayWorkload ||
             a.weeklyWorkload - b.weeklyWorkload ||
+            a.dayWorkload - b.dayWorkload ||
             String(a.name).localeCompare(String(b.name))
         );
-        setAvailableTeachersWithWorkload(scored);
+        setAvailableTeachersWithWorkload(withWL);
       } catch (e) {
         console.error('Error fetching available teachers:', e);
         setAvailableTeachersWithWorkload([]);
       }
     })();
-  }, [selectedDay, selectedPeriod, selectedDate, authHeaders, grid]);
+  }, [selectedDay, selectedPeriod, selectedDate, authHeaders]);
 
   const filteredTeachers = useMemo(() => {
     const q = teacherSearch.trim().toLowerCase();
@@ -641,16 +470,6 @@ const TeacherTimetableView = () => {
       `${t.name} ${t.userId} ${t.employeeId ?? ''}`.toLowerCase().includes(q)
     );
   }, [teachers, teacherSearch]);
-
-  const filteredAvailableTeachers = useMemo(() => {
-    const q = availableTeacherSearch.trim().toLowerCase();
-    if (!q) return availableTeachersWithWorkload;
-    return availableTeachersWithWorkload.filter((t) =>
-      `${t.name} ${t.id}`.toLowerCase().includes(q)
-    );
-  }, [availableTeachersWithWorkload, availableTeacherSearch]);
-
-  const recommendedTeacher = availableTeachersWithWorkload[0] || null;
 
   const currentCellKey =
     selectedDay && selectedPeriod != null
@@ -709,14 +528,6 @@ const TeacherTimetableView = () => {
       teacherName: teacher.name,
     };
     setSubstitutions((prev) => ({ ...prev, [key]: teacherToStore }));
-  };
-
-  const useRecommendedTeacher = () => {
-    if (!recommendedTeacher) {
-      Swal.fire('No recommendation', 'No available teacher was found for this period.', 'info');
-      return;
-    }
-    handleTeacherSubstitution(recommendedTeacher);
   };
 
   const removeSubstitution = async (cellKey) => {
@@ -835,12 +646,6 @@ const TeacherTimetableView = () => {
       return;
     }
 
-    const arrangement = await saveTeacherArrangement({ silent: true });
-    if (!arrangement) {
-      Swal.fire('Arrangement required', 'Please complete the reason and affected period selection first.', 'warning');
-      return;
-    }
-
     const { payload, selectedTeacherId, error } = buildSubstitutionPayload(
       selectedDay,
       selectedPeriod,
@@ -892,12 +697,6 @@ const TeacherTimetableView = () => {
 
     if (!upsertKeys.length && !deleteKeys.length) {
       Swal.fire('Nothing to save', 'No pending substitution changes found.', 'info');
-      return;
-    }
-
-    const arrangement = await saveTeacherArrangement({ silent: true });
-    if (!arrangement) {
-      Swal.fire('Arrangement required', 'Please complete the reason and affected period selection first.', 'warning');
       return;
     }
 
@@ -1005,9 +804,6 @@ const TeacherTimetableView = () => {
 
     setSelectedDay(dayKey);
     setSelectedPeriod(pid);
-    if (arrangementScope === 'SELECTED_PERIODS') {
-      setAffectedPeriodIds((prev) => (prev.includes(pid) ? prev : [...prev, pid]));
-    }
   };
 
   const changeWeek = (offsetDays) => {
@@ -1314,47 +1110,6 @@ const TeacherTimetableView = () => {
             color: #64748b;
           }
 
-          .ttv-step-chip {
-            display: inline-flex;
-            align-items: center;
-            gap: 7px;
-            padding: 7px 11px;
-            border-radius: 999px;
-            background: #f1f5f9;
-            color: #64748b;
-            font-size: .78rem;
-            font-weight: 700;
-            border: 1px solid #e2e8f0;
-          }
-          .ttv-step-chip strong {
-            width: 20px; height: 20px; border-radius: 50%; display: inline-grid; place-items: center;
-            background: #cbd5e1; color: #fff; font-size: .7rem;
-          }
-          .ttv-step-chip.active { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
-          .ttv-step-chip.active strong { background: #2563eb; }
-
-          .ttv-day-summary {
-            display: flex; justify-content: space-between; align-items: center; gap: 12px;
-            padding: 14px 16px; border: 1px solid #e2e8f0; border-radius: 16px; background: #f8fafc;
-          }
-          .ttv-period-grid {
-            display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px;
-          }
-          .ttv-period-card {
-            min-height: 150px; padding: 14px; border-radius: 16px; border: 1px solid #dbe3ee;
-            background: #fff; text-align: left; transition: .18s ease; cursor: pointer;
-          }
-          .ttv-period-card:hover:not(.disabled) {
-            transform: translateY(-2px); border-color: #93c5fd; box-shadow: 0 10px 22px rgba(37,99,235,.09);
-          }
-          .ttv-period-card.selected { border: 2px solid #2563eb; background: #eff6ff; }
-          .ttv-period-card.assigned { box-shadow: inset 0 0 0 1px #86efac; }
-          .ttv-period-card.disabled { cursor: default; background: #f8fafc; opacity: .72; }
-          .ttv-period-label { font-size: .78rem; font-weight: 800; color: #475569; text-transform: uppercase; letter-spacing: .04em; }
-          .ttv-period-empty { margin-top: 26px; text-align: center; color: #94a3b8; font-size: .85rem; font-weight: 600; }
-          .ttv-assigned-teacher { padding: 7px 9px; border-radius: 10px; background: #ecfdf5; color: #047857; font-size: .78rem; font-weight: 800; }
-          .ttv-recommended { padding: 3px 7px; border-radius: 999px; background: #fef3c7; color: #92400e; font-size: .66rem; font-weight: 800; flex-shrink: 0; }
-
           @media (max-width: 991px) {
             .ttv-page { padding: 14px; }
             .ttv-hero { border-radius: 18px; padding: 18px; }
@@ -1377,9 +1132,9 @@ const TeacherTimetableView = () => {
                   </span>
                 )}
               </div>
-              <h2 className="mb-2 fw-bold">Substitution & Period Arrangement</h2>
+              <h2 className="mb-2 fw-bold">Teacher Timetable & Substitution Planner</h2>
               <p className="mb-0" style={{ color: 'rgba(255,255,255,0.82)', maxWidth: 760 }}>
-                Arrange periods for absence, leave, official duties, meetings and temporary unavailability with smart workload-aware recommendations.
+                Select a teacher, click a scheduled class, then assign the best available substitute teacher with workload visibility.
               </p>
             </div>
 
@@ -1438,19 +1193,19 @@ const TeacherTimetableView = () => {
         <div className="ttv-toolbar mb-3">
           <div className="row g-3 align-items-end">
             <div className="col-lg-3 col-md-6">
-              <label htmlFor="teacherSearch" className="form-label fw-semibold">Find Teacher</label>
+              <label htmlFor="teacherSearch" className="form-label fw-semibold">Search Teacher</label>
               <input
                 id="teacherSearch"
                 type="text"
                 className="form-control"
-                placeholder="Type teacher name"
+                placeholder="Name / User ID"
                 value={teacherSearch}
                 onChange={(e) => setTeacherSearch(e.target.value)}
               />
             </div>
 
             <div className="col-lg-3 col-md-6">
-              <label htmlFor="teacherSelect" className="form-label fw-semibold">Teacher to Arrange</label>
+              <label htmlFor="teacherSelect" className="form-label fw-semibold">Select Teacher</label>
               <select
                 id="teacherSelect"
                 className="form-select"
@@ -1467,7 +1222,7 @@ const TeacherTimetableView = () => {
                 )}
                 {filteredTeachers.map((t) => (
                   <option key={t.userId} value={t.userId}>
-                    {t.name}
+                    {t.name} (User #{t.userId})
                   </option>
                 ))}
               </select>
@@ -1505,77 +1260,17 @@ const TeacherTimetableView = () => {
             </div>
           </div>
 
-          <div className="d-flex flex-wrap align-items-center justify-content-between gap-2 mt-3">
-            <div className="d-flex flex-wrap gap-2">
-              <span className="ttv-step-chip active"><strong>1</strong> Teacher</span>
-              <span className={`ttv-step-chip ${arrangementReason ? 'active' : ''}`}><strong>2</strong> Reason & periods</span>
-              <span className={`ttv-step-chip ${currentCellSubstitution ? 'active' : ''}`}><strong>3</strong> Substitute</span>
-            </div>
+          <div className="d-flex flex-wrap gap-2 mt-3">
+            {!API_URL && <span className="ttv-badge-soft ttv-badge-red">REACT_APP_API_URL missing</span>}
+            {!token && <span className="ttv-badge-soft ttv-badge-orange">No token found</span>}
+            <span className="ttv-badge-soft ttv-badge-gray">Rows: {timetable?.length ?? 0}</span>
+            <span className="ttv-badge-soft ttv-badge-gray">Teachers: {teachers.length}</span>
+            <span className="ttv-badge-soft ttv-badge-gray">Periods: {periods.length}</span>
+            {globalTimetable?.length > 0 && (
+              <span className="ttv-badge-soft ttv-badge-gray">Global records: {globalTimetable.length}</span>
+            )}
             {pendingDeleteCount > 0 && (
-              <span className="ttv-badge-soft ttv-badge-orange">{pendingDeleteCount} removal(s) pending</span>
-            )}
-          </div>
-        </div>
-
-        <div className="ttv-panel mb-3">
-          <div className="ttv-panel-head d-flex flex-wrap justify-content-between align-items-center gap-2">
-            <div>
-              <div className="fw-bold">Teacher Availability</div>
-              <div className="small text-muted">The teacher may be present in school but unavailable for one or more periods.</div>
-            </div>
-            {arrangementLoading ? (
-              <span className="ttv-badge-soft ttv-badge-gray">Loading…</span>
-            ) : activeArrangement ? (
-              <span className="ttv-badge-soft ttv-badge-green">Saved • {arrangementReasonLabel(activeArrangement.reasonType)}</span>
-            ) : (
-              <span className="ttv-badge-soft ttv-badge-blue">New arrangement</span>
-            )}
-          </div>
-          <div className="ttv-panel-body">
-            <div className="row g-3 align-items-end">
-              <div className="col-lg-3 col-md-6">
-                <label className="form-label fw-semibold">Reason</label>
-                <select className="form-select" value={arrangementReason} onChange={(e) => setArrangementReason(e.target.value)}>
-                  {ARRANGEMENT_REASONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-                </select>
-              </div>
-              <div className="col-lg-3 col-md-6">
-                <label className="form-label fw-semibold">Availability</label>
-                <div className="btn-group w-100" role="group">
-                  <button type="button" className={`btn ${arrangementScope === 'FULL_DAY' ? 'btn-primary' : 'btn-outline-primary'}`} onClick={() => setArrangementScope('FULL_DAY')}>Full Day</button>
-                  <button type="button" className={`btn ${arrangementScope === 'SELECTED_PERIODS' ? 'btn-primary' : 'btn-outline-primary'}`} onClick={() => setArrangementScope('SELECTED_PERIODS')}>Selected Periods</button>
-                </div>
-              </div>
-              <div className="col-lg-4 col-md-8">
-                <label className="form-label fw-semibold">Note <span className="text-muted fw-normal">(optional)</span></label>
-                <input className="form-control" maxLength={500} placeholder="e.g. Board meeting / competition duty" value={arrangementNote} onChange={(e) => setArrangementNote(e.target.value)} />
-              </div>
-              <div className="col-lg-2 col-md-4">
-                <button type="button" className="btn btn-dark w-100" disabled={arrangementSaving || arrangementLoading} onClick={() => saveTeacherArrangement()}>
-                  {arrangementSaving ? 'Saving…' : 'Save Arrangement'}
-                </button>
-              </div>
-            </div>
-
-            {arrangementScope === 'SELECTED_PERIODS' && (
-              <div className="mt-3 p-3 rounded-4 border bg-light">
-                <div className="d-flex flex-wrap justify-content-between gap-2 align-items-center mb-2">
-                  <div className="small fw-bold text-dark">Affected periods</div>
-                  <div className="small text-muted">Click scheduled period cards below to add them.</div>
-                </div>
-                <div className="d-flex flex-wrap gap-2">
-                  {affectedPeriodIds.length === 0 ? (
-                    <span className="small text-muted">No period selected yet.</span>
-                  ) : affectedPeriodIds.map((pid) => {
-                    const period = periods.find((p) => p.id === pid);
-                    return (
-                      <button key={pid} type="button" className="btn btn-sm btn-outline-danger rounded-pill" onClick={() => toggleAffectedPeriod(pid)}>
-                        {period?.name || `P${pid}`} ×
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
+              <span className="ttv-badge-soft ttv-badge-orange">Pending removals: {pendingDeleteCount}</span>
             )}
           </div>
         </div>
@@ -1585,15 +1280,12 @@ const TeacherTimetableView = () => {
             <div className="ttv-glass-card p-3">
               <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
                 <div>
-                  <h5 className="mb-1 fw-bold">Teacher Schedule</h5>
-                  <div className="small text-muted">Select the affected class period. Daily view is recommended for quick marking.</div>
+                  <h5 className="mb-1 fw-bold">Weekly Timetable</h5>
+                  <div className="small text-muted">Click only on a scheduled class cell to assign substitution.</div>
                 </div>
-                <div className="d-flex flex-wrap align-items-center gap-2">
-                  <div className="btn-group btn-group-sm" role="group" aria-label="Schedule view">
-                    <button type="button" className={`btn ${viewMode === 'day' ? 'btn-primary' : 'btn-outline-primary'}`} onClick={() => setViewMode('day')}>Day</button>
-                    <button type="button" className={`btn ${viewMode === 'week' ? 'btn-primary' : 'btn-outline-primary'}`} onClick={() => setViewMode('week')}>Week</button>
-                  </div>
-                  <span className="ttv-badge-soft ttv-badge-green">Substitutions: {substitutionCount}</span>
+                <div className="d-flex flex-wrap gap-2">
+                  <span className="ttv-badge-soft ttv-badge-blue">Selected: {selectedDay ? `${prettyDay(selectedDay)} ${selectedPeriodObj?.name || `P${selectedPeriod}`}` : 'None'}</span>
+                  <span className="ttv-badge-soft ttv-badge-green">Saved/Selected Subs: {substitutionCount}</span>
                 </div>
               </div>
 
@@ -1603,59 +1295,6 @@ const TeacherTimetableView = () => {
                     <span className="visually-hidden">Loading...</span>
                   </div>
                   <div className="mt-3 text-muted">Loading timetable...</div>
-                </div>
-              ) : viewMode === 'day' ? (
-                <div className="ttv-day-view">
-                  <div className="ttv-day-summary mb-3">
-                    <div>
-                      <div className="small text-muted fw-semibold text-uppercase">Selected day</div>
-                      <div className="fw-bold fs-5">{weekdayOfSelectedDate ? prettyDay(weekdayOfSelectedDate) : '—'} <span className="text-muted fw-normal fs-6">• {formatNiceDate(selectedDate)}</span></div>
-                    </div>
-                    <span className="ttv-badge-soft ttv-badge-blue">Click a class to assign cover</span>
-                  </div>
-                  <div className="ttv-period-grid">
-                    {periods.map((p) => {
-                      const dayKey = weekdayOfSelectedDate;
-                      const records = dayKey ? (grid[dayKey]?.[p.id] || []) : [];
-                      const key = dayKey ? `${dayKey}_${p.id}` : '';
-                      const sub = key ? substitutions[key] : null;
-                      const selected = selectedDay === dayKey && selectedPeriod === p.id;
-                      const holiday = dayKey ? holidayByDate[weekDates[dayKey]] : null;
-                      const disabled = !dayKey || Boolean(holiday) || !records.length;
-                      return (
-                        <button
-                          type="button"
-                          key={p.id}
-                          className={`ttv-period-card ${selected ? 'selected' : ''} ${sub ? 'assigned' : ''} ${disabled ? 'disabled' : ''}`}
-                          disabled={disabled}
-                          onClick={() => dayKey && handleCellClick(prettyDay(dayKey), p.id)}
-                        >
-                          <div className="d-flex justify-content-between align-items-start gap-2">
-                            <span className="ttv-period-label">{p.name}</span>
-                            <div className="d-flex flex-wrap gap-1 justify-content-end">
-                              {records.length > 0 && isPeriodAffected(p.id) && <span className="ttv-badge-soft ttv-badge-orange">Affected</span>}
-                              {sub && <span className="ttv-badge-soft ttv-badge-green">Assigned</span>}
-                            </div>
-                          </div>
-                          {holiday ? (
-                            <div className="ttv-period-empty">Holiday</div>
-                          ) : records.length ? (
-                            <div className="mt-3">
-                              {records.map((rec, idx) => (
-                                <div key={idx} className="mb-2">
-                                  <div className="fw-bold text-dark">{safeGetClassName(rec) || 'Class'}</div>
-                                  <div className="small text-muted">{safeGetSubjectName(rec)}</div>
-                                </div>
-                              ))}
-                              {sub && <div className="ttv-assigned-teacher mt-2"><i className="bi bi-person-check-fill"></i> {getSubTeacherName(sub)}</div>}
-                            </div>
-                          ) : (
-                            <div className="ttv-period-empty">Free period</div>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
                 </div>
               ) : (
                 <div className="ttv-table-wrap ttv-custom-scrollbar">
@@ -1812,7 +1451,7 @@ const TeacherTimetableView = () => {
                   </>
                 ) : (
                   <div className="ttv-empty-state">
-                    Choose a class period from the schedule to continue.
+                    Select any scheduled class cell from the timetable.
                   </div>
                 )}
               </div>
@@ -1822,8 +1461,8 @@ const TeacherTimetableView = () => {
               <div className="ttv-panel-head">
                 <div className="d-flex justify-content-between align-items-start gap-2">
                   <div>
-                    <h6 className="mb-1 fw-bold">Choose Substitute</h6>
-                    <div className="small text-muted">Smart match • subject/class fit • workload</div>
+                    <h6 className="mb-1 fw-bold">Available Teachers</h6>
+                    <div className="small text-muted">Sorted by lower workload first</div>
                   </div>
                   {selectedDay && selectedPeriod != null && (
                     <span className="ttv-badge-soft ttv-badge-green">{availableTeachersWithWorkload.length}</span>
@@ -1831,26 +1470,11 @@ const TeacherTimetableView = () => {
                 </div>
               </div>
 
-              <div className="ttv-panel-body">
-                {selectedDay && selectedPeriod != null && availableTeachersWithWorkload.length > 0 && (
-                  <>
-                    <button type="button" className="btn btn-primary w-100 mb-2" onClick={useRecommendedTeacher}>
-                      <i className="bi bi-stars me-2"></i>Use Smart Pick: {recommendedTeacher?.name}
-                    </button>
-                    <input
-                      type="search"
-                      className="form-control mb-3"
-                      placeholder="Search available teacher"
-                      value={availableTeacherSearch}
-                      onChange={(e) => setAvailableTeacherSearch(e.target.value)}
-                    />
-                  </>
-                )}
-                <div className="ttv-custom-scrollbar" style={{ maxHeight: 390, overflowY: 'auto' }}>
+              <div className="ttv-panel-body ttv-custom-scrollbar" style={{ maxHeight: 460, overflowY: 'auto' }}>
                 {selectedDay && selectedPeriod != null ? (
-                  filteredAvailableTeachers.length ? (
+                  availableTeachersWithWorkload.length ? (
                     <div className="d-flex flex-column gap-2">
-                      {filteredAvailableTeachers.map((t) => {
+                      {availableTeachersWithWorkload.map((t) => {
                         const isSelectedSame =
                           currentCellSubstitution && getSubTeacherId(currentCellSubstitution) === t.id;
 
@@ -1864,21 +1488,13 @@ const TeacherTimetableView = () => {
                             title={`Weekly: ${t.weeklyWorkload ?? 0} | ${prettyDay(selectedDay)}: ${t.dayWorkload ?? 0}`}
                           >
                             <div style={{ minWidth: 0 }}>
-                              <div className="d-flex align-items-center gap-2">
-                                <div className="fw-bold text-dark text-truncate">{t.name}</div>
-                                {recommendedTeacher?.id === t.id && (
-                                  <span className="ttv-recommended">Recommended</span>
-                                )}
-                              </div>
-                              <div className="small text-muted text-truncate">{t.smartReason || 'Available for this period'}</div>
+                              <div className="fw-bold text-dark text-truncate">{t.name}</div>
+                              <div className="small text-muted">User #{t.id}</div>
                             </div>
                             <div className="text-end flex-shrink-0">
-                              <span className="ttv-badge-soft ttv-badge-orange">Match {t.smartScore ?? '—'}%</span>
+                              <span className="ttv-badge-soft ttv-badge-blue">W: {t.weeklyWorkload ?? 0}</span>
                               <div className="mt-1">
-                                <span className="ttv-badge-soft ttv-badge-blue">Week {t.weeklyWorkload ?? 0}</span>
-                              </div>
-                              <div className="mt-1">
-                                <span className="ttv-badge-soft ttv-badge-gray">Today {t.dayWorkload ?? 0}</span>
+                                <span className="ttv-badge-soft ttv-badge-gray">D: {t.dayWorkload ?? 0}</span>
                               </div>
                             </div>
                           </button>
@@ -1892,10 +1508,9 @@ const TeacherTimetableView = () => {
                   )
                 ) : (
                   <div className="ttv-empty-state">
-                    Choose a class period first. Available teachers will appear here.
+                    Click a scheduled class to load available teachers.
                   </div>
                 )}
-                </div>
               </div>
             </div>
           </div>
@@ -1953,5 +1568,4 @@ const TeacherTimetableView = () => {
   );
 };
 
-// EDUBRIDGE_PERIOD_ARRANGEMENT_V1
 export default TeacherTimetableView;

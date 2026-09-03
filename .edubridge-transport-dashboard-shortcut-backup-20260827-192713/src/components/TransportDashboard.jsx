@@ -511,14 +511,6 @@ export default function TransportDashboard() {
         show: isTransport || isAdmin || isSuperadmin || isAccounts,
       },
       {
-        label: "Live Operations",
-        icon: "bi-arrow-left-right",
-        href: "/transport-live-operations",
-        gradient: "linear-gradient(135deg, #0f766e, #0f4c81)",
-        desc: "Temporary bus/driver override & delay alerts",
-        show: isTransport || isAdmin || isSuperadmin,
-      }, // EDUBRIDGE_TRANSPORT_LIVE_OPS_DASHBOARD_TILE_V1
-      {
         label: "Assign Students",
         icon: "bi-person-check",
         href: "/student-transport-assignments",

@@ -39,6 +39,7 @@ import Transportation from "./pages/Transportation";
 
 // ✅ NEW: Transport pages
 import Buses from "./pages/Buses";
+import TransportLiveOperations from "./pages/TransportLiveOperations"; // EDUBRIDGE_TRANSPORT_LIVE_OPS_WEB_V1
 import StudentTransportAssignments from "./pages/StudentTransportAssignments";
 import EmployeeTransportAssignments from "./pages/EmployeeTransportAssignments";
 import ActualRoutes from "./pages/ActualRoutes";
@@ -1132,6 +1133,16 @@ function App() {
             element={
               <RequireRole roles={["transport", "admin", "superadmin", "accounts"]}>
                 <Buses />
+              </RequireRole>
+            }
+          />
+
+          {/* EDUBRIDGE_TRANSPORT_LIVE_OPS_WEB_V1 */}
+          <Route
+            path="/transport-live-operations"
+            element={
+              <RequireRole roles={["transport", "transport_admin", "admin", "superadmin"]}>
+                <TransportLiveOperations />
               </RequireRole>
             }
           />

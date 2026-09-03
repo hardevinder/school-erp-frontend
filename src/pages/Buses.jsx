@@ -465,6 +465,10 @@ const Buses = () => {
             Refresh
           </button>
 
+          <button className="btn btn-outline-primary" onClick={() => navigate("/transport-live-operations")} disabled={!canManage}>
+            <i className="bi bi-broadcast-pin me-1" />Live Operations
+          </button> {/* EDUBRIDGE_TRANSPORT_LIVE_OPS_BUTTON_V1 */}
+
           <button className="btn btn-success" onClick={handleAdd} disabled={!canManage}>
             Add Bus
           </button>

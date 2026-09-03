@@ -315,6 +315,7 @@ const DEFAULT_EXPORT_COLUMNS = [
 const Students = () => {
   const navigate = useNavigate();
   const {
+    roles,
     isAdmin,
     isSuperadmin,
     isPrincipal,
@@ -329,6 +330,11 @@ const Students = () => {
     canPrintAdmissionForm,
     canUseTcOperations,
   } = getPermissionFlags();
+
+  const canAddFeeOverrides =
+    isAdmin || isSuperadmin || roles.includes("accounts");
+  const canAddTransportOverrides =
+    canAddFeeOverrides || roles.includes("transport");
 
   // data lists
   const [students, setStudents] = useState([]);
@@ -672,17 +678,91 @@ const Students = () => {
   const showStudentForm = async (mode = "add", student = null) => {
     if (mode === "add" && !canAddStudents) return;
     if (mode === "edit" && !canEditStudents) return;
+    const isEdit = mode === "edit";
+    const s = student || {};
     await fetchClasses();
     await fetchSections();
     await fetchSessions();
     await fetchTransportations();
     await fetchHouses();
     const admissionTypesData = admissionTypes.length ? admissionTypes : await fetchAdmissionTypes();
+    let feeHeadingsData = [];
+    let existingFeeOverrides = [];
+    let existingTransportOverrides = [];
+    let studentFeeDetails = [];
+    if (canAddFeeOverrides || canAddTransportOverrides) {
+      try {
+        const { data } = await api.get("/fee-headings");
+        feeHeadingsData = Array.isArray(data) ? data : data?.data || [];
+      } catch (err) {
+        console.error("fetch fee headings for student overrides:", err);
+      }
+    }
+    if (isEdit && s.id && s.session_id) {
+      if (canAddFeeOverrides) {
+        try {
+          const { data } = await api.get(`/students/${s.id}/fee-details`, {
+            params: { session_id: s.session_id },
+          });
+          studentFeeDetails = Array.isArray(data?.feeDetails) ? data.feeDetails : [];
+        } catch (err) {
+          console.error("fetch student's normal fee structure:", err);
+        }
+        try {
+          const { data } = await api.get(`/student-fee-structures/student/${s.id}`, {
+            params: { session_id: s.session_id },
+          });
+          const rows = Array.isArray(data) ? data : data?.data || [];
+          existingFeeOverrides = rows.filter(
+            (row) => String(row.sourceType || "").toLowerCase() === "override"
+          );
+        } catch (err) {
+          if (err.response?.status !== 404) {
+            console.error("fetch existing student fee overrides:", err);
+          }
+        }
+      }
+      if (canAddTransportOverrides) {
+        try {
+          const { data } = await api.get("/student-transport-fee-head-amounts", {
+            params: { student_id: s.id, session_id: s.session_id },
+          });
+          existingTransportOverrides = Array.isArray(data) ? data : data?.data || [];
+        } catch (err) {
+          console.error("fetch existing transport fee overrides:", err);
+        }
+      }
+    }
     await fetchStudents();
     if (canManageStudents) await fetchConcessions();
 
-    const isEdit = mode === "edit";
-    const s = student || {};
+    const feeOverrideByHead = new Map(
+      existingFeeOverrides.map((row) => [String(row.fee_heading_id), row])
+    );
+    const transportOverrideByHead = new Map(
+      existingTransportOverrides.map((row) => [String(row.fee_head_id), row])
+    );
+    const feeDetailByHead = new Map(
+      studentFeeDetails.map((row) => [String(row.fee_heading_id), row])
+    );
+    const feeOverrideDisplayHeads =
+      isEdit && studentFeeDetails.length
+        ? studentFeeDetails.map((row) => ({
+            id: row.fee_heading_id,
+            fee_heading: row.fee_heading,
+          }))
+        : feeHeadingsData;
+    const isTransportApplicable = (value) =>
+      value === true ||
+      value === 1 ||
+      String(value || "").trim().toLowerCase() === "yes" ||
+      String(value || "").trim().toLowerCase() === "true";
+    const transportOverrideDisplayHeads = studentFeeDetails
+      .filter((row) => isTransportApplicable(row.transportApplicable))
+      .map((row) => ({
+        id: row.fee_heading_id,
+        fee_heading: row.fee_heading,
+      }));
 
     // helper: pick first non-empty field from multiple possible keys
     const pickField = (obj, keys, fallback = "") => {
@@ -738,7 +818,7 @@ const Students = () => {
       .map((t) => {
         const label = (t?.Villages || "").replace(/"/g, "&quot;");
         const cost = t?.Cost ?? "";
-        return `<option value="${t.id}" ${t.id === s.route_id ? "selected" : ""}>${label}${
+        return `<option value="${t.id}" data-cost="${Number(cost || 0)}" ${t.id === s.route_id ? "selected" : ""}>${label}${
           cost ? ` — ₹${cost}` : ""
         }</option>`;
       })
@@ -933,6 +1013,32 @@ const Students = () => {
           margin-bottom: 8px;
           background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
         }
+        .override-note {
+          grid-column: 1 / -1;
+          padding: 9px 11px;
+          border: 1px solid #bfdbfe;
+          border-radius: 10px;
+          background: #eff6ff;
+          color: #1e3a8a;
+          font-size: 11.5px;
+          line-height: 1.45;
+        }
+        .override-table-wrap {
+          grid-column: 1 / -1;
+          max-height: 310px;
+          overflow: auto;
+          border: 1px solid #e5e7eb;
+          border-radius: 10px;
+        }
+        .override-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        .override-table th, .override-table td {
+          padding: 7px 8px;
+          border-bottom: 1px solid #eef2f7;
+          text-align: left;
+          vertical-align: middle;
+        }
+        .override-table th { position: sticky; top: 0; background: #f8fafc; z-index: 1; }
+        .override-table .amount-input { min-width: 120px; }
         .sibling-row {
           display: flex;
           gap: 10px;
@@ -961,6 +1067,8 @@ const Students = () => {
           <button class="tabbtn" data-tab="personal">Personal</button>
           <button class="tabbtn" data-tab="contact">Contact</button>
           <button class="tabbtn" data-tab="transport">Transport</button>
+          ${canAddTransportOverrides ? `<button class="tabbtn" data-tab="transportoverride">Transport Override</button>` : ""}
+          ${canAddFeeOverrides ? `<button class="tabbtn" data-tab="feeoverride">Fee Override</button>` : ""}
           <button class="tabbtn" data-tab="siblings">Siblings</button>
           <button class="tabbtn" data-tab="prevschool">Previous</button>
         </div>
@@ -1191,6 +1299,92 @@ const Students = () => {
           </div>
         </div>
 
+        ${
+          canAddTransportOverrides
+            ? `<!-- Transport Fee Override -->
+        <div class="tabpane" id="pane-transportoverride">
+          <div class="form-container">
+            <div class="override-note">
+              Only transport-applicable fee heads are shown. Review the normal route charge and already paid/concession amount before entering an override. Uncheck an existing override to remove it on Update.
+            </div>
+            <div class="override-table-wrap">
+              <table class="override-table">
+                <thead><tr><th style="width:60px">Override</th><th>Fee Head</th><th style="width:130px">Normal Transport</th><th style="width:130px">Paid + Concession</th><th style="width:170px">Current / New Override</th></tr></thead>
+                <tbody id="transportOverrideRows">
+                  ${
+                    transportOverrideDisplayHeads.length
+                      ? transportOverrideDisplayHeads
+                          .map((head, index) => {
+                            const existing = transportOverrideByHead.get(String(head.id));
+                            const detail = feeDetailByHead.get(String(head.id));
+                            const normalTransport = Number(detail?.normal_van_fee_due || 0);
+                            const adjusted = Number(detail?.total_van_adjusted || 0);
+                            return `<tr>
+                              <td><input type="checkbox" class="transport-override-check" data-index="${index}" data-existing-id="${existing?.id || ""}" ${existing ? "checked" : ""} /></td>
+                              <td>${escapeHtmlAttr(head.fee_heading || `Fee Head ${head.id}`)}${existing ? ` <span style="color:#2563eb">(existing)</span>` : ""}</td>
+                              <td>₹${normalTransport.toFixed(2)}</td>
+                              <td>₹${adjusted.toFixed(2)}</td>
+                              <td><input type="number" min="${adjusted}" step="0.01" class="form-field amount-input transport-override-amount" data-index="${index}" data-head-id="${head.id}" data-transportation-id="${existing?.transportation_id || ""}" value="${existing?.amount ?? 0}" ${existing ? "" : "disabled"} /></td>
+                            </tr>`;
+                          })
+                          .join("")
+                      : `<tr><td colspan="5" style="text-align:center;color:#6b7280">${isEdit ? "No transport-applicable fee heads were found for this student and session." : "Select class and session to load transport-applicable fee heads."}</td></tr>`
+                  }
+                </tbody>
+              </table>
+            </div>
+            <div class="full-row">
+              <label class="form-label">Remarks</label>
+              <input id="f_transport_override_remarks" class="form-field" value="${escapeHtmlAttr(existingTransportOverrides[0]?.remarks || "Admission transport fee override")}" />
+            </div>
+          </div>
+        </div>`
+            : ""
+        }
+
+        ${
+          canAddFeeOverrides
+            ? `<!-- Student Fee Override -->
+        <div class="tabpane" id="pane-feeoverride">
+          <div class="form-container">
+            <div class="override-note">
+              The normal fee structure is shown first. Tick only the heads you want to override; ₹0 is an intentional waiver. Uncheck an existing override to remove it on Update.
+            </div>
+            <div class="override-table-wrap">
+              <table class="override-table">
+                <thead><tr><th style="width:60px">Override</th><th>Fee Head</th><th style="width:130px">Normal Fee</th><th style="width:130px">Paid + Concession</th><th style="width:170px">Current / New Override</th></tr></thead>
+                <tbody>
+                  ${
+                    feeOverrideDisplayHeads.length
+                      ? feeOverrideDisplayHeads
+                          .map((head, index) => {
+                            const existing = feeOverrideByHead.get(String(head.id));
+                            const detail = feeDetailByHead.get(String(head.id));
+                            const normalFee = detail?.normal_fee_due;
+                            const adjusted = Number(detail?.total_adjusted || 0);
+                            return `<tr>
+                              <td><input type="checkbox" class="fee-override-check" data-index="${index}" data-existing-id="${existing?.id || ""}" ${existing ? "checked" : ""} /></td>
+                              <td>${escapeHtmlAttr(head.fee_heading || `Fee Head ${head.id}`)}${existing ? ` <span style="color:#2563eb">(existing)</span>` : ""}</td>
+                              <td>${normalFee !== undefined && normalFee !== null ? `₹${Number(normalFee).toFixed(2)}` : "—"}</td>
+                              <td>₹${adjusted.toFixed(2)}</td>
+                              <td><input type="number" min="${adjusted}" step="0.01" class="form-field amount-input fee-override-amount" data-index="${index}" data-head-id="${head.id}" value="${existing?.feeDue ?? 0}" ${existing ? "" : "disabled"} /></td>
+                            </tr>`;
+                          })
+                          .join("")
+                      : `<tr><td colspan="5" style="text-align:center;color:#6b7280">No applicable fee structure was found for this student and session.</td></tr>`
+                  }
+                </tbody>
+              </table>
+            </div>
+            <div class="full-row">
+              <label class="form-label">Reason / Remarks</label>
+              <input id="f_fee_override_remarks" class="form-field" value="${escapeHtmlAttr(existingFeeOverrides[0]?.remarks || "Admission fee adjustment")}" />
+            </div>
+          </div>
+        </div>`
+            : ""
+        }
+
         <!-- Siblings -->
         <div class="tabpane" id="pane-siblings">
           <div class="form-container">
@@ -1388,13 +1582,143 @@ const Students = () => {
           return false;
         }
 
+        const collectOverrideItems = (checkSelector, amountSelector) => {
+          const items = [];
+          document.querySelectorAll(`${checkSelector}:checked`).forEach((checkbox) => {
+            const index = checkbox.dataset.index;
+            const input = document.querySelector(`${amountSelector}[data-index="${index}"]`);
+            const amount = Number(input?.value);
+            const feeHeadingId = Number(input?.dataset.headId);
+            items.push({
+              fee_heading_id: feeHeadingId,
+              amount,
+              minimum_amount: Number(input?.min || 0),
+              transportation_id: input?.dataset.transportationId || null,
+            });
+          });
+          return items;
+        };
+
+        const feeOverrideItems = collectOverrideItems(
+          ".fee-override-check",
+          ".fee-override-amount"
+        );
+        const transportOverrideItems = collectOverrideItems(
+          ".transport-override-check",
+          ".transport-override-amount"
+        );
+        const collectRemovedOverrideIds = (checkSelector) =>
+          Array.from(document.querySelectorAll(checkSelector))
+            .filter((checkbox) => !checkbox.checked && checkbox.dataset.existingId)
+            .map((checkbox) => Number(checkbox.dataset.existingId))
+            .filter(Boolean);
+        const removedFeeOverrideIds = isEdit
+          ? collectRemovedOverrideIds(".fee-override-check")
+          : [];
+        const removedTransportOverrideIds = isEdit
+          ? collectRemovedOverrideIds(".transport-override-check")
+          : [];
+        const allOverrideItems = [...feeOverrideItems, ...transportOverrideItems];
+
+        if (
+          allOverrideItems.some(
+            (item) =>
+              !item.fee_heading_id || !Number.isFinite(item.amount) || item.amount < 0
+              || item.amount < item.minimum_amount
+          )
+        ) {
+          Swal.showValidationMessage(
+            "Override amounts must be valid and cannot be lower than Paid + Concession"
+          );
+          return false;
+        }
+        if (allOverrideItems.length && !payload.session_id) {
+          Swal.showValidationMessage("Session is required when adding fee overrides");
+          return false;
+        }
+
         try {
+          let savedStudent = s;
           if (isEdit) {
             await api.put(`/students/edit/${s.id}`, payload);
           } else {
-            await api.post("/students/add", payload);
+            const { data } = await api.post("/students/add", payload);
+            savedStudent = data;
           }
-          return payload;
+
+          const overrideWarnings = [];
+          if (feeOverrideItems.length) {
+            try {
+              await api.post("/student-fee-structures/bulk-overrides", {
+                student_id: Number(savedStudent.id),
+                session_id: Number(payload.session_id),
+                items: feeOverrideItems,
+                remarks:
+                  document.getElementById("f_fee_override_remarks")?.value.trim() ||
+                  "Admission fee adjustment",
+              });
+            } catch (overrideError) {
+              console.error("save admission fee overrides:", overrideError);
+              overrideWarnings.push(
+                overrideError.response?.data?.error || "Fee overrides could not be saved"
+              );
+            }
+          }
+
+          if (transportOverrideItems.length) {
+            const transportRemarks =
+              document.getElementById("f_transport_override_remarks")?.value.trim() ||
+              "Admission transport fee override";
+            for (const item of transportOverrideItems) {
+              try {
+                await api.post("/student-transport-fee-head-amounts/upsert", {
+                  student_id: Number(savedStudent.id),
+                  session_id: Number(payload.session_id),
+                  fee_head_id: item.fee_heading_id,
+                  transportation_id:
+                    item.transportation_id || payload.route_id || null,
+                  amount: item.amount,
+                  remarks: transportRemarks,
+                });
+              } catch (overrideError) {
+                console.error("save admission transport override:", overrideError);
+                overrideWarnings.push(
+                  overrideError.response?.data?.error ||
+                    `Transport override for fee head ${item.fee_heading_id} could not be saved`
+                );
+              }
+            }
+          }
+          for (const overrideId of removedFeeOverrideIds) {
+            try {
+              await api.delete(`/student-fee-structures/${overrideId}`);
+            } catch (overrideError) {
+              console.error("remove student fee override:", overrideError);
+              overrideWarnings.push(
+                overrideError.response?.data?.error ||
+                  `Fee override ${overrideId} could not be removed`
+              );
+            }
+          }
+          for (const overrideId of removedTransportOverrideIds) {
+            try {
+              await api.delete(`/student-transport-fee-head-amounts/${overrideId}`);
+            } catch (overrideError) {
+              console.error("remove student transport override:", overrideError);
+              overrideWarnings.push(
+                overrideError.response?.data?.error ||
+                  `Transport override ${overrideId} could not be removed`
+              );
+            }
+          }
+          return {
+            payload,
+            overrideWarnings,
+            overrideCount:
+              allOverrideItems.length +
+              removedFeeOverrideIds.length +
+              removedTransportOverrideIds.length,
+          };
         } catch (err) {
           console.error("showStudentForm submit:", err);
           const message =
@@ -1456,7 +1780,7 @@ const Students = () => {
             const id = t?.id;
 
             opts.push(
-              `<option value="${id}" ${String(id) === String(selectedId) ? "selected" : ""}>
+              `<option value="${id}" data-cost="${Number(cost || 0)}" ${String(id) === String(selectedId) ? "selected" : ""}>
                 ${label}${cost ? ` — ₹${cost}` : ""}
               </option>`
             );
@@ -1508,6 +1832,8 @@ const Students = () => {
           personal: document.getElementById("pane-personal"),
           contact: document.getElementById("pane-contact"),
           transport: document.getElementById("pane-transport"),
+          transportoverride: document.getElementById("pane-transportoverride"),
+          feeoverride: document.getElementById("pane-feeoverride"),
           siblings: document.getElementById("pane-siblings"),
           prevschool: document.getElementById("pane-prevschool"),
         };
@@ -1515,11 +1841,90 @@ const Students = () => {
           b.addEventListener("click", () => {
             btns.forEach((x) => x.classList.remove("active"));
             b.classList.add("active");
-            Object.values(panes).forEach((p) => p.classList.remove("active"));
+            Object.values(panes).filter(Boolean).forEach((p) => p.classList.remove("active"));
             const t = b.getAttribute("data-tab");
             if (panes[t]) panes[t].classList.add("active");
           })
         );
+
+        const wireOverrideAmounts = (checkSelector, amountSelector) => {
+          document.querySelectorAll(checkSelector).forEach((checkbox) => {
+            checkbox.addEventListener("change", () => {
+              const input = document.querySelector(
+                `${amountSelector}[data-index="${checkbox.dataset.index}"]`
+              );
+              if (input) input.disabled = !checkbox.checked;
+            });
+          });
+        };
+        wireOverrideAmounts(".fee-override-check", ".fee-override-amount");
+        wireOverrideAmounts(".transport-override-check", ".transport-override-amount");
+
+        const refreshAddTransportOverrideRows = async () => {
+          if (isEdit || !canAddTransportOverrides) return;
+          const tbody = document.getElementById("transportOverrideRows");
+          const classId = document.getElementById("f_class_id")?.value || "";
+          const sessionId = document.getElementById("f_session_id")?.value || "";
+          if (!tbody) return;
+          if (!classId || !sessionId) {
+            tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;color:#6b7280">Select class and session to load transport-applicable fee heads.</td></tr>`;
+            return;
+          }
+
+          tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;color:#6b7280">Loading transport-applicable fee heads...</td></tr>`;
+          try {
+            const { data } = await api.get(`/fee-structures/class/${classId}`, {
+              params: { session_id: sessionId, isActive: true },
+            });
+            const rows = Array.isArray(data) ? data : data?.fees || data?.data || [];
+            const applicableByHead = new Map();
+            rows
+              .filter((row) => isTransportApplicable(row.transportApplicable))
+              .forEach((row) => {
+                if (!applicableByHead.has(String(row.fee_heading_id))) {
+                  applicableByHead.set(String(row.fee_heading_id), row);
+                }
+              });
+            const applicable = [...applicableByHead.values()];
+            const normalTransport = Number(
+              document.getElementById("f_route_id")?.selectedOptions?.[0]?.dataset?.cost || 0
+            );
+
+            tbody.innerHTML = applicable.length
+              ? applicable
+                  .map(
+                    (row, index) => `<tr>
+                      <td><input type="checkbox" class="transport-override-check" data-index="add-${index}" /></td>
+                      <td>${escapeHtmlAttr(row.FeeHeading?.fee_heading || row.fee_heading || `Fee Head ${row.fee_heading_id}`)}</td>
+                      <td>₹${normalTransport.toFixed(2)}</td>
+                      <td>₹0.00</td>
+                      <td><input type="number" min="0" step="0.01" class="form-field amount-input transport-override-amount" data-index="add-${index}" data-head-id="${row.fee_heading_id}" value="0" disabled /></td>
+                    </tr>`
+                  )
+                  .join("")
+              : `<tr><td colspan="5" style="text-align:center;color:#6b7280">No transport-applicable fee heads were found for the selected class and session.</td></tr>`;
+            wireOverrideAmounts(".transport-override-check", ".transport-override-amount");
+          } catch (err) {
+            console.error("load transport-applicable admission fee heads:", err);
+            tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;color:#b91c1c">Transport-applicable fee heads could not be loaded.</td></tr>`;
+          }
+        };
+
+        if (!isEdit && canAddTransportOverrides) {
+          document.getElementById("f_class_id")?.addEventListener(
+            "change",
+            refreshAddTransportOverrideRows
+          );
+          document.getElementById("f_session_id")?.addEventListener(
+            "change",
+            refreshAddTransportOverrideRows
+          );
+          document.getElementById("f_route_id")?.addEventListener(
+            "change",
+            refreshAddTransportOverrideRows
+          );
+          refreshAddTransportOverrideRows();
+        }
 
         /* ============================================================
          * Sibling pickers
@@ -1679,12 +2084,20 @@ const Students = () => {
     });
 
     if (!popup.isConfirmed) return;
+    const overrideWarnings = popup.value?.overrideWarnings || [];
+    const overrideCount = popup.value?.overrideCount || 0;
     Swal.fire(
-      "Success",
-      isEdit
-        ? "Student record updated successfully"
-        : "New student added successfully",
-      "success"
+      overrideWarnings.length ? (isEdit ? "Student Updated" : "Student Added") : "Success",
+      overrideWarnings.length
+        ? `The student was ${isEdit ? "updated" : "added"}, but: ${overrideWarnings.join("; ")}`
+        : isEdit
+          ? overrideCount
+            ? "Student record and selected overrides updated successfully"
+            : "Student record updated successfully"
+          : overrideCount
+            ? "New student and selected overrides added successfully"
+            : "New student added successfully",
+      overrideWarnings.length ? "warning" : "success"
     );
     fetchStudents();
   };

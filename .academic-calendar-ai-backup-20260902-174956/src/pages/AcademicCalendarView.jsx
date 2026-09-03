@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import api from "../api";
 import Swal from "sweetalert2";
-import "./AcademicCalendar.css";
 
 /**
  * AcademicCalendarView.jsx (READ ONLY)
@@ -266,21 +265,14 @@ export default function AcademicCalendarView() {
     });
   }, [calendar, type, q]);
 
-  const monthNotes = useMemo(() => {
-    const key = `${monthCursor.getFullYear()}-${String(monthCursor.getMonth() + 1).padStart(2, "0")}`;
-    return (Array.isArray(calendar?.notes) ? calendar.notes : []).filter(
-      (note) => String(note.note_month || "").slice(0, 7) === key
-    );
-  }, [calendar, monthCursor]);
-
   // ---------------- Month Grid Computation ----------------
   const monthGrid = useMemo(() => {
-    // Build a six-week grid starting on Monday to match the documentation PDF.
+    // Build a 6-week grid starting from Sunday (or Monday? we'll keep Sunday like common wall calendars)
     const first = new Date(monthCursor);
     first.setDate(1);
     first.setHours(0, 0, 0, 0);
 
-    const firstDow = (first.getDay() + 6) % 7; // 0=Mon
+    const firstDow = first.getDay(); // 0=Sun
     const gridStart = addDays(first, -firstDow);
 
     const days = [];
@@ -377,22 +369,32 @@ export default function AcademicCalendarView() {
   };
 
   return (
-    <div className="container-fluid px-3 px-xl-4 mt-4 academic-calendar-view-page">
-      <section className="calendar-hero">
-        <div className="calendar-hero-icon"><i className="bi bi-calendar2-heart" /></div>
-        <div>
-          <div className="calendar-eyebrow text-info">SCHOOL YEAR AT A GLANCE</div>
-          <h2>Academic Calendar</h2>
-          <p>Events, holidays, examinations, activities and monthly notes in one place.</p>
-        </div>
-        <div className="calendar-hero-actions">
-          <button className="btn btn-outline-light" onClick={fetchCalendars} disabled={loadingList}><i className="bi bi-arrow-clockwise me-2" />{loadingList ? "Loading..." : "Refresh"}</button>
-          <button className="btn btn-light" onClick={openPdf} disabled={!calendar?.id} title="Download professional PDF"><i className="bi bi-file-earmark-pdf me-2" />Download PDF</button>
-        </div>
-      </section>
+    <div className="container mt-4">
+      {/* Top Header */}
+      <div className="d-flex flex-wrap gap-2 align-items-center mb-3">
+        <h2 className="mb-0">Academic Calendar</h2>
+        <div style={{ flex: 1 }} />
+
+        <button
+          className="btn btn-outline-secondary"
+          onClick={fetchCalendars}
+          disabled={loadingList}
+        >
+          {loadingList ? "Loading..." : "Refresh"}
+        </button>
+
+        <button
+          className="btn btn-outline-dark"
+          onClick={openPdf}
+          disabled={!calendar?.id}
+          title="Open PDF"
+        >
+          PDF
+        </button>
+      </div>
 
       {/* Filters */}
-      <div className="card calendar-view-card">
+      <div className="card mb-3">
         <div className="card-body">
           <div className="row g-2">
             <div className="col-12 col-md-4">
@@ -455,7 +457,7 @@ export default function AcademicCalendarView() {
       </div>
 
       {/* Calendar header */}
-      <div className="card calendar-view-card">
+      <div className="card mb-3">
         <div className="card-body">
           {loadingCal && <div>Loading calendar...</div>}
           {!loadingCal && !calendar && (
@@ -517,7 +519,7 @@ export default function AcademicCalendarView() {
       </div>
 
       {/* Month summary */}
-      <div className="card calendar-view-card">
+      <div className="card mb-3">
         <div className="card-header bg-white fw-semibold d-flex align-items-center justify-content-between">
           <span>Month Summary</span>
           <span className="text-muted small">
@@ -567,7 +569,7 @@ export default function AcademicCalendarView() {
       </div>
 
       {/* Events */}
-      <div className="card calendar-view-card mb-5">
+      <div className="card mb-5">
         <div className="card-header bg-white fw-semibold d-flex flex-wrap gap-2 align-items-center justify-content-between">
           <span>Events</span>
           <div className="d-flex gap-2 align-items-center">
@@ -624,14 +626,14 @@ export default function AcademicCalendarView() {
           {/* MONTH VIEW */}
           {viewMode === "MONTH" && (
             <div className="mb-3">
-              <div className="calendar-month-toolbar">
+              <div className="d-flex flex-wrap gap-2 align-items-center justify-content-between mb-2">
                 <div className="fw-semibold" style={{ fontSize: 16 }}>
                   {monthLabel(monthCursor)}
                 </div>
 
                 <div className="d-flex gap-2">
                   <button
-                    className="btn btn-outline-light btn-sm"
+                    className="btn btn-outline-secondary btn-sm"
                     type="button"
                     onClick={() => {
                       const d = new Date(monthCursor);
@@ -644,7 +646,7 @@ export default function AcademicCalendarView() {
                     ← Prev
                   </button>
                   <button
-                    className="btn btn-light btn-sm"
+                    className="btn btn-outline-dark btn-sm"
                     type="button"
                     onClick={() => {
                       const d = new Date();
@@ -656,7 +658,7 @@ export default function AcademicCalendarView() {
                     Today
                   </button>
                   <button
-                    className="btn btn-outline-light btn-sm"
+                    className="btn btn-outline-secondary btn-sm"
                     type="button"
                     onClick={() => {
                       const d = new Date(monthCursor);
@@ -680,7 +682,7 @@ export default function AcademicCalendarView() {
                   marginBottom: 8,
                 }}
               >
-                {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => (
+                {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
                   <div
                     key={d}
                     className="text-muted small fw-semibold"
@@ -692,7 +694,13 @@ export default function AcademicCalendarView() {
               </div>
 
               {/* Grid */}
-              <div className="calendar-month-grid">
+              <div
+                className="d-grid"
+                style={{
+                  gridTemplateColumns: "repeat(7, 1fr)",
+                  gap: 8,
+                }}
+              >
                 {monthGrid.map((cell) => {
                   const list = eventsByDay.get(cell.iso) || [];
                   return (
@@ -704,7 +712,14 @@ export default function AcademicCalendarView() {
                       onKeyDown={(e) => {
                         if (e.key === "Enter" || e.key === " ") openDayModal(cell.iso);
                       }}
-                      className={`calendar-month-day ${cell.inMonth ? "" : "outside"} ${cell.isToday ? "today" : ""}`}
+                      className={`border rounded-3 ${cell.inMonth ? "bg-white" : "bg-light"}`}
+                      style={{
+                        minHeight: 110,
+                        padding: 8,
+                        cursor: "pointer",
+                        boxShadow: cell.isToday ? "0 0 0 2px rgba(33,37,41,0.15)" : "none",
+                        overflow: "hidden",
+                      }}
                       title="Click to view details"
                     >
                       <div className="d-flex align-items-center justify-content-between mb-1">
@@ -725,7 +740,13 @@ export default function AcademicCalendarView() {
                           {list.slice(0, 6).map((ev) => (
                             <div
                               key={`${cell.iso}-${ev.id}`}
-                              className="calendar-event-chip"
+                              className="small"
+                              style={{
+                                whiteSpace: "nowrap",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                padding: "2px 0",
+                              }}
                               title={ev.title}
                             >
                               <span className="me-1">•</span>
@@ -741,18 +762,6 @@ export default function AcademicCalendarView() {
                   );
                 })}
               </div>
-
-              {monthNotes.length > 0 && (
-                <div className="calendar-public-notes">
-                  {monthNotes.map((note) => (
-                    <div key={note.id} className="calendar-public-note" style={{ "--note-color": note.color || "#4f46e5" }}>
-                      <b>{note.title || "Monthly Note"}</b>
-                      <span>{note.note_text}</span>
-                      {(note.start_date || note.end_date) && <small className="text-muted">{note.start_date || ""}{note.end_date && note.end_date !== note.start_date ? ` to ${note.end_date}` : ""}</small>}
-                    </div>
-                  ))}
-                </div>
-              )}
 
               <div className="text-muted small mt-2">
                 Click any date box to see event details. (Multi-day events appear on each day.)

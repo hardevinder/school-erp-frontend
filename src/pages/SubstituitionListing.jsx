@@ -80,6 +80,31 @@ const SubstitutionListing = () => {
   const getSubjectName = (s) =>
     s?.Subject?.name ?? s?.subjectName ?? s?.subject?.name ?? "";
 
+  // EDUBRIDGE_REASON_LISTING_V1
+  const reasonLabels = {
+    ABSENT: "Absent",
+    ON_LEAVE: "On Leave",
+    OFFICIAL_DUTY: "Official Duty",
+    EXAM_DUTY: "Exam Duty",
+    MEETING: "Meeting",
+    TRAINING_WORKSHOP: "Training / Workshop",
+    EVENT_DUTY: "Event Duty",
+    COMPETITION_TRIP: "Competition / Trip",
+    ADMINISTRATIVE_WORK: "Administrative Work",
+    PERSONAL_PERMISSION: "Personal Permission",
+    OTHER: "Other",
+  };
+
+  const getReasonLabel = (s) =>
+    s?.arrangementReasonLabel ||
+    reasonLabels[s?.arrangementReasonType] ||
+    s?.reasonLabel ||
+    reasonLabels[s?.reasonType] ||
+    "";
+
+  const getReasonNote = (s) =>
+    s?.arrangementReasonNote || s?.reasonNote || "";
+
   const parseISO = (d) => {
     const t = Date.parse(d);
     return Number.isNaN(t) ? -Infinity : t;
@@ -97,6 +122,8 @@ const SubstitutionListing = () => {
         _classLabel: String(getClassLabel(s)),
         _periodName: String(getPeriodName(s)),
         _subjectName: getSubjectName(s),
+        _reasonLabel: getReasonLabel(s),
+        _reasonNote: getReasonNote(s),
         _date: s?.date ?? "",
         _isToday: (s?.date ?? "") === todayISO,
       }))
@@ -185,6 +212,7 @@ const SubstitutionListing = () => {
     { key: "_classLabel", label: "Class" },
     { key: "_periodName", label: "Period" },
     { key: "_subjectName", label: "Subject" },
+    { key: "_reasonLabel", label: "Reason" },
   ];
 
   // Build printable filter summary
@@ -433,6 +461,26 @@ const SubstitutionListing = () => {
                     <td data-label="Class">{r._classLabel || "-"}</td>
                     <td data-label="Period">{r._periodName || "-"}</td>
                     <td data-label="Subject">{r._subjectName || "-"}</td>
+                    <td data-label="Reason">
+                      {r._reasonLabel ? (
+                        <div>
+                          <span className="badge rounded-pill text-bg-info">
+                            {r._reasonLabel}
+                          </span>
+                          {r._reasonNote && (
+                            <div
+                              className="small text-muted mt-1"
+                              title={r._reasonNote}
+                              style={{ maxWidth: 220 }}
+                            >
+                              {r._reasonNote}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-muted">—</span>
+                      )}
+                    </td>
                   </tr>
                 ))
               ) : (
