@@ -164,8 +164,6 @@ function ResultStrip({ enrollment, total, visible }) {
 
 function AssessmentBuilder({ options, state, onClose, onSaved, onError }) {
   const [form, setForm] = useState(state.data); const [busy, setBusy] = useState(false); const [aiBusy, setAiBusy] = useState(false);
-  const [importBusy, setImportBusy] = useState(false); const [importNotice, setImportNotice] = useState("");
-  const questionImportRef = useRef(null);
   const classRows = options.filter((o) => !form.class_id || Number(o.class_id) === Number(form.class_id));
   const sectionRows = classRows.filter((o) => !form.section_id || Number(o.section_id) === Number(form.section_id));
   const classes = uniqueOptions(options, "class_id", "class_name"); const sections = uniqueOptions(classRows, "section_id", "section_name"); const subjects = uniqueOptions(sectionRows, "subject_id", "subject_name");
@@ -180,44 +178,6 @@ function AssessmentBuilder({ options, state, onClose, onSaved, onError }) {
       setForm((f) => ({ ...f, title: result.title || f.title, description: result.description || f.description, instructions: result.instructions || f.instructions, questions: result.questions || f.questions, ai_meta: result.ai_meta }));
     } catch (error) { onError(error.response?.data?.message || "AI could not generate the test."); }
     finally { setAiBusy(false); }
-  };
-  const importQuestionDocument = async (file) => {
-    if (!file) return;
-    if (!form.class_id || !form.subject_id) {
-      if (questionImportRef.current) questionImportRef.current.value = "";
-      return onError("Select class and subject before importing questions.");
-    }
-    setImportBusy(true); setImportNotice("");
-    try {
-      const fd = new FormData();
-      fd.append("assessment_document", file);
-      fd.append("class_id", form.class_id);
-      if (form.section_id) fd.append("section_id", form.section_id);
-      fd.append("subject_id", form.subject_id);
-      if (form.title) fd.append("title", form.title);
-      if (form.description) fd.append("topic", form.description);
-      const result = unwrap(await api.post("/api/assessments/ai/import-document", fd));
-      const imported = Array.isArray(result.questions) ? result.questions : [];
-      if (!imported.length) throw new Error("No readable questions were detected.");
-      setForm((current) => {
-        const existing = (current.questions || []).filter((q) => String(q.question_text || "").trim());
-        const questions = [...existing, ...imported].map((q, i) => ({ ...q, sort_order: i }));
-        return {
-          ...current,
-          title: current.title || result.document?.title || "",
-          instructions: current.instructions || result.document?.instructions || "",
-          total_marks: Number(result.total_marks) > 0 ? result.total_marks : current.total_marks,
-          questions,
-          ai_meta: { ...(current.ai_meta || {}), document_import: true, teacher_review_required: true },
-        };
-      });
-      setImportNotice(`${imported.length} question(s) extracted${result.review_count ? ` · ${result.review_count} need review` : ""}. Review before saving.`);
-    } catch (error) {
-      onError(error.response?.data?.message || error.message || "AI could not read this question document.");
-    } finally {
-      setImportBusy(false);
-      if (questionImportRef.current) questionImportRef.current.value = "";
-    }
   };
   const submit = async (event) => {
     event.preventDefault(); setBusy(true);
@@ -262,8 +222,7 @@ function AssessmentBuilder({ options, state, onClose, onSaved, onError }) {
 
       {form.mode === "offline" && <div className="assessment-upload-box mt-4"><h6><i className="bi bi-file-earmark-pdf me-2" />Offline Question Paper</h6><p className="text-muted small">Upload PDF/Word/image, or keep questions below to generate a branded PDF.</p><input className="form-control" type="file" accept=".pdf,.doc,.docx,image/*" onChange={(e) => setForm({ ...form, question_paper: e.target.files?.[0] || null })} /></div>}
 
-      <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-4 mb-2"><div><h5 className="mb-0">Questions</h5><small className="text-muted">Generate with AI or import a printed/handwritten PDF or screenshot. Teacher review is required.</small></div><div className="d-flex flex-wrap gap-2"><button type="button" className="btn btn-outline-primary" disabled={aiBusy || importBusy} onClick={generateAi}><i className="bi bi-stars me-1" />{aiBusy ? "Generating…" : "AI Generate"}</button><button type="button" className="btn btn-primary" disabled={importBusy || aiBusy} onClick={() => questionImportRef.current?.click()}><i className="bi bi-file-earmark-scan me-1" />{importBusy ? "Reading…" : "AI Import Questions"}</button><input ref={questionImportRef} hidden type="file" accept="application/pdf,image/jpeg,image/png,image/webp" onChange={(e) => importQuestionDocument(e.target.files?.[0])} /><button type="button" className="btn btn-outline-secondary" onClick={addQuestion}>Add Question</button></div></div>
-      {importNotice && <div className="alert alert-info py-2 small"><i className="bi bi-check2-circle me-1" />{importNotice}</div>}
+      <div className="d-flex justify-content-between align-items-center mt-4 mb-2"><div><h5 className="mb-0">Questions</h5><small className="text-muted">AI drafts must be reviewed by the teacher before publishing.</small></div><div className="d-flex gap-2"><button type="button" className="btn btn-outline-primary" disabled={aiBusy} onClick={generateAi}><i className="bi bi-stars me-1" />{aiBusy ? "Generating…" : "AI Generate"}</button><button type="button" className="btn btn-outline-secondary" onClick={addQuestion}>Add Question</button></div></div>
       {form.questions.map((q, index) => <QuestionEditor key={`${q.id || "new"}-${index}`} index={index} value={q} onChange={(patch) => updateQuestion(index, patch)} onRemove={() => removeQuestion(index)} />)}
       <div className="assessment-upload-box mt-3"><label className="form-label fw-semibold">Supporting materials</label><input className="form-control" type="file" multiple onChange={(e) => setForm({ ...form, supporting_files: Array.from(e.target.files || []) })} /></div>
     </div>
@@ -273,13 +232,13 @@ function AssessmentBuilder({ options, state, onClose, onSaved, onError }) {
 
 function QuestionEditor({ index, value, onChange, onRemove }) {
   const objective = ["mcq", "true_false"].includes(value.question_type); const options = value.question_type === "true_false" ? ["True", "False"] : (value.options || ["", "", "", ""]);
-  return <div className="question-editor card border-0 mt-3"><div className="card-body"><div className="d-flex justify-content-between"><strong>Question {index + 1}{value.source_number ? ` · Source ${value.source_number}` : ""}</strong><button type="button" className="btn btn-sm btn-link text-danger" onClick={onRemove}>Remove</button></div>{value.needs_review && <div className="alert alert-warning py-2 small mb-2">{Array.isArray(value.warnings) && value.warnings.length ? value.warnings.join(" · ") : "Please verify this scanned question."}</div>}<div className="row g-2 mt-1">
+  return <div className="question-editor card border-0 mt-3"><div className="card-body"><div className="d-flex justify-content-between"><strong>Question {index + 1}</strong><button type="button" className="btn btn-sm btn-link text-danger" onClick={onRemove}>Remove</button></div><div className="row g-2 mt-1">
     <SelectField label="Question Type" value={value.question_type} options={[{ id: "mcq", label: "MCQ" }, { id: "true_false", label: "True / False" }, { id: "fill_blank", label: "Fill in the blank" }, { id: "short", label: "Short answer" }, { id: "long", label: "Long answer" }]} onChange={(v) => onChange({ question_type: v, options: v === "true_false" ? ["True", "False"] : v === "mcq" ? (value.options?.length ? value.options : ["", "", "", ""]) : [] })} />
     <Input label="Marks" type="number" min="0.5" step="0.5" value={value.marks} onChange={(v) => onChange({ marks: v })} />
     <SelectField label="Difficulty" value={value.difficulty || "medium"} options={[{ id: "easy", label: "Easy" }, { id: "medium", label: "Medium" }, { id: "hard", label: "Hard" }]} onChange={(v) => onChange({ difficulty: v })} />
     <Input label="Topic" value={value.topic || ""} onChange={(v) => onChange({ topic: v })} />
     <div className="col-12"><label className="form-label">Question</label><textarea required className="form-control" rows="2" value={value.question_text} onChange={(e) => onChange({ question_text: e.target.value })} /></div>
-    {objective && <div className="col-12"><label className="form-label">Options and correct answer</label><div className="row g-2">{options.map((option, oi) => <div className="col-md-6" key={oi}><div className="input-group"><span className="input-group-text"><input type="radio" name={`correct-${index}`} checked={value.correct_answer != null && Number(value.correct_answer) === oi} onChange={() => onChange({ correct_answer: oi })} /></span><input className="form-control" required value={option} disabled={value.question_type === "true_false"} onChange={(e) => { const next = [...options]; next[oi] = e.target.value; onChange({ options: next }); }} /></div></div>)}</div></div>}
+    {objective && <div className="col-12"><label className="form-label">Options and correct answer</label><div className="row g-2">{options.map((option, oi) => <div className="col-md-6" key={oi}><div className="input-group"><span className="input-group-text"><input type="radio" name={`correct-${index}`} checked={Number(value.correct_answer) === oi} onChange={() => onChange({ correct_answer: oi })} /></span><input className="form-control" required value={option} disabled={value.question_type === "true_false"} onChange={(e) => { const next = [...options]; next[oi] = e.target.value; onChange({ options: next }); }} /></div></div>)}</div></div>}
     {value.question_type === "fill_blank" && <Input label="Accepted answer(s), comma separated" value={Array.isArray(value.correct_answer) ? value.correct_answer.join(", ") : value.correct_answer || ""} onChange={(v) => onChange({ correct_answer: v.split(",").map((x) => x.trim()).filter(Boolean) })} />}
     {["short", "long"].includes(value.question_type) && <div className="col-12"><label className="form-label">Answer key / marking guidance</label><textarea className="form-control" rows="2" value={value.explanation || ""} onChange={(e) => onChange({ explanation: e.target.value })} /></div>}
   </div></div></div>;

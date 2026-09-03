@@ -9,7 +9,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import api from "../api";
-import UpcomingCalendarEvents from "./dashboard/UpcomingCalendarEvents";
 
 /* ---------------- Roles helper ---------------- */
 const getRoleFlags = () => {
@@ -277,32 +276,6 @@ export default function FrontOfficeDashboard() {
   const enquiryKpi = useMemo(() => recentEnquiries.length, [recentEnquiries]);
 
   const dashboardBusy = loading.gatepass || loading.visitors || loading.enquiries;
-
-  const activityFeed = useMemo(() => {
-    const toTime = (value) => {
-      const d = value ? new Date(value) : null;
-      return d && !Number.isNaN(d.getTime()) ? d.getTime() : 0;
-    };
-    const gate = recentGatePasses.map((gp) => ({
-      key: `gate-${gp.id || gp.pass_no || Math.random()}`, icon: "bi-door-open", tone: "primary",
-      title: `${getGatePassPerson(gp)} • Gate Pass`,
-      detail: `${gp.pass_no || "Pass"} • ${gp.status || "Updated"}`,
-      at: gp.issued_at || gp.updated_at || gp.created_at, href: "/gate-pass",
-    }));
-    const visitors = recentVisitors.map((v) => ({
-      key: `visitor-${v.id || v.visitor_no || Math.random()}`, icon: "bi-person-badge", tone: "warning",
-      title: `${v.name || "Visitor"} • Visitor`,
-      detail: `${v.visitor_no || "Visitor entry"} • ${v.status || "Updated"}`,
-      at: v.check_in_at || v.updated_at || v.created_at, href: "/visitors",
-    }));
-    const enquiries = recentEnquiries.map((e) => ({
-      key: `enquiry-${e.id || e.student_name || Math.random()}`, icon: "bi-chat-dots", tone: "info",
-      title: `${e.student_name || "New enquiry"} • Admission Enquiry`,
-      detail: e.class_interested ? `Interested in ${e.class_interested}` : "New admission lead",
-      at: e.updated_at || e.created_at || e.enquiry_date, href: "/enquiries",
-    }));
-    return [...gate, ...visitors, ...enquiries].sort((a,b) => toTime(b.at)-toTime(a.at)).slice(0, 8);
-  }, [recentGatePasses, recentVisitors, recentEnquiries]);
 
   const quickLinks = useMemo(
     () => [
@@ -575,38 +548,6 @@ export default function FrontOfficeDashboard() {
               </Link>
             </div>
           ))}
-        </div>
-
-        {/* Upcoming Academic Calendar Events */}
-        <UpcomingCalendarEvents
-          openPath="/academic-calendar-view"
-          maxItems={6}
-          title="Upcoming Calendar Events"
-          subtitle="Keep the front office aware of the next school events, PTMs, holidays and exams."
-        />
-
-        {/* Unified Recent Activity */}
-        <div className="card border-0 shadow-sm rounded-4 mb-4 overflow-hidden fo-activity-card">
-          <div className="card-header bg-white border-0 px-4 pt-4 pb-2 d-flex flex-wrap align-items-center justify-content-between gap-2">
-            <div>
-              <div className="d-flex align-items-center gap-2"><span className="fo-live-dot active" /><h5 className="mb-0 fw-semibold">Recent Activity</h5></div>
-              <div className="small text-muted mt-1">Gate passes, visitors and admission enquiries in one live feed.</div>
-            </div>
-            <span className="badge text-bg-light border rounded-pill px-3 py-2">{activityFeed.length} latest updates</span>
-          </div>
-          <div className="card-body px-4 pt-2">
-            {activityFeed.length ? (
-              <div className="fo-activity-grid">
-                {activityFeed.map((item) => (
-                  <button key={item.key} type="button" className="fo-activity-item" onClick={() => navigate(item.href)}>
-                    <span className={`fo-activity-icon text-${item.tone}`}><i className={`bi ${item.icon}`} /></span>
-                    <span className="fo-activity-copy"><strong>{item.title}</strong><small>{item.detail}</small><em>{fmtDT(item.at)}</em></span>
-                    <i className="bi bi-chevron-right text-muted" />
-                  </button>
-                ))}
-              </div>
-            ) : <div className="text-center text-muted py-4">No recent front office activity yet.</div>}
-          </div>
         </div>
 
         {/* Summary */}
@@ -884,14 +825,6 @@ export default function FrontOfficeDashboard() {
 
         {/* Styles */}
         <style>{`
-          .fo-activity-card{border:1px solid rgba(226,232,240,.85)!important;}
-          .fo-activity-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;}
-          .fo-activity-item{border:1px solid #edf1f6;background:#fbfdff;border-radius:14px;padding:12px;display:grid;grid-template-columns:38px 1fr 16px;align-items:center;gap:10px;text-align:left;color:#1f2937;transition:.18s ease;}
-          .fo-activity-item:hover{background:#fff;transform:translateY(-1px);box-shadow:0 8px 18px rgba(15,23,42,.06);}
-          .fo-activity-icon{width:38px;height:38px;border-radius:12px;background:#f1f5f9;display:grid;place-items:center;font-size:1rem;}
-          .fo-activity-copy{display:flex;flex-direction:column;min-width:0}.fo-activity-copy strong{font-size:.84rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.fo-activity-copy small{font-size:.74rem;color:#64748b}.fo-activity-copy em{font-size:.66rem;color:#94a3b8;font-style:normal;margin-top:3px;}
-          @media(max-width:767px){.fo-activity-grid{grid-template-columns:1fr}}
-
           .fo-link {
             transition: transform .2s ease, box-shadow .2s ease, filter .2s ease;
           }

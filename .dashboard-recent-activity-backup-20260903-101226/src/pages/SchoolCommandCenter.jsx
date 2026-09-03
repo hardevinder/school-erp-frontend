@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import commandCenterApi from "../services/commandCenterApi";
-import UpcomingCalendarEvents from "../components/dashboard/UpcomingCalendarEvents";
 import "./SchoolCommandCenter.css";
 
 const fmt = (value) => new Intl.NumberFormat("en-IN").format(Number(value || 0));
@@ -101,7 +100,6 @@ export default function SchoolCommandCenter() {
   const showWellbeing = data?.profile !== "hr";
   const showCompliance = data?.profile !== "academic";
 
-
   return (
     <div className="cc-page">
       <section className="cc-hero">
@@ -186,14 +184,6 @@ export default function SchoolCommandCenter() {
           tone="rose"
         />
       </section>
-
-      <UpcomingCalendarEvents
-        openPath="/academic-calendar-view"
-        managePath="/academic-calendar"
-        maxItems={6}
-        title="Upcoming Calendar Events"
-        subtitle="Next Academic Calendar events for quick leadership visibility."
-      />
 
       <div className="cc-columns">
         <section className="cc-card" id="cc-attention">

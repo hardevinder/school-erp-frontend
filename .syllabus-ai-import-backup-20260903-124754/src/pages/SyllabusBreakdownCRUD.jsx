@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useState } from "react";
 import api from "../api";
 import Swal from "sweetalert2";
 import { Form, Button, Table, Modal, Row, Col, Badge, Card } from "react-bootstrap";
-import SyllabusAiImportModal from "../components/syllabus/SyllabusAiImportModal";
 import "./SyllabusBreakdownCRUD.css";
 
 /* ---------------- Helpers ---------------- */
@@ -63,8 +62,6 @@ const SyllabusBreakdownCRUD = () => {
 
   // modal
   const [showModal, setShowModal] = useState(false);
-  const [showAiImport, setShowAiImport] = useState(false);
-  const [pendingAiOpen, setPendingAiOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editId, setEditId] = useState(null);
 
@@ -305,74 +302,6 @@ const SyllabusBreakdownCRUD = () => {
     }, 0);
 
     setShowModal(true);
-  };
-
-  const openAiImport = () => {
-    if (!formData.class_id || !formData.subject_id) {
-      return Swal.fire(
-        "Select Class & Subject",
-        "Please select the assigned Class and Subject first, then upload the syllabus.",
-        "info"
-      );
-    }
-    // Never stack two Bootstrap-style modals. Close the syllabus form first;
-    // onExited opens the AI importer after the parent has fully left the DOM.
-    setPendingAiOpen(true);
-    setShowModal(false);
-  };
-
-  const closeAiImport = () => {
-    setShowAiImport(false);
-    setShowModal(true);
-  };
-
-  const handleUseAiDraft = async (draft) => {
-    const currentHasContent = (formData.items || []).some((it) =>
-      [it.unit_no, it.unit_title, it.topics, it.subtopics, it.periods, it.planned_month, it.remarks]
-        .some((value) => String(value ?? "").trim())
-    );
-
-    if (currentHasContent) {
-      const confirm = await Swal.fire({
-        title: "Replace current unit rows?",
-        text: "The AI draft will replace the unit/chapter rows currently in this form. Class, Subject, Session and Term will stay unchanged.",
-        icon: "question",
-        showCancelButton: true,
-        confirmButtonText: "Use AI draft",
-        customClass: { container: "sb-ai-swal" },
-      });
-      if (!confirm.isConfirmed) return;
-    }
-
-    const items = safeArr(draft?.units).map((it, idx) => ({
-      seq_no: idx + 1,
-      unit_no: safeStr(it.unit_no),
-      unit_title: safeStr(it.unit_title),
-      topics: safeStr(it.topics),
-      subtopics: safeStr(it.subtopics),
-      periods: it.periods ?? "",
-      planned_from: "",
-      planned_to: "",
-      planned_month: safeStr(it.planned_month),
-      remarks: safeStr(it.remarks),
-    }));
-
-    setFormData((prev) => ({
-      ...prev,
-      book_ref: safeStr(draft?.book_reference) || prev.book_ref,
-      objectives: safeStr(draft?.objectives) || prev.objectives,
-      items: items.length ? items : prev.items,
-    }));
-    setShowAiImport(false);
-    setShowModal(true);
-
-    await Swal.fire({
-      icon: "success",
-      title: "AI draft added",
-      text: `${items.length} unit/chapter row${items.length === 1 ? "" : "s"} added to the form. Please review them, then click Save.`,
-      timer: 2200,
-      showConfirmButton: false,
-    });
   };
 
   const openEditModal = async (row) => {
@@ -894,12 +823,6 @@ const SyllabusBreakdownCRUD = () => {
         <Modal
           show={showModal}
           onHide={() => setShowModal(false)}
-          onExited={() => {
-            if (pendingAiOpen) {
-              setPendingAiOpen(false);
-              setShowAiImport(true);
-            }
-          }}
           size="xl"
           centered
           fullscreen="sm-down"
@@ -966,28 +889,6 @@ const SyllabusBreakdownCRUD = () => {
                   </Form.Select>
                 </Col>
               </Row>
-
-              <div className="sb-ai-import-banner mt-3">
-                <div className="d-flex align-items-start gap-3">
-                  <div className="sb-ai-import-banner-icon"><i className="bi bi-stars" /></div>
-                  <div className="flex-grow-1">
-                    <div className="fw-semibold">Create syllabus breakup with AI</div>
-                    <div className="small text-muted">Upload a PDF, scanned page, handwritten photo or screenshot. AI fills the draft; you review before saving.</div>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="primary"
-                    onClick={openAiImport}
-                    disabled={!formData.class_id || !formData.subject_id}
-                    className="text-nowrap"
-                  >
-                    <i className="bi bi-cloud-arrow-up me-2" />AI Import PDF / Handwriting
-                  </Button>
-                </div>
-                {(!formData.class_id || !formData.subject_id) && (
-                  <div className="small text-primary mt-2"><i className="bi bi-info-circle me-1" />Select Class and Subject to enable AI import.</div>
-                )}
-              </div>
 
               <Row className="g-2 mt-2">
                 <Col xs={12} md={6}>
@@ -1077,7 +978,7 @@ const SyllabusBreakdownCRUD = () => {
                         </td>
 
                         <td>
-                          <Form.Control value={it.planned_month} maxLength={20} onChange={(e) => updateItem(idx, "planned_month", e.target.value.slice(0, 20))} placeholder="April / Q1" />
+                          <Form.Control value={it.planned_month} onChange={(e) => updateItem(idx, "planned_month", e.target.value)} placeholder="April / Q1" />
                         </td>
 
                         <td>
@@ -1165,7 +1066,7 @@ const SyllabusBreakdownCRUD = () => {
 
                         <Col xs={12} sm={6}>
                           <Form.Label>Month</Form.Label>
-                          <Form.Control value={it.planned_month} maxLength={20} onChange={(e) => updateItem(idx, "planned_month", e.target.value.slice(0, 20))} placeholder="April / Q1" />
+                          <Form.Control value={it.planned_month} onChange={(e) => updateItem(idx, "planned_month", e.target.value)} placeholder="April / Q1" />
                         </Col>
 
                         <Col xs={12} sm={6}>
@@ -1191,21 +1092,6 @@ const SyllabusBreakdownCRUD = () => {
             </Form>
           </Modal.Body>
         </Modal>
-
-        {showAiImport && (
-          <SyllabusAiImportModal
-            context={{
-              classId: formData.class_id,
-              className: classes.find((c) => String(c.id) === String(formData.class_id))?.class_name || "",
-              subjectId: formData.subject_id,
-              subjectName: subjectsForSelectedClass.find((s) => String(s.id) === String(formData.subject_id))?.name || "",
-              academicSession: formData.academic_session,
-              term: formData.term,
-            }}
-            onClose={closeAiImport}
-            onUseDraft={handleUseAiDraft}
-          />
-        )}
       </div>
     </div>
   );

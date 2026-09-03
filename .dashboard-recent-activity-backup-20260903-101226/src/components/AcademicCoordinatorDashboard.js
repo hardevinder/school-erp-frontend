@@ -7,7 +7,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import api from "../api";
 import { useNavigate } from "react-router-dom";
-import UpcomingCalendarEvents from "./dashboard/UpcomingCalendarEvents";
 
 // Charts
 import { Pie } from "react-chartjs-2";
@@ -348,7 +347,6 @@ export default function Dashboard() {
     return (a + b).toUpperCase();
   }, [displayName]);
 
-
   return (
     <div className="container-fluid px-3 py-3 dashboard-pro">
       {/* HERO HEADER */}
@@ -465,16 +463,6 @@ export default function Dashboard() {
           <div><small>Sections reported</small><strong>{loading ? "…" : attendanceSummary?.summary?.length || 0}</strong></div>
         </div>
       </section>
-
-      {/* UPCOMING ACADEMIC CALENDAR EVENTS */}
-      <UpcomingCalendarEvents
-        refreshKey={refreshKey}
-        openPath="/academic-calendar-view"
-        managePath="/academic-calendar"
-        maxItems={6}
-        title="Upcoming Calendar Events"
-        subtitle="Next school events, exams, PTMs, holidays and activities from the Academic Calendar."
-      />
 
       {/* QUICK ACTIONS */}
       {canSeeAcademicCards && (
@@ -901,17 +889,6 @@ export default function Dashboard() {
         .section-heading h5{
           color: #0f172a;
         }
-
-        .coordinator-activity-panel{
-          background:linear-gradient(135deg,#ffffff 0%,#f8fbff 100%);
-          border:1px solid #e7edf6;border-radius:20px;padding:18px;
-          box-shadow:0 10px 30px rgba(31,45,61,.05);
-        }
-        .activity-live-dot{width:9px;height:9px;border-radius:50%;background:#22c55e;box-shadow:0 0 0 5px rgba(34,197,94,.12);}
-        .activity-tile{width:100%;height:100%;min-height:118px;border:1px solid #e8edf5;border-radius:16px;background:#fff;padding:14px;display:grid;grid-template-columns:42px 1fr 16px;gap:11px;text-align:left;align-items:start;color:#1f2937;transition:.18s ease;}
-        .activity-tile:hover{transform:translateY(-2px);box-shadow:0 12px 24px rgba(31,45,61,.08);}
-        .activity-icon{width:42px;height:42px;border-radius:13px;display:grid;place-items:center;background:#eff6ff;color:#2563eb;font-size:1.05rem;}
-        .activity-copy{display:flex;flex-direction:column;min-width:0}.activity-copy strong{font-size:.88rem}.activity-copy small{font-size:.76rem;color:#6b7280;margin-top:4px;line-height:1.35}.activity-copy em{font-size:.68rem;color:#94a3b8;font-style:normal;margin-top:8px;text-transform:uppercase;letter-spacing:.04em}.activity-arrow{color:#a3afbf;margin-top:12px}.activity-amber .activity-icon{background:#fff7ed;color:#d97706}.activity-green .activity-icon{background:#ecfdf5;color:#059669}.activity-purple .activity-icon{background:#f5f3ff;color:#7c3aed}.activity-red .activity-icon{background:#fef2f2;color:#dc2626}
 
         .quick-action-card,
         .metric-card,

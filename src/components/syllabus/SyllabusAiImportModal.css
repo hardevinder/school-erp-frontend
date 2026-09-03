@@ -1,0 +1,88 @@
+.sb-ai-backdrop {
+  z-index: 30000 !important;
+  position: fixed !important;
+  inset: 0 !important;
+  background: rgba(15, 23, 42, 0.62);
+  backdrop-filter: blur(3px);
+  overflow-y: auto !important;
+  padding: 20px 12px;
+}
+
+.sb-ai-swal { z-index: 31000 !important; }
+
+.sb-ai-dialog { max-width: min(96vw, 1460px); margin: 0 auto !important; }
+.sb-ai-shell { width: 100%; max-height: calc(100vh - 40px); border: 0; border-radius: 18px; overflow: hidden; box-shadow: 0 30px 80px rgba(15, 23, 42, 0.28); }
+
+.sb-ai-header {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px 22px;
+  color: #fff;
+  background: linear-gradient(120deg, #0f4c81, #2563eb 55%, #7c3aed);
+}
+.sb-ai-icon { width: 48px; height: 48px; border-radius: 14px; display: grid; place-items: center; font-size: 23px; background: rgba(255,255,255,.16); border: 1px solid rgba(255,255,255,.22); }
+.sb-ai-eyebrow { font-size: 11px; font-weight: 800; letter-spacing: .12em; opacity: .82; }
+.sb-ai-subtitle { font-size: 13px; opacity: .85; }
+.sb-ai-start { padding: 28px; background: linear-gradient(180deg, #f8fbff, #fff); }
+.sb-ai-shell > .modal-body { overflow-y: auto; min-height: 0; }
+.sb-ai-footer { position: sticky; bottom: 0; z-index: 4; flex: 0 0 auto; }
+
+.sb-ai-dropzone {
+  border: 2px dashed #9db8e6;
+  border-radius: 18px;
+  min-height: 220px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  cursor: pointer;
+  background: #fff;
+  transition: .2s ease;
+}
+.sb-ai-dropzone:hover, .sb-ai-dropzone.is-dragging { border-color: #2563eb; background: #eff6ff; transform: translateY(-1px); }
+.sb-ai-dropzone p { margin-bottom: 8px; color: #64748b; }
+.sb-ai-upload-orb { width: 66px; height: 66px; border-radius: 50%; display: grid; place-items: center; margin-bottom: 12px; font-size: 30px; color: #2563eb; background: #eaf2ff; }
+
+.sb-ai-promise { margin-top: 18px; }
+.sb-ai-promise > div { display: flex; flex-direction: column; padding: 18px; border-radius: 14px; background: #f8fafc; border: 1px solid #e2e8f0; }
+.sb-ai-promise i { font-size: 22px; color: #2563eb; margin-bottom: 7px; }
+.sb-ai-promise b { font-size: 14px; }
+.sb-ai-promise span { color: #64748b; font-size: 12px; margin-top: 3px; }
+
+.sb-ai-review { background: #fff; }
+.sb-ai-summary { display: grid; grid-template-columns: 2fr repeat(3, 1fr); gap: 1px; background: #e2e8f0; border-bottom: 1px solid #e2e8f0; }
+.sb-ai-summary > div { background: #f8fafc; padding: 14px 18px; display: flex; flex-direction: column; min-width: 0; }
+.sb-ai-summary span { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: #64748b; }
+.sb-ai-summary b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sb-ai-summary .needs-attention { background: #fffbeb; }
+.sb-ai-summary .is-clear { background: #f0fdf4; }
+
+.sb-ai-table-wrap { max-height: 48vh; border-top: 1px solid #e2e8f0; }
+.sb-ai-table { min-width: 1500px; font-size: 13px; }
+.sb-ai-table thead th { position: sticky; top: 0; z-index: 2; background: #f8fafc; white-space: nowrap; }
+.sb-ai-table textarea { min-width: 220px; }
+.sb-ai-table td:nth-child(4) input { min-width: 240px; }
+.sb-ai-table td:nth-child(3) input { min-width: 90px; }
+.sb-ai-table td:nth-child(8) input { min-width: 120px; }
+.sb-ai-table td:nth-child(9) input { min-width: 160px; }
+.sb-ai-warning-row > td { background: #fffbeb !important; }
+.sb-ai-footer { background: #f8fafc; }
+
+@media (max-width: 767.98px) {
+  .sb-ai-backdrop { padding: 10px 6px; }
+  .sb-ai-dialog { margin: 0 auto !important; max-width: none; width: 100%; min-height: 0; }
+  .sb-ai-shell { min-height: 0; max-height: calc(100vh - 20px); border-radius: 12px; }
+  .sb-ai-header { padding: 14px; align-items: flex-start; }
+  .sb-ai-header h4 { font-size: 18px; }
+  .sb-ai-icon { width: 42px; height: 42px; flex: 0 0 42px; }
+  .sb-ai-start { padding: 16px; }
+  .sb-ai-summary { grid-template-columns: 1fr 1fr; }
+  .sb-ai-summary > div { padding: 11px 12px; }
+  .sb-ai-footer { position: sticky; bottom: 0; }
+}

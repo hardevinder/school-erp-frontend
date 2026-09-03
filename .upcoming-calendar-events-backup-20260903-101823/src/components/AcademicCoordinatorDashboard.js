@@ -7,7 +7,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import api from "../api";
 import { useNavigate } from "react-router-dom";
-import UpcomingCalendarEvents from "./dashboard/UpcomingCalendarEvents";
 
 // Charts
 import { Pie } from "react-chartjs-2";
@@ -348,6 +347,46 @@ export default function Dashboard() {
     return (a + b).toUpperCase();
   }, [displayName]);
 
+  const recentActivities = useMemo(() => {
+    const items = [];
+    if (calMini) {
+      items.push({
+        icon: "bi-stars",
+        tone: "blue",
+        title: "Academic Calendar synced",
+        detail: `${calMini.activities || 0} activities • ${calMini.events || 0} events • ${calMini.holidays || 0} holidays`,
+        meta: calMini.status ? `Calendar status: ${calMini.status}` : "Latest calendar snapshot",
+        onClick: openAcademicCalendar,
+      });
+    }
+    items.push({
+      icon: "bi-check2-square",
+      tone: Number(syllPendingCount || 0) > 0 ? "amber" : "green",
+      title: Number(syllPendingCount || 0) > 0 ? `${syllPendingCount} syllabus approval${Number(syllPendingCount) === 1 ? "" : "s"} pending` : "Syllabus approvals clear",
+      detail: Number(syllPendingCount || 0) > 0 ? "Submissions are waiting for coordinator review." : "No pending syllabus submissions right now.",
+      meta: "Syllabus workflow",
+      onClick: openSyllabusApproval,
+    });
+    items.push({
+      icon: "bi-people",
+      tone: "purple",
+      title: `${attendanceSummary?.summary?.length || 0} sections reported`,
+      detail: `${present} present • ${absent} absent • ${leaves} on leave`,
+      meta: `Attendance • ${formatDateDisplay(selectedDate)}`,
+      onClick: openMonthlyAttendanceRegister,
+    });
+    if (absent > 0) {
+      items.push({
+        icon: "bi-person-x",
+        tone: "red",
+        title: `${absent} students absent`,
+        detail: "Open the attendance register for class-wise follow-up.",
+        meta: "Needs attention",
+        onClick: openMonthlyAttendanceRegister,
+      });
+    }
+    return items.slice(0, 5);
+  }, [calMini, syllPendingCount, attendanceSummary, present, absent, leaves, selectedDate]);
 
   return (
     <div className="container-fluid px-3 py-3 dashboard-pro">
@@ -466,15 +505,36 @@ export default function Dashboard() {
         </div>
       </section>
 
-      {/* UPCOMING ACADEMIC CALENDAR EVENTS */}
-      <UpcomingCalendarEvents
-        refreshKey={refreshKey}
-        openPath="/academic-calendar-view"
-        managePath="/academic-calendar"
-        maxItems={6}
-        title="Upcoming Calendar Events"
-        subtitle="Next school events, exams, PTMs, holidays and activities from the Academic Calendar."
-      />
+      {/* RECENT ACTIVITY */}
+      <section className="coordinator-activity-panel mb-4">
+        <div className="section-heading d-flex flex-wrap align-items-end justify-content-between gap-2 mb-3">
+          <div>
+            <div className="d-flex align-items-center gap-2">
+              <span className="activity-live-dot" />
+              <h5 className="mb-0 fw-semibold">Recent Activity</h5>
+            </div>
+            <div className="text-muted small mt-1">Important academic updates surfaced automatically for the coordinator.</div>
+          </div>
+          <button className="btn btn-sm btn-outline-primary rounded-pill px-3" type="button" onClick={hardRefresh}>
+            <i className="bi bi-arrow-clockwise me-1" /> Refresh
+          </button>
+        </div>
+        <div className="row g-3">
+          {recentActivities.map((item, index) => (
+            <div className="col-12 col-md-6 col-xl-3" key={`${item.title}-${index}`}>
+              <button type="button" className={`activity-tile activity-${item.tone}`} onClick={item.onClick}>
+                <span className="activity-icon"><i className={`bi ${item.icon}`} /></span>
+                <span className="activity-copy">
+                  <strong>{item.title}</strong>
+                  <small>{item.detail}</small>
+                  <em>{item.meta}</em>
+                </span>
+                <i className="bi bi-chevron-right activity-arrow" />
+              </button>
+            </div>
+          ))}
+        </div>
+      </section>
 
       {/* QUICK ACTIONS */}
       {canSeeAcademicCards && (

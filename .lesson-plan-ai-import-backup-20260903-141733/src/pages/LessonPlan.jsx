@@ -1,5 +1,5 @@
 // src/pages/LessonPlanCRUD.jsx
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../api";
 import Swal from "sweetalert2";
@@ -111,9 +111,6 @@ const LessonPlanCRUD = () => {
   // ✅ AI states
   const [aiBusy, setAiBusy] = useState(false);
   const [aiFilled, setAiFilled] = useState(false);
-  const [aiImportBusy, setAiImportBusy] = useState(false);
-  const [aiImportInfo, setAiImportInfo] = useState(null);
-  const lessonPlanImportInputRef = useRef(null);
 
   const [searchClass, setSearchClass] = useState("");
   const [searchSubject, setSearchSubject] = useState("");
@@ -193,9 +190,6 @@ const LessonPlanCRUD = () => {
   const closeCreateEdit = async () => {
     setShowModal(false);
     setAiBusy(false);
-    setAiImportBusy(false);
-    setAiImportInfo(null);
-    if (lessonPlanImportInputRef.current) lessonPlanImportInputRef.current.value = "";
     await sleep(320);
     setEditing(false);
     setEditId(null);
@@ -432,9 +426,6 @@ const LessonPlanCRUD = () => {
 
     setAiFilled(false);
     setAiBusy(false);
-    setAiImportBusy(false);
-    setAiImportInfo(null);
-    if (lessonPlanImportInputRef.current) lessonPlanImportInputRef.current.value = "";
   };
 
   const openCreate = async () => {
@@ -449,7 +440,6 @@ const LessonPlanCRUD = () => {
     setEditing(true);
     setEditId(plan.id);
     setAiFilled(false);
-    setAiImportInfo(null);
 
     let full = plan;
     try {
@@ -782,182 +772,6 @@ const LessonPlanCRUD = () => {
       fireTop({ icon: "error", title: "AI Error", text: msg });
     } finally {
       setAiBusy(false);
-    }
-  };
-
-  /* ---------------- ✅ AI: Import PDF / handwriting ---------------- */
-
-  const lessonPlanImportEnabled = useMemo(() => {
-    return !!formData.classId && !!formData.subjectId;
-  }, [formData.classId, formData.subjectId]);
-
-  const openLessonPlanImportPicker = () => {
-    if (aiBusy || aiImportBusy || saving) return;
-    if (!lessonPlanImportEnabled) {
-      fireTop({
-        icon: "warning",
-        title: "Select Class & Subject",
-        text: "Please select Class and Subject first. Then upload the handwritten lesson plan, image or PDF.",
-      });
-      return;
-    }
-    lessonPlanImportInputRef.current?.click();
-  };
-
-  const applyImportedLessonPlan = (responseData) => {
-    const draft = responseData?.plan || responseData?.data?.plan || null;
-    if (!draft || typeof draft !== "object") return false;
-
-    const next = { ...formData };
-    const setText = (target, source) => {
-      if (source != null && safeStr(source).trim()) next[target] = safeStr(source).trim();
-    };
-
-    setText("academicSession", draft.academic_session);
-    if (["FULL_YEAR", "TERM1", "TERM2"].includes(safeStr(draft.term).toUpperCase())) {
-      next.term = safeStr(draft.term).toUpperCase();
-    }
-    if (/^\d{4}-\d{2}-\d{2}$/.test(safeStr(draft.week_start))) next.weekStart = draft.week_start;
-    if (/^\d{4}-\d{2}-\d{2}$/.test(safeStr(draft.week_end))) next.weekEnd = draft.week_end;
-
-    setText("topic", draft.topic);
-    setText("subtopic", draft.subtopic);
-    setText("specificObjectives", draft.specific_objectives);
-    setText("teachingMethod", draft.teaching_method);
-    setText("teachingAids", draft.teaching_aids);
-    setText("activities", draft.activities);
-    setText("resources", draft.resources);
-    setText("evaluationMethod", draft.evaluation_method);
-    setText("assessmentPlan", draft.assessment_plan);
-    setText("homework", draft.homework);
-    setText("remedialPlan", draft.remedial_plan);
-    setText("enrichmentPlan", draft.enrichment_plan);
-    setText("remarks", draft.remarks);
-
-    if (draft.planned_periods != null && Number.isFinite(Number(draft.planned_periods))) {
-      next.plannedPeriods = String(Math.max(1, Math.round(Number(draft.planned_periods))));
-    }
-
-    const importedTopic = safeStr(draft.topic).trim();
-    const importedSubtopic = safeStr(draft.subtopic).trim();
-    if (importedTopic) {
-      setTopicOptions((prev) =>
-        prev.includes(importedTopic) ? prev : [importedTopic, ...prev]
-      );
-    }
-    if (importedSubtopic) {
-      setSubtopicOptions((prev) =>
-        prev.includes(importedSubtopic) ? prev : [importedSubtopic, ...prev]
-      );
-    }
-
-    const doc = responseData?.document || {};
-    const combinedWarnings = [
-      ...(Array.isArray(responseData?.warnings) ? responseData.warnings : []),
-      ...(Array.isArray(draft?.warnings) ? draft.warnings : []),
-    ].filter(Boolean);
-    const confidence = Number(draft?.confidence || doc?.confidence || 0);
-
-    setFormData(next);
-    setAiFilled(true);
-    setAiImportInfo({
-      fileName: responseData?._fileName || "Uploaded lesson plan",
-      language: safeStr(doc?.detected_language).trim(),
-      confidence: Number.isFinite(confidence) ? confidence : 0,
-      warnings: Array.from(new Set(combinedWarnings)),
-    });
-    return true;
-  };
-
-  const handleLessonPlanImportFile = async (event) => {
-    const file = event?.target?.files?.[0];
-    if (!file) return;
-
-    try {
-      if (!lessonPlanImportEnabled) {
-        fireTop({
-          icon: "warning",
-          title: "Select Class & Subject",
-          text: "Please select Class and Subject first.",
-        });
-        return;
-      }
-
-      if (file.size > 25 * 1024 * 1024) {
-        fireTop({
-          icon: "warning",
-          title: "File too large",
-          text: "Please choose a PDF or image up to 25 MB.",
-        });
-        return;
-      }
-
-      setAiImportBusy(true);
-      setAiImportInfo(null);
-
-      const body = new FormData();
-      body.append("lesson_plan_document", file);
-      body.append("classId", String(formData.classId));
-      body.append("subjectId", String(formData.subjectId));
-      body.append("academicSession", safeStr(formData.academicSession).trim());
-      body.append("term", safeStr(formData.term || "FULL_YEAR"));
-
-      const res = await api.post("/api/ai/lesson-plan/analyze-document", body);
-      const data = { ...(res?.data || {}), _fileName: file.name };
-      const draft = data?.plan;
-      if (!draft || typeof draft !== "object") {
-        throw new Error("AI response did not contain a lesson plan draft.");
-      }
-
-      const doc = data?.document || {};
-      const confidence = Number(draft?.confidence || doc?.confidence || 0);
-      const pct = confidence > 0 ? `${Math.round(confidence * 100)}%` : "not available";
-      const warnings = [
-        ...(Array.isArray(data?.warnings) ? data.warnings : []),
-        ...(Array.isArray(draft?.warnings) ? draft.warnings : []),
-      ].filter(Boolean);
-      const summary = [
-        `Topic: ${safeStr(draft.topic).trim() || "Needs review"}`,
-        doc?.detected_language ? `Language: ${doc.detected_language}` : null,
-        `AI confidence: ${pct}`,
-        warnings.length ? `${warnings.length} item(s) need review.` : "No special warnings detected.",
-        "Nothing will be saved until you review the form and click Create/Update Lesson Plan.",
-      ]
-        .filter(Boolean)
-        .join("\n");
-
-      const confirm = await fireTop({
-        icon: warnings.length ? "warning" : "info",
-        title: "AI lesson plan draft ready",
-        text: summary,
-        showCancelButton: true,
-        confirmButtonText: "Use Draft",
-        cancelButtonText: "Cancel",
-        reverseButtons: true,
-      });
-
-      if (confirm.isConfirmed) {
-        const applied = applyImportedLessonPlan(data);
-        if (!applied) throw new Error("Could not map the AI lesson plan fields to the form.");
-        fireTop({
-          icon: "success",
-          title: "Draft added to the form",
-          text: "Please review the imported fields before saving.",
-          timer: 1700,
-          showConfirmButton: false,
-        });
-      }
-    } catch (e) {
-      console.error("AI lesson plan import error:", e);
-      const msg =
-        e?.response?.data?.message ||
-        e?.response?.data?.error ||
-        e?.message ||
-        "Could not read this lesson plan. Try a clearer PDF or scan.";
-      fireTop({ icon: "error", title: "AI Import Error", text: msg });
-    } finally {
-      setAiImportBusy(false);
-      if (event?.target) event.target.value = "";
     }
   };
 
@@ -1530,34 +1344,6 @@ const LessonPlanCRUD = () => {
                   </Button>
                 ) : null}
 
-                <input
-                  ref={lessonPlanImportInputRef}
-                  type="file"
-                  accept=".pdf,image/jpeg,image/png,image/webp"
-                  className="d-none"
-                  onChange={handleLessonPlanImportFile}
-                />
-
-                <Button
-                  size="sm"
-                  variant={lessonPlanImportEnabled ? "outline-primary" : "outline-secondary"}
-                  onClick={openLessonPlanImportPicker}
-                  disabled={aiImportBusy || aiBusy || saving}
-                  title={
-                    lessonPlanImportEnabled
-                      ? "Import a PDF, screenshot, scan or handwritten lesson plan with AI"
-                      : "Select Class and Subject first"
-                  }
-                >
-                  {aiImportBusy ? (
-                    <>
-                      <Spinner size="sm" animation="border" className="me-2" /> Reading...
-                    </>
-                  ) : (
-                    "📄 AI Import PDF / Handwriting"
-                  )}
-                </Button>
-
                 <Button
                   size="sm"
                   variant={aiEnabled ? "dark" : "outline-dark"}
@@ -1596,29 +1382,6 @@ const LessonPlanCRUD = () => {
 
         <Form onSubmit={handleSubmit}>
           <Modal.Body style={modalBodyStyle}>
-            {aiImportInfo ? (
-              <div
-                className={`alert mb-3 ${
-                  aiImportInfo.warnings?.length ? "alert-warning" : "alert-info"
-                }`}
-                role="alert"
-              >
-                <div className="fw-semibold">📄 AI imported draft — review before saving</div>
-                <div className="small mt-1">
-                  {aiImportInfo.fileName}
-                  {aiImportInfo.language ? ` • ${aiImportInfo.language}` : ""}
-                  {aiImportInfo.confidence > 0
-                    ? ` • ${Math.round(aiImportInfo.confidence * 100)}% confidence`
-                    : ""}
-                </div>
-                {aiImportInfo.warnings?.length ? (
-                  <div className="small mt-1">
-                    {aiImportInfo.warnings.slice(0, 3).join(" • ")}
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
-
             <Row className="g-3">
               {/* Left column */}
               <Col xs={12} lg={6}>
@@ -2048,7 +1811,7 @@ const LessonPlanCRUD = () => {
 
           <Modal.Footer className="bg-white lesson-plan-modal-footer">
             <div className="text-muted small me-auto d-none d-md-block">
-              Tip: Import a PDF/handwritten plan, or select Unit → Topic and use ✨ Generate with AI.
+              Tip: Select Unit → then Topic/Subtopic dropdown auto loads. Use ✨ Generate with AI for fast draft.
             </div>
 
             <div className="d-flex gap-2 w-100 w-md-auto justify-content-end">

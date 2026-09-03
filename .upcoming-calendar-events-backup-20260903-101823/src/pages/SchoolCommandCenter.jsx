@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import commandCenterApi from "../services/commandCenterApi";
-import UpcomingCalendarEvents from "../components/dashboard/UpcomingCalendarEvents";
 import "./SchoolCommandCenter.css";
 
 const fmt = (value) => new Intl.NumberFormat("en-IN").format(Number(value || 0));
@@ -101,6 +100,17 @@ export default function SchoolCommandCenter() {
   const showWellbeing = data?.profile !== "hr";
   const showCompliance = data?.profile !== "academic";
 
+  const recentActivity = [
+    ...(data?.calendar_events || []).map((event) => ({
+      key: `calendar-${event.id}`, icon: "bi-calendar2-event", tone: "blue",
+      title: event.title, detail: event.type || event.day_type || "Academic Calendar",
+      meta: event.start_time ? `${event.start_time}${event.end_time ? `–${event.end_time}` : ""}` : "Today", route: "/academic-calendar",
+    })),
+    ...(data?.alerts || []).slice(0, 5).map((alert) => ({
+      key: `alert-${alert.id}`, icon: alert.severity === "warning" ? "bi-exclamation-triangle" : "bi-info-circle", tone: alert.severity === "warning" ? "amber" : "violet",
+      title: alert.title, detail: alert.description, meta: `${fmt(alert.count)} item${Number(alert.count) === 1 ? "" : "s"}`, route: alert.route,
+    })),
+  ].slice(0, 8);
 
   return (
     <div className="cc-page">
@@ -187,13 +197,21 @@ export default function SchoolCommandCenter() {
         />
       </section>
 
-      <UpcomingCalendarEvents
-        openPath="/academic-calendar-view"
-        managePath="/academic-calendar"
-        maxItems={6}
-        title="Upcoming Calendar Events"
-        subtitle="Next Academic Calendar events for quick leadership visibility."
-      />
+      <section className="cc-card cc-recent-activity">
+        <div className="cc-card-head">
+          <div><span className="cc-eyebrow">Live School Pulse</span><h3>Recent Activity</h3><small>Calendar updates and items that currently need leadership attention.</small></div>
+          <span className="cc-count-pill">{recentActivity.length} updates</span>
+        </div>
+        <div className="cc-activity-grid">
+          {recentActivity.length ? recentActivity.map((item) => (
+            <button type="button" key={item.key} className={`cc-activity-item cc-activity-${item.tone}`} onClick={() => item.route && navigate(item.route)}>
+              <span className="cc-activity-icon"><i className={`bi ${item.icon}`} /></span>
+              <span className="cc-activity-copy"><strong>{item.title}</strong><small>{item.detail}</small><em>{item.meta}</em></span>
+              <i className="bi bi-chevron-right" />
+            </button>
+          )) : <div className="cc-empty compact"><i className="bi bi-check-circle-fill" /><strong>No recent activity requiring attention</strong><span>School pulse is clear for the selected date.</span></div>}
+        </div>
+      </section>
 
       <div className="cc-columns">
         <section className="cc-card" id="cc-attention">

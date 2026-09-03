@@ -62,31 +62,3 @@
     bottom: 0;
   }
 }
-
-.sb-ai-import-banner {
-  padding: 14px 16px;
-  border: 1px solid #bfdbfe;
-  border-radius: 12px;
-  background: linear-gradient(110deg, #eff6ff, #f5f3ff);
-}
-
-.sb-ai-import-banner-icon {
-  width: 42px;
-  height: 42px;
-  flex: 0 0 42px;
-  border-radius: 12px;
-  display: grid;
-  place-items: center;
-  color: #fff;
-  font-size: 20px;
-  background: linear-gradient(135deg, #2563eb, #7c3aed);
-}
-
-@media (max-width: 767.98px) {
-  .sb-ai-import-banner .d-flex {
-    flex-wrap: wrap;
-  }
-  .sb-ai-import-banner .btn {
-    width: 100%;
-  }
-}

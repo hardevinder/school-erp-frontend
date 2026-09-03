@@ -64,7 +64,6 @@ const SyllabusBreakdownCRUD = () => {
   // modal
   const [showModal, setShowModal] = useState(false);
   const [showAiImport, setShowAiImport] = useState(false);
-  const [pendingAiOpen, setPendingAiOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editId, setEditId] = useState(null);
 
@@ -315,15 +314,7 @@ const SyllabusBreakdownCRUD = () => {
         "info"
       );
     }
-    // Never stack two Bootstrap-style modals. Close the syllabus form first;
-    // onExited opens the AI importer after the parent has fully left the DOM.
-    setPendingAiOpen(true);
-    setShowModal(false);
-  };
-
-  const closeAiImport = () => {
-    setShowAiImport(false);
-    setShowModal(true);
+    setShowAiImport(true);
   };
 
   const handleUseAiDraft = async (draft) => {
@@ -339,7 +330,6 @@ const SyllabusBreakdownCRUD = () => {
         icon: "question",
         showCancelButton: true,
         confirmButtonText: "Use AI draft",
-        customClass: { container: "sb-ai-swal" },
       });
       if (!confirm.isConfirmed) return;
     }
@@ -364,7 +354,6 @@ const SyllabusBreakdownCRUD = () => {
       items: items.length ? items : prev.items,
     }));
     setShowAiImport(false);
-    setShowModal(true);
 
     await Swal.fire({
       icon: "success",
@@ -894,12 +883,6 @@ const SyllabusBreakdownCRUD = () => {
         <Modal
           show={showModal}
           onHide={() => setShowModal(false)}
-          onExited={() => {
-            if (pendingAiOpen) {
-              setPendingAiOpen(false);
-              setShowAiImport(true);
-            }
-          }}
           size="xl"
           centered
           fullscreen="sm-down"
@@ -1077,7 +1060,7 @@ const SyllabusBreakdownCRUD = () => {
                         </td>
 
                         <td>
-                          <Form.Control value={it.planned_month} maxLength={20} onChange={(e) => updateItem(idx, "planned_month", e.target.value.slice(0, 20))} placeholder="April / Q1" />
+                          <Form.Control value={it.planned_month} onChange={(e) => updateItem(idx, "planned_month", e.target.value)} placeholder="April / Q1" />
                         </td>
 
                         <td>
@@ -1165,7 +1148,7 @@ const SyllabusBreakdownCRUD = () => {
 
                         <Col xs={12} sm={6}>
                           <Form.Label>Month</Form.Label>
-                          <Form.Control value={it.planned_month} maxLength={20} onChange={(e) => updateItem(idx, "planned_month", e.target.value.slice(0, 20))} placeholder="April / Q1" />
+                          <Form.Control value={it.planned_month} onChange={(e) => updateItem(idx, "planned_month", e.target.value)} placeholder="April / Q1" />
                         </Col>
 
                         <Col xs={12} sm={6}>
@@ -1202,7 +1185,7 @@ const SyllabusBreakdownCRUD = () => {
               academicSession: formData.academic_session,
               term: formData.term,
             }}
-            onClose={closeAiImport}
+            onClose={() => setShowAiImport(false)}
             onUseDraft={handleUseAiDraft}
           />
         )}

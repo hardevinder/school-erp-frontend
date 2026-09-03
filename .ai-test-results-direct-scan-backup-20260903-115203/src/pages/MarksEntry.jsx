@@ -136,8 +136,6 @@ const MarksEntry = () => {
   const [examScheduleId, setExamScheduleId] = useState(null);
   const [activeStudentId, setActiveStudentId] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [aiImportBusy, setAiImportBusy] = useState(false);
-  const aiMarksInputRef = useRef(null);
 
   const inputRefs = useRef({});
 
@@ -730,96 +728,6 @@ const MarksEntry = () => {
     }
   };
 
-  const handleAiMarksImport = async (file) => {
-    if (!file) return;
-    if (!examScheduleId) {
-      if (aiMarksInputRef.current) aiMarksInputRef.current.value = "";
-      Swal.fire("Load students first", "Select the exam context before scanning a marks sheet.", "warning");
-      return;
-    }
-    const editable = selectedComponents.filter((component) => !component.is_locked);
-    if (!editable.length) {
-      if (aiMarksInputRef.current) aiMarksInputRef.current.value = "";
-      Swal.fire("Select component", "Select at least one unlocked component first.", "warning");
-      return;
-    }
-
-    setAiImportBusy(true);
-    try {
-      const fd = new FormData();
-      fd.append("marks_document", file);
-      fd.append("exam_schedule_id", examScheduleId);
-      fd.append("selected_component_ids", JSON.stringify(editable.map((component) => component.component_id)));
-      const response = await api.post("/marks-entry/ai-analyze", fd);
-      const result = response?.data?.data ?? response?.data ?? {};
-      const rows = Array.isArray(result.rows) ? result.rows : [];
-      const selectedIds = new Set(editable.map((component) => String(component.component_id)));
-      let valueCount = 0;
-
-      setMarks((previous) => {
-        const next = { ...previous };
-        rows.forEach((row) => {
-          (Array.isArray(row.values) ? row.values : []).forEach((value) => {
-            const componentId = String(value.component_id ?? "");
-            if (!selectedIds.has(componentId)) return;
-            const key = `${row.student_id}_${componentId}`;
-            if (evaluationMode !== "GRADE") {
-              next[key] = String(value.attendance || "P").toUpperCase() === "P" && value.marks_obtained != null
-                ? value.marks_obtained
-                : "";
-            }
-            valueCount += 1;
-          });
-        });
-        return next;
-      });
-      setAttendance((previous) => {
-        const next = { ...previous };
-        rows.forEach((row) => (Array.isArray(row.values) ? row.values : []).forEach((value) => {
-          const componentId = String(value.component_id ?? "");
-          if (selectedIds.has(componentId)) next[`${row.student_id}_${componentId}`] = String(value.attendance || "P").toUpperCase();
-        }));
-        return next;
-      });
-      if (evaluationMode === "GRADE") {
-        setGradeValues((previous) => {
-          const next = { ...previous };
-          rows.forEach((row) => (Array.isArray(row.values) ? row.values : []).forEach((value) => {
-            const componentId = String(value.component_id ?? "");
-            if (!selectedIds.has(componentId)) return;
-            const key = `${row.student_id}_${componentId}`;
-            next[key] = String(value.attendance || "P").toUpperCase() === "P" && value.grade != null ? value.grade : "";
-          }));
-          return next;
-        });
-        setGradeAttendance((previous) => {
-          const next = { ...previous };
-          rows.forEach((row) => (Array.isArray(row.values) ? row.values : []).forEach((value) => {
-            const componentId = String(value.component_id ?? "");
-            if (selectedIds.has(componentId)) next[`${row.student_id}_${componentId}`] = String(value.attendance || "P").toUpperCase();
-          }));
-          return next;
-        });
-      }
-
-      const matched = Number(result.matched_students || 0);
-      const review = Number(result.review_count || 0);
-      const unmatched = Array.isArray(result.unmatched_rows) ? result.unmatched_rows.length : 0;
-      const warnings = Array.isArray(result.warnings) ? result.warnings : [];
-      await Swal.fire({
-        icon: unmatched || review ? "warning" : "success",
-        title: "AI marks draft ready",
-        html: `<div style="text-align:left"><div><b>${matched}</b> student(s) matched · <b>${valueCount}</b> value(s) filled.</div>${review ? `<div>${review} matched row(s) need review.</div>` : ""}${unmatched ? `<div>${unmatched} row(s) could not be matched automatically.</div>` : ""}${warnings.length ? `<hr/><div>${warnings.slice(0, 6).map((warning) => `• ${escapeHtml(warning)}`).join("<br/>")}</div>` : ""}<hr/><b>Nothing has been saved yet.</b> Review the grid, then click Save.</div>`,
-        confirmButtonText: "Review Marks",
-      });
-    } catch (err) {
-      showApiError("AI scan failed", err, "Could not analyze marks sheet");
-    } finally {
-      setAiImportBusy(false);
-      if (aiMarksInputRef.current) aiMarksInputRef.current.value = "";
-    }
-  };
-
   const handleImportExcel = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -1069,19 +977,6 @@ const MarksEntry = () => {
             >
               Export PDF
             </button>
-
-            <label className={`btn btn-primary mb-0 ${aiImportBusy ? "disabled" : ""}`}>
-              <i className="bi bi-stars me-1" aria-hidden="true" />
-              {aiImportBusy ? "Reading marks…" : "AI Import PDF/Image"}
-              <input
-                ref={aiMarksInputRef}
-                type="file"
-                accept="application/pdf,image/jpeg,image/png,image/webp"
-                hidden
-                onChange={(e) => handleAiMarksImport(e.target.files?.[0])}
-                disabled={!examScheduleId || loading || aiImportBusy || !selectedComponents.some((component) => !component.is_locked)}
-              />
-            </label>
 
             <label className="btn btn-outline-secondary mb-0">
               Import Excel

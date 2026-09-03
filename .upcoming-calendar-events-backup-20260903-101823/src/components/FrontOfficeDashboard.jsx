@@ -9,7 +9,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import api from "../api";
-import UpcomingCalendarEvents from "./dashboard/UpcomingCalendarEvents";
 
 /* ---------------- Roles helper ---------------- */
 const getRoleFlags = () => {
@@ -576,14 +575,6 @@ export default function FrontOfficeDashboard() {
             </div>
           ))}
         </div>
-
-        {/* Upcoming Academic Calendar Events */}
-        <UpcomingCalendarEvents
-          openPath="/academic-calendar-view"
-          maxItems={6}
-          title="Upcoming Calendar Events"
-          subtitle="Keep the front office aware of the next school events, PTMs, holidays and exams."
-        />
 
         {/* Unified Recent Activity */}
         <div className="card border-0 shadow-sm rounded-4 mb-4 overflow-hidden fo-activity-card">
