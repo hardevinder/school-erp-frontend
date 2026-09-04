@@ -516,7 +516,7 @@ function App() {
           <Route
             path="/school-ai"
             element={
-              <RequireRole roles={["principal"]}>
+              <RequireRole roles={["principal", "admin", "superadmin", "super_admin", "academic_coordinator", "coordinator", "hr"]}>
                 <SchoolAiAssistant />
               </RequireRole>
             }

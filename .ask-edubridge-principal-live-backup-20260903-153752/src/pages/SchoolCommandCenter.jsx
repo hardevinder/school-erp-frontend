@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useRoles } from "../hooks/useRoles";
 import commandCenterApi from "../services/commandCenterApi";
 import UpcomingCalendarEvents from "../components/dashboard/UpcomingCalendarEvents";
 import "./SchoolCommandCenter.css";
@@ -53,9 +52,6 @@ function PulseItem({ label, value, note, route, navigate, available = true }) {
 
 export default function SchoolCommandCenter() {
   const navigate = useNavigate();
-  const { activeRole } = useRoles();
-  const isPrincipal = String(activeRole || "").toLowerCase() === "principal";
-  const [aiQuestion, setAiQuestion] = useState("");
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -120,32 +116,13 @@ export default function SchoolCommandCenter() {
           </div>
         </div>
         <div className="cc-hero-actions">
-          {isPrincipal && <button className="btn btn-warning" onClick={() => navigate("/school-ai")}><i className="bi bi-stars me-2" />Ask EduBridge</button>} {/* PRINCIPAL_LIVE_AI */}
+          <button className="btn btn-warning" onClick={() => navigate("/school-ai")}><i className="bi bi-stars me-2" />Ask School AI</button> {/* SCHOOL_AI_COMMAND_CTA_V12 */}
           <input type="date" className="form-control" value={date || ""} onChange={(e) => setDate(e.target.value)} />
           <button className="btn btn-light" onClick={() => load(date)} disabled={loading}>
             <i className={`bi ${loading ? "bi-arrow-repeat cc-spin" : "bi-arrow-clockwise"} me-2`} />Refresh
           </button>
         </div>
       </section>
-
-      {isPrincipal && (
-        <section className="cc-ai-command">
-          <div className="cc-ai-command-icon"><i className="bi bi-stars" /></div>
-          <div className="cc-ai-command-copy">
-            <span>ASK EDUBRIDGE · PRINCIPAL LIVE DATA</span>
-            <strong>Ask the ERP instead of opening reports.</strong>
-          </div>
-          <form onSubmit={(e) => { e.preventDefault(); const q = aiQuestion.trim(); if (q) navigate(`/school-ai?q=${encodeURIComponent(q)}`); }}>
-            <input value={aiQuestion} onChange={(e) => setAiQuestion(e.target.value)} placeholder="e.g. How many students are present in Class VII today?" maxLength={1500} />
-            <button type="submit" disabled={!aiQuestion.trim()}><i className="bi bi-arrow-up-right" /> Ask</button>
-          </form>
-          <div className="cc-ai-examples">
-            <button type="button" onClick={() => navigate(`/school-ai?q=${encodeURIComponent("Which teachers are unavailable today?")}`)}>Teacher availability</button>
-            <button type="button" onClick={() => navigate(`/school-ai?q=${encodeURIComponent("Show upcoming calendar events for the next 7 days")}`)}>Upcoming events</button>
-            <button type="button" onClick={() => navigate(`/school-ai?q=${encodeURIComponent("What is the current session pending fee position?")}`)}>Fee position</button>
-          </div>
-        </section>
-      )}
 
       {error && <div className="alert alert-warning py-2">Showing last loaded data. Refresh issue: {error}</div>}
 

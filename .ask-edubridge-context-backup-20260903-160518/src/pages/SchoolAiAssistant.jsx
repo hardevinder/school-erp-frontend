@@ -91,7 +91,6 @@ export default function SchoolAiAssistant() {
   const [question, setQuestion] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [conversationContext, setConversationContext] = useState(null);
   const inputRef = useRef(null);
   const initialPromptRef = useRef(new URLSearchParams(window.location.search).get("q") || "");
 
@@ -104,9 +103,8 @@ export default function SchoolAiAssistant() {
     setMessages((m) => [...m, userMessage]);
     setQuestion(""); setError(""); setLoading(true);
     try {
-      const response = await schoolAiApi.ask(text, history, conversationContext);
+      const response = await schoolAiApi.ask(text, history);
       const payload = response.data || {};
-      if (payload.context?.student?.id || payload.context?.teacher?.id || payload.context?.class?.id) setConversationContext(payload.context);
       setMessages((m) => [...m, { role: "assistant", content: payload.answer || "I could not build a summary from the available ERP data.", payload }]);
     } catch (err) {
       setError(err?.response?.data?.message || err?.message || "Ask EduBridge is unavailable right now.");
@@ -152,41 +150,8 @@ export default function SchoolAiAssistant() {
           </div>
 
           {error && <div className="alert alert-warning m-3 py-2">{error}</div>}
-          {conversationContext?.student?.id && (
-            <div className="sai-student-context">
-              <span className="sai-student-context-icon"><i className="bi bi-person-check" /></span>
-              <div>
-                <small>Current student</small>
-                <strong>{conversationContext.student.name}</strong>
-                <span>{[conversationContext.student.class_name, conversationContext.student.section_name, conversationContext.student.admission_number].filter(Boolean).join(" • ")}</span>
-              </div>
-              <button type="button" title="Clear current student" onClick={() => setConversationContext(null)}><i className="bi bi-x-lg" /></button>
-            </div>
-          )}
-          {conversationContext?.teacher?.id && (
-            <div className="sai-teacher-context">
-              <span className="sai-teacher-context-icon"><i className="bi bi-person-workspace" /></span>
-              <div>
-                <small>Current teacher</small>
-                <strong>{conversationContext.teacher.name}</strong>
-                <span>{[conversationContext.teacher.designation, conversationContext.teacher.employee_id].filter(Boolean).join(" • ")}</span>
-              </div>
-              <button type="button" title="Clear current teacher" onClick={() => setConversationContext(null)}><i className="bi bi-x-lg" /></button>
-            </div>
-          )}
-          {conversationContext?.class?.id && (
-            <div className="sai-class-context">
-              <span className="sai-class-context-icon"><i className="bi bi-grid-3x3-gap" /></span>
-              <div>
-                <small>Current class</small>
-                <strong>{[conversationContext.class.class_name, conversationContext.class.section_name].filter(Boolean).join("-")}</strong>
-                <span>Live class context</span>
-              </div>
-              <button type="button" title="Clear current class" onClick={() => setConversationContext(null)}><i className="bi bi-x-lg" /></button>
-            </div>
-          )}
           <form className="sai-composer" onSubmit={(e) => { e.preventDefault(); ask(); }}>
-            <textarea ref={inputRef} value={question} onChange={(e) => setQuestion(e.target.value)} placeholder={conversationContext?.teacher?.id ? `Ask about ${conversationContext.teacher.name}: e.g. Show her/his timetable or attendance` : conversationContext?.student?.id ? `Ask about ${conversationContext.student.name}: e.g. Give me her/his attendance record` : conversationContext?.class?.id ? `Ask about ${[conversationContext.class.class_name, conversationContext.class.section_name].filter(Boolean).join("-")}: e.g. Who is in-charge of this class?` : "Ask: How many students are present in Class VII today?"} rows={2} maxLength={1500} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); ask(); } }} />
+            <textarea ref={inputRef} value={question} onChange={(e) => setQuestion(e.target.value)} placeholder="Ask: How many students are present in Class VII today?" rows={2} maxLength={1500} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); ask(); } }} />
             <button type="submit" disabled={loading || !question.trim()}><i className="bi bi-arrow-up" /></button>
           </form>
         </main>
