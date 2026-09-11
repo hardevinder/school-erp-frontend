@@ -4,8 +4,6 @@ import "bootstrap/dist/css/bootstrap.min.css";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useRoles } from "../hooks/useRoles";
 import "./Sidebar.css";
-import { WorkspaceTabs } from "./dashboard/DashboardInsights";
-import { filterWorkspaceGroups } from "./dashboard/dashboardModel";
 
 const DESKTOP_BP = 992; // Bootstrap lg
 
@@ -125,7 +123,6 @@ function sortGroups(groups = []) {
 export default function Sidebar({ headerHeight = 56 }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const [workspace, setWorkspace] = useState("All");
   const { activeRole } = useRoles();
   const isMobile = useIsMobile();
 
@@ -430,7 +427,6 @@ export default function Sidebar({ headerHeight = 56 }) {
           { key: "classwise-result-summary", label: "Class Result", icon: "bi-bar-chart", path: "/reports/classwise-result-summary", roles: ["examination"] },
           { key: "final-result-summary", label: "Final Result Summary", icon: "bi-bar-chart-line", path: "/reports/final-result-summary", roles: ["examination"] },
           { key: "report-card-formats", label: "Report Card Formats", icon: "bi-file-earmark-font", path: "/report-card-formats", roles: ["examination"] },
-          { key: "report-card-template-studio", label: "Smart Report Card Templates", icon: "bi-magic", path: "/report-card-template-studio", roles: ["examination"] },
           { key: "assign-report-card-format", label: "Assign Report Format", icon: "bi-link", path: "/assign-report-card-format", roles: ["examination"] },
           { key: "student-remarks-entry", label: "Student Remarks Entry", icon: "bi-chat-square-text", path: "/student-remarks-entry", roles: ["examination"] },
           { key: "report-card-generator", label: "Print Report Cards", icon: "bi-printer", path: "/report-card-generator", roles: ["examination"] },
@@ -1285,7 +1281,6 @@ export default function Sidebar({ headerHeight = 56 }) {
           { key: "assessment-components", label: "Assessment Components", icon: "bi-diagram-3", path: "/assessment-components" },
           { key: "exam-schedules", label: "Exam Schedule", icon: "bi-calendar2-check", path: "/exam-schedules" },
           { key: "report-card-formats", label: "Report Card Format", icon: "bi-file-earmark-font", path: "/report-card-formats" },
-          { key: "report-card-template-studio", label: "Smart Report Card Templates", icon: "bi-magic", path: "/report-card-template-studio" },
           { key: "assign-report-card-format", label: "Assign Report Format", icon: "bi-link", path: "/assign-report-card-format" },
         ],
       });
@@ -1514,11 +1509,10 @@ export default function Sidebar({ headerHeight = 56 }) {
 
   const filteredGroups = useMemo(() => {
     const s = (q || "").trim().toLowerCase();
-    const workspaceGroups = filterWorkspaceGroups(menuGroups, workspace);
-    if (!s) return workspaceGroups;
+    if (!s) return menuGroups;
 
     const out = [];
-    for (const g of workspaceGroups) {
+    for (const g of menuGroups) {
       const matchedItems = g.items.filter((it) => {
         const label = (it.label || "").toLowerCase();
         const path = (it.path || "").toLowerCase();
@@ -1530,7 +1524,7 @@ export default function Sidebar({ headerHeight = 56 }) {
     }
 
     return out;
-  }, [q, menuGroups, workspace]);
+  }, [q, menuGroups]);
 
   const isPathActive = (path) =>
     location.pathname === path || location.pathname.startsWith(path + "/");
@@ -1629,9 +1623,6 @@ export default function Sidebar({ headerHeight = 56 }) {
           </button>
         </div>
 
-        <div className="px-2">
-          <WorkspaceTabs value={workspace} onChange={(value) => { setWorkspace(value); setActiveMenuGroup(""); }} />
-        </div>
         <div className="sidebar-search-wrap">
           <div className={`sidebar-search ${q ? "has-value" : ""}`}>
             <i className="bi bi-search sidebar-search-icon" aria-hidden="true" />

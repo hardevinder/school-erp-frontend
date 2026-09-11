@@ -1,6 +1,7 @@
-import React, { useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import Swal from "sweetalert2";
 import api from "../../api";
+import { waitForCalendarAnalysis } from "./calendarAnalysis";
 
 const EVENT_TYPES = [
   "HOLIDAY", "VACATION", "EXAM", "PTM", "ACTIVITY", "EVENT", "TRAINING",
@@ -19,6 +20,8 @@ const updateAt = (rows, index, key, value) =>
 
 export default function CalendarAiImportModal({ calendar, onClose, onImported }) {
   const inputRef = useRef(null);
+  const analysisRequest = useRef(null);
+  useEffect(() => () => analysisRequest.current?.abort(), []);
   const [file, setFile] = useState(null);
   const [dragging, setDragging] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
@@ -33,6 +36,7 @@ export default function CalendarAiImportModal({ calendar, onClose, onImported })
   }, [draft]);
 
   const chooseFile = (selected) => {
+    if (analysisRequest.current) return;
     if (!selected) return;
     const allowed = ["application/pdf", "image/jpeg", "image/png", "image/webp"];
     if (!allowed.includes(selected.type)) {
@@ -48,21 +52,32 @@ export default function CalendarAiImportModal({ calendar, onClose, onImported })
   };
 
   const analyze = async () => {
+    if (analysisRequest.current) return;
     if (!file) return Swal.fire("Choose a file", "Upload a calendar PDF or image first.", "info");
+    const request = new AbortController();
+    analysisRequest.current = request;
     setAnalyzing(true);
     try {
       const form = new FormData();
       form.append("calendar_document", file);
       const response = await api.post(`/academic-calendars/${calendar.id}/ai-analyze`, form, {
+        params: { async: true },
+        signal: request.signal,
         headers: { "Content-Type": "multipart/form-data" },
         timeout: 180000,
       });
-      setDraft(response.data);
-      setTab((response.data?.events || []).length ? "events" : "notes");
+      const result = response.status === 202
+        ? await waitForCalendarAnalysis(api, calendar.id, response.data.analysis_id, request.signal)
+        : response.data;
+      if (request.signal.aborted) return;
+      setDraft(result);
+      setTab((result?.events || []).length ? "events" : "notes");
     } catch (error) {
-      Swal.fire("AI analysis failed", error?.response?.data?.error || "The calendar could not be analyzed.", "error");
+      if (request.signal.aborted) return;
+      Swal.fire("AI analysis failed", error?.response?.data?.error || error.message || "The calendar could not be analyzed.", "error");
     } finally {
-      setAnalyzing(false);
+      analysisRequest.current = null;
+      if (!request.signal.aborted) setAnalyzing(false);
     }
   };
 
@@ -168,6 +183,7 @@ export default function CalendarAiImportModal({ calendar, onClose, onImported })
                     {analyzing ? <><span className="spinner-border spinner-border-sm me-2" />Reading every page...</> : <><i className="bi bi-stars me-2" />Analyze calendar</>}
                   </button>
                 </div>
+                {analyzing && <p className="text-center text-muted mt-3" role="status">Reading the calendar may take several minutes. Keep this window open while we check progress.</p>}
               </div>
             ) : (
               <div className="calendar-review-wrap">

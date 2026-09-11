@@ -4,8 +4,6 @@ import "bootstrap/dist/css/bootstrap.min.css";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useRoles } from "../hooks/useRoles";
 import "./Sidebar.css";
-import { WorkspaceTabs } from "./dashboard/DashboardInsights";
-import { filterWorkspaceGroups } from "./dashboard/dashboardModel";
 
 const DESKTOP_BP = 992; // Bootstrap lg
 
@@ -125,7 +123,6 @@ function sortGroups(groups = []) {
 export default function Sidebar({ headerHeight = 56 }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const [workspace, setWorkspace] = useState("All");
   const { activeRole } = useRoles();
   const isMobile = useIsMobile();
 
@@ -1514,11 +1511,10 @@ export default function Sidebar({ headerHeight = 56 }) {
 
   const filteredGroups = useMemo(() => {
     const s = (q || "").trim().toLowerCase();
-    const workspaceGroups = filterWorkspaceGroups(menuGroups, workspace);
-    if (!s) return workspaceGroups;
+    if (!s) return menuGroups;
 
     const out = [];
-    for (const g of workspaceGroups) {
+    for (const g of menuGroups) {
       const matchedItems = g.items.filter((it) => {
         const label = (it.label || "").toLowerCase();
         const path = (it.path || "").toLowerCase();
@@ -1530,7 +1526,7 @@ export default function Sidebar({ headerHeight = 56 }) {
     }
 
     return out;
-  }, [q, menuGroups, workspace]);
+  }, [q, menuGroups]);
 
   const isPathActive = (path) =>
     location.pathname === path || location.pathname.startsWith(path + "/");
@@ -1629,9 +1625,6 @@ export default function Sidebar({ headerHeight = 56 }) {
           </button>
         </div>
 
-        <div className="px-2">
-          <WorkspaceTabs value={workspace} onChange={(value) => { setWorkspace(value); setActiveMenuGroup(""); }} />
-        </div>
         <div className="sidebar-search-wrap">
           <div className={`sidebar-search ${q ? "has-value" : ""}`}>
             <i className="bi bi-search sidebar-search-icon" aria-hidden="true" />

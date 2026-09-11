@@ -11,6 +11,8 @@ import CoScholasticEntry from "../pages/CoScholasticEntry";
 // API + sockets
 import api from "../api"; // your axios instance with auth
 import socket from "../socket";
+import DashboardInsights, { SummaryChart, WorkspaceTabs } from "./dashboard/DashboardInsights";
+import { workspaceForPath } from "./dashboard/dashboardModel";
 
 // The separated chat container (REAL, not dummy)
 /**
@@ -77,10 +79,13 @@ export default function TeacherDashboard() {
 
   // Quick Actions search
   const [qaSearch, setQaSearch] = useState("");
+  const [workspace, setWorkspace] = useState("All");
 
   const userRoles = useMemo(() => {
     try {
-      return JSON.parse(localStorage.getItem("roles")) || [];
+      const roles = JSON.parse(localStorage.getItem("roles"));
+      const fallback = localStorage.getItem("userRole") || localStorage.getItem("role");
+      return Array.isArray(roles) && roles.length ? roles : fallback ? [fallback] : [];
     } catch {
       const single = localStorage.getItem("userRole");
       return single ? [single] : [];
@@ -95,6 +100,7 @@ export default function TeacherDashboard() {
   // ------- Data state -------
   const [periods, setPeriods] = useState([]);
   const [todayClasses, setTodayClasses] = useState([]);
+  const [weeklyClasses, setWeeklyClasses] = useState(null);
   const [inchargeStudents, setInchargeStudents] = useState([]);
   const [attendanceTodayMarked, setAttendanceTodayMarked] = useState(null); // null=loading
   const [pendingLeave, setPendingLeave] = useState(0);
@@ -141,7 +147,10 @@ export default function TeacherDashboard() {
             ? tt.data.timetable
             : [];
           const todays = list.filter((r) => normalizeDay(r?.day) === todayName);
-          if (!cancelled) setTodayClasses(todays);
+          if (!cancelled) {
+            setTodayClasses(todays);
+            setWeeklyClasses(["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"].map((day) => ({ name: day.slice(0, 3), value: list.filter((row) => normalizeDay(row?.day) === day).length })));
+          }
         } catch {
           pushError("Failed to load timetable.");
         }
@@ -479,6 +488,12 @@ export default function TeacherDashboard() {
     !isTeacher
       ? []
       : [
+          { label: "Assessments & Tests", icon: "bi-clipboard2-check", path: "/assessments", color: "var(--qa-indigo)" },
+          { label: "LMS Assignments", icon: "bi-journal-check", path: "/assessments?assessment_type=assignment", color: "var(--qa-green)" },
+          { label: "Online Classes", icon: "bi-camera-video", path: "/online-classes", color: "var(--qa-blue)" },
+          { label: "Messages", icon: "bi-envelope", path: "/messages", color: "var(--qa-teal)" },
+          { label: "My Actions", icon: "bi-inboxes", path: "/action-inbox", color: "var(--qa-orange)" },
+          { label: "PTM Feedback", icon: "bi-people", path: "/ptm-management", color: "var(--qa-purple)" },
           { label: "Mark Attendance", icon: "bi-check2-square", path: "/mark-attendance", color: "var(--qa-blue)" },
 
           // ✅ NEW: Bulk Attendance Upload
@@ -556,9 +571,8 @@ export default function TeacherDashboard() {
 
   const filteredQuickActions = useMemo(() => {
     const q = (qaSearch || "").trim().toLowerCase();
-    if (!q) return quickActions;
-    return quickActions.filter((a) => (a.label || "").toLowerCase().includes(q));
-  }, [qaSearch, quickActions]);
+    return quickActions.filter((a) => (workspace === "All" || workspaceForPath(a.path) === workspace) && (a.label || "").toLowerCase().includes(q));
+  }, [qaSearch, quickActions, workspace]);
 
   const go = (path) => navigate(path);
 
@@ -689,6 +703,11 @@ export default function TeacherDashboard() {
         </div>
       </div>
 
+      <div className="dashboard-insights">
+        <SummaryChart title="ERP · Weekly teaching schedule" subtitle="Scheduled periods by day, before substitutions" loading={loading} error={!loading && !weeklyClasses} data={weeklyClasses || []} />
+      </div>
+      <DashboardInsights role="teacher" />
+
       {/* Errors */}
       {errors.length > 0 && (
         <div className="alert alert-warning">
@@ -763,7 +782,8 @@ export default function TeacherDashboard() {
           <div className="card shadow-sm border-0 rounded-4 overflow-hidden">
             <div className="card-header bg-white d-flex flex-wrap gap-2 align-items-center justify-content-between">
               <div>
-                <h6 className="mb-0">Quick Actions</h6>
+                <h6 className="mb-0">ERP & LMS · Quick Actions</h6>
+                <WorkspaceTabs value={workspace} onChange={setWorkspace} />
                 <small className="text-muted">Tap to open • Search to find quickly</small>
               </div>
 

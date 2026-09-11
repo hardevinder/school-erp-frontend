@@ -7,10 +7,8 @@ const emptyRoom = {
   name: "",
   building: "",
   floor: "",
-  layout_type: "individual",
   rows_count: 5,
   seats_per_row: 6,
-  students_per_bench: 1,
   capacity: 30,
 };
 
@@ -41,25 +39,6 @@ const defaultRoomRules = {
   excluded_class_section_keys: [],
   allowed_gender: "any",
   max_same_class_per_room: "",
-};
-
-const normalizedRoomLayoutType = (value) =>
-  String(value || "").toLowerCase() === "bench" ? "bench" : "individual";
-
-const roomLayoutCapacity = (room = {}) => {
-  const rows = Math.max(1, Number(room.rows_count || 1));
-  const columns = Math.max(1, Number(room.seats_per_row || 1));
-  const studentsPerBench = normalizedRoomLayoutType(room.layout_type) === "bench"
-    ? Math.min(Math.max(2, Number(room.students_per_bench || 2)), 4)
-    : 1;
-  return rows * columns * studentsPerBench;
-};
-
-const roomLayoutText = (room = {}) => {
-  if (normalizedRoomLayoutType(room.layout_type) === "bench") {
-    return `${Number(room.seats_per_row || 0)} columns × ${Number(room.rows_count || 0)} benches × ${Number(room.students_per_bench || 2)} students`;
-  }
-  return `${Number(room.rows_count || 0)} rows × ${Number(room.seats_per_row || 0)} seats`;
 };
 
 const normalizedRoomRulesForUi = (rules) => ({
@@ -235,7 +214,6 @@ export default function ExamSeatingManagement() {
   const [studentSelections, setStudentSelections] = useState({});
   const [studentSearches, setStudentSearches] = useState({});
   const [invigilators, setInvigilators] = useState({});
-  const [invigilatorOptions, setInvigilatorOptions] = useState({ rooms: [], summary: null });
   const [busy, setBusy] = useState(false);
   const [aiRoomFile, setAiRoomFile] = useState(null);
   const [aiRoomDraft, setAiRoomDraft] = useState([]);
@@ -284,29 +262,22 @@ export default function ExamSeatingManagement() {
   const visualRoomGroups = useMemo(() => (activePlan?.rooms || []).map((planRoom) => {
     const room = planRoom.room || {};
     const roomSeats = seats.filter((seat) => Number(seat.plan_room_id) === Number(planRoom.id));
-    const layoutType = normalizedRoomLayoutType(room.layout_type);
     const configuredRows = Math.max(1, Number(room.rows_count || 0));
     const configuredColumns = Math.max(1, Number(room.seats_per_row || 0));
-    const studentsPerBench = layoutType === "bench"
-      ? Math.min(Math.max(2, Number(room.students_per_bench || 2)), 4)
-      : 1;
-    const slotColumns = configuredColumns * studentsPerBench;
     const highestRow = roomSeats.reduce((max, seat) => {
       const index = visualRowIndex(seat.row_label);
       return index == null ? max : Math.max(max, index + 1);
     }, 0);
-    const highestSlotColumn = roomSeats.reduce(
+    const highestColumn = roomSeats.reduce(
       (max, seat) => Math.max(max, Number(seat.column_number || 0)),
       0
     );
     const capacity = Math.max(
       1,
-      Number(planRoom.capacity_override || room.capacity || configuredRows * slotColumns || roomSeats.length)
+      Number(planRoom.capacity_override || room.capacity || configuredRows * configuredColumns || roomSeats.length)
     );
-    const rows = Math.max(configuredRows, highestRow, Math.ceil(capacity / Math.max(slotColumns, 1)), 1);
-    const columns = layoutType === "bench"
-      ? Math.max(configuredColumns, Math.ceil(highestSlotColumn / studentsPerBench), 1)
-      : Math.max(configuredColumns, highestSlotColumn, 1);
+    const columns = Math.max(configuredColumns, highestColumn, 1);
+    const rows = Math.max(configuredRows, highestRow, Math.ceil(capacity / columns), 1);
     const seatMap = new Map();
     roomSeats.forEach((seat) => {
       seatMap.set(`${String(seat.row_label || "").toUpperCase()}:${Number(seat.column_number)}`, seat);
@@ -317,9 +288,6 @@ export default function ExamSeatingManagement() {
       room,
       seats: roomSeats,
       seatMap,
-      layoutType,
-      studentsPerBench,
-      slotColumns: columns * studentsPerBench,
       rows,
       columns,
       capacity,
@@ -338,27 +306,6 @@ export default function ExamSeatingManagement() {
     const validScheduleIds = new Set(matchingSchedules.map((schedule) => String(schedule.id)));
     return !validScheduleIds.size || seats.some((seat) => !validScheduleIds.has(String(seat.exam_schedule_id)));
   }, [matchingSchedules, seats]);
-
-  const invigilatorOptionsByRoom = useMemo(() => {
-    const map = new Map();
-    (invigilatorOptions.rooms || []).forEach((room) => map.set(String(room.plan_room_id), room));
-    return map;
-  }, [invigilatorOptions]);
-
-  // Manual mode remains open: show every loaded teacher, but hide anyone
-  // already selected in another room of the same plan/shift.
-  const invigilatorCandidatesForRoom = (planRoomId) => {
-    const roomKey = String(planRoomId);
-    const currentEmployeeId = String(invigilators[roomKey] || "");
-    const usedElsewhere = new Set(
-      Object.entries(invigilators)
-        .filter(([otherRoomId, employeeId]) => String(otherRoomId) !== roomKey && employeeId)
-        .map(([, employeeId]) => String(employeeId))
-    );
-    return employees.filter(
-      (employee) => String(employee.id) === currentEmployeeId || !usedElsewhere.has(String(employee.id))
-    );
-  };
 
   const loadBase = async () => {
     try {
@@ -485,8 +432,6 @@ export default function ExamSeatingManagement() {
       setSmartMode(false);
       setSmartRules(defaultSmartRules);
       setRoomRules({});
-      setInvigilators({});
-      setInvigilatorOptions({ rooms: [], summary: null });
       return;
     }
     setBusy(true);
@@ -511,7 +456,6 @@ export default function ExamSeatingManagement() {
       setActiveScheduleSlots(slots);
       setSeats(loadedSeats);
       setDashboard(dashRes.data);
-      setInvigilatorOptions({ rooms: [], summary: null });
       setSelectedRoomIds((plan?.rooms || []).map((item) => String(item.exam_room_id)));
       const loadedSmartRules = { ...defaultSmartRules, ...(plan?.smart_rules || {}) };
       setSmartRules(loadedSmartRules);
@@ -619,12 +563,8 @@ export default function ExamSeatingManagement() {
       name: room.name || "",
       building: room.building || "",
       floor: room.floor || "",
-      layout_type: normalizedRoomLayoutType(room.layout_type),
       rows_count: Number(room.rows_count || 1),
       seats_per_row: Number(room.seats_per_row || 1),
-      students_per_bench: normalizedRoomLayoutType(room.layout_type) === "bench"
-        ? Number(room.students_per_bench || 2)
-        : 1,
       capacity: Number(room.capacity || 1),
     });
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -635,12 +575,8 @@ export default function ExamSeatingManagement() {
     setBusy(true);
     const payload = {
       ...roomForm,
-      layout_type: normalizedRoomLayoutType(roomForm.layout_type),
       rows_count: Number(roomForm.rows_count),
       seats_per_row: Number(roomForm.seats_per_row),
-      students_per_bench: normalizedRoomLayoutType(roomForm.layout_type) === "bench"
-        ? Number(roomForm.students_per_bench || 2)
-        : 1,
       capacity: Number(roomForm.capacity),
     };
 
@@ -674,38 +610,6 @@ export default function ExamSeatingManagement() {
       await loadBase();
     } catch (error) {
       Swal.fire("Not updated", error?.response?.data?.message || "Failed to update room", "error");
-    }
-  };
-
-  const deleteRoom = async (room) => {
-    const confirmation = await Swal.fire({
-      title: "Delete examination room?",
-      text: `${room.room_code} — ${room.name} will be permanently removed. Rooms already used in a seating plan cannot be deleted.`,
-      icon: "warning",
-      showCancelButton: true,
-      confirmButtonText: "Delete room",
-      cancelButtonText: "Cancel",
-      confirmButtonColor: "#dc3545",
-      reverseButtons: true,
-    });
-    if (!confirmation.isConfirmed) return;
-
-    setBusy(true);
-    try {
-      await api.delete(`/exam-seating/rooms/${room.id}/permanent`);
-      if (String(editingRoomId) === String(room.id)) resetRoomEditor();
-      setSelectedRoomIds((current) => current.filter((id) => String(id) !== String(room.id)));
-      await loadBase();
-      Swal.fire("Room deleted", "The unused examination room was deleted permanently.", "success");
-    } catch (error) {
-      const message = error?.response?.data?.message || "Failed to delete room";
-      if (error?.response?.status === 409) {
-        Swal.fire("Room is in use", message, "info");
-      } else {
-        Swal.fire("Not deleted", message, "error");
-      }
-    } finally {
-      setBusy(false);
     }
   };
 
@@ -1090,49 +994,6 @@ export default function ExamSeatingManagement() {
     };
   };
 
-  const formatBestEffortRelaxations = (relaxations) => {
-    if (!relaxations || !Number(relaxations.total || 0)) return "No selected same-class rule needed relaxation.";
-    const parts = [];
-    if (Number(relaxations.same_class_horizontal || 0)) {
-      parts.push(`${relaxations.same_class_horizontal} side-by-side`);
-    }
-    if (Number(relaxations.same_class_vertical || 0)) {
-      parts.push(`${relaxations.same_class_vertical} front/back`);
-    }
-    if (Number(relaxations.same_class_diagonal || 0)) {
-      parts.push(`${relaxations.same_class_diagonal} diagonal`);
-    }
-    return `${relaxations.total} unavoidable same-class adjustment(s): ${parts.join(", ")}.`;
-  };
-
-  const showBestEffortPrompt = async (data, title = "Rules need adjustment") => {
-    const suggestions = data?.suggestions || [];
-    const unassigned = data?.unassigned_by_class || [];
-    const relaxes = data?.best_effort_relaxes || [];
-    const detail = [
-      data?.message || "The selected strict rules cannot all be satisfied.",
-      unassigned.length
-        ? `Strict mode leaves: ${unassigned.map((item) => `${item.class_name} (${item.count})`).join(", ")}`
-        : "",
-      relaxes.length
-        ? `Strict-first mode keeps these rules active: ${relaxes.join(", ")}. It accepts an individual conflict only after a complete strict arrangement becomes impossible.`
-        : "",
-      "No selected rule is switched off globally. Room capacity and room/class/gender restrictions remain hard limits.",
-      suggestions.length ? `Suggestions:\n• ${suggestions.join("\n• ")}` : "",
-    ].filter(Boolean).join("\n\n");
-
-    return Swal.fire({
-      title,
-      text: detail,
-      icon: "warning",
-      showCancelButton: true,
-      confirmButtonText: "Try Best Adjustment",
-      cancelButtonText: "Adjust Rules",
-      reverseButtons: true,
-      focusCancel: true,
-    });
-  };
-
   const analyzeSmartAllocation = async () => {
     if (!activePlan) return;
     const built = buildAllocationPayload();
@@ -1158,148 +1019,44 @@ export default function ExamSeatingManagement() {
       );
     } catch (error) {
       const data = error?.response?.data || {};
-      if (data.best_effort_available) {
-        const choice = await showBestEffortPrompt(data);
-        if (choice.isConfirmed) {
-          setBusy(false);
-          return autoAllocate({ bestEffort: true });
-        }
-      } else {
-        const suggestions = data.suggestions || [];
-        const unassigned = data.unassigned_by_class || [];
-        const detail = [
-          data.message || "The selected rules cannot all be satisfied.",
-          unassigned.length
-            ? `Unassigned: ${unassigned.map((item) => `${item.class_name} (${item.count})`).join(", ")}`
-            : "",
-          suggestions.length ? `Suggestions:\n• ${suggestions.join("\n• ")}` : "",
-        ].filter(Boolean).join("\n\n");
-        Swal.fire("Rules need adjustment", detail, "warning");
-      }
+      const suggestions = data.suggestions || [];
+      const unassigned = data.unassigned_by_class || [];
+      const detail = [
+        data.message || "The selected rules cannot all be satisfied.",
+        unassigned.length
+          ? `Unassigned: ${unassigned.map((item) => `${item.class_name} (${item.count})`).join(", ")}`
+          : "",
+        suggestions.length ? `Suggestions:\n• ${suggestions.join("\n• ")}` : "",
+      ].filter(Boolean).join("\n\n");
+      Swal.fire("Rules need adjustment", detail, "warning");
     } finally {
       setBusy(false);
     }
   };
 
-  const autoAllocate = async ({ bestEffort = false } = {}) => {
+  const autoAllocate = async () => {
     if (!activePlan) return;
     const built = buildAllocationPayload();
     if (!built.payload) {
       return Swal.fire(built.errorTitle, built.errorMessage, "warning");
     }
-    if (bestEffort) built.payload.best_effort = true;
 
     setBusy(true);
     try {
       const response = await api.post(`/exam-seating/plans/${activePlan.id}/auto-allocate`, built.payload);
       await openPlan(activePlan.id);
       const warnings = response.data?.warnings || [];
-      const relaxationText = response.data?.best_effort
-        ? ` ${formatBestEffortRelaxations(response.data?.relaxations)}`
-        : "";
       Swal.fire(
-        response.data?.best_effort
-          ? "Strict-first best adjustment generated"
-          : (smartMode ? "Smart seating generated" : "Seats allocated"),
-        `${response.data?.student_count || 0} selected students were assigned. ${response.data?.remaining_capacity ?? 0} seats remain.${relaxationText}${warnings.length ? ` ${warnings.join(" ")}` : ""}`,
-        response.data?.best_effort && Number(response.data?.relaxations?.total || 0) ? "warning" : "success"
+        smartMode ? "Smart seating generated" : "Seats allocated",
+        `${response.data?.student_count || 0} selected students were assigned. ${response.data?.remaining_capacity ?? 0} seats remain.${warnings.length ? ` ${warnings.join(" ")}` : ""}`,
+        "success"
       );
     } catch (error) {
       const data = error?.response?.data || {};
-      if (!bestEffort && data.best_effort_available) {
-        const choice = await showBestEffortPrompt(data, "Strict allocation stopped");
-        if (choice.isConfirmed) {
-          setBusy(false);
-          return autoAllocate({ bestEffort: true });
-        }
-      } else {
-        const suggestions = data.suggestions || [];
-        Swal.fire(
-          bestEffort ? "Best adjustment could not complete" : "Allocation stopped",
-          `${data.message || "Failed to allocate students"}${suggestions.length ? `\n\nSuggestions:\n• ${suggestions.join("\n• ")}` : ""}`,
-          "error"
-        );
-      }
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const applySmartInvigilatorRecommendations = (data) => {
-    const roomOptions = data.rooms || [];
-    setInvigilatorOptions({ rooms: roomOptions, summary: data.summary || null });
-    const next = {};
-    (activePlan?.rooms || []).forEach((planRoom) => {
-      next[String(planRoom.id)] = "";
-    });
-    roomOptions.forEach((room) => {
-      if (!room.recommended_employee_id) return;
-      next[String(room.plan_room_id)] = String(room.recommended_employee_id);
-    });
-    setInvigilators(next);
-  };
-
-  const smartAssignInvigilators = async () => {
-    if (!activePlan) return;
-    setBusy(true);
-    try {
-      const strictResponse = await api.get(
-        `/exam-seating/plans/${activePlan.id}/invigilator-options?mode=strict`
-      );
-      const strictData = strictResponse.data || {};
-      const strictSummary = strictData.summary || {};
-
-      if (strictSummary.complete) {
-        applySmartInvigilatorRecommendations(strictData);
-        await Swal.fire(
-          "AI teacher allocation ready",
-          `${strictSummary.recommended_count || 0} room(s) assigned. The system used teachers from the classes seated in the rooms, excluded teachers of the scheduled exam subject, prevented duplicate/overlapping duties, and preferred teachers with fewer previous duties. Please review and save.`,
-          "success"
-        );
-        return;
-      }
-
-      const missing = Number(strictSummary.room_count || 0) - Number(strictSummary.strict_recommended_count || 0);
-      const choice = await Swal.fire({
-        title: "Strict AI allocation is not fully possible",
-        html: `The system could satisfy all smart teacher rules for <b>${strictSummary.strict_recommended_count || 0} of ${strictSummary.room_count || 0}</b> rooms.<br><br><b>${Math.max(0, missing)} room(s)</b> need an adjustment.<br><br>Best Possible will keep every rule strict for as many rooms as possible. It will first relax the same-class preference only where necessary, and it will consider a scheduled-subject teacher only as the final fallback. Duplicate teachers and overlapping duties are never allowed.`,
-        icon: "warning",
-        showCancelButton: true,
-        confirmButtonText: "Try Best Possible",
-        cancelButtonText: "Assign manually",
-        reverseButtons: true,
-      });
-      if (!choice.isConfirmed) {
-        setInvigilatorOptions({ rooms: strictData.rooms || [], summary: strictSummary });
-        return;
-      }
-
-      const bestResponse = await api.get(
-        `/exam-seating/plans/${activePlan.id}/invigilator-options?mode=best-fit`
-      );
-      const bestData = bestResponse.data || {};
-      const bestSummary = bestData.summary || {};
-      applySmartInvigilatorRecommendations(bestData);
-
-      const sameClassRelaxed = Number(bestSummary.relaxation_counts?.same_class_preference || 0);
-      const subjectRelaxed = Number(bestSummary.relaxation_counts?.scheduled_subject_exclusion || 0);
-      const unassigned = Number(bestSummary.room_count || 0) - Number(bestSummary.recommended_count || 0);
-      const detailParts = [
-        `${bestSummary.recommended_count || 0} of ${bestSummary.room_count || 0} room(s) assigned`,
-        `${sameClassRelaxed} same-class preference adjustment(s)`,
-        `${subjectRelaxed} scheduled-subject last-resort adjustment(s)`,
-      ];
-      if (unassigned > 0) detailParts.push(`${unassigned} room(s) still require manual assignment`);
-
-      await Swal.fire(
-        bestSummary.complete ? "Best possible AI allocation ready" : "Best possible allocation prepared",
-        `${detailParts.join(". ")}. Duplicate-teacher and overlapping-duty rules were kept strict. Teachers with fewer past duties were preferred within each rule level. Please review and save.`,
-        bestSummary.complete ? "success" : "warning"
-      );
-    } catch (error) {
+      const suggestions = data.suggestions || [];
       Swal.fire(
-        "AI teacher allocation failed",
-        error?.response?.data?.message || "Could not prepare invigilator recommendations",
+        "Allocation stopped",
+        `${data.message || "Failed to allocate students"}${suggestions.length ? `\n\nSuggestions:\n• ${suggestions.join("\n• ")}` : ""}`,
         "error"
       );
     } finally {
@@ -1537,13 +1294,6 @@ export default function ExamSeatingManagement() {
           font-weight: 800; color: #475569;
         }
         .exam-visual-seat-grid { display: grid; gap: 10px; flex: 1 1 auto; }
-        .exam-visual-bench-heads { display: grid; gap: 12px; margin: 0 0 8px 44px; }
-        .exam-visual-bench-head { font-size: 12px; font-weight: 800; text-align: center; color: #334155; }
-        .exam-visual-bench-grid { display: grid; gap: 12px; flex: 1 1 auto; }
-        .exam-visual-bench { border: 2px solid #94a3b8; border-radius: 12px; padding: 7px; background: #fff; }
-        .exam-visual-bench-label { font-size: 10px; font-weight: 800; color: #64748b; text-align: center; margin-bottom: 6px; }
-        .exam-visual-bench-slots { display: grid; gap: 6px; }
-        .exam-visual-bench .exam-visual-seat { min-height: 74px; }
         .exam-visual-seat {
           min-height: 82px; border: 2px solid #cbd5e1; border-radius: 10px; padding: 7px 6px;
           display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -1718,42 +1468,9 @@ export default function ExamSeatingManagement() {
                 <div className="col-7"><label className="form-label">Room name</label><input required className="form-control" value={roomForm.name} onChange={(e) => setRoomForm({ ...roomForm, name: e.target.value })} /></div>
                 <div className="col-6"><label className="form-label">Building</label><input className="form-control" value={roomForm.building} onChange={(e) => setRoomForm({ ...roomForm, building: e.target.value })} /></div>
                 <div className="col-6"><label className="form-label">Floor</label><input className="form-control" value={roomForm.floor} onChange={(e) => setRoomForm({ ...roomForm, floor: e.target.value })} /></div>
-                <div className="col-12">
-                  <label className="form-label">Layout type</label>
-                  <select
-                    className="form-select"
-                    value={roomForm.layout_type || "individual"}
-                    onChange={(e) => {
-                      const layout_type = e.target.value;
-                      const students_per_bench = layout_type === "bench" ? 2 : 1;
-                      const next = { ...roomForm, layout_type, students_per_bench };
-                      next.capacity = roomLayoutCapacity(next);
-                      setRoomForm(next);
-                    }}
-                  >
-                    <option value="individual">Individual seats</option>
-                    <option value="bench">Bench layout (multiple students per bench)</option>
-                  </select>
-                </div>
-                <div className="col-4">
-                  <label className="form-label">{roomForm.layout_type === "bench" ? "Benches / column" : "Rows"}</label>
-                  <input type="number" min="1" className="form-control" value={roomForm.rows_count} onChange={(e) => { const next = { ...roomForm, rows_count: e.target.value }; next.capacity = roomLayoutCapacity(next); setRoomForm(next); }} />
-                </div>
-                <div className="col-4">
-                  <label className="form-label">{roomForm.layout_type === "bench" ? "Vertical columns" : "Per row"}</label>
-                  <input type="number" min="1" className="form-control" value={roomForm.seats_per_row} onChange={(e) => { const next = { ...roomForm, seats_per_row: e.target.value }; next.capacity = roomLayoutCapacity(next); setRoomForm(next); }} />
-                </div>
-                {roomForm.layout_type === "bench" && (
-                  <div className="col-4">
-                    <label className="form-label">Students / bench</label>
-                    <input type="number" min="2" max="4" className="form-control" value={roomForm.students_per_bench || 2} onChange={(e) => { const next = { ...roomForm, students_per_bench: e.target.value }; next.capacity = roomLayoutCapacity(next); setRoomForm(next); }} />
-                  </div>
-                )}
-                <div className={roomForm.layout_type === "bench" ? "col-12" : "col-4"}>
-                  <label className="form-label">Usable capacity</label>
-                  <input type="number" min="1" max={roomLayoutCapacity(roomForm)} className="form-control" value={roomForm.capacity} onChange={(e) => setRoomForm({ ...roomForm, capacity: e.target.value })} />
-                  {roomForm.layout_type === "bench" && <div className="form-text">Example: 4 vertical columns × 6 benches × 2 students = 48 seats.</div>}
-                </div>
+                <div className="col-4"><label className="form-label">Rows</label><input type="number" min="1" className="form-control" value={roomForm.rows_count} onChange={(e) => setRoomForm({ ...roomForm, rows_count: e.target.value, capacity: Number(e.target.value) * Number(roomForm.seats_per_row) })} /></div>
+                <div className="col-4"><label className="form-label">Per row</label><input type="number" min="1" className="form-control" value={roomForm.seats_per_row} onChange={(e) => setRoomForm({ ...roomForm, seats_per_row: e.target.value, capacity: Number(roomForm.rows_count) * Number(e.target.value) })} /></div>
+                <div className="col-4"><label className="form-label">Capacity</label><input type="number" min="1" className="form-control" value={roomForm.capacity} onChange={(e) => setRoomForm({ ...roomForm, capacity: e.target.value })} /></div>
               </div>
               <div className="card-footer d-flex gap-2">
                 <button disabled={busy} className="btn btn-primary flex-grow-1">
@@ -1777,13 +1494,12 @@ export default function ExamSeatingManagement() {
                     {rooms.map((room) => (
                       <tr key={room.id}>
                         <td className="fw-semibold">{room.room_code}</td><td>{room.name}<div className="small text-muted">{[room.building, room.floor].filter(Boolean).join(" · ")}</div></td>
-                        <td>{roomLayoutText(room)}<div className="small text-muted">{normalizedRoomLayoutType(room.layout_type) === "bench" ? "Bench layout" : "Individual seats"}</div></td><td>{room.capacity}</td>
+                        <td>{room.rows_count} × {room.seats_per_row}</td><td>{room.capacity}</td>
                         <td><span className={`badge ${room.is_active ? "text-bg-success" : "text-bg-secondary"}`}>{room.is_active ? "Active" : "Archived"}</span></td>
                         <td>
                           <div className="d-flex flex-wrap gap-2">
-                            <button type="button" disabled={busy} className="btn btn-sm btn-outline-primary" onClick={() => startEditRoom(room)}>Edit</button>
-                            <button type="button" disabled={busy} className="btn btn-sm btn-outline-secondary" onClick={() => toggleRoomStatus(room)}>{room.is_active ? "Archive" : "Restore"}</button>
-                            <button type="button" disabled={busy} className="btn btn-sm btn-outline-danger" onClick={() => deleteRoom(room)}>Delete</button>
+                            <button type="button" className="btn btn-sm btn-outline-primary" onClick={() => startEditRoom(room)}>Edit</button>
+                            <button type="button" className="btn btn-sm btn-outline-secondary" onClick={() => toggleRoomStatus(room)}>{room.is_active ? "Archive" : "Restore"}</button>
                           </div>
                         </td>
                       </tr>
@@ -2061,7 +1777,7 @@ export default function ExamSeatingManagement() {
                               checked={smartRules.avoid_same_class_horizontal !== false}
                               onChange={(event) => setSmartRules((current) => ({ ...current, avoid_same_class_horizontal: event.target.checked }))}
                             />
-                            <span className="form-check-label">No same class on same bench / side-by-side</span>
+                            <span className="form-check-label">No same class side-by-side</span>
                           </label>
                           <label className="form-check">
                             <input
@@ -2132,7 +1848,7 @@ export default function ExamSeatingManagement() {
                               />
                               <span>
                                 <strong>{room.room_code}</strong> — {room.name}
-                                <span className="d-block small text-muted">Capacity {room.capacity} ({roomLayoutText(room)})</span>
+                                <span className="d-block small text-muted">Capacity {room.capacity} ({room.rows_count} × {room.seats_per_row})</span>
                               </span>
                             </label>
 
@@ -2417,72 +2133,12 @@ export default function ExamSeatingManagement() {
 
                 <div className="col-xl-4">
                   <div className="card shadow-sm h-100 d-flex flex-column exam-seating-workflow-card">
-                    <div className="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
-                      <span className="fw-semibold">4. Assign main invigilators</span>
-                      <span className="badge text-bg-light border">Manual + AI Smart Assign</span>
-                    </div>
+                    <div className="card-header fw-semibold">4. Assign main invigilators</div>
                     <div className="card-body flex-grow-1 exam-seating-scroll-body">
-                      {(activePlan.rooms || []).length > 0 && (
-                        <div className="alert alert-light border small py-2">
-                          <strong>Manual:</strong> all available teachers remain open for selection. <strong>AI Smart Assign:</strong> first prefers teachers from the classes seated in the room, excludes teachers of the scheduled exam subject, and balances previous duties. If strict matching is impossible, the system asks before preparing the best possible adjustment.
-                        </div>
-                      )}
-                      {(activePlan.rooms || []).map((planRoom) => {
-                        const candidates = invigilatorCandidatesForRoom(planRoom.id);
-                        const roomMeta = invigilatorOptionsByRoom.get(String(planRoom.id));
-                        const selectedEmployeeId = String(invigilators[String(planRoom.id)] || "");
-                        const selectedByAi = roomMeta && String(roomMeta.recommended_employee_id || "") === selectedEmployeeId;
-                        let aiNote = "";
-                        if (selectedByAi) {
-                          if (Number(roomMeta.recommendation_tier) === 0) aiNote = "AI strict match";
-                          else if (Number(roomMeta.recommendation_tier) === 1) aiNote = "AI best fit: same-class preference relaxed";
-                          else if (Number(roomMeta.recommendation_tier) === 2) aiNote = "AI last resort: scheduled-subject rule relaxed";
-                        }
-                        return (
-                          <div className="mb-3" key={planRoom.id}>
-                            <label className="form-label mb-1">{planRoom.room?.room_code} — {planRoom.room?.name}</label>
-                            <select
-                              className="form-select"
-                              value={selectedEmployeeId}
-                              onChange={(e) => {
-                                setInvigilators({ ...invigilators, [String(planRoom.id)]: e.target.value });
-                                setInvigilatorOptions({ rooms: [], summary: null });
-                              }}
-                            >
-                              <option value="">Select teacher</option>
-                              {candidates.map((employee) => (
-                                <option key={employee.id} value={employee.id}>
-                                  {employee.name}{employee.designation ? ` — ${employee.designation}` : ""}
-                                </option>
-                              ))}
-                            </select>
-                            <div className="form-text d-flex flex-wrap justify-content-between gap-1">
-                              <span>{candidates.length} available teacher(s)</span>
-                              {aiNote && <span className={Number(roomMeta?.recommendation_tier) === 0 ? "text-success" : "text-warning"}>{aiNote}</span>}
-                            </div>
-                          </div>
-                        );
-                      })}
+                      {(activePlan.rooms || []).map((planRoom) => <div className="mb-3" key={planRoom.id}><label className="form-label mb-1">{planRoom.room?.room_code} — {planRoom.room?.name}</label><select className="form-select" value={invigilators[String(planRoom.id)] || ""} onChange={(e) => setInvigilators({ ...invigilators, [String(planRoom.id)]: e.target.value })}><option value="">Select teacher</option>{employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.name}{employee.designation ? ` — ${employee.designation}` : ""}</option>)}</select></div>)}
                       {!(activePlan.rooms || []).length && <div className="text-muted">Save plan rooms first.</div>}
                     </div>
-                    <div className="card-footer d-grid gap-2">
-                      <button
-                        type="button"
-                        disabled={busy || !(activePlan.rooms || []).length}
-                        className="btn btn-outline-primary"
-                        onClick={smartAssignInvigilators}
-                      >
-                        AI Smart Assign Teachers
-                      </button>
-                      <button
-                        type="button"
-                        disabled={busy || !(activePlan.rooms || []).length}
-                        className="btn btn-primary"
-                        onClick={saveInvigilators}
-                      >
-                        Save duty assignments
-                      </button>
-                    </div>
+                    <div className="card-footer"><button disabled={busy || !(activePlan.rooms || []).length} className="btn btn-primary w-100" onClick={saveInvigilators}>Save duty assignments</button></div>
                   </div>
                 </div>
               </div>
@@ -2570,10 +2226,7 @@ export default function ExamSeatingManagement() {
                       {activeVisualRoom.room?.name ? ` - ${activeVisualRoom.room.name}` : ""}
                     </h5>
                     <div className="small text-muted">
-                      {activeVisualRoom.layoutType === "bench"
-                        ? `${activeVisualRoom.columns} vertical columns × ${activeVisualRoom.rows} benches × ${activeVisualRoom.studentsPerBench} students`
-                        : `${activeVisualRoom.rows} rows × ${activeVisualRoom.columns} seats`}
-                      {` · Capacity ${activeVisualRoom.capacity} · Assigned ${activeVisualRoom.seats.length} · Empty ${activeVisualRoom.emptySeats}`}
+                      {activeVisualRoom.rows} rows × {activeVisualRoom.columns} seats · Capacity {activeVisualRoom.capacity} · Assigned {activeVisualRoom.seats.length} · Empty {activeVisualRoom.emptySeats}
                     </div>
                   </div>
                   <div className="small text-muted text-end">
@@ -2584,145 +2237,62 @@ export default function ExamSeatingManagement() {
 
                 <div className="exam-visual-board">BLACKBOARD / FRONT</div>
 
-                {activeVisualRoom.layoutType === "bench" ? (
-                  <div style={{ minWidth: `${Math.max(900, activeVisualRoom.columns * 250 + 44)}px` }}>
-                    <div
-                      className="exam-visual-bench-heads"
-                      style={{ gridTemplateColumns: `repeat(${activeVisualRoom.columns}, minmax(220px, 1fr))` }}
-                    >
-                      {Array.from({ length: activeVisualRoom.columns }).map((_, columnIndex) => (
-                        <div className="exam-visual-bench-head" key={`head-${columnIndex + 1}`}>
-                          Column-{String(columnIndex + 1).padStart(2, "0")}
-                        </div>
-                      ))}
-                    </div>
-                    {Array.from({ length: activeVisualRoom.rows }).map((_, rowIndex) => {
-                      const rowLabel = visualRowLabel(rowIndex);
-                      return (
-                        <div className="exam-visual-row" key={rowLabel}>
-                          <div className="exam-visual-row-label">B{rowIndex + 1}</div>
-                          <div
-                            className="exam-visual-bench-grid"
-                            style={{ gridTemplateColumns: `repeat(${activeVisualRoom.columns}, minmax(220px, 1fr))` }}
-                          >
-                            {Array.from({ length: activeVisualRoom.columns }).map((__, benchColumnIndex) => {
-                              const benchColumn = benchColumnIndex + 1;
+                <div style={{ minWidth: `${Math.max(720, activeVisualRoom.columns * 118 + 44)}px` }}>
+                  {Array.from({ length: activeVisualRoom.rows }).map((_, rowIndex) => {
+                    const rowLabel = visualRowLabel(rowIndex);
+                    return (
+                      <div className="exam-visual-row" key={rowLabel}>
+                        <div className="exam-visual-row-label">{rowLabel}</div>
+                        <div
+                          className="exam-visual-seat-grid"
+                          style={{ gridTemplateColumns: `repeat(${activeVisualRoom.columns}, minmax(105px, 1fr))` }}
+                        >
+                          {Array.from({ length: activeVisualRoom.columns }).map((__, columnIndex) => {
+                            const columnNumber = columnIndex + 1;
+                            const physicalIndex = rowIndex * activeVisualRoom.columns + columnNumber;
+                            const seat = activeVisualRoom.seatMap.get(`${rowLabel}:${columnNumber}`);
+                            const blocked = physicalIndex > activeVisualRoom.capacity;
+                            if (blocked) {
                               return (
-                                <div className="exam-visual-bench" key={`${rowLabel}:bench:${benchColumn}`}>
-                                  <div className="exam-visual-bench-label">Bench {rowIndex + 1}</div>
-                                  <div
-                                    className="exam-visual-bench-slots"
-                                    style={{ gridTemplateColumns: `repeat(${activeVisualRoom.studentsPerBench}, minmax(92px, 1fr))` }}
-                                  >
-                                    {Array.from({ length: activeVisualRoom.studentsPerBench }).map((___, benchPositionIndex) => {
-                                      const benchPosition = benchPositionIndex + 1;
-                                      const slotColumn = benchColumnIndex * activeVisualRoom.studentsPerBench + benchPosition;
-                                      const physicalIndex = rowIndex * activeVisualRoom.slotColumns + slotColumn;
-                                      const seat = activeVisualRoom.seatMap.get(`${rowLabel}:${slotColumn}`);
-                                      const blocked = physicalIndex > activeVisualRoom.capacity;
-                                      const fallbackSeatNumber = `C${String(benchColumn).padStart(2, "0")}-B${String(rowIndex + 1).padStart(2, "0")}-${String.fromCharCode(64 + benchPosition)}`;
-                                      if (blocked) {
-                                        return (
-                                          <div className="exam-visual-seat blocked" key={`${rowLabel}:${slotColumn}`}>
-                                            <div className="exam-visual-seat-number">{fallbackSeatNumber}</div>
-                                            <div className="exam-visual-seat-meta">N/A</div>
-                                          </div>
-                                        );
-                                      }
-                                      if (!seat) {
-                                        return (
-                                          <div className="exam-visual-seat empty" key={`${rowLabel}:${slotColumn}`}>
-                                            <div className="exam-visual-seat-number">{fallbackSeatNumber}</div>
-                                            <div className="exam-visual-seat-meta">EMPTY</div>
-                                          </div>
-                                        );
-                                      }
-                                      const classLabel = visualSeatClassLabel(seat);
-                                      const identity = seat.student?.roll_number != null
-                                        ? `Roll ${seat.student.roll_number}`
-                                        : (seat.student?.admission_number ? `Adm ${seat.student.admission_number}` : "");
-                                      return (
-                                        <button
-                                          type="button"
-                                          key={seat.id || `${rowLabel}:${slotColumn}`}
-                                          className={`exam-visual-seat tone-${visualToneIndex(classLabel)}`}
-                                          title={`${seat.student?.name || "Student"} · ${classLabel} · ${identity}`}
-                                          onClick={() => showVisualSeatDetails(seat)}
-                                        >
-                                          <div className="exam-visual-seat-number">{seat.seat_number || fallbackSeatNumber}</div>
-                                          <div className="exam-visual-seat-class">{classLabel}</div>
-                                          {identity && <div className="exam-visual-seat-meta">{identity}</div>}
-                                          <div className="exam-visual-seat-name">{seat.student?.name || "Student"}</div>
-                                        </button>
-                                      );
-                                    })}
-                                  </div>
+                                <div className="exam-visual-seat blocked" key={`${rowLabel}:${columnNumber}`}>
+                                  <div className="exam-visual-seat-number">{rowLabel}{columnNumber}</div>
+                                  <div className="exam-visual-seat-meta">N/A</div>
                                 </div>
                               );
-                            })}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <div style={{ minWidth: `${Math.max(720, activeVisualRoom.columns * 118 + 44)}px` }}>
-                    {Array.from({ length: activeVisualRoom.rows }).map((_, rowIndex) => {
-                      const rowLabel = visualRowLabel(rowIndex);
-                      return (
-                        <div className="exam-visual-row" key={rowLabel}>
-                          <div className="exam-visual-row-label">{rowLabel}</div>
-                          <div
-                            className="exam-visual-seat-grid"
-                            style={{ gridTemplateColumns: `repeat(${activeVisualRoom.columns}, minmax(105px, 1fr))` }}
-                          >
-                            {Array.from({ length: activeVisualRoom.columns }).map((__, columnIndex) => {
-                              const columnNumber = columnIndex + 1;
-                              const physicalIndex = rowIndex * activeVisualRoom.columns + columnNumber;
-                              const seat = activeVisualRoom.seatMap.get(`${rowLabel}:${columnNumber}`);
-                              const blocked = physicalIndex > activeVisualRoom.capacity;
-                              if (blocked) {
-                                return (
-                                  <div className="exam-visual-seat blocked" key={`${rowLabel}:${columnNumber}`}>
-                                    <div className="exam-visual-seat-number">{rowLabel}{columnNumber}</div>
-                                    <div className="exam-visual-seat-meta">N/A</div>
-                                  </div>
-                                );
-                              }
-                              if (!seat) {
-                                return (
-                                  <div className="exam-visual-seat empty" key={`${rowLabel}:${columnNumber}`}>
-                                    <div className="exam-visual-seat-number">{rowLabel}{columnNumber}</div>
-                                    <div className="exam-visual-seat-meta">EMPTY</div>
-                                  </div>
-                                );
-                              }
-
-                              const classLabel = visualSeatClassLabel(seat);
-                              const identity = seat.student?.roll_number != null
-                                ? `Roll ${seat.student.roll_number}`
-                                : (seat.student?.admission_number ? `Adm ${seat.student.admission_number}` : "");
+                            }
+                            if (!seat) {
                               return (
-                                <button
-                                  type="button"
-                                  key={seat.id || `${rowLabel}:${columnNumber}`}
-                                  className={`exam-visual-seat tone-${visualToneIndex(classLabel)}`}
-                                  title={`${seat.student?.name || "Student"} · ${classLabel} · ${identity}`}
-                                  onClick={() => showVisualSeatDetails(seat)}
-                                >
-                                  <div className="exam-visual-seat-number">{seat.seat_number || `${rowLabel}-${columnNumber}`}</div>
-                                  <div className="exam-visual-seat-class">{classLabel}</div>
-                                  {identity && <div className="exam-visual-seat-meta">{identity}</div>}
-                                  <div className="exam-visual-seat-name">{seat.student?.name || "Student"}</div>
-                                </button>
+                                <div className="exam-visual-seat empty" key={`${rowLabel}:${columnNumber}`}>
+                                  <div className="exam-visual-seat-number">{rowLabel}{columnNumber}</div>
+                                  <div className="exam-visual-seat-meta">EMPTY</div>
+                                </div>
                               );
-                            })}
-                          </div>
+                            }
+
+                            const classLabel = visualSeatClassLabel(seat);
+                            const identity = seat.student?.roll_number != null
+                              ? `Roll ${seat.student.roll_number}`
+                              : (seat.student?.admission_number ? `Adm ${seat.student.admission_number}` : "");
+                            return (
+                              <button
+                                type="button"
+                                key={seat.id || `${rowLabel}:${columnNumber}`}
+                                className={`exam-visual-seat tone-${visualToneIndex(classLabel)}`}
+                                title={`${seat.student?.name || "Student"} · ${classLabel} · ${identity}`}
+                                onClick={() => showVisualSeatDetails(seat)}
+                              >
+                                <div className="exam-visual-seat-number">{seat.seat_number || `${rowLabel}-${columnNumber}`}</div>
+                                <div className="exam-visual-seat-class">{classLabel}</div>
+                                {identity && <div className="exam-visual-seat-meta">{identity}</div>}
+                                <div className="exam-visual-seat-name">{seat.student?.name || "Student"}</div>
+                              </button>
+                            );
+                          })}
                         </div>
-                      );
-                    })}
-                  </div>
-                )}
+                      </div>
+                    );
+                  })}
+                </div>
 
                 <div className="d-flex flex-wrap align-items-center gap-3 mt-2">
                   <span className="small fw-semibold text-muted">Class key:</span>

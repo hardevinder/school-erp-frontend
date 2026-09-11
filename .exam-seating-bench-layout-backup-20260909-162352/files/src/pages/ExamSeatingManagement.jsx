@@ -7,10 +7,8 @@ const emptyRoom = {
   name: "",
   building: "",
   floor: "",
-  layout_type: "individual",
   rows_count: 5,
   seats_per_row: 6,
-  students_per_bench: 1,
   capacity: 30,
 };
 
@@ -41,25 +39,6 @@ const defaultRoomRules = {
   excluded_class_section_keys: [],
   allowed_gender: "any",
   max_same_class_per_room: "",
-};
-
-const normalizedRoomLayoutType = (value) =>
-  String(value || "").toLowerCase() === "bench" ? "bench" : "individual";
-
-const roomLayoutCapacity = (room = {}) => {
-  const rows = Math.max(1, Number(room.rows_count || 1));
-  const columns = Math.max(1, Number(room.seats_per_row || 1));
-  const studentsPerBench = normalizedRoomLayoutType(room.layout_type) === "bench"
-    ? Math.min(Math.max(2, Number(room.students_per_bench || 2)), 4)
-    : 1;
-  return rows * columns * studentsPerBench;
-};
-
-const roomLayoutText = (room = {}) => {
-  if (normalizedRoomLayoutType(room.layout_type) === "bench") {
-    return `${Number(room.seats_per_row || 0)} columns × ${Number(room.rows_count || 0)} benches × ${Number(room.students_per_bench || 2)} students`;
-  }
-  return `${Number(room.rows_count || 0)} rows × ${Number(room.seats_per_row || 0)} seats`;
 };
 
 const normalizedRoomRulesForUi = (rules) => ({
@@ -284,29 +263,22 @@ export default function ExamSeatingManagement() {
   const visualRoomGroups = useMemo(() => (activePlan?.rooms || []).map((planRoom) => {
     const room = planRoom.room || {};
     const roomSeats = seats.filter((seat) => Number(seat.plan_room_id) === Number(planRoom.id));
-    const layoutType = normalizedRoomLayoutType(room.layout_type);
     const configuredRows = Math.max(1, Number(room.rows_count || 0));
     const configuredColumns = Math.max(1, Number(room.seats_per_row || 0));
-    const studentsPerBench = layoutType === "bench"
-      ? Math.min(Math.max(2, Number(room.students_per_bench || 2)), 4)
-      : 1;
-    const slotColumns = configuredColumns * studentsPerBench;
     const highestRow = roomSeats.reduce((max, seat) => {
       const index = visualRowIndex(seat.row_label);
       return index == null ? max : Math.max(max, index + 1);
     }, 0);
-    const highestSlotColumn = roomSeats.reduce(
+    const highestColumn = roomSeats.reduce(
       (max, seat) => Math.max(max, Number(seat.column_number || 0)),
       0
     );
     const capacity = Math.max(
       1,
-      Number(planRoom.capacity_override || room.capacity || configuredRows * slotColumns || roomSeats.length)
+      Number(planRoom.capacity_override || room.capacity || configuredRows * configuredColumns || roomSeats.length)
     );
-    const rows = Math.max(configuredRows, highestRow, Math.ceil(capacity / Math.max(slotColumns, 1)), 1);
-    const columns = layoutType === "bench"
-      ? Math.max(configuredColumns, Math.ceil(highestSlotColumn / studentsPerBench), 1)
-      : Math.max(configuredColumns, highestSlotColumn, 1);
+    const columns = Math.max(configuredColumns, highestColumn, 1);
+    const rows = Math.max(configuredRows, highestRow, Math.ceil(capacity / columns), 1);
     const seatMap = new Map();
     roomSeats.forEach((seat) => {
       seatMap.set(`${String(seat.row_label || "").toUpperCase()}:${Number(seat.column_number)}`, seat);
@@ -317,9 +289,6 @@ export default function ExamSeatingManagement() {
       room,
       seats: roomSeats,
       seatMap,
-      layoutType,
-      studentsPerBench,
-      slotColumns: columns * studentsPerBench,
       rows,
       columns,
       capacity,
@@ -619,12 +588,8 @@ export default function ExamSeatingManagement() {
       name: room.name || "",
       building: room.building || "",
       floor: room.floor || "",
-      layout_type: normalizedRoomLayoutType(room.layout_type),
       rows_count: Number(room.rows_count || 1),
       seats_per_row: Number(room.seats_per_row || 1),
-      students_per_bench: normalizedRoomLayoutType(room.layout_type) === "bench"
-        ? Number(room.students_per_bench || 2)
-        : 1,
       capacity: Number(room.capacity || 1),
     });
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -635,12 +600,8 @@ export default function ExamSeatingManagement() {
     setBusy(true);
     const payload = {
       ...roomForm,
-      layout_type: normalizedRoomLayoutType(roomForm.layout_type),
       rows_count: Number(roomForm.rows_count),
       seats_per_row: Number(roomForm.seats_per_row),
-      students_per_bench: normalizedRoomLayoutType(roomForm.layout_type) === "bench"
-        ? Number(roomForm.students_per_bench || 2)
-        : 1,
       capacity: Number(roomForm.capacity),
     };
 
@@ -1537,13 +1498,6 @@ export default function ExamSeatingManagement() {
           font-weight: 800; color: #475569;
         }
         .exam-visual-seat-grid { display: grid; gap: 10px; flex: 1 1 auto; }
-        .exam-visual-bench-heads { display: grid; gap: 12px; margin: 0 0 8px 44px; }
-        .exam-visual-bench-head { font-size: 12px; font-weight: 800; text-align: center; color: #334155; }
-        .exam-visual-bench-grid { display: grid; gap: 12px; flex: 1 1 auto; }
-        .exam-visual-bench { border: 2px solid #94a3b8; border-radius: 12px; padding: 7px; background: #fff; }
-        .exam-visual-bench-label { font-size: 10px; font-weight: 800; color: #64748b; text-align: center; margin-bottom: 6px; }
-        .exam-visual-bench-slots { display: grid; gap: 6px; }
-        .exam-visual-bench .exam-visual-seat { min-height: 74px; }
         .exam-visual-seat {
           min-height: 82px; border: 2px solid #cbd5e1; border-radius: 10px; padding: 7px 6px;
           display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -1718,42 +1672,9 @@ export default function ExamSeatingManagement() {
                 <div className="col-7"><label className="form-label">Room name</label><input required className="form-control" value={roomForm.name} onChange={(e) => setRoomForm({ ...roomForm, name: e.target.value })} /></div>
                 <div className="col-6"><label className="form-label">Building</label><input className="form-control" value={roomForm.building} onChange={(e) => setRoomForm({ ...roomForm, building: e.target.value })} /></div>
                 <div className="col-6"><label className="form-label">Floor</label><input className="form-control" value={roomForm.floor} onChange={(e) => setRoomForm({ ...roomForm, floor: e.target.value })} /></div>
-                <div className="col-12">
-                  <label className="form-label">Layout type</label>
-                  <select
-                    className="form-select"
-                    value={roomForm.layout_type || "individual"}
-                    onChange={(e) => {
-                      const layout_type = e.target.value;
-                      const students_per_bench = layout_type === "bench" ? 2 : 1;
-                      const next = { ...roomForm, layout_type, students_per_bench };
-                      next.capacity = roomLayoutCapacity(next);
-                      setRoomForm(next);
-                    }}
-                  >
-                    <option value="individual">Individual seats</option>
-                    <option value="bench">Bench layout (multiple students per bench)</option>
-                  </select>
-                </div>
-                <div className="col-4">
-                  <label className="form-label">{roomForm.layout_type === "bench" ? "Benches / column" : "Rows"}</label>
-                  <input type="number" min="1" className="form-control" value={roomForm.rows_count} onChange={(e) => { const next = { ...roomForm, rows_count: e.target.value }; next.capacity = roomLayoutCapacity(next); setRoomForm(next); }} />
-                </div>
-                <div className="col-4">
-                  <label className="form-label">{roomForm.layout_type === "bench" ? "Vertical columns" : "Per row"}</label>
-                  <input type="number" min="1" className="form-control" value={roomForm.seats_per_row} onChange={(e) => { const next = { ...roomForm, seats_per_row: e.target.value }; next.capacity = roomLayoutCapacity(next); setRoomForm(next); }} />
-                </div>
-                {roomForm.layout_type === "bench" && (
-                  <div className="col-4">
-                    <label className="form-label">Students / bench</label>
-                    <input type="number" min="2" max="4" className="form-control" value={roomForm.students_per_bench || 2} onChange={(e) => { const next = { ...roomForm, students_per_bench: e.target.value }; next.capacity = roomLayoutCapacity(next); setRoomForm(next); }} />
-                  </div>
-                )}
-                <div className={roomForm.layout_type === "bench" ? "col-12" : "col-4"}>
-                  <label className="form-label">Usable capacity</label>
-                  <input type="number" min="1" max={roomLayoutCapacity(roomForm)} className="form-control" value={roomForm.capacity} onChange={(e) => setRoomForm({ ...roomForm, capacity: e.target.value })} />
-                  {roomForm.layout_type === "bench" && <div className="form-text">Example: 4 vertical columns × 6 benches × 2 students = 48 seats.</div>}
-                </div>
+                <div className="col-4"><label className="form-label">Rows</label><input type="number" min="1" className="form-control" value={roomForm.rows_count} onChange={(e) => setRoomForm({ ...roomForm, rows_count: e.target.value, capacity: Number(e.target.value) * Number(roomForm.seats_per_row) })} /></div>
+                <div className="col-4"><label className="form-label">Per row</label><input type="number" min="1" className="form-control" value={roomForm.seats_per_row} onChange={(e) => setRoomForm({ ...roomForm, seats_per_row: e.target.value, capacity: Number(roomForm.rows_count) * Number(e.target.value) })} /></div>
+                <div className="col-4"><label className="form-label">Capacity</label><input type="number" min="1" className="form-control" value={roomForm.capacity} onChange={(e) => setRoomForm({ ...roomForm, capacity: e.target.value })} /></div>
               </div>
               <div className="card-footer d-flex gap-2">
                 <button disabled={busy} className="btn btn-primary flex-grow-1">
@@ -1777,7 +1698,7 @@ export default function ExamSeatingManagement() {
                     {rooms.map((room) => (
                       <tr key={room.id}>
                         <td className="fw-semibold">{room.room_code}</td><td>{room.name}<div className="small text-muted">{[room.building, room.floor].filter(Boolean).join(" · ")}</div></td>
-                        <td>{roomLayoutText(room)}<div className="small text-muted">{normalizedRoomLayoutType(room.layout_type) === "bench" ? "Bench layout" : "Individual seats"}</div></td><td>{room.capacity}</td>
+                        <td>{room.rows_count} × {room.seats_per_row}</td><td>{room.capacity}</td>
                         <td><span className={`badge ${room.is_active ? "text-bg-success" : "text-bg-secondary"}`}>{room.is_active ? "Active" : "Archived"}</span></td>
                         <td>
                           <div className="d-flex flex-wrap gap-2">
@@ -2061,7 +1982,7 @@ export default function ExamSeatingManagement() {
                               checked={smartRules.avoid_same_class_horizontal !== false}
                               onChange={(event) => setSmartRules((current) => ({ ...current, avoid_same_class_horizontal: event.target.checked }))}
                             />
-                            <span className="form-check-label">No same class on same bench / side-by-side</span>
+                            <span className="form-check-label">No same class side-by-side</span>
                           </label>
                           <label className="form-check">
                             <input
@@ -2132,7 +2053,7 @@ export default function ExamSeatingManagement() {
                               />
                               <span>
                                 <strong>{room.room_code}</strong> — {room.name}
-                                <span className="d-block small text-muted">Capacity {room.capacity} ({roomLayoutText(room)})</span>
+                                <span className="d-block small text-muted">Capacity {room.capacity} ({room.rows_count} × {room.seats_per_row})</span>
                               </span>
                             </label>
 
@@ -2570,10 +2491,7 @@ export default function ExamSeatingManagement() {
                       {activeVisualRoom.room?.name ? ` - ${activeVisualRoom.room.name}` : ""}
                     </h5>
                     <div className="small text-muted">
-                      {activeVisualRoom.layoutType === "bench"
-                        ? `${activeVisualRoom.columns} vertical columns × ${activeVisualRoom.rows} benches × ${activeVisualRoom.studentsPerBench} students`
-                        : `${activeVisualRoom.rows} rows × ${activeVisualRoom.columns} seats`}
-                      {` · Capacity ${activeVisualRoom.capacity} · Assigned ${activeVisualRoom.seats.length} · Empty ${activeVisualRoom.emptySeats}`}
+                      {activeVisualRoom.rows} rows × {activeVisualRoom.columns} seats · Capacity {activeVisualRoom.capacity} · Assigned {activeVisualRoom.seats.length} · Empty {activeVisualRoom.emptySeats}
                     </div>
                   </div>
                   <div className="small text-muted text-end">
@@ -2584,145 +2502,62 @@ export default function ExamSeatingManagement() {
 
                 <div className="exam-visual-board">BLACKBOARD / FRONT</div>
 
-                {activeVisualRoom.layoutType === "bench" ? (
-                  <div style={{ minWidth: `${Math.max(900, activeVisualRoom.columns * 250 + 44)}px` }}>
-                    <div
-                      className="exam-visual-bench-heads"
-                      style={{ gridTemplateColumns: `repeat(${activeVisualRoom.columns}, minmax(220px, 1fr))` }}
-                    >
-                      {Array.from({ length: activeVisualRoom.columns }).map((_, columnIndex) => (
-                        <div className="exam-visual-bench-head" key={`head-${columnIndex + 1}`}>
-                          Column-{String(columnIndex + 1).padStart(2, "0")}
-                        </div>
-                      ))}
-                    </div>
-                    {Array.from({ length: activeVisualRoom.rows }).map((_, rowIndex) => {
-                      const rowLabel = visualRowLabel(rowIndex);
-                      return (
-                        <div className="exam-visual-row" key={rowLabel}>
-                          <div className="exam-visual-row-label">B{rowIndex + 1}</div>
-                          <div
-                            className="exam-visual-bench-grid"
-                            style={{ gridTemplateColumns: `repeat(${activeVisualRoom.columns}, minmax(220px, 1fr))` }}
-                          >
-                            {Array.from({ length: activeVisualRoom.columns }).map((__, benchColumnIndex) => {
-                              const benchColumn = benchColumnIndex + 1;
+                <div style={{ minWidth: `${Math.max(720, activeVisualRoom.columns * 118 + 44)}px` }}>
+                  {Array.from({ length: activeVisualRoom.rows }).map((_, rowIndex) => {
+                    const rowLabel = visualRowLabel(rowIndex);
+                    return (
+                      <div className="exam-visual-row" key={rowLabel}>
+                        <div className="exam-visual-row-label">{rowLabel}</div>
+                        <div
+                          className="exam-visual-seat-grid"
+                          style={{ gridTemplateColumns: `repeat(${activeVisualRoom.columns}, minmax(105px, 1fr))` }}
+                        >
+                          {Array.from({ length: activeVisualRoom.columns }).map((__, columnIndex) => {
+                            const columnNumber = columnIndex + 1;
+                            const physicalIndex = rowIndex * activeVisualRoom.columns + columnNumber;
+                            const seat = activeVisualRoom.seatMap.get(`${rowLabel}:${columnNumber}`);
+                            const blocked = physicalIndex > activeVisualRoom.capacity;
+                            if (blocked) {
                               return (
-                                <div className="exam-visual-bench" key={`${rowLabel}:bench:${benchColumn}`}>
-                                  <div className="exam-visual-bench-label">Bench {rowIndex + 1}</div>
-                                  <div
-                                    className="exam-visual-bench-slots"
-                                    style={{ gridTemplateColumns: `repeat(${activeVisualRoom.studentsPerBench}, minmax(92px, 1fr))` }}
-                                  >
-                                    {Array.from({ length: activeVisualRoom.studentsPerBench }).map((___, benchPositionIndex) => {
-                                      const benchPosition = benchPositionIndex + 1;
-                                      const slotColumn = benchColumnIndex * activeVisualRoom.studentsPerBench + benchPosition;
-                                      const physicalIndex = rowIndex * activeVisualRoom.slotColumns + slotColumn;
-                                      const seat = activeVisualRoom.seatMap.get(`${rowLabel}:${slotColumn}`);
-                                      const blocked = physicalIndex > activeVisualRoom.capacity;
-                                      const fallbackSeatNumber = `C${String(benchColumn).padStart(2, "0")}-B${String(rowIndex + 1).padStart(2, "0")}-${String.fromCharCode(64 + benchPosition)}`;
-                                      if (blocked) {
-                                        return (
-                                          <div className="exam-visual-seat blocked" key={`${rowLabel}:${slotColumn}`}>
-                                            <div className="exam-visual-seat-number">{fallbackSeatNumber}</div>
-                                            <div className="exam-visual-seat-meta">N/A</div>
-                                          </div>
-                                        );
-                                      }
-                                      if (!seat) {
-                                        return (
-                                          <div className="exam-visual-seat empty" key={`${rowLabel}:${slotColumn}`}>
-                                            <div className="exam-visual-seat-number">{fallbackSeatNumber}</div>
-                                            <div className="exam-visual-seat-meta">EMPTY</div>
-                                          </div>
-                                        );
-                                      }
-                                      const classLabel = visualSeatClassLabel(seat);
-                                      const identity = seat.student?.roll_number != null
-                                        ? `Roll ${seat.student.roll_number}`
-                                        : (seat.student?.admission_number ? `Adm ${seat.student.admission_number}` : "");
-                                      return (
-                                        <button
-                                          type="button"
-                                          key={seat.id || `${rowLabel}:${slotColumn}`}
-                                          className={`exam-visual-seat tone-${visualToneIndex(classLabel)}`}
-                                          title={`${seat.student?.name || "Student"} · ${classLabel} · ${identity}`}
-                                          onClick={() => showVisualSeatDetails(seat)}
-                                        >
-                                          <div className="exam-visual-seat-number">{seat.seat_number || fallbackSeatNumber}</div>
-                                          <div className="exam-visual-seat-class">{classLabel}</div>
-                                          {identity && <div className="exam-visual-seat-meta">{identity}</div>}
-                                          <div className="exam-visual-seat-name">{seat.student?.name || "Student"}</div>
-                                        </button>
-                                      );
-                                    })}
-                                  </div>
+                                <div className="exam-visual-seat blocked" key={`${rowLabel}:${columnNumber}`}>
+                                  <div className="exam-visual-seat-number">{rowLabel}{columnNumber}</div>
+                                  <div className="exam-visual-seat-meta">N/A</div>
                                 </div>
                               );
-                            })}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <div style={{ minWidth: `${Math.max(720, activeVisualRoom.columns * 118 + 44)}px` }}>
-                    {Array.from({ length: activeVisualRoom.rows }).map((_, rowIndex) => {
-                      const rowLabel = visualRowLabel(rowIndex);
-                      return (
-                        <div className="exam-visual-row" key={rowLabel}>
-                          <div className="exam-visual-row-label">{rowLabel}</div>
-                          <div
-                            className="exam-visual-seat-grid"
-                            style={{ gridTemplateColumns: `repeat(${activeVisualRoom.columns}, minmax(105px, 1fr))` }}
-                          >
-                            {Array.from({ length: activeVisualRoom.columns }).map((__, columnIndex) => {
-                              const columnNumber = columnIndex + 1;
-                              const physicalIndex = rowIndex * activeVisualRoom.columns + columnNumber;
-                              const seat = activeVisualRoom.seatMap.get(`${rowLabel}:${columnNumber}`);
-                              const blocked = physicalIndex > activeVisualRoom.capacity;
-                              if (blocked) {
-                                return (
-                                  <div className="exam-visual-seat blocked" key={`${rowLabel}:${columnNumber}`}>
-                                    <div className="exam-visual-seat-number">{rowLabel}{columnNumber}</div>
-                                    <div className="exam-visual-seat-meta">N/A</div>
-                                  </div>
-                                );
-                              }
-                              if (!seat) {
-                                return (
-                                  <div className="exam-visual-seat empty" key={`${rowLabel}:${columnNumber}`}>
-                                    <div className="exam-visual-seat-number">{rowLabel}{columnNumber}</div>
-                                    <div className="exam-visual-seat-meta">EMPTY</div>
-                                  </div>
-                                );
-                              }
-
-                              const classLabel = visualSeatClassLabel(seat);
-                              const identity = seat.student?.roll_number != null
-                                ? `Roll ${seat.student.roll_number}`
-                                : (seat.student?.admission_number ? `Adm ${seat.student.admission_number}` : "");
+                            }
+                            if (!seat) {
                               return (
-                                <button
-                                  type="button"
-                                  key={seat.id || `${rowLabel}:${columnNumber}`}
-                                  className={`exam-visual-seat tone-${visualToneIndex(classLabel)}`}
-                                  title={`${seat.student?.name || "Student"} · ${classLabel} · ${identity}`}
-                                  onClick={() => showVisualSeatDetails(seat)}
-                                >
-                                  <div className="exam-visual-seat-number">{seat.seat_number || `${rowLabel}-${columnNumber}`}</div>
-                                  <div className="exam-visual-seat-class">{classLabel}</div>
-                                  {identity && <div className="exam-visual-seat-meta">{identity}</div>}
-                                  <div className="exam-visual-seat-name">{seat.student?.name || "Student"}</div>
-                                </button>
+                                <div className="exam-visual-seat empty" key={`${rowLabel}:${columnNumber}`}>
+                                  <div className="exam-visual-seat-number">{rowLabel}{columnNumber}</div>
+                                  <div className="exam-visual-seat-meta">EMPTY</div>
+                                </div>
                               );
-                            })}
-                          </div>
+                            }
+
+                            const classLabel = visualSeatClassLabel(seat);
+                            const identity = seat.student?.roll_number != null
+                              ? `Roll ${seat.student.roll_number}`
+                              : (seat.student?.admission_number ? `Adm ${seat.student.admission_number}` : "");
+                            return (
+                              <button
+                                type="button"
+                                key={seat.id || `${rowLabel}:${columnNumber}`}
+                                className={`exam-visual-seat tone-${visualToneIndex(classLabel)}`}
+                                title={`${seat.student?.name || "Student"} · ${classLabel} · ${identity}`}
+                                onClick={() => showVisualSeatDetails(seat)}
+                              >
+                                <div className="exam-visual-seat-number">{seat.seat_number || `${rowLabel}-${columnNumber}`}</div>
+                                <div className="exam-visual-seat-class">{classLabel}</div>
+                                {identity && <div className="exam-visual-seat-meta">{identity}</div>}
+                                <div className="exam-visual-seat-name">{seat.student?.name || "Student"}</div>
+                              </button>
+                            );
+                          })}
                         </div>
-                      );
-                    })}
-                  </div>
-                )}
+                      </div>
+                    );
+                  })}
+                </div>
 
                 <div className="d-flex flex-wrap align-items-center gap-3 mt-2">
                   <span className="small fw-semibold text-muted">Class key:</span>

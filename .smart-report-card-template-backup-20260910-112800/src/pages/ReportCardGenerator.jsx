@@ -300,24 +300,6 @@ const formatDisplayDate = (raw) => {
 };
 
 /* ============================================================
- * ✅ Smart report-card template helpers
- * Used by the reusable PDF/image background template renderer.
- * ============================================================ */
-const smartTemplateSlug = (value) =>
-  String(value || "")
-    .trim()
-    .toLowerCase()
-    .replace(/&/g, " and ")
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "") || "field";
-
-const smartTemplateAliases = (value) => {
-  const base = smartTemplateSlug(value);
-  const compact = base.replace(/_/g, "");
-  return [...new Set([base, compact].filter(Boolean))];
-};
-
-/* ============================================================
  * ✅ Attendance helpers
  * ============================================================ */
 const safeInt = (v) => {
@@ -659,15 +641,6 @@ const FinalResultSummary = () => {
   const selectedReportTemplate = useMemo(() => {
     return (reportTemplates || []).find((t) => String(t.id) === String(selectedTemplateId)) || null;
   }, [reportTemplates, selectedTemplateId]);
-
-  const isSmartReportTemplate = useMemo(() => {
-    if (!selectedReportTemplate) return false;
-    if (selectedReportTemplate.is_smart_template) return true;
-    const layout = Array.isArray(selectedReportTemplate.layout_json)
-      ? selectedReportTemplate.layout_json
-      : selectedReportTemplate.layout_json?.elements;
-    return Boolean(selectedReportTemplate.background_file_url && Array.isArray(layout) && layout.length);
-  }, [selectedReportTemplate]);
 
   const selectedReportFormat = useMemo(() => {
     return (reportFormats || []).find((f) => String(f.id) === String(selectedReportFormatId)) || null;
@@ -1153,29 +1126,22 @@ const FinalResultSummary = () => {
       // Otherwise the global Default Report Card can get selected first.
       const isPrimaryClass = ["0", "1", "2", "3"].includes(String(class_id));
 
-      const templateHasClass = (x) =>
-        String(x.class_id) === String(class_id) ||
-        (Array.isArray(x.class_ids) && x.class_ids.some((id) => String(id) === String(class_id))) ||
-        (Array.isArray(x.classes) && x.classes.some((item) => String(item?.id) === String(class_id)));
-
       const primaryClassTemplate = list.find(
         (x) =>
           isPrimaryClass &&
-          templateHasClass(x) &&
+          String(x.class_id) === String(class_id) &&
           x.template_key === "primary_section_report_card"
       );
 
       const exactClassDefaultTemplate = list.find(
         (x) =>
-          templateHasClass(x) &&
+          String(x.class_id) === String(class_id) &&
           (x.is_default === true || Number(x.is_default) === 1)
       );
 
       const globalDefaultTemplate = list.find(
         (x) =>
-          !x.class_id &&
-          !(Array.isArray(x.class_ids) && x.class_ids.length) &&
-          !(Array.isArray(x.classes) && x.classes.length) &&
+          (x.class_id === null || x.class_id === undefined) &&
           (x.is_default === true || Number(x.is_default) === 1)
       );
 
@@ -1687,207 +1653,6 @@ const FinalResultSummary = () => {
     const percent = wMax > 0 ? (wTotal / wMax) * 100 : null;
     const grade = percent != null ? gradeFromSchema(percent, gradeSchema) : "-";
     return { total_weighted: wTotal, percent, grade };
-  };
-
-  // Build a stable, school-agnostic data object for Smart Report Card Templates.
-  // The Template Studio maps visual fields to these paths once; every student reuses them.
-  const buildSmartTemplateData = (student, infoOverride = {}) => {
-    const info = infoOverride || {};
-    const allComponents = Array.isArray(student?.components) ? student.components : [];
-    const session = (sessions || []).find((item) => String(item.id) === String(filters.session_id)) || {};
-    const className = info?.Class?.class_name || info?.class_name || "";
-    const sectionName = info?.Section?.section_name || info?.section_name || "";
-    const dobRaw = info?.Date_Of_Birth || info?.date_of_birth || info?.dob || "";
-    const health = getPrimaryHealthInfo(info);
-
-    const termBucket = (termId) => {
-      const att = termId ? attendanceByTerm[String(termId)]?.[student.id] : null;
-      const pct = buildAttendancePercent(att);
-      return {
-        present_days: att?.present_days ?? "",
-        total_days: att?.total_days ?? "",
-        display: buildPresentTotalText(att),
-        percentage: pct == null ? "-" : Number(pct.toFixed ? pct.toFixed(2) : pct),
-        percentage_text: pct == null ? "-" : `${Number(pct.toFixed ? pct.toFixed(2) : pct)}%`,
-      };
-    };
-
-    const marks = {};
-    const subjectData = {};
-    const uniqueCombos = new Map();
-
-    for (const c of allComponents) {
-      const subjectName = c?.subject_name || c?.Subject?.name || c?.subject || "Subject";
-      const subjectAliases = smartTemplateAliases(subjectName);
-      const examTermId = Number(
-        exams.find((e) => Number(e.id) === Number(c?.exam_id))?.term_id || c?.term_id || 0
-      );
-      const termKey =
-        term1Id && examTermId === Number(term1Id)
-          ? "term1"
-          : term2Id && examTermId === Number(term2Id)
-          ? "term2"
-          : examTermId
-          ? `term_${examTermId}`
-          : "overall";
-      const componentLabel =
-        c?.abbreviation ||
-        c?.abbr ||
-        c?.short_name ||
-        c?.shortName ||
-        c?.code ||
-        c?.component?.abbreviation ||
-        c?.component?.abbr ||
-        c?.component?.short_name ||
-        c?.component?.shortName ||
-        c?.component?.code ||
-        c?.name ||
-        c?.component_name ||
-        c?.componentName ||
-        `component_${c?.component_id || "x"}`;
-      const componentAliases = smartTemplateAliases(componentLabel);
-      const comboKey = `${subjectName}__${examTermId}__${c?.component_id || componentLabel}`;
-      if (!uniqueCombos.has(comboKey)) {
-        uniqueCombos.set(comboKey, { subjectName, subjectAliases, examTermId, termKey, componentAliases, componentId: c?.component_id });
-      }
-    }
-
-    for (const combo of uniqueCombos.values()) {
-      let display = "-";
-      if (combo.componentId != null && combo.examTermId) {
-        display = getSubjectTermCompDisplay(student, combo.subjectName, combo.examTermId, combo.componentId);
-      } else {
-        const rows = allComponents.filter((c) => c?.subject_name === combo.subjectName);
-        const match = rows.find((c) => smartTemplateAliases(c?.abbreviation || c?.component_name || c?.name).some((x) => combo.componentAliases.includes(x)));
-        const att = String(match?.attendance || "").trim().toUpperCase();
-        display = ["A", "AB", "ABSENT"].includes(att) ? "AB" : (match?.marks ?? match?.grade ?? "-");
-      }
-
-      const matchingRows = allComponents.filter((c) => {
-        if ((c?.subject_name || c?.subject) !== combo.subjectName) return false;
-        const tid = Number(exams.find((e) => Number(e.id) === Number(c?.exam_id))?.term_id || c?.term_id || 0);
-        if (combo.examTermId && tid !== combo.examTermId) return false;
-        return combo.componentId == null || Number(c?.component_id) === Number(combo.componentId);
-      });
-      const first = matchingRows[0] || {};
-      const cell = {
-        display,
-        marks: hasAnyMarks(matchingRows) ? sumMarksOnly(matchingRows) : (first?.marks ?? ""),
-        max_marks: matchingRows.reduce((sum, row) => sum + (isNumeric(row?.max_marks) ? Number(row.max_marks) : 0), 0) || first?.max_marks || "",
-        weighted_marks: sumWeightedOnly(matchingRows),
-        grade: pickGrade(matchingRows),
-        attendance: first?.attendance || "",
-      };
-
-      for (const subjectKey of combo.subjectAliases) {
-        if (!marks[subjectKey]) marks[subjectKey] = {};
-        if (!marks[subjectKey][combo.termKey]) marks[subjectKey][combo.termKey] = {};
-        for (const componentKey of combo.componentAliases) {
-          marks[subjectKey][combo.termKey][componentKey] = cell;
-          // Also expose a non-term path for designs with a single exam/term.
-          if (!marks[subjectKey][componentKey]) marks[subjectKey][componentKey] = cell;
-        }
-      }
-    }
-
-    const subjectNames = [...new Set(allComponents.map((c) => c?.subject_name || c?.subject).filter(Boolean))];
-    for (const subjectName of subjectNames) {
-      const rows = allComponents.filter((c) => (c?.subject_name || c?.subject) === subjectName);
-      const raw = hasAnyMarks(rows) ? sumMarksOnly(rows) : null;
-      const weighted = sumWeightedOnly(rows);
-      const maxWeight = sumMaxWeight(rows);
-      const pct = maxWeight > 0 ? (weighted / maxWeight) * 100 : null;
-      const entry = {
-        name: subjectName,
-        total_raw: raw ?? "-",
-        total_weighted: weighted,
-        percentage: pct == null ? "-" : Number(pct.toFixed(2)),
-        grade: pct == null ? pickGrade(rows) : gradeFromSchema(pct, gradeSchema),
-      };
-      if (term1Id) entry.term1 = getSubjectTermStats(student, subjectName, term1Id);
-      if (term2Id) entry.term2 = getSubjectTermStats(student, subjectName, term2Id);
-      for (const key of smartTemplateAliases(subjectName)) subjectData[key] = entry;
-    }
-
-    const coScholastic = {};
-    const addCoTerm = (termId, termKey) => {
-      if (!termId) return;
-      const bucket = coScholasticByTerm[String(termId)] || {};
-      const rows = Object.values(bucket[String(student.id)] || {});
-      for (const row of rows) {
-        const areaName = row?.area_name || row?.name || `area_${row?.area_id || "x"}`;
-        for (const key of smartTemplateAliases(areaName)) {
-          if (!coScholastic[key]) coScholastic[key] = {};
-          coScholastic[key][termKey] = row?.grade || row?.value || "-";
-        }
-      }
-    };
-    addCoTerm(term1Id, "term1");
-    addCoTerm(term2Id, "term2");
-
-    const drawingT1 = getDrawingGradeForTerm(student, term1Id, exams, gradeSchema);
-    const drawingT2 = getDrawingGradeForTerm(student, term2Id, exams, gradeSchema);
-    if (drawingT1 !== "-" || drawingT2 !== "-") {
-      coScholastic.drawing = { term1: drawingT1, term2: drawingT2 };
-    }
-
-    const weightedTotal = sumWeightedOnly(allComponents);
-    const maxWeightTotal = sumMaxWeight(allComponents);
-    const overallPct = maxWeightTotal > 0 ? (weightedTotal / maxWeightTotal) * 100 : null;
-    const rawTotal = hasAnyMarks(allComponents) ? sumMarksOnly(allComponents) : null;
-    const rawMax = allComponents.reduce((sum, row) => sum + (isNumeric(row?.max_marks) ? Number(row.max_marks) : 0), 0);
-    const term1Overall = term1Id ? getStudentTermOverall(student, term1Id) : null;
-    const term2Overall = term2Id ? getStudentTermOverall(student, term2Id) : null;
-    const r1 = term1Id ? remarksByTerm[String(term1Id)]?.[student.id] : null;
-    const r2 = term2Id ? remarksByTerm[String(term2Id)]?.[student.id] : null;
-    const promotion = term2Id ? promotionDecisionByTerm[String(term2Id)]?.[student.id] : null;
-
-    return {
-      student: {
-        id: student.id,
-        name: info?.name || info?.student_name || student?.name || "-",
-        admission_number: info?.admission_number || info?.AdmissionNumber || student?.admission_number || "-",
-        roll_number: info?.roll_number ?? student?.roll_number ?? "-",
-        class_name: className || "-",
-        section_name: sectionName || "-",
-        class_section: [className, sectionName].filter(Boolean).join(" - ") || "-",
-        father_name: info?.father_name || "-",
-        mother_name: info?.mother_name || "-",
-        dob: formatDOB(dobRaw),
-        blood_group: info?.blood_group_snapshot || info?.blood_group || info?.b_group || "-",
-        photo_data_url: info?.__pdfPhotoSrc || getStudentPhotoURL(info) || "",
-      },
-      session: {
-        id: session?.id || filters.session_id || null,
-        name: session?.name || "-",
-      },
-      result: {
-        total_raw: rawTotal ?? "-",
-        max_raw: rawMax || "-",
-        total_weighted: Number(weightedTotal.toFixed ? weightedTotal.toFixed(2) : weightedTotal),
-        max_weighted: Number(maxWeightTotal.toFixed ? maxWeightTotal.toFixed(2) : maxWeightTotal),
-        percentage: overallPct == null ? "-" : Number(overallPct.toFixed(2)),
-        percentage_text: overallPct == null ? "-" : `${Number(overallPct.toFixed(2))}%`,
-        grade: overallPct == null ? "-" : gradeFromSchema(overallPct, gradeSchema),
-        rank: hasDisplayRank(student?.rank) ? student.rank : "-",
-        term1: term1Overall || {},
-        term2: term2Overall || {},
-      },
-      attendance: {
-        term1: termBucket(term1Id),
-        term2: termBucket(term2Id),
-      },
-      remarks: {
-        term1: r1 || "-",
-        term2: r2 || "-",
-        final: r2 || r1 || "-",
-      },
-      health,
-      promotion: promotion || {},
-      marks,
-      subjects: subjectData,
-      coscholastic: coScholastic,
-    };
   };
 
   const fetchReport = async () => {
@@ -3965,8 +3730,7 @@ const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
 
     const activeReportFormat = selectedReportFormat || reportFormatRef.current || reportFormat;
 
-    // Smart templates preserve the uploaded school design itself, so a legacy print format is not required.
-    if (!isSmartReportTemplate && !activeReportFormat?.id) {
+    if (!activeReportFormat?.id) {
       return Swal.fire(
         "Select Format",
         "Please select the report card print format before generating PDF.",
@@ -3991,80 +3755,48 @@ const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
     abortGenRef.current = controller;
 
     try {
-      let res;
+      setPdfMessage("Preparing selected report format…");
+      setReportFormat(activeReportFormat);
 
-      if (isSmartReportTemplate) {
-        setPdfMessage("Preparing smart template data & student photos…");
-        const pdfInfoMap = await prepareStudentPhotoDataUrlsForPdf(selected);
-        const records = selected.map((student) => ({
-          student_id: student.id,
-          data: buildSmartTemplateData(student, pdfInfoMap[student.id] || studentInfoMap[student.id] || {}),
-        }));
+      const [pdfInfoMap, pdfFormatAssets] = await Promise.all([
+        prepareStudentPhotoDataUrlsForPdf(selected),
+        prepareReportFormatAssetsForPdf(),
+      ]);
+      const html = buildCardsHtml(selected, pdfInfoMap, pdfFormatAssets);
 
-        setPdfPercent(5);
-        setPdfMessage("Overlaying ERP data on school design…");
-        res = await api.post(
-          `/report-card/templates/${selectedTemplateId}/render-pdf`,
-          { records, fileName },
-          {
-            responseType: "blob",
-            signal: controller.signal,
-            onDownloadProgress: (e) => {
-              if (e.total) {
-                const pct = Math.min(98, Math.round((e.loaded / e.total) * 100));
-                setPdfPercent(pct);
-                setPdfMessage(pct < 90 ? "Rendering smart report cards…" : "Finalizing…");
-              } else {
-                setPdfPercent((p) => (p < 80 ? p + 1 : p));
-                setPdfMessage("Rendering smart report cards…");
-              }
-            },
-          }
-        );
-      } else {
-        setPdfMessage("Preparing selected report format…");
-        setReportFormat(activeReportFormat);
+      setPdfPercent(2);
+      setPdfMessage("Queuing render…");
 
-        const [pdfInfoMap, pdfFormatAssets] = await Promise.all([
-          prepareStudentPhotoDataUrlsForPdf(selected),
-          prepareReportFormatAssetsForPdf(),
-        ]);
-        const html = buildCardsHtml(selected, pdfInfoMap, pdfFormatAssets);
-
-        setPdfPercent(2);
-        setPdfMessage("Queuing render…");
-
-        res = await api.post(
-          PDF_ENDPOINT,
-          {
-            html,
-            format_id: activeReportFormat.id,
-            fileName,
-            orientation: isPrimarySectionTemplateActive() ? "landscape" : selectedReportTemplate?.orientation || "portrait",
-            session_id: Number(filters.session_id),
-            class_id: Number(filters.class_id),
-            template_id: Number(selectedTemplateId),
-            template_key: selectedReportTemplate?.template_key || null,
-            selected_template: selectedReportTemplate || null,
-            school_logo_url: getReportCardFormatValue("school_logo_url") || null,
-            asset_base_url: assetBase,
+      const res = await api.post(
+        PDF_ENDPOINT,
+        {
+          html,
+          format_id: activeReportFormat.id,
+          fileName,
+          orientation: isPrimarySectionTemplateActive() ? "landscape" : selectedReportTemplate?.orientation || "portrait",
+          session_id: Number(filters.session_id),
+          class_id: Number(filters.class_id),
+          template_id: Number(selectedTemplateId),
+          template_key: selectedReportTemplate?.template_key || null,
+          selected_template: selectedReportTemplate || null,
+          school_logo_url: getReportCardFormatValue("school_logo_url") || null,
+          asset_base_url: assetBase,
+        },
+        {
+          responseType: "blob",
+          signal: controller.signal,
+          onDownloadProgress: (e) => {
+            if (e.total) {
+              const pct = Math.min(98, Math.round((e.loaded / e.total) * 100));
+              setPdfPercent(pct);
+              setPdfMessage(pct < 90 ? "Rendering PDF…" : "Finalizing…");
+            } else {
+              setPdfPercent((p) => (p < 80 ? p + 1 : p));
+              setPdfMessage("Rendering PDF…");
+            }
           },
-          {
-            responseType: "blob",
-            signal: controller.signal,
-            onDownloadProgress: (e) => {
-              if (e.total) {
-                const pct = Math.min(98, Math.round((e.loaded / e.total) * 100));
-                setPdfPercent(pct);
-                setPdfMessage(pct < 90 ? "Rendering PDF…" : "Finalizing…");
-              } else {
-                setPdfPercent((p) => (p < 80 ? p + 1 : p));
-                setPdfMessage("Rendering PDF…");
-              }
-            },
-          }
-        );
-      }
+        }
+      );
 
       setPdfPercent(100);
       setPdfMessage("Opening…");
@@ -4644,11 +4376,7 @@ const renderTeacherRemarksTermWise = (studentId) => {
                       </option>
                     ))}
                   </select>
-                  <div className="text-muted small mt-1">
-                    {isSmartReportTemplate
-                      ? "Not required for Smart Templates — uploaded school design controls the PDF."
-                      : "Selected format controls PDF layout"}
-                  </div>
+                  <div className="text-muted small mt-1">Selected format controls PDF layout</div>
                 </div>
 
                 <div className="col-md-3">
@@ -4669,11 +4397,7 @@ const renderTeacherRemarksTermWise = (studentId) => {
                       </option>
                     ))}
                   </select>
-                  <div className="text-muted small mt-1">
-                    {isSmartReportTemplate
-                      ? "Smart Template: ERP data will be overlaid on the saved school design."
-                      : "Legacy template selected."}
-                  </div>
+                  <div className="text-muted small mt-1">Selected template will be sent to backend</div>
                 </div>
 
                 {pdfMode === "single" && (

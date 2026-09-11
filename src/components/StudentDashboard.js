@@ -12,6 +12,8 @@ import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import socket from "../socket";
 import { Link } from "react-router-dom";
+import DashboardInsights, { SummaryChart, WorkspaceTabs } from "./dashboard/DashboardInsights";
+import { workspaceForPath } from "./dashboard/dashboardModel";
 import { getAuthToken } from "../utils/student360Session";
 
 const API_URL = process.env.REACT_APP_API_URL || "";
@@ -42,6 +44,9 @@ const isOverdue = (due) => {
 
 export default function StudentDashboard() {
   const [loading, setLoading] = useState(true);
+  const [workspace, setWorkspace] = useState("All");
+  const [dashboardRefresh, setDashboardRefresh] = useState(0);
+  const [summaryErrors, setSummaryErrors] = useState({});
   const [err, setErr] = useState(null);
 
   const [studentInfo, setStudentInfo] = useState(null);
@@ -87,7 +92,9 @@ export default function StudentDashboard() {
 
   const userRoles = useMemo(() => {
     try {
-      return JSON.parse(localStorage.getItem("roles")) || [];
+      const roles = JSON.parse(localStorage.getItem("roles"));
+      const fallback = localStorage.getItem("userRole") || localStorage.getItem("role");
+      return (Array.isArray(roles) && roles.length ? roles : fallback ? [fallback] : []).map((role) => String(role).toLowerCase());
     } catch {
       const single = localStorage.getItem("userRole");
       return single ? [single] : [];
@@ -141,28 +148,24 @@ export default function StudentDashboard() {
 
     const headers = { Authorization: `Bearer ${token()}` };
 
-    const fetchStudent = async () => {
-      try {
-        const res = await fetch(
-          `${API_URL}/StudentsApp/admission/${encodeURIComponent(admission)}/fees`,
-          { headers, signal: ac.signal }
-        );
-        const data = await res.json();
-        setStudentInfo(data || null);
-      } catch {}
-    };
-
     const fetchAttendance = async () => {
       try {
         let rows = [];
+        const ownAdmission = localStorage.getItem("username") || "";
+        const isStudentAccount = userRoles.includes("student");
+        if (isStudentAccount && admission && admission !== ownAdmission) throw new Error("Attendance is only available for the signed-in student");
+        const attendanceUrl = isStudentAccount
+          ? `${API_URL}/attendance/student/me`
+          : `${API_URL}/attendance/by-admission/${encodeURIComponent(admission)}`;
         try {
           const res = await fetch(
-            `${API_URL}/attendance/student/by-admission/${encodeURIComponent(admission)}`,
+            attendanceUrl,
             { headers, signal: ac.signal }
           );
-          if (res.ok) rows = (await res.json()) || [];
-        } catch {}
-        if (!rows || rows.length === 0) {
+          if (!res.ok) throw new Error("Could not load attendance");
+          rows = (await res.json()) || [];
+        } catch (error) { if (admission) throw error; }
+        if (!admission && (!rows || rows.length === 0)) {
           const res = await fetch(`${API_URL}/attendance/student/me`, {
             headers,
             signal: ac.signal,
@@ -182,20 +185,22 @@ export default function StudentDashboard() {
         const absent = monthRows.filter((r) => (r.status || "").toLowerCase() === "absent").length;
         const leave = monthRows.filter((r) => (r.status || "").toLowerCase() === "leave").length;
 
-        setAttendance({ present, absent, leave, total: monthRows.length });
-      } catch {}
+        if (!ac.signal.aborted) setAttendance({ present, absent, leave, total: monthRows.length });
+      } catch { if (!ac.signal.aborted) setSummaryErrors((previous) => ({ ...previous, attendance: true })); }
     };
 
     const fetchAssignments = async () => {
       try {
+        if (admission && admission !== localStorage.getItem("username")) throw new Error("Assignments are only available for the signed-in student");
         let data;
         try {
           const res = await fetch(
             `${API_URL}/student-assignments/student?admission=${encodeURIComponent(admission)}`,
             { headers, signal: ac.signal }
           );
-          if (res.ok) data = await res.json();
-        } catch {}
+          if (!res.ok) throw new Error("Could not load assignments");
+          data = await res.json();
+        } catch (error) { if (admission) throw error; }
         if (!data) {
           const res = await fetch(`${API_URL}/student-assignments/student`, {
             headers,
@@ -238,8 +243,8 @@ export default function StudentDashboard() {
             })
           );
 
-        setAssignSummary({ total: list.length, submitted, graded, overdue, next3 });
-      } catch {}
+        if (!ac.signal.aborted) setAssignSummary({ total: list.length, submitted, graded, overdue, next3 });
+      } catch { if (!ac.signal.aborted) setSummaryErrors((previous) => ({ ...previous, assignments: true })); }
     };
 
     const fetchCirculars = async () => {
@@ -250,7 +255,7 @@ export default function StudentDashboard() {
           .filter((c) => c.audience === "student" || c.audience === "both")
           .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
           .slice(0, 5);
-        setRecentCirculars(filtered);
+        if (!ac.signal.aborted) setRecentCirculars(filtered);
       } catch {}
     };
 
@@ -260,7 +265,9 @@ export default function StudentDashboard() {
           `${API_URL}/StudentsApp/admission/${encodeURIComponent(admission)}/fees`,
           { headers, signal: ac.signal }
         );
+        if (!res.ok) throw new Error("Could not load fees");
         const data = await res.json();
+        if (!ac.signal.aborted) setStudentInfo(data || null);
         const fees = data?.feeDetails || [];
         const totalDue = fees.reduce((s, f) => s + Number(f.finalAmountDue || 0), 0);
         const totalRecv = fees.reduce((s, f) => s + Number(f.totalFeeReceived || 0), 0);
@@ -272,7 +279,7 @@ export default function StudentDashboard() {
         const vanCon = Number(vanObj.totalVanFeeConcession || 0);
         const vanDue = Math.max(vanCost - (vanRecv + vanCon), 0);
 
-        setFeeSummary({ totalDue, totalRecv, totalConcession, vanDue, vanRecv });
+        if (!ac.signal.aborted) setFeeSummary({ totalDue, totalRecv, totalConcession, vanDue, vanRecv });
       } catch {}
     };
 
@@ -319,7 +326,7 @@ export default function StudentDashboard() {
           type: d.type,
         }));
 
-        setDiarySummary({ total, unack, latest });
+        if (!ac.signal.aborted) setDiarySummary({ total, unack, latest });
       } catch {}
     };
 
@@ -374,14 +381,20 @@ export default function StudentDashboard() {
           if (mins >= nowMin && (!nextUp || mins < toMins(nextUp.startHM))) nextUp = it;
         });
 
-        setTodaySchedule({ items, nextUp });
+        if (!ac.signal.aborted) setTodaySchedule({ items, nextUp });
       } catch {}
     };
 
     (async () => {
       setLoading(true);
+      setSummaryErrors({});
+      setAttendance({ present: 0, absent: 0, leave: 0, total: 0 });
+      setAssignSummary({ total: 0, submitted: 0, graded: 0, overdue: 0, next3: [] });
+      setStudentInfo(null);
+      setFeeSummary({ totalDue: 0, totalRecv: 0, totalConcession: 0, vanDue: 0, vanRecv: 0 });
+      setTodaySchedule({ items: [], nextUp: null });
+      setDiarySummary({ total: 0, unack: 0, latest: [] });
       await Promise.all([
-        fetchStudent(),
         fetchAttendance(),
         fetchAssignments(),
         fetchCirculars(),
@@ -389,8 +402,8 @@ export default function StudentDashboard() {
         fetchTodaySchedule(),
         fetchDiarySummary(),
       ]);
-      setLoading(false);
-    })().catch(() => setLoading(false));
+      if (!ac.signal.aborted) setLoading(false);
+    })().catch(() => { if (!ac.signal.aborted) setLoading(false); });
 
     const onDiaryChanged = () => fetchDiarySummary();
     socket.on("diaryChanged", onDiaryChanged);
@@ -399,7 +412,7 @@ export default function StudentDashboard() {
       ac.abort();
       socket.off("diaryChanged", onDiaryChanged);
     };
-  }, [canView, admission]);
+  }, [canView, admission, userRoles, dashboardRefresh]);
 
   const presencePct =
     attendance.total > 0 ? Math.round((attendance.present / Math.max(attendance.total, 1)) * 100) : 0;
@@ -426,7 +439,7 @@ export default function StudentDashboard() {
     </div>
   );
 
-  const QuickLink = ({ to, icon, label, desc, badge }) => (
+  const QuickLink = ({ to, icon, label, desc, badge }) => workspace !== "All" && workspaceForPath(to) !== workspace ? null : (
     <div className="col-6 col-md-4 col-lg-3">
       <Link to={to} className="student-quick-link text-decoration-none d-block h-100">
         <div className="card h-100 border-0 shadow-lg rounded-4 hover-rise glow-on-hover">
@@ -540,8 +553,23 @@ export default function StudentDashboard() {
 
       {err && <div className="alert alert-warning rounded-4 shadow-sm">{String(err)}</div>}
 
+      <div className="d-flex justify-content-end mb-2"><button type="button" className="btn btn-sm btn-outline-primary" onClick={() => setDashboardRefresh((v) => v + 1)} disabled={loading}>Refresh dashboard</button></div>
+      <div className="dashboard-insights dashboard-insight-grid">
+        <SummaryChart title="ERP · Attendance this month" subtitle="Recorded attendance days" loading={loading} error={summaryErrors.attendance}
+          data={[{ name: 'Present', value: attendance.present }, { name: 'Absent', value: attendance.absent }, { name: 'Leave', value: attendance.leave }]} />
+        <SummaryChart title="LMS · Legacy assignment progress" subtitle="Submitted, graded and outstanding work" loading={loading} error={summaryErrors.assignments}
+          data={[{ name: 'Submitted', value: assignSummary.submitted }, { name: 'Graded', value: assignSummary.graded }, { name: 'Overdue', value: assignSummary.overdue }, { name: 'Pending', value: Math.max(0, assignSummary.total - assignSummary.submitted - assignSummary.graded - assignSummary.overdue) }]} />
+      </div>
+      <DashboardInsights role="student" admission={admission} />
+      <h2 className="h5 mt-4">ERP & LMS · Quick access</h2>
+      <p className="text-muted small">ERP: school services and administration. LMS: lessons, assignments and assessments.</p>
+      <WorkspaceTabs value={workspace} onChange={setWorkspace} />
       {/* Quick actions grid */}
       <div className="row g-3 mb-3">
+        <QuickLink to="/assessments?assessment_type=assignment" icon={<i className="bi bi-journal-check text-primary" />} label="LMS Assignments" desc="Assignments, submissions and feedback" />
+        <QuickLink to="/assessments" icon={<i className="bi bi-clipboard2-check text-primary" />} label="Tests & Results" desc="Assessments and published results" />
+        <QuickLink to="/online-classes" icon={<i className="bi bi-camera-video text-primary" />} label="Online Classes" desc="View sessions and join classes" />
+        <QuickLink to="/messages" icon={<i className="bi bi-envelope text-primary" />} label="Messages" desc="Conversations with your school" />
         <QuickLink
           to="/student-attendance"
           icon={<i className="bi bi-calendar2-check text-success"></i>}
@@ -552,8 +580,8 @@ export default function StudentDashboard() {
         <QuickLink
           to="/my-assignments"
           icon={<i className="bi bi-journal-check text-primary"></i>}
-          label="Assignments"
-          desc="All tasks, due dates & grades"
+          label="Legacy Assignments"
+          desc="Earlier tasks, due dates & grades"
           badge={<span className="badge rounded-pill text-bg-danger fs-6">{assignSummary.overdue} overdue</span>}
         />
         <QuickLink
