@@ -690,6 +690,7 @@ export default function TransportDashboard() {
 
   return (
     <div
+      className="dashboard-surface"
       style={{
         backgroundImage:
           "linear-gradient(135deg, rgba(14,165,233,0.10), rgba(34,197,94,0.10), rgba(99,102,241,0.10))",

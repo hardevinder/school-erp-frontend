@@ -24,17 +24,30 @@ const render = async (props) => {
   await act(async () => { root.render(<MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}><DashboardInsights {...props} /></MemoryRouter>); });
 };
 
-test('teacher summary uses full unread total and keeps successful cards when one source fails', async () => {
-  api.get.mockImplementation((url, options) => {
+test('teacher LMS summary keeps successful cards when one learning source fails', async () => {
+  api.get.mockImplementation((url) => {
     if (url === '/api/assessments') return Promise.reject(new Error('Unavailable'));
     if (url === '/api/online-classes') return Promise.resolve({ data: { data: [] } });
-    return Promise.resolve({ data: { data: options.params.unreadOnly ? [] : [{ id: 1, thread: { subject: 'Parent question', messages: [{ body: 'Please review' }] } }], pagination: { total: options.params.unreadOnly ? 42 : 1 } } });
+    return Promise.reject(new Error('Unexpected request'));
   });
-  await render({ role: 'teacher' });
-  expect(container.textContent).toContain('42 unread conversations');
-  expect(container.textContent).toContain('Parent question');
+  await render({ role: 'teacher', workspace: 'LMS' });
+  expect(api.get.mock.calls).toHaveLength(2);
+  expect(container.textContent).toContain('LMS at a glance');
   expect(container.textContent).toContain('Summary unavailable');
   expect(container.textContent).toContain('No upcoming online classes');
+});
+
+test('teacher ERP summary shows communication only', async () => {
+  api.get.mockImplementation((url, options) => Promise.resolve({
+    data: {
+      data: options.params.unreadOnly ? [] : [{ id: 1, thread: { subject: 'Parent question', messages: [{ body: 'Please review' }] } }],
+      pagination: { total: options.params.unreadOnly ? 42 : 1 },
+    },
+  }));
+  await render({ role: 'teacher', workspace: 'ERP' });
+  expect(container.textContent).toContain('42 unread conversations');
+  expect(container.textContent).toContain('Parent question');
+  expect(api.get.mock.calls.every(([url]) => url === '/messages/me')).toBe(true);
 });
 
 test('student message requests carry admission and abort when the selected student changes', async () => {

@@ -482,7 +482,7 @@ export default function LibraryDashboard() {
 
   return (
     <div
-      className="lib-bg"
+      className="lib-bg dashboard-surface"
       style={{
         backgroundImage:
           "linear-gradient(135deg, rgba(59,130,246,.10), rgba(168,85,247,.08), rgba(34,197,94,.10), rgba(245,158,11,.08))",

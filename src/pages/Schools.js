@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import api from "../api";
 import Swal from "sweetalert2";
+import { publishInstitutionChange } from "../institution/InstitutionContext"; // GLOBAL_INSTITUTION_UI_V2
 import "./Schools.css";
 
 // ---------- helpers: roles ----------
@@ -148,11 +149,18 @@ const Schools = () => {
         <div class="card-body">
           <div class="row g-3">
             <div class="col-lg-4 col-md-6">
-              <label for="swal-name" class="form-label fw-semibold">School Name *</label>
+              <label for="swal-institution-type" class="form-label fw-semibold">Institution Type *</label>
+              <select id="swal-institution-type" class="form-select form-select-sm">
+                <option value="school" ${String(school.institution_type || "school").toLowerCase() === "school" ? "selected" : ""}>School</option>
+                <option value="college" ${String(school.institution_type || "school").toLowerCase() === "college" ? "selected" : ""}>College</option>
+              </select>
+            </div>
+            <div class="col-lg-4 col-md-6">
+              <label for="swal-name" class="form-label fw-semibold">Institution Name *</label>
               <input
                 id="swal-name"
                 class="form-control form-control-sm"
-                placeholder="School Name"
+                placeholder="Institution Name"
                 value="${esc(school.name)}"
               />
             </div>
@@ -190,7 +198,7 @@ const Schools = () => {
               <div class="school-map-heading">
                 <div>
                   <label for="swal-map-search" class="form-label fw-semibold mb-1">
-                    Pick School Address from Google Maps
+                    Pick Institution Address from Google Maps
                   </label>
                   <div class="text-muted small">Search, click the map, or drag the marker.</div>
                 </div>
@@ -203,7 +211,7 @@ const Schools = () => {
                 <input
                   id="swal-map-search"
                   class="form-control"
-                  placeholder="Search school, street, landmark or address"
+                  placeholder="Search institution, street, landmark or address"
                   autocomplete="off"
                 />
               </div>
@@ -244,13 +252,13 @@ const Schools = () => {
 
       <div class="card mb-3">
         <div class="card-header py-2 fw-semibold">
-          School Meta
+          Academic / Regulatory Meta
         </div>
 
         <div class="card-body">
           <div class="row g-3">
             <div class="col-lg-4 col-md-6">
-              <label for="swal-affiliation" class="form-label fw-semibold">Affiliation Number</label>
+              <label for="swal-affiliation" class="form-label fw-semibold">Affiliation / University Ref.</label>
               <input
                 id="swal-affiliation"
                 class="form-control form-control-sm"
@@ -260,7 +268,7 @@ const Schools = () => {
             </div>
 
             <div class="col-lg-4 col-md-6">
-              <label for="swal-udise" class="form-label fw-semibold">UDISE Number</label>
+              <label for="swal-udise" class="form-label fw-semibold">UDISE / AISHE Number</label>
               <input
                 id="swal-udise"
                 class="form-control form-control-sm"
@@ -270,7 +278,7 @@ const Schools = () => {
             </div>
 
             <div class="col-lg-4 col-md-6">
-              <label for="swal-school-code" class="form-label fw-semibold">School Code</label>
+              <label for="swal-school-code" class="form-label fw-semibold">Institution Code</label>
               <input
                 id="swal-school-code"
                 class="form-control form-control-sm"
@@ -352,7 +360,7 @@ const Schools = () => {
             </div>
 
             <div class="col-lg-6 col-md-6">
-              <label for="swal-board-logo" class="form-label fw-semibold">Board Logo</label>
+              <label for="swal-board-logo" class="form-label fw-semibold">Board / University Logo</label>
               <input
                 type="file"
                 id="swal-board-logo"
@@ -362,7 +370,7 @@ const Schools = () => {
               <div id="swal-board-logo-preview" class="d-flex align-items-center gap-2 mt-2">
                 ${
                   school.board_logo
-                    ? getPreviewHtml(school.board_logo, "Board Logo Preview")
+                    ? getPreviewHtml(school.board_logo, "Board / University Logo Preview")
                     : `<span class="text-muted small">No board logo selected</span>`
                 }
               </div>
@@ -416,14 +424,14 @@ const Schools = () => {
           boardPreview.innerHTML = `
             <img
               src="${previewUrl}"
-              alt="Board Logo Preview"
+              alt="Board / University Logo Preview"
               class="rounded border"
               style="width:64px;height:64px;object-fit:cover;"
             />
           `;
         } else {
           boardPreview.innerHTML = school.board_logo
-            ? getPreviewHtml(school.board_logo, "Board Logo Preview")
+            ? getPreviewHtml(school.board_logo, "Board / University Logo Preview")
             : `<span class="text-muted small">No board logo selected</span>`;
         }
       });
@@ -648,7 +656,7 @@ const Schools = () => {
     const name = p.querySelector("#swal-name").value.trim();
 
     if (!name) {
-      Swal.showValidationMessage("School Name is required");
+      Swal.showValidationMessage("Institution Name is required");
       return false;
     }
 
@@ -658,7 +666,7 @@ const Schools = () => {
       p.querySelector("#swal-attendance-radius").value
     );
     if ((latitude && !longitude) || (!latitude && longitude)) {
-      Swal.showValidationMessage("Please select a complete school location");
+      Swal.showValidationMessage("Please select a complete institution location");
       return false;
     }
     if (!Number.isInteger(attendanceRadius) || attendanceRadius < 25 || attendanceRadius > 5000) {
@@ -668,6 +676,7 @@ const Schools = () => {
 
     return {
       name,
+      institution_type: p.querySelector("#swal-institution-type").value,
       description: p.querySelector("#swal-description").value.trim(),
       phone: p.querySelector("#swal-phone").value.trim(),
       email: p.querySelector("#swal-email").value.trim(),
@@ -690,6 +699,7 @@ const Schools = () => {
     const formData = new FormData();
 
     formData.append("name", values.name);
+    formData.append("institution_type", values.institution_type || "school");
     formData.append("description", values.description || "");
     formData.append("phone", values.phone || "");
     formData.append("email", values.email || "");
@@ -719,7 +729,7 @@ const Schools = () => {
     let fileBoardLogo = null;
 
     Swal.fire({
-      title: "Add New School",
+      title: "Add New Institution",
       width: "1050px",
       heightAuto: false,
       allowOutsideClick: false,
@@ -758,7 +768,7 @@ const Schools = () => {
             headers: { "Content-Type": "multipart/form-data" },
           });
 
-          Swal.fire("Added!", "School has been added successfully.", "success");
+          Swal.fire("Added!", "Institution has been added successfully.", "success");
           fetchSchools();
         } catch (err) {
           console.error("Add school error:", err);
@@ -778,7 +788,7 @@ const Schools = () => {
     let fileBoardLogo = null;
 
     Swal.fire({
-      title: "Edit School",
+      title: "Edit Institution",
       width: "1050px",
       heightAuto: false,
       allowOutsideClick: false,
@@ -817,7 +827,14 @@ const Schools = () => {
             headers: { "Content-Type": "multipart/form-data" },
           });
 
-          Swal.fire("Updated!", "School has been updated successfully.", "success");
+          // GLOBAL_INSTITUTION_UI_V2: switch the whole protected UI immediately.
+          publishInstitutionChange({
+            id: school.id,
+            institution_type: res.value?.institution_type || school.institution_type || "school",
+            name: res.value?.name || school.name,
+          });
+
+          Swal.fire("Updated!", "Institution has been updated successfully.", "success");
           fetchSchools();
         } catch (err) {
           console.error("Update school error:", err);
@@ -887,11 +904,11 @@ const Schools = () => {
   return (
     <div className="container mt-4">
       <div className="d-flex justify-content-between align-items-center mb-3">
-        <h1>Schools Management</h1>
+        <h1>Institutions Management</h1>
 
         {canEdit && (
           <button className="btn btn-success" onClick={handleAdd}>
-            Add School
+            Add Institution
           </button>
         )}
       </div>
@@ -900,7 +917,7 @@ const Schools = () => {
         <input
           type="text"
           className="form-control w-50"
-          placeholder="Search by name, affiliation no, UDISE, school code, transport label, website, phone, address..."
+          placeholder="Search by name, type, affiliation/AISHE, institution code, transport label, website, phone, address..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
@@ -912,11 +929,12 @@ const Schools = () => {
             <tr>
               <th>#</th>
               <th>Logo</th>
-              <th>Board Logo</th>
+              <th>Board / University Logo</th>
+              <th>Type</th>
               <th>Name & Description</th>
-              <th>Affiliation Number</th>
-              <th>UDISE Number</th>
-              <th>School Code</th>
+              <th>Affiliation / University Ref.</th>
+              <th>UDISE / AISHE Number</th>
+              <th>Institution Code</th>
               <th>Transport Label</th>
               <th>Phone</th>
               <th>Email</th>
@@ -936,7 +954,7 @@ const Schools = () => {
                   {school.logo ? (
                     <img
                       src={toAbs(school.logo)}
-                      alt="School Logo"
+                      alt="Institution Logo"
                       className="rounded border"
                       style={{
                         width: "50px",
@@ -953,7 +971,7 @@ const Schools = () => {
                   {school.board_logo ? (
                     <img
                       src={toAbs(school.board_logo)}
-                      alt="Board Logo"
+                      alt="Board / University Logo"
                       className="rounded border"
                       style={{
                         width: "50px",
@@ -964,6 +982,12 @@ const Schools = () => {
                   ) : (
                     "—"
                   )}
+                </td>
+
+                <td>
+                  <span className={`badge ${String(school.institution_type || "school").toLowerCase() === "college" ? "text-bg-primary" : "text-bg-success"}`}>
+                    {String(school.institution_type || "school").toLowerCase() === "college" ? "College" : "School"}
+                  </span>
                 </td>
 
                 <td>
@@ -1036,8 +1060,8 @@ const Schools = () => {
 
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={canEdit ? 14 : 13} className="text-center">
-                  No schools found
+                <td colSpan={canEdit ? 15 : 14} className="text-center">
+                  No institutions found
                 </td>
               </tr>
             )}

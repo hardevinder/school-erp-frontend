@@ -1,0 +1,24 @@
+.lecture-attendance-page .lecture-hero {
+  background: linear-gradient(135deg, rgba(37,99,235,.10), rgba(124,58,237,.08));
+  border: 1px solid rgba(37,99,235,.12);
+}
+.lecture-attendance-page .slot-card {
+  transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease;
+  cursor: pointer;
+}
+.lecture-attendance-page .slot-card:hover,
+.lecture-attendance-page .slot-card.active {
+  transform: translateY(-2px);
+  box-shadow: 0 .75rem 1.75rem rgba(15,23,42,.10) !important;
+  border-color: rgba(37,99,235,.35) !important;
+}
+.lecture-attendance-page .student-row {
+  border-bottom: 1px solid rgba(148,163,184,.18);
+}
+.lecture-attendance-page .status-select { min-width: 145px; }
+.lecture-attendance-page .attendance-kpi {
+  background: rgba(255,255,255,.82);
+  backdrop-filter: blur(8px);
+}
+.lecture-attendance-page .subject-progress { height: 7px; }
+.lecture-attendance-page .status-pill { text-transform: capitalize; }

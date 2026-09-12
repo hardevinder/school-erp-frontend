@@ -11,7 +11,7 @@ import CoScholasticEntry from "../pages/CoScholasticEntry";
 // API + sockets
 import api from "../api"; // your axios instance with auth
 import socket from "../socket";
-import DashboardInsights, { SummaryChart, WorkspaceTabs } from "./dashboard/DashboardInsights";
+import DashboardInsights, { SummaryChart } from "./dashboard/DashboardInsights";
 import { workspaceForPath } from "./dashboard/dashboardModel";
 
 // The separated chat container (REAL, not dummy)
@@ -79,7 +79,7 @@ export default function TeacherDashboard() {
 
   // Quick Actions search
   const [qaSearch, setQaSearch] = useState("");
-  const [workspace, setWorkspace] = useState("All");
+  const workspace = "ERP";
 
   const userRoles = useMemo(() => {
     try {
@@ -584,7 +584,7 @@ export default function TeacherDashboard() {
   }, [teacherName]);
 
   return (
-    <div className="container-fluid px-3 teacher-dash">
+    <div className="container-fluid px-3 teacher-dash dashboard-surface">
       {/* Header */}
       <div className="dash-hero mb-3 rounded-4 shadow-sm">
         <div className="dash-hero-inner p-3 p-md-4">
@@ -706,7 +706,7 @@ export default function TeacherDashboard() {
       <div className="dashboard-insights">
         <SummaryChart title="ERP · Weekly teaching schedule" subtitle="Scheduled periods by day, before substitutions" loading={loading} error={!loading && !weeklyClasses} data={weeklyClasses || []} />
       </div>
-      <DashboardInsights role="teacher" />
+      <DashboardInsights role="teacher" workspace="ERP" />
 
       {/* Errors */}
       {errors.length > 0 && (
@@ -782,9 +782,8 @@ export default function TeacherDashboard() {
           <div className="card shadow-sm border-0 rounded-4 overflow-hidden">
             <div className="card-header bg-white d-flex flex-wrap gap-2 align-items-center justify-content-between">
               <div>
-                <h6 className="mb-0">ERP & LMS · Quick Actions</h6>
-                <WorkspaceTabs value={workspace} onChange={setWorkspace} />
-                <small className="text-muted">Tap to open • Search to find quickly</small>
+                <h6 className="mb-0">ERP · Quick Actions</h6>
+                <small className="text-muted">School operations for your teacher role • Use the LMS tab for learning tools</small>
               </div>
 
               <div className="qa-search">

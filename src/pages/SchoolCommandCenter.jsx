@@ -107,7 +107,7 @@ export default function SchoolCommandCenter() {
 
 
   return (
-    <div className="cc-page">
+    <div className="cc-page dashboard-surface">
       <section className="cc-hero">
         <div>
           <div className="cc-kicker"><i className="bi bi-command me-2" />{profileLabel}</div>

@@ -5,6 +5,9 @@ import "../components/Sidebar.css";
 import Navbar from "../components/Navbar.jsx";
 import SchoolChatFloatingButton from "../components/SchoolChatFloatingButton"; // SCHOOL_CHAT_FLOATING_V16_2_IMPORT
 import DashboardSupportBanner from "../components/DashboardSupportBanner";
+import { InstitutionProvider } from "../institution/InstitutionContext"; // GLOBAL_INSTITUTION_UI_V2
+import InstitutionTerminologyBridge from "../institution/InstitutionTerminologyBridge";
+import { BranchProvider } from "../branch/BranchContext"; // EDUBRIDGE_MULTI_BRANCH_PROVIDER_V1
 
 const DASHBOARD_PATHS = new Set([
   "/dashboard",
@@ -53,7 +56,10 @@ export default function AppLayout() {
   }, [location.pathname]); // re-measure on route changes too
 
   return (
-    <>
+    <InstitutionProvider>
+      <BranchProvider>
+      <InstitutionTerminologyBridge />
+      <>
       {/* Always on top */}
       <Navbar />
 
@@ -68,6 +74,8 @@ export default function AppLayout() {
 
       {/* SCHOOL_CHAT_FLOATING_V16_2_MOUNT */}
       <SchoolChatFloatingButton />
-    </>
+      </>
+          </BranchProvider>
+    </InstitutionProvider>
   );
 }

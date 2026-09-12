@@ -21,6 +21,14 @@ const SHOULD_TAG = (url = "") => {
 };
 
 axios.interceptors.request.use((config) => {
+    // EDUBRIDGE_MULTI_BRANCH_GLOBAL_AXIOS_V1
+    config.headers = config.headers || {};
+    const branchUrl = String(config.url || "");
+    const activeBranch = localStorage.getItem("edubridgeActiveBranchId");
+    if (activeBranch && !branchUrl.includes("/branches") && !config.headers["X-Branch-Id"]) {
+      config.headers["X-Branch-Id"] = activeBranch;
+    }
+
   try {
     const adm = getActingAdmission();
     if (adm) {

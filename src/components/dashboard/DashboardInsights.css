@@ -17,3 +17,35 @@
 .dashboard-workspaces button { border:1px solid #d8e2ee; border-radius:8px; background:#fff; color:#334155; padding:7px 10px; font-size:.8rem; font-weight:600; }
 .dashboard-workspaces button.selected { background:#1d4ed8; color:#fff; border-color:#1d4ed8; }
 .dashboard-workspaces button:focus-visible { outline:3px solid #60a5fa; outline-offset:2px; }
+
+.dashboard-workspaces {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px;
+  padding: 4px;
+  margin: 10px 0;
+  border: 1px solid #dbe4ef;
+  border-radius: 11px;
+  background: #f1f5f9;
+}
+.dashboard-workspaces button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #475569;
+  padding: 7px 8px;
+  font-size: .78rem;
+  font-weight: 800;
+  letter-spacing: .025em;
+  transition: background .16s ease, color .16s ease, box-shadow .16s ease;
+}
+.dashboard-workspaces button.selected { background: #fff; color: #1d4ed8; box-shadow: 0 2px 8px rgba(15,23,42,.10); }
+.dashboard-workspaces button:focus-visible { outline: 3px solid #93c5fd; outline-offset: 1px; }
+.dashboard-workspaces.is-compact { margin: 0; width: 100%; }
+.dashboard-insight-empty-card { display:flex; align-items:center; gap:14px; }
+.dashboard-insight-empty-icon { width:48px; height:48px; flex:0 0 48px; display:grid; place-items:center; border-radius:14px; background:#eef2ff; color:#4338ca; font-size:1.25rem; }

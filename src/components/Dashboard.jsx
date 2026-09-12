@@ -1164,7 +1164,7 @@ const Dashboard = () => {
   /* -------------------------------- RENDER ------------------------------- */
   return (
     <div
-      className="dashboard-bg"
+      className="dashboard-bg dashboard-surface"
       style={{
         backgroundImage:
           "linear-gradient(135deg, rgba(99, 102, 241, 0.15), rgba(34, 197, 94, 0.15), rgba(245, 158, 11, 0.15))",

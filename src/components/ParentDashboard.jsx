@@ -211,7 +211,7 @@ export default function ParentDashboard() {
   }
 
   return (
-    <div className="container-fluid px-2 px-sm-3 pb-5">
+    <div className="container-fluid px-2 px-sm-3 pb-5 dashboard-surface">
       {/* Header / Picker */}
       <div className="card border-0 shadow-lg rounded-4 my-3">
         <div className="card-body p-3 p-sm-4">

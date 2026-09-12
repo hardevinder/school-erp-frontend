@@ -350,7 +350,7 @@ export default function Dashboard() {
 
 
   return (
-    <div className="container-fluid px-3 py-3 dashboard-pro">
+    <div className="container-fluid px-3 py-3 dashboard-pro dashboard-surface">
       {/* HERO HEADER */}
       <section className="hero-pro mb-4">
         <div className="hero-overlay p-3 p-md-4 rounded-4 shadow-sm">

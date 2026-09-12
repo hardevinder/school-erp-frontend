@@ -7,10 +7,15 @@ import './DashboardInsights.css';
 
 const colors = ['#2563eb', '#0d9488', '#d97706', '#7c3aed', '#e11d48', '#64748b'];
 
-export function WorkspaceTabs({ value, onChange }) {
-  return <div className="dashboard-workspaces" role="group" aria-label="ERP and LMS workspace">
-    {['All', 'ERP', 'LMS'].map((item) => <button type="button" key={item} aria-pressed={value === item}
-      onClick={() => onChange(item)} className={value === item ? 'selected' : ''}>{item === 'All' ? 'All modules' : item}</button>)}
+export function WorkspaceTabs({ value, onChange, compact = false }) {
+  return <div className={`dashboard-workspaces ${compact ? 'is-compact' : ''}`} role="tablist" aria-label="Choose EduBridge workspace">
+    {[
+      { key: 'ERP', icon: 'bi-buildings', label: 'ERP' },
+      { key: 'LMS', icon: 'bi-mortarboard', label: 'LMS' },
+    ].map((item) => <button type="button" role="tab" key={item.key} aria-selected={value === item.key}
+      onClick={() => onChange(item.key)} className={value === item.key ? 'selected' : ''}>
+      <i className={`bi ${item.icon}`} aria-hidden="true" /><span>{item.label}</span>
+    </button>)}
   </div>;
 }
 
@@ -30,20 +35,30 @@ export function SummaryChart({ title, subtitle, data, loading, error }) {
   </section>;
 }
 
-export default function DashboardInsights({ role, admission }) {
+export default function DashboardInsights({ role, admission, workspace = 'ERP' }) {
   const [refresh, setRefresh] = useState(0);
   const [state, setState] = useState({});
-  const teacher = role === 'teacher';
+  const normalizedRole = String(role || '').toLowerCase();
+  const isLms = workspace === 'LMS';
+  const canReadLearning = [
+    'teacher', 'department_hod', 'admin', 'superadmin', 'principal',
+    'academic_coordinator', 'coordinator', 'examination',
+  ].includes(normalizedRole);
+
   useEffect(() => {
     const controller = new AbortController();
     setState({});
-    const sources = teacher ? [
-      ['messages', '/messages/me', { page: 1, limit: 5 }],
-      ['unread', '/messages/me', { page: 1, limit: 1, unreadOnly: true }],
-      ['assessments', '/api/assessments', {}],
-      ['classes', '/api/online-classes', {}],
-    ] : [['messages', '/messages/me', { page: 1, limit: 5, admissionNumber: admission }],
-      ['unread', '/messages/me', { page: 1, limit: 1, unreadOnly: true, admissionNumber: admission }]];
+
+    const sources = isLms
+      ? (canReadLearning ? [
+          ['assessments', '/api/assessments', {}],
+          ['classes', '/api/online-classes', {}],
+        ] : [])
+      : [
+          ['messages', '/messages/me', { page: 1, limit: 5, admissionNumber: admission }],
+          ['unread', '/messages/me', { page: 1, limit: 1, unreadOnly: true, admissionNumber: admission }],
+        ];
+
     sources.forEach(async ([key, url, params]) => {
       try {
         const { data } = await api.get(url, { params, signal: controller.signal });
@@ -55,26 +70,37 @@ export default function DashboardInsights({ role, admission }) {
       }
     });
     return () => controller.abort();
-  }, [teacher, admission, refresh]);
+  }, [isLms, canReadLearning, admission, refresh]);
 
   const upcoming = upcomingClasses(state.classes?.rows || []);
+
+  if (isLms && !canReadLearning) {
+    return <div className="dashboard-insights">
+      <div className="dashboard-insight-heading"><div><h2>LMS at a glance</h2><p>Learning tools available for your role</p></div></div>
+      <section className="dashboard-insight-card dashboard-insight-empty-card">
+        <div className="dashboard-insight-empty-icon"><i className="bi bi-mortarboard" /></div>
+        <div><h3>Learning workspace ready</h3><p className="dashboard-insight-caption mb-0">Use the LMS menu to open learning resources available to your account.</p></div>
+      </section>
+    </div>;
+  }
+
   return <div className="dashboard-insights">
-    <div className="dashboard-insight-heading"><div><h2>At a glance</h2><p>ERP · Communication {teacher && ' / LMS · Teaching and learning'}</p></div>
+    <div className="dashboard-insight-heading"><div><h2>{isLms ? 'LMS at a glance' : 'ERP at a glance'}</h2><p>{isLms ? 'Teaching, assessments and live learning' : 'School communication and operations'}</p></div>
       <button type="button" className="btn btn-sm btn-outline-primary" onClick={() => setRefresh((v) => v + 1)}>Refresh summaries</button>
     </div>
     <div className="dashboard-insight-grid">
-      <section className="dashboard-insight-card">
-        <h3>ERP · Messages</h3>
+      {!isLms && <section className="dashboard-insight-card">
+        <h3>Messages</h3>
         <p className="dashboard-insight-caption">{!state.unread ? 'Loading unread count…' : state.unread.error ? 'Unread count unavailable' : `${state.unread.total} unread conversations`}</p>
         {!state.messages ? <p role="status">Loading messages…</p> : state.messages.error ? <p role="status">Messages unavailable. Refresh to retry.</p> : !state.messages.rows.length ? <p>No messages yet.</p> : <ul className="dashboard-preview-list">{state.messages.rows.slice(0, 3).map((row) => <li key={row.id}>
           <Link to="/messages">{row.thread?.subject || 'Message'}</Link><p>{row.thread?.messages?.[0]?.body || 'Open conversation to read more.'}</p>
         </li>)}</ul>}
         <Link to="/messages">Open messages →</Link>
-      </section>
-      {teacher && <>
-        <SummaryChart title="LMS · Assessment overview" subtitle="Your visible assessments, grouped by status" data={statusCounts(state.assessments?.rows || [])} loading={!state.assessments} error={state.assessments?.error} />
-        <section className="dashboard-insight-card"><h3>LMS · Upcoming online classes</h3><p className="dashboard-insight-caption">Scheduled and ongoing sessions</p>
-          {!state.classes ? <p role="status">Loading classes…</p> : state.classes.error ? <p role="status">Classes unavailable. Refresh to retry.</p> : !upcoming.length ? <p>No upcoming online classes.</p> : <ul className="dashboard-preview-list">{upcoming.slice(0, 3).map((row) => <li key={row.id}><Link to="/online-classes">{row.title}</Link><p>{new Date(row.start_time).toLocaleString()}</p></li>)}</ul>}
+      </section>}
+      {isLms && canReadLearning && <>
+        <SummaryChart title="Assessment overview" subtitle="Visible assessments grouped by status" data={statusCounts(state.assessments?.rows || [])} loading={!state.assessments} error={state.assessments?.error} />
+        <section className="dashboard-insight-card"><h3>Upcoming online classes</h3><p className="dashboard-insight-caption">Scheduled and ongoing sessions</p>
+          {!state.classes ? <p role="status">Loading classes…</p> : state.classes.error ? <p role="status">Classes unavailable. Refresh to retry.</p> : !upcoming.length ? <p>No upcoming online classes.</p> : <ul className="dashboard-preview-list">{upcoming.slice(0, 4).map((row) => <li key={row.id}><Link to="/online-classes">{row.title}</Link><p>{new Date(row.start_time).toLocaleString()}</p></li>)}</ul>}
           <Link to="/online-classes">Open online classes →</Link>
         </section>
       </>}

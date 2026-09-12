@@ -8,6 +8,11 @@ import 'bootstrap/dist/css/bootstrap.min.css';
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { getMessaging, getToken } from "firebase/messaging";
 import "bootstrap-icons/font/bootstrap-icons.css";
+import { installBranchFetch } from "./branch/installBranchFetch"; // EDUBRIDGE_MULTI_BRANCH_FETCH_V1
+import { installBranchAxios } from "./branch/installBranchAxios"; // EDUBRIDGE_MULTI_BRANCH_AXIOS_V1
+import "./branchSelectionPersistence";
+installBranchFetch();
+installBranchAxios();
 
 
 // Your Firebase configuration (replace with your actual config)

@@ -1,6 +1,6 @@
 const learningPaths = new Set([
   '/assignments', '/assignment-marking', '/my-assignments', '/assessments',
-  '/online-classes', '/lesson-plan', '/lesson-plans', '/student-lesson-plans',
+  '/online-classes', '/learning-resources', '/clubs-activities', '/notebook-checking', '/lesson-plan', '/lesson-plans', '/student-lesson-plans',
   '/syllabus-breakdown', '/digital-diary', '/student-diary', '/my-library',
   '/marks-entry', '/co-scholastic-entry', '/student-remarks-entry',
   '/report-card-generator', '/reports/classwise-result-summary',

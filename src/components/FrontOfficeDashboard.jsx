@@ -426,7 +426,7 @@ export default function FrontOfficeDashboard() {
 
   return (
     <div
-      className="fo-bg"
+      className="fo-bg dashboard-surface"
       style={{
         backgroundImage:
           "radial-gradient(circle at top left, rgba(37, 99, 235, 0.15), transparent 30%), radial-gradient(circle at top right, rgba(168, 85, 247, 0.12), transparent 24%), linear-gradient(180deg, #f8fbff 0%, #f8fafc 100%)",

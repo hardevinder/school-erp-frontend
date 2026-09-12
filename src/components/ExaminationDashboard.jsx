@@ -351,7 +351,7 @@ export default function ExaminationDashboard() {
   );
 
   return (
-    <div className="container-fluid px-3 py-2 exam-dash">
+    <div className="container-fluid px-3 py-2 exam-dash dashboard-surface">
       {/* Header (TeacherDashboard feel) */}
       <div className="dash-hero mb-3 rounded-4 shadow-sm">
         <div className="dash-hero-inner p-3 p-md-4">

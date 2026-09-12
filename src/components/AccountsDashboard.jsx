@@ -171,7 +171,7 @@ function TileSection({ title, subtitle, tiles }) {
 export default function AccountsDashboard() {
   return (
     <div
-      className="accounts-tiles-bg"
+      className="accounts-tiles-bg dashboard-surface"
       style={{
         background:
           "radial-gradient(circle at top left, rgba(99,102,241,.10), transparent 28%), radial-gradient(circle at top right, rgba(34,197,94,.10), transparent 25%), linear-gradient(135deg, #f8fafc, #eef2ff)",

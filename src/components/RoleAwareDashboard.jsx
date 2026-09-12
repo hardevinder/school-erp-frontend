@@ -2,6 +2,7 @@
 import React from "react";
 import { Navigate } from "react-router-dom";
 import { useRoles } from "../hooks/useRoles";
+import { defaultWorkspaceForRole, useWorkspace } from "../hooks/useWorkspace";
 
 import Dashboard from "./Dashboard";
 import FrontOfficeDashboard from "./FrontOfficeDashboard";
@@ -10,77 +11,90 @@ import TeacherDashboard from "./TeacherDashboard";
 import StudentDashboard from "./StudentDashboard";
 import AcademicCoordinatorDashboard from "./AcademicCoordinatorDashboard";
 import HRDashboard from "./HRDashboard";
-
 import LibraryDashboard from "./LibraryDashboard";
-
-// ✅ Transport Dashboard
 import TransportDashboard from "./TransportDashboard";
-
-// ✅ NEW: Transport Attendance (Mobile UI for Driver/Conductor)
 import TransportAttendanceMobile from "../pages/TransportAttendanceMobile";
-
-// ✅ NEW: Examination Dashboard
 import ExaminationDashboard from "./ExaminationDashboard";
+import LmsWorkspaceDashboard from "./dashboard/LmsWorkspaceDashboard";
+import "./dashboard/DashboardPolish.css";
+
+function ErpWorkspaceLabel() {
+  return (
+    <div className="workspace-dashboard-strip">
+      <span className="workspace-dashboard-pill"><i className="bi bi-buildings" /> ERP</span>
+      <span><strong>ERP Workspace</strong> · School administration & operations</span>
+    </div>
+  );
+}
 
 export default function RoleAwareDashboard() {
   const { activeRole } = useRoles();
   const role = (activeRole || "").toLowerCase();
+  const { workspace } = useWorkspace(defaultWorkspaceForRole(role));
 
+  if (workspace === "LMS") {
+    return <LmsWorkspaceDashboard role={role} />;
+  }
+
+  let dashboard;
   switch (role) {
     case "frontoffice":
-      return <FrontOfficeDashboard />;
-
+      dashboard = <FrontOfficeDashboard />;
+      break;
     case "admission":
-      return <AdmissionDashboard />;
-
-    // ✅ Transport office / admin
+      dashboard = <AdmissionDashboard />;
+      break;
     case "transport":
     case "transport_admin":
-      return <TransportDashboard />;
-
-    // ✅ Driver/Conductor should land directly on attendance page
+      dashboard = <TransportDashboard />;
+      break;
     case "driver":
     case "conductor":
       return <TransportAttendanceMobile />;
-
-    // ✅ Examination role
     case "examination":
-      return <ExaminationDashboard />;
-
-    // ✅ Library
+      dashboard = <ExaminationDashboard />;
+      break;
     case "librarian":
     case "library":
     case "libraryadmin":
-      return <LibraryDashboard />;
-
+      dashboard = <LibraryDashboard />;
+      break;
     case "teacher":
-      return <TeacherDashboard />;
-
+    case "department_hod":
+      dashboard = <TeacherDashboard />;
+      break;
     case "student":
-      return <StudentDashboard />;
-
+      dashboard = <StudentDashboard />;
+      break;
     case "academic_coordinator":
-      return <AcademicCoordinatorDashboard />;
-
+    case "coordinator":
+      dashboard = <AcademicCoordinatorDashboard />;
+      break;
     case "hr":
-      return <HRDashboard />;
-
+      dashboard = <HRDashboard />;
+      break;
     case "accounts":
+    case "account":
+    case "accountant":
       return <Navigate to="/accounts-dashboard" replace />;
-
-    // ✅ Principal leadership cockpit
     case "principal":
       return <Navigate to="/command-center" replace />;
-
-    // ✅ Inventory roles
     case "inventoryadmin":
     case "storeincharge":
     case "labincharge":
       return <Navigate to="/inventory" replace />;
-
     case "admin":
     case "superadmin":
+    case "super_admin":
     default:
-      return <Dashboard />;
+      dashboard = <Dashboard />;
+      break;
   }
+
+  return (
+    <div className="workspace-dashboard-host">
+      <ErpWorkspaceLabel />
+      {dashboard}
+    </div>
+  );
 }

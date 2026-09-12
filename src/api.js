@@ -25,6 +25,16 @@ api.interceptors.request.use(
 
       config.headers = config.headers || {};
       if (token) config.headers.Authorization = token;
+
+      // EDUBRIDGE_MULTI_BRANCH_API_V1
+      // Every normal ERP/LMS request carries the globally selected branch.
+      // Branch-management discovery itself is intentionally unscoped.
+      const skipBranch = String(config.headers["X-Skip-Branch"] || "") === "1";
+      const url = String(config.url || "");
+      if (!skipBranch && !url.startsWith("/branches")) {
+        const activeBranch = localStorage.getItem("edubridgeActiveBranchId");
+        if (activeBranch) config.headers["X-Branch-Id"] = activeBranch;
+      }
     } catch (err) {
       // reading localStorage can throw in some edge cases (e.g. privacy mode)
       // swallow the error and allow the request to continue without Authorization

@@ -107,7 +107,7 @@ export default function InventoryDashboard() {
   };
 
   return (
-    <div className="container-fluid px-3 py-3">
+    <div className="container-fluid px-3 py-3 dashboard-surface">
       <InventoryPageHeader
         title="Inventory Dashboard"
         subtitle="Overview of categories, items, stock, low stock alerts and recent transactions"

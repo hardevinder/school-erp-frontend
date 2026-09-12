@@ -1,0 +1,32 @@
+.learning-resources-page { max-width: 1500px; }
+.lr-hero { padding: 1.25rem 1.35rem; border-radius: 18px; background: linear-gradient(135deg, rgba(13,110,253,.08), rgba(111,66,193,.07)); border: 1px solid rgba(13,110,253,.09); }
+.lr-eyebrow { font-size: .74rem; letter-spacing: .12em; text-transform: uppercase; font-weight: 700; color: var(--bs-primary); }
+.lr-create-btn { border-radius: 12px; }
+.lr-filter-card, .lr-resource-card, .lr-empty { border-radius: 16px; }
+.lr-resource-card { transition: transform .16s ease, box-shadow .16s ease; }
+.lr-resource-card:hover { transform: translateY(-2px); }
+.lr-title { overflow-wrap: anywhere; }
+.lr-description { white-space: pre-wrap; color: #4b5563; }
+.lr-target-pill { display: inline-flex; align-items: center; padding: .34rem .62rem; border-radius: 999px; background: #f1f5f9; color: #475569; font-size: .78rem; font-weight: 600; }
+.lr-section-label { font-size: .76rem; text-transform: uppercase; letter-spacing: .06em; color: #64748b; font-weight: 700; margin-bottom: .45rem; }
+.lr-item-list { display: grid; gap: .45rem; }
+.lr-file-item, .lr-link-item { display: flex; gap: .65rem; align-items: center; padding: .68rem .78rem; border: 1px solid #e5e7eb; border-radius: 11px; color: #334155; text-decoration: none; background: #fff; }
+.lr-file-item:hover, .lr-link-item:hover { border-color: rgba(13,110,253,.35); background: #f8fbff; color: #0d6efd; }
+.lr-file-item .bi-file-earmark-pdf { color: #dc3545; }
+.lr-link-item .bi-youtube { color: #dc3545; font-size: 1.2rem; }
+.lr-modal-backdrop { background: rgba(15,23,42,.45); backdrop-filter: blur(2px); overflow-y: auto; }
+.lr-form-section { border: 1px solid #e5e7eb; border-radius: 14px; padding: 1rem; background: #fbfdff; }
+.lr-dropzone { min-height: 195px; border: 2px dashed #b8c7dc; border-radius: 14px; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; background: white; transition: all .18s ease; text-align: center; padding: 1rem; }
+.lr-dropzone:hover, .lr-dropzone.is-dragging { border-color: #0d6efd; background: #f2f7ff; transform: scale(1.005); }
+.lr-selected-files { max-height: 260px; overflow: auto; display: grid; gap: .4rem; }
+.lr-selected-file { display: flex; gap: .55rem; align-items: center; border-radius: 10px; padding: .55rem .65rem; background: #fff; border: 1px solid #e5e7eb; }
+.lr-selected-file > .bi { color: #dc3545; }
+.lr-audience-chip { display: inline-flex; align-items: center; gap: .35rem; background: #e9f2ff; color: #174ea6; border-radius: 999px; padding: .34rem .42rem .34rem .7rem; font-size: .8rem; font-weight: 600; }
+.lr-audience-chip button { border: 0; background: transparent; color: inherit; padding: 0 .1rem; line-height: 1; }
+.min-w-0 { min-width: 0; }
+@media (max-width: 767.98px) {
+  .learning-resources-page { padding-left: .75rem !important; padding-right: .75rem !important; }
+  .lr-hero { padding: 1rem; }
+  .lr-modal-backdrop .modal-dialog { margin: .5rem; }
+  .lr-modal-backdrop .modal-body { padding: 1rem !important; }
+}

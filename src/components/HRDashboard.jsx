@@ -376,7 +376,7 @@ export default function HRDashboard() {
     latestLeave?.leaveType?.name || latestLeave?.leave_type?.name || "—";
 
   return (
-    <div className="container-fluid px-3 py-3">
+    <div className="container-fluid px-3 py-3 dashboard-surface">
       <div
         className="d-flex flex-wrap align-items-center justify-content-between mb-3 rounded-4 p-3 shadow-sm"
         style={{

@@ -1,0 +1,54 @@
+/* Shared visual polish for every EduBridge dashboard. Scoped with dashboard-surface. */
+.dashboard-surface {
+  --dash-border: #e6ebf2;
+  --dash-text: #172033;
+  --dash-muted: #64748b;
+  --dash-shadow: 0 8px 26px rgba(15, 23, 42, .055);
+  color: var(--dash-text);
+}
+
+.dashboard-surface .card,
+.dashboard-surface .dashboard-insight-card,
+.dashboard-surface .dashboard-header-card,
+.dashboard-surface .operation-item,
+.dashboard-surface .metric-card {
+  border-color: var(--dash-border) !important;
+  box-shadow: var(--dash-shadow) !important;
+}
+
+.dashboard-surface .card:not(.no-hover),
+.dashboard-surface .dashboard-insight-card,
+.dashboard-surface .operation-item,
+.dashboard-surface .metric-card {
+  transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+}
+
+.dashboard-surface .card:not(.no-hover):hover,
+.dashboard-surface .dashboard-insight-card:hover,
+.dashboard-surface .operation-item:hover,
+.dashboard-surface .metric-card:hover {
+  border-color: #d6deea !important;
+  box-shadow: 0 14px 34px rgba(15, 23, 42, .075) !important;
+}
+
+.dashboard-surface .card-header.bg-white,
+.dashboard-surface .card-header:not([class*="bg-"]) {
+  background: linear-gradient(180deg, #ffffff, #fbfcfe) !important;
+}
+
+.dashboard-surface .table { --bs-table-bg: transparent; }
+.dashboard-surface .table thead th { color: #64748b; font-size: .74rem; text-transform: uppercase; letter-spacing: .035em; border-bottom-color: #e8edf4; }
+.dashboard-surface .table tbody tr { transition: background-color .15s ease; }
+.dashboard-surface .table tbody tr:hover { background: #f8fafc; }
+.dashboard-surface .btn { border-radius: 10px; font-weight: 600; }
+.dashboard-surface .badge { font-weight: 650; letter-spacing: .01em; }
+
+.workspace-dashboard-host { min-height: 100%; background: #f8fafc; }
+.workspace-dashboard-strip { display: flex; align-items: center; gap: 10px; padding: 10px 18px; border-bottom: 1px solid #e7ebf1; background: rgba(255,255,255,.90); backdrop-filter: blur(10px); color: #475569; font-size: .82rem; }
+.workspace-dashboard-strip strong { color: #1e293b; }
+.workspace-dashboard-pill { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 999px; color: #1d4ed8; background: #eff6ff; border: 1px solid #dbeafe; font-weight: 800; font-size: .74rem; letter-spacing: .045em; }
+
+@media (max-width: 767.98px) {
+  .workspace-dashboard-strip { padding-inline: 12px; }
+  .dashboard-surface .card { border-radius: 16px !important; }
+}

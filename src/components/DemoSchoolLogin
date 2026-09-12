@@ -152,6 +152,13 @@ const Login = () => {
       storage.setItem("userId", user.id);
       storage.setItem("name", user.name);
 
+      // GLOBAL_INSTITUTION_UI_V2_USER_SCHOOL
+      if (user?.school_id || user?.schoolId) {
+        const sid = String(user.school_id || user.schoolId);
+        localStorage.setItem("schoolId", sid);
+        localStorage.setItem("edubridgeInstitutionId", sid);
+      }
+
       axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
     } catch (e) {
       console.warn("Storage failed", e);

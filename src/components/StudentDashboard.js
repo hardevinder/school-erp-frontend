@@ -12,9 +12,16 @@ import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import socket from "../socket";
 import { Link } from "react-router-dom";
-import DashboardInsights, { SummaryChart, WorkspaceTabs } from "./dashboard/DashboardInsights";
+import DashboardInsights, { SummaryChart } from "./dashboard/DashboardInsights";
 import { workspaceForPath } from "./dashboard/dashboardModel";
 import { getAuthToken } from "../utils/student360Session";
+import { useInstitution } from "../institution/InstitutionContext";
+import CollegeLectureAttendanceWidget from "./CollegeLectureAttendanceWidget"; // COLLEGE_LECTURE_ATTENDANCE_DASHBOARD_V1
+import CollegeCgpaWidget from "./CollegeCgpaWidget"; // COLLEGE_CREDITS_SGPA_CGPA_DASHBOARD_V1
+import CollegeBacklogWidget from "./CollegeBacklogWidget"; // COLLEGE_BACKLOG_REAPPEAR_DASHBOARD_V1
+import CollegeEnrollmentWidget from "./CollegeEnrollmentWidget"; // COLLEGE_UNIVERSITY_ENROLLMENT_DASHBOARD_V1
+import CollegeGradeCardWidget from "./CollegeGradeCardWidget"; // COLLEGE_GRADECARD_TRANSCRIPT_DASHBOARD_V1
+import CollegeStudent360Widget from "./CollegeStudent360Widget"; // COLLEGE_STUDENT_360_DASHBOARD_V1
 
 const API_URL = process.env.REACT_APP_API_URL || "";
 const token = getAuthToken;
@@ -44,7 +51,8 @@ const isOverdue = (due) => {
 
 export default function StudentDashboard() {
   const [loading, setLoading] = useState(true);
-  const [workspace, setWorkspace] = useState("All");
+  const workspace = "ERP";
+  const { isCollege, terms } = useInstitution();
   const [dashboardRefresh, setDashboardRefresh] = useState(0);
   const [summaryErrors, setSummaryErrors] = useState({});
   const [err, setErr] = useState(null);
@@ -56,6 +64,14 @@ export default function StudentDashboard() {
     absent: 0,
     leave: 0,
     total: 0,
+  });
+
+  const [lectureAttendance, setLectureAttendance] = useState({
+    threshold: 75,
+    overall: { total: 0, attended: 0, present: 0, absent: 0, late: 0, leave: 0, on_duty: 0, percentage: 0, shortage: false, lectures_needed: 0 },
+    subjects: [],
+    today: [],
+    recent: [],
   });
 
   const [assignSummary, setAssignSummary] = useState({
@@ -187,6 +203,25 @@ export default function StudentDashboard() {
 
         if (!ac.signal.aborted) setAttendance({ present, absent, leave, total: monthRows.length });
       } catch { if (!ac.signal.aborted) setSummaryErrors((previous) => ({ ...previous, attendance: true })); }
+    };
+
+    const fetchLectureAttendance = async () => {
+      if (!isCollege) return;
+      if (!userRoles.includes("student")) {
+        await fetchAttendance();
+        return;
+      }
+      try {
+        const res = await fetch(`${API_URL}/lecture-attendance/student/me/summary`, {
+          headers,
+          signal: ac.signal,
+        });
+        if (!res.ok) throw new Error("Could not load lecture attendance");
+        const result = await res.json();
+        if (!ac.signal.aborted) setLectureAttendance(result || {});
+      } catch {
+        if (!ac.signal.aborted) setSummaryErrors((previous) => ({ ...previous, lectureAttendance: true }));
+      }
     };
 
     const fetchAssignments = async () => {
@@ -389,13 +424,14 @@ export default function StudentDashboard() {
       setLoading(true);
       setSummaryErrors({});
       setAttendance({ present: 0, absent: 0, leave: 0, total: 0 });
+      setLectureAttendance({ threshold: 75, overall: { total: 0, attended: 0, present: 0, absent: 0, late: 0, leave: 0, on_duty: 0, percentage: 0, shortage: false, lectures_needed: 0 }, subjects: [], today: [], recent: [] });
       setAssignSummary({ total: 0, submitted: 0, graded: 0, overdue: 0, next3: [] });
       setStudentInfo(null);
       setFeeSummary({ totalDue: 0, totalRecv: 0, totalConcession: 0, vanDue: 0, vanRecv: 0 });
       setTodaySchedule({ items: [], nextUp: null });
       setDiarySummary({ total: 0, unack: 0, latest: [] });
       await Promise.all([
-        fetchAttendance(),
+        isCollege ? fetchLectureAttendance() : fetchAttendance(),
         fetchAssignments(),
         fetchCirculars(),
         fetchFees(),
@@ -412,10 +448,12 @@ export default function StudentDashboard() {
       ac.abort();
       socket.off("diaryChanged", onDiaryChanged);
     };
-  }, [canView, admission, userRoles, dashboardRefresh]);
+  }, [canView, admission, userRoles, dashboardRefresh, isCollege]);
 
   const presencePct =
     attendance.total > 0 ? Math.round((attendance.present / Math.max(attendance.total, 1)) * 100) : 0;
+  const lecturePct = Number(lectureAttendance?.overall?.percentage || 0);
+  const dashboardAttendancePct = isCollege ? lecturePct : presencePct;
 
   const Skeleton = () => (
     <div className="placeholder-glow p-3">
@@ -470,7 +508,7 @@ export default function StudentDashboard() {
   }
 
   return (
-    <div className="container-fluid px-2 px-sm-3 pb-5">
+    <div className="container-fluid px-2 px-sm-3 pb-5 dashboard-surface">
       {/* Top hero */}
       <div className="hero rounded-4 p-3 p-sm-4 my-3 position-relative overflow-hidden">
         <div className="hero-bg"></div>
@@ -491,13 +529,13 @@ export default function StudentDashboard() {
               {studentInfo?.class_name && (
                 <span className="chip chip-glass animate-slide-in" style={{ animationDelay: "0.1s" }}>
                   <i className="bi bi-mortarboard me-1"></i>
-                  Class: <strong className="ms-1">{studentInfo.class_name}</strong>
+                  {terms.class}: <strong className="ms-1">{studentInfo.class_name}</strong>
                 </span>
               )}
               {studentInfo?.section_name && (
                 <span className="chip chip-glass animate-slide-in" style={{ animationDelay: "0.2s" }}>
                   <i className="bi bi-book me-1"></i>
-                  Section: <strong className="ms-1">{studentInfo.section_name}</strong>
+                  {terms.section}: <strong className="ms-1">{studentInfo.section_name}</strong>
                 </span>
               )}
             </div>
@@ -521,10 +559,10 @@ export default function StudentDashboard() {
         {/* KPI strip */}
         <div className="row g-2 mt-3 position-relative z-2">
           <StatCard
-            title="Attendance"
-            value={`${presencePct}%`}
-            sub={`${attendance.present}/${attendance.total} present`}
-            pillClass="text-bg-success"
+            title={isCollege ? "Lecture Attendance" : "Attendance"}
+            value={`${dashboardAttendancePct}%`}
+            sub={isCollege ? `${lectureAttendance?.overall?.attended || 0}/${lectureAttendance?.overall?.total || 0} lectures attended` : `${attendance.present}/${attendance.total} present`}
+            pillClass={isCollege && lectureAttendance?.overall?.shortage ? "text-bg-danger" : "text-bg-success"}
             icon="bi-check-circle"
           />
           <StatCard
@@ -555,28 +593,139 @@ export default function StudentDashboard() {
 
       <div className="d-flex justify-content-end mb-2"><button type="button" className="btn btn-sm btn-outline-primary" onClick={() => setDashboardRefresh((v) => v + 1)} disabled={loading}>Refresh dashboard</button></div>
       <div className="dashboard-insights dashboard-insight-grid">
-        <SummaryChart title="ERP · Attendance this month" subtitle="Recorded attendance days" loading={loading} error={summaryErrors.attendance}
-          data={[{ name: 'Present', value: attendance.present }, { name: 'Absent', value: attendance.absent }, { name: 'Leave', value: attendance.leave }]} />
-        <SummaryChart title="LMS · Legacy assignment progress" subtitle="Submitted, graded and outstanding work" loading={loading} error={summaryErrors.assignments}
-          data={[{ name: 'Submitted', value: assignSummary.submitted }, { name: 'Graded', value: assignSummary.graded }, { name: 'Overdue', value: assignSummary.overdue }, { name: 'Pending', value: Math.max(0, assignSummary.total - assignSummary.submitted - assignSummary.graded - assignSummary.overdue) }]} />
+        <SummaryChart
+          title={isCollege ? "ERP · Lecture attendance" : "ERP · Attendance this month"}
+          subtitle={isCollege ? "Recorded lecture attendance" : "Recorded attendance days"}
+          loading={loading}
+          error={isCollege ? summaryErrors.lectureAttendance : summaryErrors.attendance}
+          data={isCollege
+            ? [
+                { name: "Present", value: lectureAttendance?.overall?.present || 0 },
+                { name: "Absent", value: lectureAttendance?.overall?.absent || 0 },
+                { name: "Late", value: lectureAttendance?.overall?.late || 0 },
+                { name: "OD", value: lectureAttendance?.overall?.on_duty || 0 },
+              ]
+            : [
+                { name: "Present", value: attendance.present },
+                { name: "Absent", value: attendance.absent },
+                { name: "Leave", value: attendance.leave },
+              ]}
+        />
       </div>
-      <DashboardInsights role="student" admission={admission} />
-      <h2 className="h5 mt-4">ERP & LMS · Quick access</h2>
-      <p className="text-muted small">ERP: school services and administration. LMS: lessons, assignments and assessments.</p>
-      <WorkspaceTabs value={workspace} onChange={setWorkspace} />
+      <DashboardInsights role="student" admission={admission} workspace="ERP" />
+      {isCollege && <CollegeLectureAttendanceWidget data={lectureAttendance} loading={loading} error={summaryErrors.lectureAttendance} />} 
+      {/* COLLEGE_CREDITS_SGPA_CGPA_WIDGET_V1 */}
+      {isCollege && userRoles.includes("student") && <CollegeCgpaWidget />} 
+      {isCollege && userRoles.includes("student") && <CollegeBacklogWidget />} 
+      {isCollege && userRoles.includes("student") && <CollegeEnrollmentWidget />} 
+      {isCollege && userRoles.includes("student") && <CollegeGradeCardWidget />} 
+      {isCollege && userRoles.includes("student") && <CollegeStudent360Widget />} 
+      <h2 className="h5 mt-4">ERP · Quick access</h2>
+      <p className="text-muted small">School services and administration. Use the LMS tab for lessons, assignments and assessments.</p>
       {/* Quick actions grid */}
       <div className="row g-3 mb-3">
         <QuickLink to="/assessments?assessment_type=assignment" icon={<i className="bi bi-journal-check text-primary" />} label="LMS Assignments" desc="Assignments, submissions and feedback" />
         <QuickLink to="/assessments" icon={<i className="bi bi-clipboard2-check text-primary" />} label="Tests & Results" desc="Assessments and published results" />
         <QuickLink to="/online-classes" icon={<i className="bi bi-camera-video text-primary" />} label="Online Classes" desc="View sessions and join classes" />
         <QuickLink to="/messages" icon={<i className="bi bi-envelope text-primary" />} label="Messages" desc="Conversations with your school" />
+        {/* STUDENT_GRIEVANCE_SAFETY_DASHBOARD_V1 */}
         <QuickLink
-          to="/student-attendance"
-          icon={<i className="bi bi-calendar2-check text-success"></i>}
-          label="Attendance"
-          desc="View monthly attendance & holidays"
-          badge={<span className="badge rounded-pill text-bg-success fs-6">{presencePct}%</span>}
+          to="/student-grievances"
+          icon={<i className="bi bi-shield-lock-fill text-primary" />}
+          label="Report & Support"
+          desc={isCollege ? "Confidential grievance, anti-ragging and student safety support" : "Confidential student safety, bullying and grievance support"}
         />
+        {/* SCHOLARSHIP_FREESHIP_DASHBOARD_V1 */}
+        <QuickLink
+          to="/scholarships"
+          icon={<i className="bi bi-award-fill text-primary" />}
+          label={isCollege ? "Scholarships & Financial Aid" : "My Scholarships"}
+          desc={isCollege ? "Apply for financial aid, freeships and track sanction status" : "Scholarships, fee support and application status"}
+        />
+        {/* STUDENT_MENTORING_SUPPORT_DASHBOARD_V1 */}
+        <QuickLink
+          to="/student-mentoring"
+          icon={<i className="bi bi-person-heart text-primary" />}
+          label="My Mentor & Support"
+          desc={isCollege ? "Faculty mentor, academic follow-ups and student success support" : "Mentor updates, academic support and follow-ups"}
+        />
+        {/* COLLEGE_CONVOCATION_DEGREE_DASHBOARD_V1 */}
+        {isCollege && (
+          <QuickLink
+            to="/college-graduation"
+            icon={<i className="bi bi-mortarboard-fill text-primary"></i>}
+            label="Graduation & Degree"
+            desc="Eligibility, No-Dues, convocation and degree / provisional status"
+            badge={<span className="badge rounded-pill text-bg-primary fs-6">Open</span>}
+          />
+        )}
+        {/* COLLEGE_STUDENT_REQUESTS_DASHBOARD_V1 */}
+        {isCollege && (
+          <QuickLink
+            to="/college-student-requests"
+            icon={<i className="bi bi-file-earmark-check-fill text-primary"></i>}
+            label="Certificates & Requests"
+            desc="Request official documents and track approval / issue status"
+            badge={<span className="badge rounded-pill text-bg-primary fs-6">Open</span>}
+          />
+        )}
+        {/* COLLEGE_INTERNSHIP_MANAGEMENT_DASHBOARD_V1 */}
+        {isCollege && (
+          <QuickLink
+            to="/college-internships"
+            icon={<i className="bi bi-building-check text-primary"></i>}
+            label="My Internship"
+            desc="Company, logbook, reports, mentor feedback and evaluation"
+            badge={<span className="badge rounded-pill text-bg-primary fs-6">Open</span>}
+          />
+        )}
+        {/* COLLEGE_PROJECT_DISSERTATION_DASHBOARD_V1 */}
+        {isCollege && (
+          <QuickLink
+            to="/college-projects"
+            icon={<i className="bi bi-kanban-fill text-primary"></i>}
+            label="My Project / Dissertation"
+            desc="Milestones, submissions, guide feedback and viva"
+            badge={<span className="badge rounded-pill text-bg-primary fs-6">Open</span>}
+          />
+        )}
+        {/* COLLEGE_HOSTEL_MANAGEMENT_DASHBOARD_V1 */}
+        {isCollege && (
+          <QuickLink
+            to="/college-hostel"
+            icon={<i className="bi bi-building-fill-gear text-primary"></i>}
+            label="My Hostel"
+            desc="Room and bed, outings, complaints and hostel charges"
+            badge={<span className="badge rounded-pill text-bg-primary fs-6">Open</span>}
+          />
+        )}
+        {/* COLLEGE_STUDENT_LEAVE_OD_DASHBOARD_V1 */}
+        {isCollege && (
+          <QuickLink
+            to="/college-student-leave"
+            icon={<i className="bi bi-calendar2-check-fill text-primary"></i>}
+            label="My Leave & On-Duty"
+            desc="Request leave or official OD and track approval status"
+            badge={<span className="badge rounded-pill text-bg-primary fs-6">Open</span>}
+          />
+        )}
+        {isCollege ? (
+          <QuickLink
+            to="/student-lecture-attendance"
+            icon={<i className="bi bi-person-check text-success"></i>}
+            label="Lecture Attendance"
+            desc="Subject-wise lecture attendance, shortage and history"
+            badge={<span className={`badge rounded-pill fs-6 ${lectureAttendance?.overall?.shortage ? "text-bg-danger" : "text-bg-success"}`}>{lecturePct}%</span>}
+          />
+        ) : (
+          <QuickLink
+            to="/student-attendance"
+            icon={<i className="bi bi-calendar2-check text-success"></i>}
+            label="Attendance"
+            desc="View monthly attendance & holidays"
+            badge={<span className="badge rounded-pill text-bg-success fs-6">{presencePct}%</span>}
+          />
+        )}
         <QuickLink
           to="/my-assignments"
           icon={<i className="bi bi-journal-check text-primary"></i>}

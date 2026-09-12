@@ -55,6 +55,28 @@ import AISettings from "./pages/AISettings";
 import Transactions from "./pages/Transactions/Transactions";
 import CancelledTransactions from "./pages/Transactions/CancelledTransactions";
 import Schools from "./pages/Schools";
+import Branches from "./pages/Branches"; // EDUBRIDGE_MULTI_BRANCH_PAGE_V1
+import CollegeAcademics from "./pages/CollegeAcademics"; // COLLEGE_READINESS_V1
+import PlacementCell from "./pages/PlacementCell"; // COLLEGE_PLACEMENT_V1
+import CollegeSubjectRegistration from "./pages/CollegeSubjectRegistration"; // COLLEGE_SUBJECT_REGISTRATION_V1
+import CollegeAcademicProgress from "./pages/CollegeAcademicProgress"; // COLLEGE_CREDITS_SGPA_CGPA_V1
+import CollegeExamination from "./pages/CollegeExamination"; // COLLEGE_INTERNAL_EXTERNAL_EXAM_V1
+import CollegeBacklogs from "./pages/CollegeBacklogs"; // COLLEGE_BACKLOG_REAPPEAR_V1
+import CollegeUniversityEnrollment from "./pages/CollegeUniversityEnrollment"; // COLLEGE_UNIVERSITY_ENROLLMENT_V1
+import CollegeGradeCards from "./pages/CollegeGradeCards"; // COLLEGE_GRADECARD_TRANSCRIPT_V1
+import CollegeStudent360 from "./pages/CollegeStudent360"; // COLLEGE_STUDENT_360_V1
+import CollegeFacultyWorkload from "./pages/CollegeFacultyWorkload"; // COLLEGE_FACULTY_WORKLOAD_V1
+import CollegeProjects from "./pages/CollegeProjects"; // COLLEGE_PROJECT_DISSERTATION_V1
+import CollegeInternships from "./pages/CollegeInternships"; // COLLEGE_INTERNSHIP_MANAGEMENT_V1
+import CollegeStudentRequests from "./pages/CollegeStudentRequests"; // COLLEGE_STUDENT_REQUESTS_V1
+import CollegeGraduationDegree from "./pages/CollegeGraduationDegree"; // COLLEGE_CONVOCATION_DEGREE_V1
+import CollegeNaacIqac from "./pages/CollegeNaacIqac"; // COLLEGE_NAAC_IQAC_V1
+import CollegeResearch from "./pages/CollegeResearch"; // COLLEGE_RESEARCH_RD_V1
+import AlumniEngagement from "./pages/AlumniEngagement"; // ALUMNI_ENGAGEMENT_V1
+import ScholarshipManagement from "./pages/ScholarshipManagement"; // SCHOLARSHIP_FREESHIP_V1
+import StudentClubsActivities from "./pages/StudentClubsActivities"; // STUDENT_CLUBS_ACTIVITIES_V1
+import StudentMentoringSupport from "./pages/StudentMentoringSupport"; // STUDENT_MENTORING_SUPPORT_V1
+import StudentGrievanceSafety from "./pages/StudentGrievanceSafety"; // STUDENT_GRIEVANCE_SAFETY_V1
 import AdmissionTypes from "./pages/AdmissionTypes";
 import Concessions from "./pages/Concessions";
 import StudentDueTable from "./pages/StudentDueTable";
@@ -84,8 +106,14 @@ import OnlineClasses from "./pages/OnlineClasses";
 import Assessments from "./pages/Assessments";
 import MarkAttendance from "./pages/MarkAttendance";
 import AttendanceCalendar from "./pages/AttendanceCalendar";
+import LectureAttendance from "./pages/LectureAttendance";
+import StudentLectureAttendance from "./pages/StudentLectureAttendance";
+import CollegeStudentLeaveOD from "./pages/CollegeStudentLeaveOD"; // COLLEGE_STUDENT_LEAVE_OD_V1
+import CollegeHostelManagement from "./pages/CollegeHostelManagement"; // COLLEGE_HOSTEL_MANAGEMENT_V1
 import TeacherTimetableAssignment from "./pages/TeacherTimetableAssignment";
 import Assignments from "./pages/Assignments";
+import LearningResources from "./pages/LearningResources";
+import NotebookChecking from "./pages/NotebookChecking";
 import StudentAssignments from "./pages/StudentAssignments";
 import AssignmentMarking from "./pages/AssignmentMarking";
 import StudentSideAssignment from "./pages/StudentSideAssignment";
@@ -709,7 +737,17 @@ function App() {
           />
 
           <Route path="/sections" element={<Sections />} />
-          <Route path="/schools" element={<Schools />} />
+          <Route path="/institutions" element={<Schools />} />
+          <Route path="/branches" element={<Branches />} />
+          <Route path="/schools" element={<Navigate to="/institutions" replace />} />
+          <Route
+            path="/college-academics"
+            element={
+              <RequireRole roles={["admin", "superadmin", "principal", "academic_coordinator", "examination"]}>
+                <CollegeAcademics />
+              </RequireRole>
+            }
+          />
           <Route
             path="/admission-types"
             element={
@@ -1396,6 +1434,204 @@ function App() {
           />
           <Route path="/mark-attendance" element={<MarkAttendance />} />
           <Route path="/attendance-calendar" element={<AttendanceCalendar />} />
+          <Route
+            path="/placement-cell"
+            element={
+              <RequireRole roles={["student", "placement_officer", "department_hod", "principal", "academic_coordinator", "coordinator", "admin", "superadmin", "super_admin"]}>
+                <PlacementCell />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="/college-grade-cards"
+            element={
+              <RequireRole roles={["student", "examination", "department_hod", "principal", "academic_coordinator", "coordinator", "admin", "superadmin", "super_admin"]}>
+                <CollegeGradeCards />
+              </RequireRole>
+            }
+          />
+          {/* COLLEGE_CONVOCATION_DEGREE_V1 */}
+          <Route
+            path="/college-graduation"
+            element={
+              <RequireRole roles={["student", "examination", "department_hod", "principal", "academic_coordinator", "coordinator", "frontoffice", "front_office", "accounts", "account", "accountant", "admin", "superadmin", "super_admin"]}>
+                <CollegeGraduationDegree />
+              </RequireRole>
+            }
+          />
+          {/* COLLEGE_STUDENT_360_V1 */}
+          <Route
+            path="/college-student-360"
+            element={
+              <RequireRole roles={["student", "department_hod", "principal", "academic_coordinator", "coordinator", "examination", "placement_officer", "admission", "admissions", "frontoffice", "front_office", "admin", "superadmin", "super_admin"]}>
+                <CollegeStudent360 />
+              </RequireRole>
+            }
+          />
+          {/* STUDENT_CLUBS_ACTIVITIES_V1 */}
+          <Route
+            path="/clubs-activities"
+            element={
+              <RequireRole roles={["student", "teacher", "department_hod", "principal", "academic_coordinator", "coordinator", "admin", "superadmin", "super_admin"]}>
+                <StudentClubsActivities />
+              </RequireRole>
+            }
+          />
+          {/* SCHOLARSHIP_FREESHIP_V1 */}
+          <Route
+            path="/scholarships"
+            element={
+              <RequireRole roles={["student", "department_hod", "principal", "academic_coordinator", "coordinator", "frontoffice", "front_office", "admission", "admissions", "accounts", "account", "accountant", "admin", "superadmin", "super_admin"]}>
+                <ScholarshipManagement />
+              </RequireRole>
+            }
+          />
+          {/* ALUMNI_ENGAGEMENT_V1 */}
+          <Route
+            path="/alumni-engagement"
+            element={
+              <RequireRole roles={["student", "alumni", "teacher", "department_hod", "principal", "academic_coordinator", "coordinator", "frontoffice", "front_office", "admission", "admissions", "placement_officer", "admin", "superadmin", "super_admin"]}>
+                <AlumniEngagement />
+              </RequireRole>
+            }
+          />
+          {/* COLLEGE_RESEARCH_RD_ROUTE_V1 */}
+          <Route
+            path="/research-publications"
+            element={
+              <RequireRole roles={["teacher", "department_hod", "principal", "academic_coordinator", "coordinator", "examination", "hr", "admin", "superadmin", "super_admin", "iqac_coordinator", "naac_coordinator", "research_coordinator", "rd_coordinator"]}>
+                <CollegeResearch />
+              </RequireRole>
+            }
+          />
+          {/* COLLEGE_NAAC_IQAC_V1 */}
+          <Route
+            path="/naac-iqac"
+            element={
+              <RequireRole roles={["teacher", "department_hod", "principal", "academic_coordinator", "coordinator", "examination", "hr", "admin", "superadmin", "super_admin", "iqac_coordinator", "naac_coordinator"]}>
+                <CollegeNaacIqac />
+              </RequireRole>
+            }
+          />
+          {/* COLLEGE_FACULTY_WORKLOAD_V1 */}
+          <Route
+            path="/college-faculty-workload"
+            element={
+              <RequireRole roles={["teacher", "department_hod", "principal", "academic_coordinator", "coordinator", "hr", "admin", "superadmin", "super_admin"]}>
+                <CollegeFacultyWorkload />
+              </RequireRole>
+            }
+          />
+          {/* STUDENT_GRIEVANCE_SAFETY_V1 */}
+          <Route
+            path="/student-grievances"
+            element={
+              <RequireRole roles={["student", "teacher", "department_hod", "principal", "academic_coordinator", "coordinator", "counselor", "admin", "superadmin", "super_admin", "grievance_officer", "anti_ragging_officer"]}>
+                <StudentGrievanceSafety />
+              </RequireRole>
+            }
+          />
+          {/* STUDENT_MENTORING_SUPPORT_V1 */}
+          <Route
+            path="/student-mentoring"
+            element={
+              <RequireRole roles={["student", "teacher", "department_hod", "principal", "academic_coordinator", "coordinator", "admin", "superadmin", "super_admin"]}>
+                <StudentMentoringSupport />
+              </RequireRole>
+            }
+          />
+          {/* COLLEGE_STUDENT_REQUESTS_V1 */}
+          <Route
+            path="/college-student-requests"
+            element={
+              <RequireRole roles={["student", "department_hod", "principal", "academic_coordinator", "coordinator", "examination", "admission", "admissions", "frontoffice", "front_office", "accounts", "account", "accountant", "admin", "superadmin", "super_admin"]}>
+                <CollegeStudentRequests />
+              </RequireRole>
+            }
+          />
+          {/* COLLEGE_INTERNSHIP_MANAGEMENT_V1 */}
+          <Route
+            path="/college-internships"
+            element={
+              <RequireRole roles={["student", "teacher", "placement_officer", "department_hod", "principal", "academic_coordinator", "coordinator", "admin", "superadmin", "super_admin"]}>
+                <CollegeInternships />
+              </RequireRole>
+            }
+          />
+          {/* COLLEGE_PROJECT_DISSERTATION_V1 */}
+          <Route
+            path="/college-projects"
+            element={
+              <RequireRole roles={["student", "teacher", "department_hod", "principal", "academic_coordinator", "coordinator", "examination", "admin", "superadmin", "super_admin"]}>
+                <CollegeProjects />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="/college-enrollment"
+            element={
+              <RequireRole roles={["student", "admission", "admissions", "frontoffice", "front_office", "examination", "department_hod", "principal", "academic_coordinator", "coordinator", "admin", "superadmin", "super_admin"]}>
+                <CollegeUniversityEnrollment />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="/college-backlogs"
+            element={
+              <RequireRole roles={["student", "examination", "department_hod", "principal", "academic_coordinator", "coordinator", "admin", "superadmin", "super_admin"]}>
+                <CollegeBacklogs />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="/college-examinations"
+            element={
+              <RequireRole roles={["student", "examination", "department_hod", "principal", "academic_coordinator", "coordinator", "admin", "superadmin", "super_admin"]}>
+                <CollegeExamination />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="/college-academic-progress"
+            element={
+              <RequireRole roles={["student", "examination", "department_hod", "principal", "academic_coordinator", "coordinator", "admin", "superadmin", "super_admin"]}>
+                <CollegeAcademicProgress />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="/college-subject-registration"
+            element={
+              <RequireRole roles={["student", "department_hod", "principal", "academic_coordinator", "coordinator", "admin", "superadmin", "super_admin"]}>
+                <CollegeSubjectRegistration />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="/lecture-attendance"
+            element={
+              <RequireRole roles={["teacher", "department_hod", "principal", "academic_coordinator", "coordinator", "admin", "superadmin", "super_admin"]}>
+                <LectureAttendance />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="/student-lecture-attendance"
+            element={
+              <RequireRole roles={["student"]}>
+                <StudentLectureAttendance />
+              </RequireRole>
+            }
+          />
+          {/* COLLEGE_STUDENT_LEAVE_OD_V1 */}
+          <Route
+            path="/college-student-leave"
+            element={
+              <RequireRole roles={["student", "department_hod", "principal", "academic_coordinator", "coordinator", "examination", "admin", "superadmin", "super_admin"]}>
+                <CollegeStudentLeaveOD />
+              </RequireRole>
+            }
+          />
           <Route path="/leave-requests" element={<TeacherLeaveRequests />} />
           <Route path="/attendance-summary" element={<AttendanceSummary />} />
           <Route
@@ -1408,6 +1644,22 @@ function App() {
           />
 
           {/* Assignments */}
+          <Route
+            path="/notebook-checking"
+            element={
+              <RequireRole roles={["teacher", "department_hod", "principal", "academic_coordinator", "coordinator", "admin", "superadmin", "super_admin"]}>
+                <NotebookChecking />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="/learning-resources"
+            element={
+              <RequireRole roles={["student", "teacher", "department_hod", "principal", "academic_coordinator", "coordinator", "admin", "superadmin", "super_admin"]}>
+                <LearningResources />
+              </RequireRole>
+            }
+          />
           <Route path="/assignments" element={<Assignments />} />
           <Route path="/student-assignments" element={<StudentAssignments />} />
           <Route path="/assignment-marking" element={<AssignmentMarking />} />
