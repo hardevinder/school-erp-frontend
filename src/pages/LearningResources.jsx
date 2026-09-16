@@ -1,8 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import Swal from "sweetalert2";
+import { Modal } from "react-bootstrap";
 import api from "../api";
 import { useInstitution } from "../institution/InstitutionContext";
 import "./LearningResources.css";
+
+const studyMaterialExtensions = [".pdf", ".doc", ".docx", ".ppt", ".pptx", ".xls", ".xlsx", ".txt", ".md", ".markdown", ".html", ".htm", ".csv", ".jpg", ".jpeg", ".png", ".webp", ".mdb", ".accdb", ".mde", ".accde", ".accdt", ".db", ".sqlite", ".sqlite3", ".sql", ".c", ".h", ".cpp", ".hpp", ".cc", ".cs", ".java", ".py", ".ipynb", ".js", ".jsx", ".ts", ".tsx", ".css", ".scss", ".php", ".json", ".xml", ".yaml", ".yml", ".r", ".rmd", ".m", ".sh", ".ps1", ".bat", ".zip", ".rar", ".7z", ".tar", ".gz", ".odt", ".ods", ".odp", ".rtf", ".tsv", ".svg", ".drawio"];
 
 const readRoles = () => {
   try {
@@ -45,6 +48,23 @@ export default function LearningResources() {
   const canManage = !isStudent && roles.some((r) => ["teacher", "department_hod", "principal", "academic_coordinator", "coordinator", "admin", "superadmin", "super_admin"].includes(r));
   const { isCollege, terms } = useInstitution();
 
+  const [preview, setPreview] = useState(null);
+  const previewRequest = useRef(0);
+  const closePreview = () => { previewRequest.current += 1; setPreview(null); };
+  const openPreview = async (file) => {
+    const request = ++previewRequest.current;
+    setPreview({ file, loading: true });
+    try {
+      if (Number(file.file_size) > 5 * 1024 * 1024) throw new Error("Preview supports files up to 5 MB. Download this file to read it.");
+      const response = await fetch(file.file_url);
+      if (!response.ok) throw new Error("Unable to load this file. Please try again or download it.");
+      const content = await response.text();
+      if (content.length > 5 * 1024 * 1024) throw new Error("This file is too large to preview. Please download it.");
+      if (request === previewRequest.current) setPreview({ file, content });
+    } catch (error) {
+      if (request === previewRequest.current) setPreview({ file, error: error.message });
+    }
+  };
   const [resources, setResources] = useState([]);
   const [classes, setClasses] = useState([]);
   const [sections, setSections] = useState([]);
@@ -120,6 +140,23 @@ export default function LearningResources() {
 
   const addFiles = (incoming) => {
     const list = Array.from(incoming || []);
+    const invalid = list.find((file) => !studyMaterialExtensions.some((extension) => file.name.toLowerCase().endsWith(extension)) && file.type !== "application/pdf");
+    if (invalid) {
+      Swal.fire("Unsupported file", `"${invalid.name}" is not supported. Allowed extensions: ${studyMaterialExtensions.join(", ")}.`, "warning");
+      return;
+    }
+    const oversized = list.find((file) => file.size > 50 * 1024 * 1024);
+    if (oversized) {
+      Swal.fire("File too large", `"${oversized.name}" exceeds 50 MB.`, "warning");
+      return;
+    }
+    const additions = list.filter((file, index) =>
+      !files.some((f) => f.name === file.name && f.size === file.size && f.lastModified === file.lastModified) &&
+      list.findIndex((f) => f.name === file.name && f.size === file.size && f.lastModified === file.lastModified) === index);
+    if (files.length + additions.length > 50) {
+      Swal.fire("Too many files", "Upload at most 50 files at a time.", "warning");
+      return;
+    }
     setFiles((prev) => {
       const next = [...prev];
       for (const file of list) {
@@ -311,7 +348,12 @@ export default function LearningResources() {
                     <div className="lr-section-label"><i className="bi bi-files me-2" />Files ({resource.files.length})</div>
                     <div className="lr-item-list">
                       {resource.files.map((file) => (
-                        <a className="lr-file-item" key={file.id} href={file.file_url} target="_blank" rel="noreferrer">
+                        <a className="lr-file-item" key={file.id} href={file.file_url} target="_blank" rel="noreferrer"
+                          onClick={(event) => {
+                            if (/\.(txt|md|markdown|html|htm|csv|sql|json|xml|yaml|yml|py|java|c|cpp|h|css|js|ts)$/i.test(file.file_name || "")) {
+                              event.preventDefault(); openPreview(file);
+                            }
+                          }}>
                           <i className={`bi ${String(file.mime_type || "").includes("pdf") ? "bi-file-earmark-pdf" : "bi-file-earmark-text"}`} />
                           <span className="flex-grow-1 text-truncate">{file.file_name}</span>
                           <small>{prettyBytes(file.file_size)}</small>
@@ -389,7 +431,7 @@ export default function LearningResources() {
                   <div className="col-lg-5">
                     <div className="lr-form-section h-100">
                       <h6>Bulk File Upload</h6>
-                      <p className="small text-muted">Select or drop up to 50 PDFs/documents together. Each file can be up to 50 MB.</p>
+                      <p className="small text-muted">Select or drop up to 50 documents, Access databases, SQL files, source code, notebooks, diagrams or archives together. Each file can be up to 50 MB.</p>
                       <div
                         className={`lr-dropzone ${dragging ? "is-dragging" : ""}`}
                         onDragEnter={(e) => { e.preventDefault(); setDragging(true); }}
@@ -400,7 +442,7 @@ export default function LearningResources() {
                         role="button"
                         tabIndex="0"
                       >
-                        <input ref={fileInputRef} type="file" multiple className="d-none" accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.csv,.jpg,.jpeg,.png,.webp" onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }} />
+                        <input ref={fileInputRef} type="file" multiple className="d-none" accept={studyMaterialExtensions.join(",")} onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }} />
                         <i className="bi bi-cloud-arrow-up display-5 text-primary" />
                         <div className="fw-semibold mt-2">Drop all files here</div>
                         <small className="text-muted">or click to select multiple files</small>
@@ -431,6 +473,21 @@ export default function LearningResources() {
           </div>
         </div>
       )}
+      <Modal show={!!preview} onHide={closePreview} size="xl" centered>
+        <Modal.Header closeButton><Modal.Title className="text-break">{preview?.file.file_name}</Modal.Title></Modal.Header>
+        <Modal.Body>
+          {preview?.loading ? <p role="status">Loading preview…</p> : preview?.error ? <div className="alert alert-warning">{preview.error}</div> :
+            /\.html?$/i.test(preview?.file.file_name || "") ?
+              <iframe title="Study material preview" sandbox="" referrerPolicy="no-referrer"
+                srcDoc={`<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:;">` + (preview?.content || "")}
+                style={{ width: "100%", height: "65vh", border: "1px solid #dee2e6", background: "white" }} /> :
+              <pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", maxHeight: "65vh", overflow: "auto", padding: "1rem", background: "#f8f9fa" }}>{preview?.content}</pre>}
+        </Modal.Body>
+        <Modal.Footer>
+          <a className="btn btn-primary" href={preview?.file.file_url} target="_blank" rel="noreferrer">Download original</a>
+          <button className="btn btn-secondary" onClick={closePreview}>Close</button>
+        </Modal.Footer>
+      </Modal>
     </div>
   );
 }

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import api from "../api";
 import Swal from "sweetalert2";
 import "./Students.css"; // Reuse styles
+import "./Departments.css";
 
 const getRoleFlags = () => {
   const singleRole = localStorage.getItem("userRole");
@@ -23,6 +24,68 @@ const Departments = () => {
   const [trashedDepartments, setTrashedDepartments] = useState([]);
   const [search, setSearch] = useState("");
   const [showTrash, setShowTrash] = useState(false);
+  const [importFile, setImportFile] = useState(null);
+  const [dragging, setDragging] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [exporting, setExporting] = useState(false);
+
+  const selectImportFile = (files) => {
+    if (importing || !files?.length) return;
+    if (files.length !== 1 || !/\.(xlsx|xls)$/i.test(files[0].name)) {
+      Swal.fire("Invalid file", "Choose one Excel file (.xlsx or .xls).", "warning");
+      return;
+    }
+    if (files[0].size > 5 * 1024 * 1024) {
+      Swal.fire("File too large", "Excel file must be 5 MB or smaller.", "warning");
+      return;
+    }
+    setImportFile(files[0]);
+  };
+
+  const handleExport = async (template = false) => {
+    setExporting(true);
+    try {
+      const { data } = await api.get("/departments/export", {
+        params: { template }, responseType: "blob",
+      });
+      const url = URL.createObjectURL(data);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `departments_${template ? "template" : "export"}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (error) {
+      Swal.fire("Error", "Failed to export departments.", "error");
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleImport = async () => {
+    if (!importFile || importing) return;
+    setImporting(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", importFile);
+      const { data } = await api.post("/departments/import", formData);
+      setImportFile(null);
+      await fetchDepartments();
+      Swal.fire({
+        title: "Import complete",
+        text: `Added: ${data.insertedCount}. Skipped: ${data.skippedCount}.` +
+          (data.skippedRows?.length ? "\n" + data.skippedRows.slice(0, 20).map((row) => `Row ${row.row}: ${row.reason}`).join("\n") +
+            (data.skippedRows.length > 20 ? "\nShowing the first 20 skipped rows." : "") : ""),
+        icon: data.skippedCount ? "warning" : "success",
+        customClass: { htmlContainer: "department-import-result" },
+      });
+    } catch (error) {
+      Swal.fire("Error", error.response?.data?.message || "Failed to import departments.", "error");
+    } finally {
+      setImporting(false);
+    }
+  };
 
   const fetchDepartments = async () => {
     try {
@@ -170,9 +233,9 @@ const Departments = () => {
 
   return (
     <div className="container-fluid mt-4">
-      <div className="d-flex justify-content-between align-items-center mb-3">
+      <div className="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
         <h1>{showTrash ? "Trashed Departments" : "Departments"}</h1>
-        <div className="d-flex gap-2">
+        <div className="d-flex gap-2 flex-wrap">
           {!showTrash && canEdit && (
             <button className="btn btn-success" onClick={handleAdd}>
               Add Department
@@ -188,6 +251,38 @@ const Departments = () => {
           )}
         </div>
       </div>
+
+      {!showTrash && canEdit && (
+        <div className="d-flex flex-wrap align-items-center gap-2 mb-3">
+          <button className="btn btn-outline-secondary" disabled={exporting} onClick={() => handleExport(true)}>
+            Export Template
+          </button>
+          <button className="btn btn-secondary" disabled={exporting} onClick={() => handleExport(false)}>
+            Export All Departments
+          </button>
+          <label
+            className={`department-import-dropzone${dragging ? " is-dragging" : ""}`}
+            onDragEnter={(event) => { event.preventDefault(); if (!importing) setDragging(true); }}
+            onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = importing ? "none" : "copy"; }}
+            onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setDragging(false); }}
+            onDrop={(event) => { event.preventDefault(); setDragging(false); selectImportFile(event.dataTransfer.files); }}
+          >
+            <input
+              type="file" className="visually-hidden" accept=".xlsx,.xls" disabled={importing}
+              aria-label="Choose departments Excel file"
+              onChange={(event) => { selectImportFile(event.target.files); event.target.value = ""; }}
+            />
+            <span className="department-import-filename" title={importFile?.name} aria-live="polite">
+              {importFile ? importFile.name : "Drop Excel file or click to browse"}
+            </span>
+            <small>{dragging ? "Drop file here" : ".xlsx or .xls · Max 5 MB · 5,000 rows"}</small>
+          </label>
+          <button className="btn btn-primary" disabled={!importFile || importing} onClick={handleImport}>
+            {importing ? "Importing…" : "Import"}
+          </button>
+          <small className="text-muted w-100">Department Name is required; Description is optional. Existing names (including Trash) are skipped.</small>
+        </div>
+      )}
 
       <input
         type="text"

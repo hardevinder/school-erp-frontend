@@ -1,0 +1,284 @@
+/* src/components/ProgramSemesterUpload.css */
+
+.psu-upload-btn {
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 7px 14px;
+  border: 1px solid #0d6efd;
+  border-radius: 9px;
+  background: #fff;
+  color: #0d6efd;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.psu-upload-btn:hover {
+  background: #eef5ff;
+}
+
+.psu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 5000;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(17, 27, 38, 0.55);
+}
+
+.psu-modal {
+  width: min(760px, 100%);
+  max-height: calc(100vh - 36px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 25px 70px rgba(0, 0, 0, 0.25);
+}
+
+.psu-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 22px 15px;
+  border-bottom: 1px solid #e7ebef;
+}
+
+.psu-header h3 {
+  margin: 0;
+  color: #233244;
+  font-size: 19px;
+}
+
+.psu-header p {
+  margin: 5px 0 0;
+  color: #738092;
+  font-size: 12px;
+}
+
+.psu-close {
+  border: 0;
+  background: transparent;
+  color: #687586;
+  font-size: 30px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.psu-body {
+  overflow: auto;
+  padding: 20px 22px;
+}
+
+.psu-dropzone {
+  min-height: 170px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 7px;
+  padding: 24px;
+  border: 2px dashed #b8c8dc;
+  border-radius: 13px;
+  background: #f8fbff;
+  color: #40546b;
+  text-align: center;
+  cursor: pointer;
+  transition: 0.18s ease;
+}
+
+.psu-dropzone:hover,
+.psu-dropzone.dragging {
+  border-color: #0d6efd;
+  background: #edf5ff;
+}
+
+.psu-upload-icon {
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  background: #e8f2ff;
+  color: #0d6efd;
+  font-size: 24px;
+}
+
+.psu-dropzone span {
+  color: #8793a1;
+  font-size: 12px;
+}
+
+.psu-template-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 13px;
+}
+
+.psu-link-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #0d6efd;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.psu-template-row small {
+  color: #8a96a4;
+}
+
+.psu-message {
+  margin-top: 14px;
+  padding: 10px 12px;
+  border: 1px solid #d9e5f1;
+  border-radius: 9px;
+  background: #f6faff;
+  color: #3b536d;
+  font-size: 12px;
+}
+
+.psu-preview {
+  margin-top: 16px;
+}
+
+.psu-summary {
+  display: flex;
+  gap: 9px;
+  flex-wrap: wrap;
+  margin-bottom: 11px;
+}
+
+.psu-summary span {
+  min-width: 88px;
+  display: flex;
+  flex-direction: column;
+  padding: 8px 11px;
+  border-radius: 9px;
+  background: #f2f5f8;
+  color: #617084;
+  font-size: 10px;
+}
+
+.psu-summary strong {
+  color: #233244;
+  font-size: 16px;
+}
+
+.psu-summary .ok {
+  background: #edf9f2;
+}
+
+.psu-summary .bad {
+  background: #fff0f0;
+}
+
+.psu-table-wrap {
+  max-height: 260px;
+  overflow: auto;
+  border: 1px solid #e2e7ec;
+  border-radius: 10px;
+}
+
+.psu-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.psu-table th,
+.psu-table td {
+  padding: 9px 10px;
+  border-bottom: 1px solid #edf0f3;
+  text-align: left;
+  vertical-align: top;
+}
+
+.psu-table th {
+  position: sticky;
+  top: 0;
+  background: #f6f8fa;
+  color: #425166;
+  font-size: 11px;
+  z-index: 1;
+}
+
+.psu-status {
+  display: inline-block;
+  padding: 3px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.psu-status.ok {
+  background: #e7f7ee;
+  color: #187647;
+}
+
+.psu-status.bad {
+  background: #ffeded;
+  color: #b02a37;
+}
+
+.psu-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 9px;
+  padding: 14px 22px;
+  border-top: 1px solid #e7ebef;
+}
+
+.psu-secondary,
+.psu-primary {
+  min-height: 38px;
+  padding: 7px 15px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.psu-secondary {
+  border: 1px solid #cfd6dd;
+  background: #fff;
+  color: #556474;
+}
+
+.psu-primary {
+  border: 1px solid #0d6efd;
+  background: #0d6efd;
+  color: #fff;
+}
+
+.psu-primary:disabled,
+.psu-secondary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+@media (max-width: 600px) {
+  .psu-template-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .psu-modal {
+    max-height: calc(100vh - 18px);
+  }
+
+  .psu-backdrop {
+    padding: 9px;
+  }
+}

@@ -5,6 +5,7 @@ import "bootstrap/dist/css/bootstrap.min.css";
 
 import { auth, provider, signInWithPopup } from "../firebase/firebaseConfig";
 import socket from "../socket";
+import { applyInstitutionBranding } from "../utils/institutionBranding";
 import "./CollegeLogin.css";
 
 const ROLE_ORDER = [
@@ -118,14 +119,6 @@ const CollegeLogin = () => {
     []
   );
 
-  // public/images/DemoCollege.png
-  const backgroundImage =
-    `${process.env.PUBLIC_URL}/images/DemoCollege.png`;
-
-  // Existing fallback logo
-  const fallbackLogo =
-    `${process.env.PUBLIC_URL}/images/DemoLogo.png`;
-
   useEffect(() => {
     userInputRef.current?.focus();
   }, []);
@@ -136,13 +129,15 @@ const CollegeLogin = () => {
     axios
       .get(`${apiBase}/schools`)
       .then((res) => {
-        if (res.data?.length) {
-          setSchool(res.data[0]);
+        const rows = Array.isArray(res.data) ? res.data : res.data?.schools || res.data?.data || [];
+        if (Array.isArray(rows) && rows.length) {
+          const preferredId = process.env.REACT_APP_INSTITUTION_ID || localStorage.getItem("edubridgeInstitutionId");
+          setSchool(rows.find((row) => String(row.id) === String(preferredId)) || rows[0]);
         }
       })
       .catch((err) => {
         console.warn(
-          "Unable to fetch college information:",
+          "Unable to fetch institution information:",
           err?.message
         );
       });
@@ -480,14 +475,22 @@ const CollegeLogin = () => {
     }
   };
 
-  const schoolName =
-    school?.name ||
-    "EduBridge Demo College";
+  useEffect(() => { applyInstitutionBranding(school); }, [school]);
 
-  const collegeLogo =
-    school?.logo
-      ? `${apiBase}${school.logo}`
-      : fallbackLogo;
+  const schoolName = school?.name?.trim() || "Your institution";
+  const institutionType = school?.institution_type === "college" ? "College" : "School";
+  const institutionLower = institutionType.toLowerCase();
+  const assetUrl = (value) => {
+    if (!value) return "";
+    if (/^https?:\/\//i.test(value)) return value;
+    if (String(value).startsWith("//")) return `${window.location.protocol}${value}`;
+    return `${apiBase || ""}/${String(value).replace(/^\/+/, "")}`;
+  };
+  const backgroundImage = assetUrl(school?.picture);
+  const initials = schoolName.split(/\s+/).slice(0, 2).map((word) => word[0]).join("").toUpperCase();
+  const safeInitials = initials.replace(/[<>&"']/g, "");
+  const fallbackLogo = `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80"><rect width="80" height="80" rx="16" fill="#0d2f5b"/><text x="40" y="49" text-anchor="middle" font-family="Arial" font-size="28" fill="white">${safeInitials}</text></svg>`)}`;
+  const collegeLogo = assetUrl(school?.logo) || fallbackLogo;
 
   return (
     <main className="demo-login">
@@ -498,9 +501,9 @@ const CollegeLogin = () => {
         className="demo-login__visual"
         style={{
           backgroundImage:
-            `url("${backgroundImage}")`,
+            backgroundImage ? `url(${JSON.stringify(backgroundImage)})` : "linear-gradient(135deg, #082544, #176394)",
         }}
-        aria-label="EduBridge Demo College"
+        aria-label={schoolName}
       >
         <div className="demo-login__visual-overlay" />
 
@@ -529,22 +532,17 @@ const CollegeLogin = () => {
           <div className="demo-login__visual-copy">
 
             <span className="demo-login__eyebrow">
-              SMART COLLEGE MANAGEMENT
+              {institutionType.toUpperCase()} MANAGEMENT PORTAL
             </span>
 
             <h1>
-              One college.
+              {schoolName}
               <br />
-              One connected experience.
+              Your connected campus.
             </h1>
 
             <p>
-              Academics, attendance,
-              communication, fees,
-              examinations and
-              administration —
-              thoughtfully connected in
-              one secure platform.
+              {school?.description || `Your ${institutionLower} community, connected. Access academics, attendance, fees, examinations and updates in one place.`}
             </p>
 
           </div>
@@ -553,7 +551,7 @@ const CollegeLogin = () => {
 
             <span className="demo-login__dot" />
 
-            Secure college access
+            Secure {institutionLower} access
 
           </div>
 
@@ -588,7 +586,7 @@ const CollegeLogin = () => {
               </span>
 
               <small>
-                College Management Portal
+                {institutionType} Management Portal
               </small>
 
             </div>
@@ -602,8 +600,7 @@ const CollegeLogin = () => {
             </h2>
 
             <p>
-              Sign in to continue to your
-              college dashboard.
+              Sign in to your {schoolName === "Your institution" ? "institution" : schoolName} portal.
             </p>
 
           </div>
@@ -898,6 +895,14 @@ const CollegeLogin = () => {
 
           </div>
 
+          {(school?.email || school?.phone || school?.address_line) && (
+            <div className="demo-login__contact">
+              <strong>Need help? Contact {schoolName}</strong>
+              {school?.email && <a href={`mailto:${school.email}`}>{school.email}</a>}
+              {school?.phone && <a href={`tel:${String(school.phone).replace(/[^+0-9]/g, "")}`}>{school.phone}</a>}
+              {school?.address_line && <span>{school.address_line}</span>}
+            </div>
+          )}
           {/* FOOTER */}
 
           <footer className="demo-login__footer">

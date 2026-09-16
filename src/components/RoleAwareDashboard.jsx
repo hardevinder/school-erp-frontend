@@ -16,24 +16,25 @@ import TransportDashboard from "./TransportDashboard";
 import TransportAttendanceMobile from "../pages/TransportAttendanceMobile";
 import ExaminationDashboard from "./ExaminationDashboard";
 import LmsWorkspaceDashboard from "./dashboard/LmsWorkspaceDashboard";
+import PremiumWorkspaceHero from "./dashboard/PremiumWorkspaceHero";
 import "./dashboard/DashboardPolish.css";
-
-function ErpWorkspaceLabel() {
-  return (
-    <div className="workspace-dashboard-strip">
-      <span className="workspace-dashboard-pill"><i className="bi bi-buildings" /> ERP</span>
-      <span><strong>ERP Workspace</strong> · School administration & operations</span>
-    </div>
-  );
-}
 
 export default function RoleAwareDashboard() {
   const { activeRole } = useRoles();
   const role = (activeRole || "").toLowerCase();
-  const { workspace } = useWorkspace(defaultWorkspaceForRole(role));
+  const { workspace, setWorkspace } = useWorkspace(defaultWorkspaceForRole(role));
 
   if (workspace === "LMS") {
-    return <LmsWorkspaceDashboard role={role} />;
+    return (
+      <div className="classic-workspace-shell">
+        <PremiumWorkspaceHero
+          workspace={workspace}
+          onSelectWorkspace={setWorkspace}
+          role={role}
+        />
+        <LmsWorkspaceDashboard role={role} />
+      </div>
+    );
   }
 
   let dashboard;
@@ -92,8 +93,12 @@ export default function RoleAwareDashboard() {
   }
 
   return (
-    <div className="workspace-dashboard-host">
-      <ErpWorkspaceLabel />
+    <div className="workspace-dashboard-host classic-workspace-shell">
+      <PremiumWorkspaceHero
+        workspace={workspace}
+        onSelectWorkspace={setWorkspace}
+        role={role}
+      />
       {dashboard}
     </div>
   );

@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import api from "../api";
 import Swal from "sweetalert2";
+import ProgramSemesterUpload from "../components/ProgramSemesterUpload";
 
 // ---- role helpers ---------------------------------------------------------
 const getRoleFlags = () => {
@@ -181,9 +182,13 @@ const Classes = () => {
         </div>
 
         {canEdit && (
-          <button className="btn btn-success" onClick={openAdd}>
-            + Add Class
-          </button>
+          <div className="d-flex flex-wrap align-items-center gap-2">
+            <ProgramSemesterUpload onImported={fetchClasses} />
+
+            <button className="btn btn-success" onClick={openAdd}>
+              + Add Class
+            </button>
+          </div>
         )}
       </div>
 
@@ -306,7 +311,7 @@ const Classes = () => {
                     <input
                       type="text"
                       className="form-control"
-                      placeholder="e.g., 6, 7, 8, UKG"
+                      placeholder="e.g., BCA - Semester 1, BBA - Semester 3"
                       value={form.class_name}
                       onChange={(e) =>
                         setForm((p) => ({ ...p, class_name: e.target.value }))

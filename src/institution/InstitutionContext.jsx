@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import api from "../api";
+import { applyInstitutionBranding } from "../utils/institutionBranding";
 
 const STORAGE_TYPE = "institutionType";
 const STORAGE_ID = "edubridgeInstitutionId";
@@ -101,6 +102,7 @@ export function InstitutionProvider({ children }) {
 
     if (row && typeof row === "object") {
       setInstitution(row);
+      applyInstitutionBranding(row);
       if (row.id) localStorage.setItem(STORAGE_ID, String(row.id));
     }
   }, []);

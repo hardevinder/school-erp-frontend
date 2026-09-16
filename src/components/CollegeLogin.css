@@ -1059,3 +1059,10 @@ body {
     text-align: center;
   }
 }
+/* Institution branding supports long names and contact details. */
+.demo-login__visual-copy h1,
+.demo-login__brand-row span,
+.demo-login__mini-brand span { overflow-wrap: anywhere; }
+.demo-login__contact { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 22px; font-size: 12px; color: #526579; }
+.demo-login__contact strong, .demo-login__contact > span { width: 100%; }
+.demo-login__contact a { color: #185d9b; overflow-wrap: anywhere; }

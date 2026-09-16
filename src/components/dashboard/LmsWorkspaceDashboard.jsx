@@ -1,6 +1,7 @@
 import React, { useMemo } from "react";
 import { Link } from "react-router-dom";
 import DashboardInsights from "./DashboardInsights";
+import RoleMenuTiles from "./RoleMenuTiles";
 import { useInstitution } from "../../institution/InstitutionContext";
 import "./LmsWorkspaceDashboard.css";
 
@@ -36,6 +37,8 @@ export default function LmsWorkspaceDashboard({ role = "" }) {
   const roleLabel = roleLabels[normalizedRole] ||
     (normalizedRole ? normalizedRole.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) : "School");
 
+  const useRoleMenuTiles = ["student", "teacher", "department_hod"].includes(normalizedRole);
+
   return (
     <main className="lms-workspace dashboard-surface">
       <div className="container-fluid px-3 px-md-4 py-3 py-md-4">
@@ -43,7 +46,7 @@ export default function LmsWorkspaceDashboard({ role = "" }) {
           <div className="lms-hero-copy">
             <div className="lms-eyebrow"><i className="bi bi-mortarboard-fill" /> EduBridge LMS</div>
             <h1>Learning Management Dashboard</h1>
-            <p>Teaching, learning, assessments and academic progress in one focused workspace.</p>
+            <p>{normalizedRole === "student" ? "Your classes, study materials and assignments, all in one place." : "Teaching, learning, assessments and academic progress in one focused workspace."}</p>
             <div className="lms-meta-row">
               <span><i className="bi bi-person-badge" /> {roleLabel}</span>
               <span><i className="bi bi-lightning-charge-fill" /> LMS Workspace</span>
@@ -52,35 +55,50 @@ export default function LmsWorkspaceDashboard({ role = "" }) {
           <div className="lms-hero-mark" aria-hidden="true"><i className="bi bi-mortarboard" /></div>
         </section>
 
-        <div className="d-flex flex-wrap justify-content-between align-items-end gap-2 mb-3">
-          <div>
-            <div className="lms-section-kicker">Quick access</div>
-            <h2 className="h5 mb-1 fw-bold">Learning tools</h2>
-            <p className="text-muted small mb-0">Only LMS modules are shown in this workspace.</p>
-          </div>
-          <span className="badge rounded-pill text-bg-light border px-3 py-2">{actions.length} modules</span>
-        </div>
-
-        {actions.length ? (
-          <div className="row g-3 mb-4">
-            {actions.map((item) => (
-              <div key={item.key} className="col-12 col-sm-6 col-xl-4 col-xxl-3">
-                <Link to={item.path} className="lms-action-card text-decoration-none">
-                  <span className="lms-action-icon"><i className={`bi ${item.icon}`} /></span>
-                  <span className="lms-action-content">
-                    <strong>{item.label}</strong>
-                    <small>{item.description}</small>
-                  </span>
-                  <i className="bi bi-arrow-right lms-action-arrow" />
-                </Link>
-              </div>
-            ))}
-          </div>
+        {useRoleMenuTiles ? (
+          <RoleMenuTiles
+            role={normalizedRole}
+            workspace="LMS"
+            title={normalizedRole === "student" ? "My Learning Hub" : "Teaching & Learning Hub"}
+            subtitle={
+              normalizedRole === "student"
+                ? "All learning, assignment, assessment and academic tools available to you."
+                : "All LMS menus available to your teaching role, arranged for faster classroom work."
+            }
+          />
         ) : (
-          <div className="alert alert-light border rounded-4 shadow-sm mb-4 d-flex align-items-center gap-3">
-            <span className="lms-action-icon"><i className="bi bi-shield-lock" /></span>
-            <div><strong>No LMS modules are assigned to this role.</strong><div className="small text-muted">An administrator can grant learning-module access when required.</div></div>
-          </div>
+          <>
+            <div className="d-flex flex-wrap justify-content-between align-items-end gap-2 mb-3">
+              <div>
+                <div className="lms-section-kicker">Quick access</div>
+                <h2 className="h5 mb-1 fw-bold">Learning tools</h2>
+                <p className="text-muted small mb-0">Only LMS modules are shown in this workspace.</p>
+              </div>
+              <span className="badge rounded-pill text-bg-light border px-3 py-2">{actions.length} modules</span>
+            </div>
+
+            {actions.length ? (
+              <div className="row g-3 mb-4">
+                {actions.map((item) => (
+                  <div key={item.key} className="col-12 col-sm-6 col-xl-4 col-xxl-3">
+                    <Link to={item.path} className="lms-action-card text-decoration-none">
+                      <span className="lms-action-icon"><i className={`bi ${item.icon}`} /></span>
+                      <span className="lms-action-content">
+                        <strong>{item.label}</strong>
+                        <small>{item.description}</small>
+                      </span>
+                      <i className="bi bi-arrow-right lms-action-arrow" />
+                    </Link>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="alert alert-light border rounded-4 shadow-sm mb-4 d-flex align-items-center gap-3">
+                <span className="lms-action-icon"><i className="bi bi-shield-lock" /></span>
+                <div><strong>No LMS modules are assigned to this role.</strong><div className="small text-muted">An administrator can grant learning-module access when required.</div></div>
+              </div>
+            )}
+          </>
         )}
 
         <DashboardInsights role={normalizedRole} workspace="LMS" />

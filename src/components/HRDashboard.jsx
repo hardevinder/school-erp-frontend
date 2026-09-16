@@ -1,22 +1,28 @@
-// src/components/HRDashboard.jsx — Attendance + Latest Leave Request Spotlight + Messages Quick Access
-import React, { useEffect, useMemo, useState } from "react";
+// HR workspace with attendance, leave approvals and quick navigation.
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import api from "../api";
 import Swal from "sweetalert2";
+import "./HRDashboard.css";
 import { useNavigate } from "react-router-dom";
 
-export default function HRDashboard() {
-  const navigate = useNavigate();
-
-  const [date, setDate] = useState(() => new Date().toISOString().split("T")[0]);
-  const [employees, setEmployees] = useState([]);
-  const [records, setRecords] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [leaveLoading, setLeaveLoading] = useState(false);
-  const [error, setError] = useState(null);
-
-  const [search, setSearch] = useState("");
-  const [selectedDept, setSelectedDept] = useState("all");
-  const [pendingLeaves, setPendingLeaves] = useState([]);
+const localDate = () => {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+};
+const quickActions = [
+  ["Employees", "Staff profiles & contact details", "person-badge", "/employees", "blue"],
+  ["Mark attendance", "Manage daily staff attendance", "person-check", "/employee-attendance", "teal"],
+  ["Review leaves", "Approve or review requests", "clipboard-check", "/hr-leave-requests", "amber"],
+  ["Payroll", "Manage salaries & payroll", "cash-coin", "/payroll", "violet"],
+  ["Monthly register", "Day-wise attendance records", "calendar2-check", "/employee-monthly-attendance-register", "teal"],
+  ["Leave balances", "Check staff leave entitlement", "calendar-range", "/employee-leave-balances", "blue"],
+  ["Departments", "Explore your teams", "diagram-3", "/departments", "violet"],
+  ["Staff documents", "Open the staff document vault", "shield-check", "/document-vault", "amber"],
+  ["Actions & approvals", "Open your action inbox", "inboxes", "/action-inbox", "blue"],
+  ["Messages", "Conversations & reminders", "chat-dots", "/messages", "teal"],
+  ["Academic calendar", "Teaching days & events", "calendar-week", "/academic-calendar", "amber"],
+  ["Staff performance", "Review professional growth", "graph-up-arrow", "/teacher-performance", "violet"],
+];
 
   /* =========================
      Helpers
@@ -143,94 +149,68 @@ export default function HRDashboard() {
     };
   };
 
-  /* =========================
-     Load employees
-  ========================= */
-  useEffect(() => {
-    let mounted = true;
 
-    (async () => {
-      try {
-        const res = await api.get("/employees");
-        const all = res?.data?.employees || [];
-        const active = all.filter(
-          (e) => (e?.status || "enabled").toLowerCase() !== "disabled"
-        );
-        if (mounted) setEmployees(active);
-      } catch (e) {
-        if (mounted) {
-          setError(
-            e?.response?.data?.message || e.message || "Failed to load employees"
-          );
-        }
-      }
-    })();
+export default function HRDashboard() {
+  const navigate = useNavigate();
 
-    return () => {
-      mounted = false;
-    };
-  }, []);
+  const [date, setDate] = useState(localDate);
+  const [employees, setEmployees] = useState([]);
+  const [records, setRecords] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [leaveLoading, setLeaveLoading] = useState(false);
+  const [error, setError] = useState(null);
 
-  /* =========================
-     Load attendance for date
-  ========================= */
-  useEffect(() => {
-    let mounted = true;
+  const [search, setSearch] = useState("");
+  const [selectedDept, setSelectedDept] = useState("all");
+  const [pendingLeaves, setPendingLeaves] = useState([]);
+  const [leaveError, setLeaveError] = useState(null);
+  const [updatedAt, setUpdatedAt] = useState(null);
+  const requestVersion = useRef(0);
 
-    (async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const res = await api.get(`/employee-attendance?date=${date}`);
-        if (mounted) {
-          setRecords(Array.isArray(res?.data?.records) ? res.data.records : []);
-        }
-      } catch (e) {
-        if (mounted) {
-          setError(
-            e?.response?.data?.message || e.message || "Failed to load attendance"
-          );
-        }
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    })();
-
-    return () => {
-      mounted = false;
-    };
+  const loadDashboard = useCallback(async () => {
+    const version = ++requestVersion.current;
+    setLoading(true);
+    setLeaveLoading(true);
+    const results = await Promise.allSettled([
+      api.get("/employees"),
+      api.get(`/employee-attendance?date=${date}`),
+      api.get("/employee-leave-requests/all", { params: { status: "pending" } }),
+    ]);
+    if (version !== requestVersion.current) return;
+    const [staff, attendance, leaves] = results;
+    const failures = [];
+    if (staff.status === "fulfilled") {
+      setEmployees((staff.value?.data?.employees || []).filter(
+        (employee) => (employee?.status || "enabled").toLowerCase() !== "disabled"
+      ));
+    } else failures.push("Employee data could not be loaded.");
+    if (attendance.status === "fulfilled") {
+      setRecords(Array.isArray(attendance.value?.data?.records) ? attendance.value.data.records : []);
+    } else failures.push("Attendance could not be loaded.");
+    setError(failures.length ? failures.join(" ") : null);
+    if (leaves.status === "fulfilled") {
+      const rows = Array.isArray(leaves.value?.data?.data) ? leaves.value.data.data : [];
+      setPendingLeaves([...rows].sort((a, b) =>
+        (new Date(b.createdAt || b.created_at).getTime() || 0) -
+        (new Date(a.createdAt || a.created_at).getTime() || 0) || Number(b.id) - Number(a.id)
+      ));
+      setLeaveError(null);
+    } else setLeaveError("Leave requests could not be loaded. Refresh to try again.");
+    if (results.every((result) => result.status === "fulfilled")) setUpdatedAt(new Date());
+    setLoading(false);
+    setLeaveLoading(false);
   }, [date]);
 
-  /* =========================
-     Load latest pending leaves
-  ========================= */
-  const fetchPendingLeaves = async () => {
-    setLeaveLoading(true);
-    try {
-      const res = await api.get("/employee-leave-requests/all", {
-        params: { status: "pending" },
-      });
-
-      const rows = Array.isArray(res?.data?.data) ? res.data.data : [];
-
-      const sorted = [...rows].sort((a, b) => {
-        const ta = a?.createdAt ? new Date(a.createdAt).getTime() : 0;
-        const tb = b?.createdAt ? new Date(b.createdAt).getTime() : 0;
-        if (tb !== ta) return tb - ta;
-        return (Number(b?.id) || 0) - (Number(a?.id) || 0);
-      });
-
-      setPendingLeaves(sorted.slice(0, 5));
-    } catch {
-      setPendingLeaves([]);
-    } finally {
-      setLeaveLoading(false);
-    }
-  };
-
   useEffect(() => {
-    fetchPendingLeaves();
-  }, []);
+    loadDashboard();
+    const timer = setInterval(() => {
+      if (!document.hidden) loadDashboard();
+    }, 60000);
+    return () => {
+      clearInterval(timer);
+      requestVersion.current += 1;
+    };
+  }, [loadDashboard]);
 
   const handleLeaveAction = async (id, action) => {
     const { value: remarks } = await Swal.fire({
@@ -250,7 +230,7 @@ export default function HRDashboard() {
         remarks,
       });
       Swal.fire("Success", `Leave request ${action}`, "success");
-      fetchPendingLeaves();
+      loadDashboard();
     } catch (err) {
       Swal.fire(
         "Error",
@@ -301,7 +281,7 @@ export default function HRDashboard() {
     let unmarked = 0;
 
     for (const emp of employees) {
-      const st = normalizeStatus(byId.get(emp.id)?.status);
+      const st = normalizeStatus(byId.get(Number(emp.id))?.status);
 
       if (!st) {
         unmarked++;
@@ -324,7 +304,7 @@ export default function HRDashboard() {
   const teacherAbsent = useMemo(
     () =>
       employees.filter((e) => {
-        const st = normalizeStatus(byId.get(e.id)?.status);
+        const st = normalizeStatus(byId.get(Number(e.id))?.status);
         return isTeacher(e) && st === "absent";
       }),
     [employees, byId]
@@ -333,7 +313,7 @@ export default function HRDashboard() {
   const teacherOnLeave = useMemo(
     () =>
       employees.filter((e) => {
-        const st = normalizeStatus(byId.get(e.id)?.status);
+        const st = normalizeStatus(byId.get(Number(e.id))?.status);
         return isTeacher(e) && onLeaveSet.has(st);
       }),
     [employees, byId]
@@ -341,33 +321,30 @@ export default function HRDashboard() {
 
   const allAbsent = useMemo(
     () =>
-      employees.filter((e) => normalizeStatus(byId.get(e.id)?.status) === "absent"),
+      employees.filter((e) => normalizeStatus(byId.get(Number(e.id))?.status) === "absent"),
     [employees, byId]
   );
 
   const allOnLeave = useMemo(
     () =>
-      employees.filter((e) => onLeaveSet.has(normalizeStatus(byId.get(e.id)?.status))),
+      employees.filter((e) => onLeaveSet.has(normalizeStatus(byId.get(Number(e.id))?.status))),
     [employees, byId]
   );
 
   const attendanceMarkedCount = useMemo(() => {
     return employees.reduce((acc, emp) => {
-      const st = normalizeStatus(byId.get(emp.id)?.status);
+      const st = normalizeStatus(byId.get(Number(emp.id))?.status);
       return st ? acc + 1 : acc;
     }, 0);
   }, [employees, byId]);
 
   const shiftDay = (delta) => {
-    const d = new Date(date);
+    const d = new Date(`${date}T12:00:00`);
     d.setDate(d.getDate() + delta);
     setDate(d.toISOString().split("T")[0]);
   };
 
-  const goToday = () => setDate(new Date().toISOString().split("T")[0]);
-
-  const openMessages = () => navigate("/messages");
-  const openMonthlyAttendanceRegister = () => navigate("/employee-monthly-attendance-register");
+  const goToday = () => setDate(localDate());
 
   const latestLeave = pendingLeaves[0] || null;
   const latestEmpName = latestLeave?.employee?.name || "—";
@@ -376,104 +353,61 @@ export default function HRDashboard() {
     latestLeave?.leaveType?.name || latestLeave?.leave_type?.name || "—";
 
   return (
-    <div className="container-fluid px-3 py-3 dashboard-surface">
-      <div
-        className="d-flex flex-wrap align-items-center justify-content-between mb-3 rounded-4 p-3 shadow-sm"
-        style={{
-          background: "linear-gradient(135deg, #0ea5e9, #6366f1)",
-          color: "white",
-          border: "1px solid rgba(255,255,255,0.15)",
-        }}
-      >
+    <div className="container-fluid px-3 py-3 dashboard-surface hr-dashboard">
+      <header className="hr-hero">
         <div>
-          <h4 className="mb-1 fw-bold">HR Dashboard</h4>
-          <div className="opacity-75 small">
-            Attendance, absentees, leave tracking and recent leave approvals
+          <span className="hr-eyebrow"><i className="bi bi-people" aria-hidden="true" /> PEOPLE & OPERATIONS</span>
+          <h1>HR Dashboard</h1>
+          <p>A clear view of your people. A head start on your day.</p>
+          <div className="hr-sync" role="status">
+            <span className={`hr-status-dot ${error || leaveError ? "hr-status-warning" : ""}`} />
+            {loading ? "Refreshing dashboard…" : error || leaveError ? "Some data is unavailable" : updatedAt ? `Updated ${updatedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : "Waiting for data"}
+            <span>· Refreshes every minute</span>
           </div>
         </div>
-
-        <div className="d-flex flex-wrap gap-2 align-items-end">
-          <div>
-            <label className="form-label mb-1 small opacity-75">Date</label>
-            <input
-              type="date"
-              className="form-control"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              style={{ borderRadius: 12, minWidth: 170 }}
-            />
+        <div className="hr-date-tools">
+          <label htmlFor="hr-dashboard-date">Attendance date</label>
+          <div className="d-flex gap-2">
+            <button className="btn btn-light" aria-label="Previous day" onClick={() => shiftDay(-1)}><i className="bi bi-chevron-left" /></button>
+            <input id="hr-dashboard-date" type="date" className="form-control" value={date} onChange={(e) => { if (e.target.value) setDate(e.target.value); }} />
+            <button className="btn btn-light" aria-label="Next day" onClick={() => shiftDay(1)}><i className="bi bi-chevron-right" /></button>
           </div>
-          <div className="d-flex gap-2 pb-1">
-            <button className="btn btn-light" type="button" onClick={() => shiftDay(-1)}>
-              ◀
-            </button>
-            <button className="btn btn-outline-light" type="button" onClick={goToday}>
-              Today
-            </button>
-            <button className="btn btn-light" type="button" onClick={() => shiftDay(1)}>
-              ▶
-            </button>
+          <div className="d-flex gap-2 mt-2">
+            <button className="btn btn-sm btn-outline-light" onClick={goToday}>Today</button>
+            <button className="btn btn-sm btn-outline-light" disabled={loading} onClick={loadDashboard}><i className="bi bi-arrow-clockwise me-2" />Refresh now</button>
           </div>
         </div>
-      </div>
+      </header>
 
-      {/* QUICK ACTIONS */}
-      <div className="row g-3 mb-4">
-        <div className="col-12 col-md-6 col-xl-3">
-          <button type="button" className="card shadow-sm rounded-4 border-0 h-100 w-100 text-start overflow-hidden quick-action-card" onClick={openMonthlyAttendanceRegister} style={{ background: "linear-gradient(135deg, #059669, #0d9488)", color: "white", minHeight: 128, cursor: "pointer" }}>
-            <div className="card-body"><div className="d-flex align-items-start justify-content-between gap-3"><div><div className="d-inline-flex align-items-center justify-content-center rounded-4 mb-3" style={{ width: 48, height: 48, background: "rgba(255,255,255,0.18)" }}><i className="bi bi-calendar2-check fs-4" /></div><div className="text-uppercase small opacity-75 mb-1">Attendance Analytics</div><div className="fw-bold fs-5">Monthly Register</div><div className="small opacity-75 mt-1">Day-wise attendance for every employee</div></div><span className="badge bg-light text-success">OPEN</span></div></div>
+      <section className="hr-stat-grid" aria-label="HR overview">
+        {[
+          ["Active employees", kpis.total, "Your current workforce", "people", "blue", "/employees"],
+          ["Present", kpis.present, `Attendance on ${date}`, "person-check", "teal", "/employee-attendance"],
+          ["Absent / on leave", `${loading || error ? "—" : kpis.absent} / ${loading || error ? "—" : kpis.leave}`, `Attendance on ${date}`, "calendar-minus", "amber", "/employee-attendance"],
+          ["Pending approvals", pendingLeaves.length, "All pending leave requests", "clipboard-check", "violet", "/hr-leave-requests"],
+        ].map(([label, value, detail, icon, tone, path], index) => (
+          <button key={label} className={`hr-stat hr-tone-${tone}`} onClick={() => navigate(path)}>
+            <span className="hr-icon"><i className={`bi bi-${icon}`} aria-hidden="true" /></span>
+            <span className="hr-stat-label">{label}</span>
+            <strong>{loading || (index === 3 ? leaveError : error) ? "—" : value}</strong>
+            <small>{detail}</small>
           </button>
+        ))}
+      </section>
+
+      <section className="hr-shortcuts" aria-labelledby="hr-shortcuts-heading">
+        <div className="hr-section-heading"><div><h2 id="hr-shortcuts-heading">Your HR workspace</h2><p>Everyday tasks, just one click away.</p></div><span className="hr-section-tag">Quick access</span></div>
+        <div className="hr-shortcut-grid">
+          {quickActions.map(([label, description, icon, path, tone]) => (
+            <button key={path} className={`hr-shortcut hr-tone-${tone}`} onClick={() => navigate(path)}>
+              <span className="hr-icon"><i className={`bi bi-${icon}`} aria-hidden="true" /></span>
+              <span className="hr-shortcut-copy"><strong>{label}</strong><small>{description}</small></span>
+              <i className="bi bi-arrow-up-right hr-shortcut-arrow" aria-hidden="true" />
+            </button>
+          ))}
         </div>
-        <div className="col-12 col-md-6 col-xl-3">
-          <button
-            type="button"
-            className="card shadow-sm rounded-4 border-0 h-100 w-100 text-start overflow-hidden quick-action-card"
-            onClick={openMessages}
-            style={{
-              background: "linear-gradient(135deg, #2563eb, #7c3aed)",
-              color: "white",
-              minHeight: 128,
-              cursor: "pointer",
-            }}
-          >
-            <div className="card-body position-relative">
-              <div
-                className="position-absolute top-0 end-0 rounded-circle"
-                style={{
-                  width: 118,
-                  height: 118,
-                  background: "rgba(255,255,255,0.12)",
-                  transform: "translate(35px, -42px)",
-                }}
-              />
-
-              <div className="d-flex align-items-start justify-content-between gap-3 position-relative">
-                <div>
-                  <div
-                    className="d-inline-flex align-items-center justify-content-center rounded-4 mb-3"
-                    style={{
-                      width: 48,
-                      height: 48,
-                      background: "rgba(255,255,255,0.18)",
-                      border: "1px solid rgba(255,255,255,0.22)",
-                    }}
-                  >
-                    <i className="bi bi-chat-dots fs-4" />
-                  </div>
-
-                  <div className="text-uppercase small opacity-75 mb-1">Communication</div>
-                  <div className="fw-bold fs-5">Messages</div>
-                  <div className="small opacity-75 mt-1">
-                    Open reminders, conversations and replies
-                  </div>
-                </div>
-
-                <span className="badge bg-light text-dark border">NEW</span>
-              </div>
-            </div>
-          </button>
-        </div>
-      </div>
+      </section>
+      {leaveError && <div className="alert alert-warning" role="alert">{leaveError}</div>}
 
       <div className="row g-3 mb-4">
         <div className="col-lg-8">
@@ -487,7 +421,7 @@ export default function HRDashboard() {
 
                   {leaveLoading ? (
                     <div className="text-muted">Loading leave requests…</div>
-                  ) : !latestLeave ? (
+                  ) : leaveError ? (<div className="text-muted">Leave requests unavailable.</div>) : !latestLeave ? (
                     <div className="d-flex align-items-center gap-2">
                       <span className="badge bg-success">All Clear</span>
                       <span className="text-muted">No pending leave requests.</span>
@@ -551,7 +485,7 @@ export default function HRDashboard() {
                   )}
                 </div>
 
-                {latestLeave && (
+                {latestLeave && !leaveError && !leaveLoading && (
                   <div className="d-flex flex-wrap gap-2">
                     <button
                       className="btn btn-success rounded-4"
@@ -567,7 +501,7 @@ export default function HRDashboard() {
                     </button>
                     <button
                       className="btn btn-outline-secondary rounded-4"
-                      onClick={fetchPendingLeaves}
+                      onClick={loadDashboard}
                       title="Refresh leave requests"
                     >
                       Refresh
@@ -580,16 +514,16 @@ export default function HRDashboard() {
 
               <div className="d-flex justify-content-between align-items-center">
                 <div className="fw-semibold">Recent Pending Requests</div>
-                <span className="badge bg-secondary">{pendingLeaves.length}</span>
+                <span className="badge bg-secondary">{leaveError ? "—" : pendingLeaves.length}</span>
               </div>
 
               {leaveLoading ? (
                 <div className="text-muted mt-2">Loading…</div>
-              ) : pendingLeaves.length === 0 ? (
+              ) : leaveError ? (<div className="text-muted mt-2">Refresh to load pending requests.</div>) : pendingLeaves.length === 0 ? (
                 <div className="text-muted mt-2">No pending leave requests.</div>
               ) : (
                 <div className="list-group list-group-flush mt-2">
-                  {pendingLeaves.map((r) => (
+                  {pendingLeaves.slice(0, 5).map((r) => (
                     <div
                       key={r.id}
                       className="list-group-item px-0 d-flex align-items-center gap-3"
@@ -637,33 +571,33 @@ export default function HRDashboard() {
             style={{ background: "linear-gradient(135deg, #f8fafc, #eef2ff)" }}
           >
             <div className="card-body">
-              <div className="text-uppercase small text-muted mb-2">Today at a glance</div>
+              <div className="text-uppercase small text-muted mb-2">Attendance on {date}</div>
 
               <div className="d-flex align-items-center justify-content-between border rounded-4 p-3 mb-2 bg-white">
                 <div>
                   <div className="fw-semibold">Present</div>
-                  <div className="text-muted small">Marked present today</div>
+                  <div className="text-muted small">Marked present on selected date</div>
                 </div>
-                <div className="display-6 fw-semibold mb-0 text-success">{kpis.present}</div>
+                <div className="display-6 fw-semibold mb-0 text-success">{loading || error ? "—" : kpis.present}</div>
               </div>
 
               <div className="d-flex align-items-center justify-content-between border rounded-4 p-3 mb-2 bg-white">
                 <div>
                   <div className="fw-semibold">Absent</div>
-                  <div className="text-muted small">Marked absent today</div>
+                  <div className="text-muted small">Marked absent on selected date</div>
                 </div>
-                <div className="display-6 fw-semibold mb-0 text-danger">{kpis.absent}</div>
+                <div className="display-6 fw-semibold mb-0 text-danger">{loading || error ? "—" : kpis.absent}</div>
               </div>
 
               <div className="d-flex align-items-center justify-content-between border rounded-4 p-3 mb-2 bg-white">
                 <div>
                   <div className="fw-semibold">On Leave</div>
                   <div className="text-muted small">
-                    {kpis.shortLeave ? `${kpis.shortLeave} short leave` : "Leave entries today"}
+                    {kpis.shortLeave ? `${kpis.shortLeave} short leave` : "Leave entries on selected date"}
                   </div>
                 </div>
                 <div className="display-6 fw-semibold mb-0" style={{ color: "#a16207" }}>
-                  {kpis.leave}
+                  {loading || error ? "—" : kpis.leave}
                 </div>
               </div>
 
@@ -673,15 +607,15 @@ export default function HRDashboard() {
                   <div className="text-muted small">Attendance not marked</div>
                 </div>
                 <div className="display-6 fw-semibold mb-0 text-secondary">
-                  {kpis.unmarked}
+                  {loading || error ? "—" : kpis.unmarked}
                 </div>
               </div>
 
               <div className="mt-3 small text-muted">
-                Active employees: <span className="fw-semibold">{kpis.total}</span>
+                Active employees: <span className="fw-semibold">{loading || error ? "—" : kpis.total}</span>
                 <br />
                 Attendance marked:{" "}
-                <span className="fw-semibold">{attendanceMarkedCount}</span>
+                <span className="fw-semibold">{loading || error ? "—" : attendanceMarkedCount}</span>
               </div>
             </div>
           </div>
@@ -782,11 +716,11 @@ export default function HRDashboard() {
                 </div>
                 <div className="card-body p-0">
                   {teacherOnLeave.length === 0 ? (
-                    <div className="p-3 text-muted">No teacher leave entries today.</div>
+                    <div className="p-3 text-muted">No teacher leave entries on the selected date.</div>
                   ) : (
                     <ul className="list-group list-group-flush">
                       {teacherOnLeave.map((e) => {
-                        const st = normalizeStatus(byId.get(e.id)?.status);
+                        const st = normalizeStatus(byId.get(Number(e.id))?.status);
                         const label = prettyStatus(st || "leave");
 
                         return (
@@ -833,7 +767,7 @@ export default function HRDashboard() {
             </div>
             <div className="card-body">
               {allAbsent.length === 0 ? (
-                <div className="text-muted">No one is absent today. 🎉</div>
+                <div className="text-muted">No employees marked absent on the selected date.</div>
               ) : (
                 <div className="row g-3">
                   {allAbsent.map((e) => (
@@ -884,11 +818,11 @@ export default function HRDashboard() {
             </div>
             <div className="card-body">
               {allOnLeave.length === 0 ? (
-                <div className="text-muted">No leave entries today.</div>
+                <div className="text-muted">No leave entries on the selected date.</div>
               ) : (
                 <div className="row g-3">
                   {allOnLeave.map((e) => {
-                    const st = normalizeStatus(byId.get(e.id)?.status);
+                    const st = normalizeStatus(byId.get(Number(e.id))?.status);
                     const label = prettyStatus(st || "leave");
 
                     return (
@@ -964,7 +898,7 @@ export default function HRDashboard() {
                     </tr>
                   ) : (
                     filteredEmployees.map((e, idx) => {
-                      const rec = byId.get(e.id) || {};
+                      const rec = byId.get(Number(e.id)) || {};
                       const meta = getStatusMeta(rec.status);
 
                       return (

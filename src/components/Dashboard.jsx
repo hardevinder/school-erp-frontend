@@ -8,6 +8,7 @@ import React, {
   useCallback,
 } from "react";
 import api from "../api";
+import "./dashboard/ClassicDashboardTheme.css";
 import { Link, useNavigate } from "react-router-dom"; // ✅ ADDED (no reload navigation)
 
 // Charts
@@ -1164,10 +1165,10 @@ const Dashboard = () => {
   /* -------------------------------- RENDER ------------------------------- */
   return (
     <div
-      className="dashboard-bg dashboard-surface"
+      className="dashboard-bg dashboard-surface classic-dashboard-theme"
       style={{
         backgroundImage:
-          "linear-gradient(135deg, rgba(99, 102, 241, 0.15), rgba(34, 197, 94, 0.15), rgba(245, 158, 11, 0.15))",
+          "linear-gradient(180deg, #f8f4ed 0%, #f5efe7 100%)",
         minHeight: "100vh",
       }}
     >
@@ -1185,7 +1186,7 @@ const Dashboard = () => {
                 className="mb-0 fw-bold d-flex align-items-center gap-2"
                 style={{ fontFamily: "'Inter', sans-serif" }}
               >
-                Dashboard
+                ERP Overview
                 {autoRefresh && (
                   <span
                     className="badge bg-success-subtle text-success border d-inline-flex align-items-center gap-1"
@@ -1289,13 +1290,13 @@ const Dashboard = () => {
               <div>
                 <div className="d-flex align-items-center gap-2 mb-1">
                   <span className="badge bg-primary-subtle text-primary border">
-                    Organized Dashboard
+                    ERP Quick Access
                   </span>
                   <span className="small text-muted">
-                    Fee, students, reports and admin links grouped properly
+                    Daily administration shortcuts, clearly organized
                   </span>
                 </div>
-                <h5 className="mb-0 fw-bold">Quick Actions</h5>
+                <h5 className="mb-0 fw-bold">Administration Shortcuts</h5>
               </div>
 
               <div className="quick-links-header-actions d-flex flex-wrap gap-2">
@@ -1336,8 +1337,8 @@ const Dashboard = () => {
 
         <SectionHeader
           badge="Overview"
-          title="Session Snapshot"
-          subtitle="Important fee and enrollment numbers first, followed by latest enquiries."
+          title="Institution Snapshot"
+          subtitle="Key operational numbers for the selected academic session."
         />
         <div className="row g-4 mb-4">
           {/* Recent Enquiries */}

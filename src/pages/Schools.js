@@ -41,7 +41,7 @@ const extractSchools = (data) => {
 };
 
 // escape helper for inline HTML values
-const esc = (v = "") => String(v ?? "").replace(/"/g, "&quot;");
+const esc = (v = "") => String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
 const GOOGLE_MAPS_API_KEY = String(
   process.env.REACT_APP_GOOGLE_MAPS_API_KEY || ""
@@ -124,26 +124,38 @@ const Schools = () => {
 
   const [schools, setSchools] = useState([]);
   const [search, setSearch] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
 
   // ---------------- Fetch ----------------
   const fetchSchools = async () => {
+    setLoading(true);
+    setLoadError("");
     try {
       const response = await api.get("/schools");
       setSchools(extractSchools(response.data));
     } catch (error) {
       console.error("fetchSchools error:", error);
-      Swal.fire("Error", "Failed to fetch schools.", "error");
+      setLoadError("Institutions could not be loaded. Please try again.");
+    } finally {
+      setLoading(false);
     }
   };
 
   // ---------------- Modal HTML Bootstrap Only ----------------
   const getModalHtml = (school = {}) => `
-    <div
-      class="text-start school-editor"
-    >
-      <div class="card mb-3">
+    <div class="institution-editor-intro">Keep your institution details up to date. Fields marked * are required.</div>
+    <nav class="institution-editor-nav" aria-label="Jump to form section">
+      <button type="button" data-editor-section="institution-basic">01 · Basic details</button>
+      <button type="button" data-editor-section="institution-academic">02 · Academic details</button>
+      <button type="button" data-editor-section="institution-location">03 · Location</button>
+      <button type="button" data-editor-section="institution-branding">04 · Branding</button>
+    </nav>
+    <div class="institution-scroll-hint"><i class="bi bi-arrow-left-right"></i> Scroll horizontally to see all sections. Your changes stay in this form.</div>
+    <div class="text-start school-editor" tabindex="0" role="region" aria-label="Institution form sections, scroll horizontally">
+      <div class="card institution-editor-panel" id="institution-basic">
         <div class="card-header py-2 fw-semibold">
-          Basic Details
+          <span>01</span> Basic details
         </div>
 
         <div class="card-body">
@@ -194,65 +206,13 @@ const Schools = () => {
                 value="${esc(school.description)}"
               />
             </div>
-            <div class="col-12">
-              <div class="school-map-heading">
-                <div>
-                  <label for="swal-map-search" class="form-label fw-semibold mb-1">
-                    Pick Institution Address from Google Maps
-                  </label>
-                  <div class="text-muted small">Search, click the map, or drag the marker.</div>
-                </div>
-                <button id="swal-current-location" type="button" class="btn btn-sm btn-primary">
-                  <i class="bi bi-crosshair me-1"></i> Current location
-                </button>
-              </div>
-              <div class="school-map-search-wrap">
-                <i class="bi bi-search"></i>
-                <input
-                  id="swal-map-search"
-                  class="form-control"
-                  placeholder="Search institution, street, landmark or address"
-                  autocomplete="off"
-                />
-              </div>
-              <div class="school-map-shell">
-                <div id="swal-school-map"></div>
-                <div id="swal-map-loading" class="school-map-loading">
-                  <span class="spinner-border spinner-border-sm me-2"></span>
-                  Loading Google Maps…
-                </div>
-              </div>
-              <div class="school-map-footer">
-                <span id="swal-map-coordinates" class="text-muted small">
-                  ${school.latitude && school.longitude
-                    ? `<i class="bi bi-geo-alt-fill text-danger me-1"></i>${esc(school.latitude)}, ${esc(school.longitude)}`
-                    : '<i class="bi bi-geo-alt me-1"></i>No location selected'}
-                </span>
-                <span class="badge text-bg-light border">Google Maps</span>
-              </div>
-              <input id="swal-latitude" type="hidden" value="${esc(school.latitude)}" />
-              <input id="swal-longitude" type="hidden" value="${esc(school.longitude)}" />
-            </div>
-            <div class="col-lg-4 col-md-6">
-              <label for="swal-attendance-radius" class="form-label fw-semibold">
-                Attendance Radius (metres)
-              </label>
-              <input
-                id="swal-attendance-radius"
-                type="number"
-                min="25"
-                max="5000"
-                class="form-control form-control-sm"
-                value="${esc(school.attendance_radius_meters || 150)}"
-              />
-            </div>
           </div>
         </div>
       </div>
 
-      <div class="card mb-3">
+      <div class="card institution-editor-panel" id="institution-academic">
         <div class="card-header py-2 fw-semibold">
-          Academic / Regulatory Meta
+          <span>02</span> Academic & regulatory
         </div>
 
         <div class="card-body">
@@ -322,6 +282,13 @@ const Schools = () => {
               </div>
             </div>
 
+          </div>
+        </div>
+      </div>
+
+      <section class="card institution-editor-panel" id="institution-location" aria-labelledby="institution-location-heading">
+        <div class="card-header" id="institution-location-heading"><span>03</span> Location & attendance</div>
+        <div class="card-body"><div class="row g-3">
             <div class="col-12">
               <label for="swal-address" class="form-label fw-semibold">Address Line</label>
               <input
@@ -331,19 +298,70 @@ const Schools = () => {
                 value="${esc(school.address_line)}"
               />
             </div>
-          </div>
-        </div>
-      </div>
+            <div class="col-12">
+              <div class="school-map-heading">
+                <div>
+                  <label for="swal-map-search" class="form-label fw-semibold mb-1">
+                    Pick Institution Address from Google Maps
+                  </label>
+                  <div class="text-muted small">Search, click the map, or drag the marker.</div>
+                </div>
+                <button id="swal-current-location" type="button" class="btn btn-sm btn-primary">
+                  <i class="bi bi-crosshair me-1"></i> Current location
+                </button>
+              </div>
+              <div class="school-map-search-wrap">
+                <i class="bi bi-search"></i>
+                <input
+                  id="swal-map-search"
+                  class="form-control"
+                  placeholder="Search institution, street, landmark or address"
+                  autocomplete="off"
+                />
+              </div>
+              <div class="school-map-shell">
+                <div id="swal-school-map"></div>
+                <div id="swal-map-loading" class="school-map-loading">
+                  <span class="spinner-border spinner-border-sm me-2"></span>
+                  Loading Google Maps…
+                </div>
+              </div>
+              <div class="school-map-footer">
+                <span id="swal-map-coordinates" class="text-muted small">
+                  ${school.latitude && school.longitude
+                    ? `<i class="bi bi-geo-alt-fill text-danger me-1"></i>${esc(school.latitude)}, ${esc(school.longitude)}`
+                    : '<i class="bi bi-geo-alt me-1"></i>No location selected'}
+                </span>
+                <span class="badge text-bg-light border">Google Maps</span>
+              </div>
+              <input id="swal-latitude" type="hidden" value="${esc(school.latitude)}" />
+              <input id="swal-longitude" type="hidden" value="${esc(school.longitude)}" />
+            </div>
+            <div class="col-lg-4 col-md-6">
+              <label for="swal-attendance-radius" class="form-label fw-semibold">
+                Attendance Radius (metres)
+              </label>
+              <input
+                id="swal-attendance-radius"
+                type="number"
+                min="25"
+                max="5000"
+                class="form-control form-control-sm"
+                value="${esc(school.attendance_radius_meters || 150)}"
+              />
+            </div>
+        </div></div>
+      </section>
 
-      <div class="card mb-1">
+      <div class="card institution-editor-panel" id="institution-branding">
         <div class="card-header py-2 fw-semibold">
-          Logos
+          <span>04</span> Institution branding
         </div>
 
         <div class="card-body">
           <div class="row g-3 align-items-start">
             <div class="col-lg-6 col-md-6">
-              <label for="swal-logo" class="form-label fw-semibold">School Logo</label>
+              <label for="swal-logo" class="form-label fw-semibold">Institution Logo</label>
               <input
                 type="file"
                 id="swal-logo"
@@ -380,6 +398,17 @@ const Schools = () => {
       </div>
     </div>
   `;
+
+  const bindEditorNavigation = () => {
+    const popup = Swal.getPopup();
+    popup.querySelectorAll("[data-editor-section]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const panel = popup.querySelector(`#${button.dataset.editorSection}`);
+        panel?.scrollIntoView({ behavior: "auto", block: "nearest", inline: "start" });
+        panel?.querySelector("input:not([type=hidden]), select, button")?.focus({ preventScroll: true });
+      });
+    });
+  };
 
   const bindLogoPreviewEvents = ({ school = {}, setFileLogo, setFileBoardLogo }) => {
     const popup = Swal.getPopup();
@@ -656,6 +685,7 @@ const Schools = () => {
     const name = p.querySelector("#swal-name").value.trim();
 
     if (!name) {
+      p.querySelector("#swal-name").focus();
       Swal.showValidationMessage("Institution Name is required");
       return false;
     }
@@ -670,6 +700,7 @@ const Schools = () => {
       return false;
     }
     if (!Number.isInteger(attendanceRadius) || attendanceRadius < 25 || attendanceRadius > 5000) {
+      p.querySelector("#swal-attendance-radius").focus();
       Swal.showValidationMessage("Attendance radius must be between 25 and 5000 metres");
       return false;
     }
@@ -730,19 +761,22 @@ const Schools = () => {
 
     Swal.fire({
       title: "Add New Institution",
-      width: "1050px",
+      width: "min(1480px, calc(100vw - 32px))",
       heightAuto: false,
       allowOutsideClick: false,
       allowEscapeKey: false,
       showCloseButton: true,
       html: getModalHtml(),
       showCancelButton: true,
-      confirmButtonText: "Add",
+      confirmButtonText: "Create institution",
       customClass: {
-        popup: "p-3",
-        htmlContainer: "m-0",
+        popup: "institution-editor-popup",
+        htmlContainer: "institution-editor-content",
+        actions: "institution-editor-actions",
+        confirmButton: "institution-save-button",
       },
       didOpen: () => {
+        bindEditorNavigation();
         bindSchoolMap({});
         bindLogoPreviewEvents({
           school: {},
@@ -789,19 +823,22 @@ const Schools = () => {
 
     Swal.fire({
       title: "Edit Institution",
-      width: "1050px",
+      width: "min(1480px, calc(100vw - 32px))",
       heightAuto: false,
       allowOutsideClick: false,
       allowEscapeKey: false,
       showCloseButton: true,
       html: getModalHtml(school),
       showCancelButton: true,
-      confirmButtonText: "Update",
+      confirmButtonText: "Save changes",
       customClass: {
-        popup: "p-3",
-        htmlContainer: "m-0",
+        popup: "institution-editor-popup",
+        htmlContainer: "institution-editor-content",
+        actions: "institution-editor-actions",
+        confirmButton: "institution-save-button",
       },
       didOpen: () => {
+        bindEditorNavigation();
         bindSchoolMap(school);
         bindLogoPreviewEvents({
           school,
@@ -884,191 +921,54 @@ const Schools = () => {
     fetchSchools();
   }, []);
 
-  const filtered = schools.filter((s) => {
-    const q = search.toLowerCase();
-
-    return (
-      (s.name || "").toLowerCase().includes(q) ||
-      (s.affiliation_number || "").toLowerCase().includes(q) ||
-      (s.udise_number || "").toLowerCase().includes(q) ||
-      (s.school_code || "").toLowerCase().includes(q) ||
-      (s.website || "").toLowerCase().includes(q) ||
-      (s.tele_fax || "").toLowerCase().includes(q) ||
-      (s.address_line || "").toLowerCase().includes(q) ||
-      (s.transport_display_label || "").toLowerCase().includes(q) ||
-      (s.phone || "").toLowerCase().includes(q) ||
-      (s.email || "").toLowerCase().includes(q)
-    );
+  const filtered = schools.filter((school) => {
+    const query = search.trim().toLowerCase();
+    return ["name", "institution_type", "description", "affiliation_number", "udise_number",
+      "school_code", "website", "tele_fax", "address_line", "transport_display_label", "phone", "email"]
+      .some((key) => String(school[key] || (key === "institution_type" ? "school" : "")).toLowerCase().includes(query));
   });
 
+  const detail = (label, value) => <div className="institution-detail" key={label}><dt>{label}</dt><dd>{value || "—"}</dd></div>;
+
+
   return (
-    <div className="container mt-4">
-      <div className="d-flex justify-content-between align-items-center mb-3">
-        <h1>Institutions Management</h1>
-
-        {canEdit && (
-          <button className="btn btn-success" onClick={handleAdd}>
-            Add Institution
-          </button>
-        )}
+    <main className="institutions-page">
+      <header className="institutions-header">
+        <div>
+          <span className="institutions-eyebrow"><i className="bi bi-buildings" aria-hidden="true" /> INSTITUTION WORKSPACE</span>
+          <h1>Institutions</h1>
+          <p>Manage your identity, academic details and campus information in one place.</p>
+        </div>
+        {canEdit && <button className="btn btn-primary institution-add" onClick={handleAdd}><i className="bi bi-plus-lg" aria-hidden="true" /> Add institution</button>}
+      </header>
+      <div className="institutions-toolbar">
+        <label className="institutions-search"><i className="bi bi-search" aria-hidden="true" /><input type="search" aria-label="Search institutions" placeholder="Search name, type, code or contact…" value={search} onChange={(e) => setSearch(e.target.value)} /></label>
+        <div className="institutions-toolbar-actions"><span aria-live="polite">{loading ? "Loading…" : `${filtered.length} of ${schools.length} institutions`}</span><button className="btn btn-light" onClick={fetchSchools} disabled={loading} aria-label="Refresh institutions"><i className="bi bi-arrow-clockwise" aria-hidden="true" /></button></div>
       </div>
-
-      <div className="mb-3">
-        <input
-          type="text"
-          className="form-control w-50"
-          placeholder="Search by name, type, affiliation/AISHE, institution code, transport label, website, phone, address..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
+      <div className="institution-scroll-hint"><i className="bi bi-arrow-left-right" aria-hidden="true" /> Scroll inside a profile to view every section.</div>
+      <div className="institutions-directory" aria-busy={loading}>
+        {loadError ? <div className="institutions-empty" role="alert"><i className="bi bi-exclamation-circle" /><h2>Unable to load institutions</h2><p>{loadError}</p><button className="btn btn-primary" onClick={fetchSchools}>Try again</button></div>
+          : loading ? <div className="institutions-empty" role="status"><span className="spinner-border text-primary" /><p>Loading institution profiles…</p></div>
+          : filtered.length === 0 ? <div className="institutions-empty"><i className="bi bi-buildings" /><h2>{search ? "No matching institutions" : "No institutions yet"}</h2><p>{search ? "Try a different name, type or institution code." : "Add an institution to start building its profile."}</p>{search && <button className="btn btn-outline-primary" onClick={() => setSearch("")}>Clear search</button>}</div>
+          : filtered.map((school) => (
+            <article className="institution-profile" key={school.id}>
+              <header className="institution-profile-header">
+                <div className="institution-identity">
+                  <div className="institution-avatar">{school.logo ? <img src={toAbs(school.logo)} alt={`${school.name} logo`} /> : <i className="bi bi-building" aria-hidden="true" />}</div>
+                  <div><div className="institution-title-line"><h2>{school.name}</h2><span className={`institution-type ${school.institution_type === "college" ? "is-college" : ""}`}>{String(school.institution_type || "school").toLowerCase() === "college" ? "College" : "School"}</span></div><p>{school.description || "Institution profile & settings"}</p></div>
+                </div>
+                {canEdit && <div className="institution-profile-actions"><button className="btn btn-outline-primary" onClick={() => handleEdit(school)} aria-label={`Edit ${school.name}`}><i className="bi bi-pencil-square" aria-hidden="true" /> Edit profile</button>{isSuperadmin && <button className="btn institution-delete" onClick={() => handleDelete(school)} aria-label={`Delete ${school.name}`}><i className="bi bi-trash3" aria-hidden="true" /></button>}</div>}
+              </header>
+              <div className="institution-profile-sections" tabIndex={0} role="region" aria-label={`${school.name} details, scroll horizontally`}>
+                <section className="institution-info-panel"><h3><i className="bi bi-person-lines-fill" aria-hidden="true" /> Contact details</h3><dl>{detail("Phone", school.phone)}{detail("Email", school.email)}{detail("Website", school.website ? <a href={/^https?:\/\//i.test(school.website) ? school.website : `https://${school.website}`} target="_blank" rel="noreferrer">{school.website}<i className="bi bi-arrow-up-right ms-1" aria-hidden="true" /></a> : null)}{detail("Tele / Fax", school.tele_fax)}</dl></section>
+                <section className="institution-info-panel"><h3><i className="bi bi-mortarboard" aria-hidden="true" /> Academic details</h3><dl>{detail("Institution code", school.school_code)}{detail("Affiliation / University ref.", school.affiliation_number)}{detail("UDISE / AISHE number", school.udise_number)}{detail("Transport display label", school.transport_display_label || "Transport")}</dl></section>
+                <section className="institution-info-panel"><h3><i className="bi bi-geo-alt" aria-hidden="true" /> Campus location</h3><dl>{detail("Address", school.address_line)}{detail("Coordinates", school.latitude != null && school.longitude != null && school.latitude !== "" && school.longitude !== "" ? `${school.latitude}, ${school.longitude}` : null)}{detail("Attendance radius", `${school.attendance_radius_meters || 150} metres`)}</dl></section>
+                <section className="institution-info-panel institution-branding-panel"><h3><i className="bi bi-palette" aria-hidden="true" /> Branding</h3><div className="institution-logos">{[["Institution logo", school.logo], ["Board / University logo", school.board_logo]].map(([label, src]) => <div key={label}><div className="institution-logo-preview">{src ? <img src={toAbs(src)} alt={label} /> : <span>No logo</span>}</div><span>{label}</span></div>)}</div></section>
+              </div>
+            </article>
+          ))}
       </div>
-
-      <div className="table-responsive">
-        <table className="table table-striped table-bordered align-middle">
-          <thead className="table-dark">
-            <tr>
-              <th>#</th>
-              <th>Logo</th>
-              <th>Board / University Logo</th>
-              <th>Type</th>
-              <th>Name & Description</th>
-              <th>Affiliation / University Ref.</th>
-              <th>UDISE / AISHE Number</th>
-              <th>Institution Code</th>
-              <th>Transport Label</th>
-              <th>Phone</th>
-              <th>Email</th>
-              <th>Website</th>
-              <th>Tele/Fax</th>
-              <th>Address</th>
-              {canEdit && <th style={{ minWidth: 150 }}>Actions</th>}
-            </tr>
-          </thead>
-
-          <tbody>
-            {filtered.map((school, index) => (
-              <tr key={school.id}>
-                <td>{index + 1}</td>
-
-                <td>
-                  {school.logo ? (
-                    <img
-                      src={toAbs(school.logo)}
-                      alt="Institution Logo"
-                      className="rounded border"
-                      style={{
-                        width: "50px",
-                        height: "50px",
-                        objectFit: "cover",
-                      }}
-                    />
-                  ) : (
-                    "—"
-                  )}
-                </td>
-
-                <td>
-                  {school.board_logo ? (
-                    <img
-                      src={toAbs(school.board_logo)}
-                      alt="Board / University Logo"
-                      className="rounded border"
-                      style={{
-                        width: "50px",
-                        height: "50px",
-                        objectFit: "cover",
-                      }}
-                    />
-                  ) : (
-                    "—"
-                  )}
-                </td>
-
-                <td>
-                  <span className={`badge ${String(school.institution_type || "school").toLowerCase() === "college" ? "text-bg-primary" : "text-bg-success"}`}>
-                    {String(school.institution_type || "school").toLowerCase() === "college" ? "College" : "School"}
-                  </span>
-                </td>
-
-                <td>
-                  <div className="fw-semibold">{school.name}</div>
-                  <div className="text-muted small">
-                    {school.description || "—"}
-                  </div>
-                </td>
-
-                <td>{school.affiliation_number || "—"}</td>
-                <td>{school.udise_number || "—"}</td>
-                <td>{school.school_code || "—"}</td>
-                <td>{school.transport_display_label || "Transport"}</td>
-                <td>{school.phone || "—"}</td>
-                <td>{school.email || "—"}</td>
-
-                <td>
-                  {school.website ? (
-                    <a
-                      href={
-                        school.website.startsWith("http")
-                          ? school.website
-                          : `https://${school.website}`
-                      }
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      {school.website}
-                    </a>
-                  ) : (
-                    "—"
-                  )}
-                </td>
-
-                <td>{school.tele_fax || "—"}</td>
-
-                <td
-                  style={{
-                    maxWidth: 240,
-                    whiteSpace: "nowrap",
-                    textOverflow: "ellipsis",
-                    overflow: "hidden",
-                  }}
-                  title={school.address_line || ""}
-                >
-                  {school.address_line || "—"}
-                </td>
-
-                {canEdit && (
-                  <td>
-                    <button
-                      className="btn btn-primary btn-sm me-2"
-                      onClick={() => handleEdit(school)}
-                    >
-                      Edit
-                    </button>
-
-                    {isSuperadmin && (
-                      <button
-                        className="btn btn-danger btn-sm"
-                        onClick={() => handleDelete(school)}
-                      >
-                        Delete
-                      </button>
-                    )}
-                  </td>
-                )}
-              </tr>
-            ))}
-
-            {filtered.length === 0 && (
-              <tr>
-                <td colSpan={canEdit ? 15 : 14} className="text-center">
-                  No institutions found
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-    </div>
+    </main>
   );
 };
 

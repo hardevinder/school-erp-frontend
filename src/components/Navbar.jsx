@@ -19,6 +19,7 @@ import { FaBell } from "react-icons/fa";
 
 import { useRoles } from "../hooks/useRoles";
 import BranchSwitcher from "./BranchSwitcher";
+import { useInstitution } from "../institution/InstitutionContext";
 
 const CollegeNavbar = ({
   notificationsCount = 0,
@@ -41,8 +42,7 @@ const CollegeNavbar = ({
   const [userName, setUserName] =
     useState("");
 
-  const [college, setCollege] =
-    useState(null);
+  const { institution, terms } = useInstitution();
 
   const [family, setFamily] =
     useState(null);
@@ -106,44 +106,17 @@ const CollegeNavbar = ({
      COLLEGE BRANDING
   ===================================================== */
 
-  useEffect(() => {
-    if (!API_BASE) return;
-
-    axios
-      .get(`${API_BASE}/schools`)
-      .then((res) => {
-        const rows =
-          Array.isArray(res.data)
-            ? res.data
-            : Array.isArray(
-                res.data?.data
-              )
-            ? res.data.data
-            : [];
-
-        if (rows.length) {
-          setCollege(rows[0]);
-        }
-      })
-      .catch((err) => {
-        console.warn(
-          "Unable to fetch college:",
-          err?.message
-        );
-      });
-  }, [API_BASE]);
-
-  const collegeName =
-    college?.name ||
-    "EduBridge Demo College";
+  const collegeName = institution?.name?.trim() || "EduBridge";
 
   const fallbackLogo =
     `${process.env.PUBLIC_URL}/images/DemoLogo.png`;
 
-  const collegeLogo =
-    college?.logo
-      ? `${API_BASE}${college.logo}`
-      : fallbackLogo;
+  const institutionLogo = institution?.logo || "";
+  const collegeLogo = institutionLogo
+    ? /^(https?:)?\/\//i.test(institutionLogo)
+      ? institutionLogo
+      : `${API_BASE}/${institutionLogo.replace(/^\/+/, "")}`
+    : fallbackLogo;
 
   /* =====================================================
      DEFAULT PROFILE PHOTO
@@ -1032,7 +1005,7 @@ const CollegeNavbar = ({
               </strong>
 
               <small>
-                College Management
+                {terms.institution} Management
               </small>
             </div>
           </Link>

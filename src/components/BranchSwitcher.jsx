@@ -1,7 +1,9 @@
 import React from "react";
 import { useBranch } from "../branch/BranchContext";
+import { useRoles } from "../hooks/useRoles";
 
 export default function BranchSwitcher({ compact = false }) {
+  const { activeRole } = useRoles();
   const {
     branches,
     activeBranchId,
@@ -9,7 +11,12 @@ export default function BranchSwitcher({ compact = false }) {
     setActiveBranch,
   } = useBranch();
 
-  if (!branches.length) return null;
+  const normalizedRole = String(activeRole || "").trim().toLowerCase();
+  const branchLockedRole = normalizedRole === "student" || normalizedRole === "teacher";
+
+  // Students and teachers are scoped to their assigned branch/campus.
+  // They should never be offered a UI control to switch the active branch.
+  if (branchLockedRole || !branches.length) return null;
 
   return (
     <div className={compact ? "branch-switcher branch-switcher-compact" : "branch-switcher"}>

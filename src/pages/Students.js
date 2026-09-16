@@ -398,6 +398,11 @@ const Students = () => {
   const [selectedSessionFilter, setSelectedSessionFilter] = useState("");
   const [hasSiblingFilter, setHasSiblingFilter] = useState("");
   const [importing, setImporting] = useState(false);
+  const [showImportPanel, setShowImportPanel] = useState(false);
+  const [importFile, setImportFile] = useState(null);
+  const [importProgress, setImportProgress] = useState(0);
+  const [importStatus, setImportStatus] = useState("");
+  const [importError, setImportError] = useState("");
   const [openActionMenuId, setOpenActionMenuId] = useState(null);
 
   // ✅ Columns mode toggle (Compact / Full) with persistence
@@ -2407,39 +2412,70 @@ const Students = () => {
   }
 };
 
-  const handleImport = async (file) => {
-    if (!canImportStudents || !file) return;
+  const selectImportFile = (files) => {
+    if (importing || !files?.length) return;
+    setImportStatus("");
+    setImportProgress(0);
+    if (files.length !== 1 || !/\.xlsx?$/i.test(files[0].name)) {
+      setImportFile(null);
+      setImportError("Please select one Excel file (.xlsx or .xls).");
+      return;
+    }
+    setImportFile(files[0]);
+    setImportError("");
+  };
+
+  const handleImport = async () => {
+    if (!canImportStudents || !importFile || importing) return;
     setImporting(true);
+    setImportProgress(0);
+    setImportStatus("uploading");
+    setImportError("");
     const fd = new FormData();
-    fd.append("file", file);
+    fd.append("file", importFile);
 
     try {
       const res = await api.post("/students/import-students", fd, {
         headers: { "Content-Type": "multipart/form-data" },
+        onUploadProgress: ({ loaded, total }) => {
+          if (!total) return;
+          setImportProgress(Math.min(100, Math.floor((loaded / total) * 100)));
+          if (loaded >= total) setImportStatus("processing");
+        },
       });
-      Swal.fire("Imported", res.data?.message || "Import completed successfully", "success");
-      if (res.data?.duplicates && res.data.duplicates.length) {
-        Swal.fire("Note", `${res.data.duplicates.length} duplicate rows were skipped`, "info");
-      }
+      const data = res.data || {};
+      const invalid = Array.isArray(data.invalid) ? data.invalid : [];
+      const duplicates = data.summary?.duplicates ?? data.duplicates?.length ?? 0;
+      const invalidCount = data.summary?.invalid ?? invalid.length;
+      const inserted = data.summary?.inserted;
+      const hasSkippedRows = invalidCount > 0 || duplicates > 0;
+      const reasons = new Map();
+      invalid.forEach((row) => {
+        const reason = row.error || "Invalid row";
+        reasons.set(reason, (reasons.get(reason) || 0) + 1);
+      });
+      const details = [
+        data.message || "Import completed",
+        `Skipped: ${invalidCount} invalid rows, ${duplicates} duplicates.`,
+        ...Array.from(reasons, ([reason, count]) => `${reason}: ${count} row(s)`),
+      ].join("\n");
+      setImportProgress(100);
+      setImportStatus(inserted === 0 ? "error" : "complete");
+      if (inserted === 0 || hasSkippedRows) setImportError(details);
+      if (inserted !== 0) setImportFile(null);
+      Swal.fire(
+        inserted === 0 ? "No students imported" : hasSkippedRows ? "Import completed with skipped rows" : "Imported",
+        details,
+        inserted === 0 || hasSkippedRows ? "warning" : "success"
+      );
       fetchStudents();
     } catch (err) {
       console.error("handleImport:", err);
-      Swal.fire("Error", err.response?.data?.message || "Failed to import data", "error");
+      setImportStatus("error");
+      setImportError(err.response?.data?.message || "Failed to import data. Please try again.");
     } finally {
       setImporting(false);
     }
-  };
-
-  const openImportDialog = () => {
-    if (!canImportStudents) return;
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = ".xlsx,.xls";
-    input.onchange = (e) => {
-      const f = e.target.files?.[0];
-      if (f) handleImport(f);
-    };
-    input.click();
   };
 
   const studentHasSibling = (stu) => {
@@ -2900,11 +2936,14 @@ const Students = () => {
           {canImportStudents && (
             <button
               className="btn btn-sm btn-outline-secondary rounded-pill px-3"
-              onClick={openImportDialog}
+              onClick={() => setShowImportPanel((open) => !open)}
+              aria-expanded={showImportPanel}
+              aria-controls="student-import-panel"
               disabled={importing}
             >
               <i className="bi bi-upload me-1"></i>
               {importing ? "Importing..." : "Import Excel"}
+              <i className={`bi bi-chevron-${showImportPanel ? "up" : "down"} ms-2`} aria-hidden="true"></i>
             </button>
           )}
 
@@ -2916,6 +2955,62 @@ const Students = () => {
           )}
         </div>
       </div>
+
+      {canImportStudents && showImportPanel && (
+        <section id="student-import-panel" className="student-import-panel mb-3" aria-label="Import students from Excel" aria-busy={importing}>
+          <h3 className="h6 fw-bold">Import students from Excel</h3>
+          <div
+            className={`student-import-dropzone${importing ? " is-disabled" : ""}`}
+            onDragOver={(event) => event.preventDefault()}
+            onDrop={(event) => {
+              event.preventDefault();
+              selectImportFile(event.dataTransfer.files);
+            }}
+          >
+            <label htmlFor="student-import-file" className="fw-semibold mb-2">
+              Drop your Excel file here or choose a file
+            </label>
+            <input
+              id="student-import-file"
+              type="file"
+              className="form-control"
+              accept=".xlsx,.xls"
+              disabled={importing}
+              aria-describedby="student-import-help"
+              onChange={(event) => {
+                selectImportFile(event.target.files);
+                event.target.value = "";
+              }}
+            />
+            <small id="student-import-help" className="text-muted d-block mt-2">
+              Supports .xlsx and .xls. Students are imported from the first worksheet.
+            </small>
+          </div>
+          {importFile && <p className="small mt-2 mb-0 text-break">Selected file: <strong>{importFile.name}</strong></p>}
+          {importError && <div className="alert alert-danger mt-2 mb-0" role="alert">{importError}</div>}
+          {importStatus && importStatus !== "error" && (
+            <div className="mt-3">
+              <div className="d-flex justify-content-between small mb-1" role="status">
+                <span>{importStatus === "complete" ? "Import complete" : importStatus === "processing" ? "Upload complete — processing students…" : "Uploading Excel file…"}</span>
+                <strong>{importProgress}%</strong>
+              </div>
+              <div
+                className="progress"
+                role="progressbar"
+                aria-label={importStatus === "complete" ? "Import complete" : "Excel file upload"}
+                aria-valuenow={importProgress}
+                aria-valuemin={0}
+                aria-valuemax={100}
+              >
+                <div className={`progress-bar${importing ? " progress-bar-striped progress-bar-animated" : " bg-success"}`} style={{ width: `${importProgress}%` }} />
+              </div>
+            </div>
+          )}
+          <button type="button" className="btn btn-primary btn-sm mt-3" disabled={!importFile || importing} onClick={handleImport}>
+            {importing ? "Importing students…" : "Start import"}
+          </button>
+        </section>
+      )}
 
       {/* ✅ Mini stats strip (very less vertical space) */}
       <div className="students-stats-strip mb-2">

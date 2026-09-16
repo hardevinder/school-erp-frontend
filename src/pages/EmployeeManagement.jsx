@@ -35,6 +35,7 @@ const EmployeeManagement = () => {
   const [modalMode, setModalMode] = useState('add');
   const [currentEmployee, setCurrentEmployee] = useState(null);
   const [file, setFile] = useState(null);
+  const [isDraggingFile, setIsDraggingFile] = useState(false);
   const [employeePhoto, setEmployeePhoto] = useState(null);
   const fileInputRef = useRef(null);
 
@@ -297,8 +298,12 @@ const EmployeeManagement = () => {
     }
   };
 
-  const handleFileChange = (e) => {
-    const selectedFile = e.target.files?.[0] || null;
+  const selectImportFile = (files) => {
+    if (!files?.length) return;
+    if (files.length !== 1 || !/\.(xlsx|xls)$/i.test(files[0].name)) {
+      return fireAlert('Error', 'Please select one Excel file (.xlsx or .xls)', 'warning');
+    }
+    const selectedFile = files[0];
     setFile(selectedFile);
   };
 
@@ -428,14 +433,44 @@ const EmployeeManagement = () => {
             </button>
           </div>
 
-          <div className="input-group" style={{ maxWidth: 260 }}>
-            <input
-              ref={fileInputRef}
-              type="file"
-              className="form-control"
-              accept=".xlsx, .xls"
-              onChange={handleFileChange}
-            />
+          <div className="employee-import-controls">
+            <label
+              className={`employee-import-dropzone${isDraggingFile ? ' is-dragging' : ''}`}
+              onDragEnter={(event) => {
+                event.preventDefault();
+                setIsDraggingFile(true);
+              }}
+              onDragOver={(event) => {
+                event.preventDefault();
+                event.dataTransfer.dropEffect = 'copy';
+              }}
+              onDragLeave={(event) => {
+                if (!event.currentTarget.contains(event.relatedTarget)) {
+                  setIsDraggingFile(false);
+                }
+              }}
+              onDrop={(event) => {
+                event.preventDefault();
+                setIsDraggingFile(false);
+                selectImportFile(event.dataTransfer.files);
+              }}
+            >
+              <input
+                ref={fileInputRef}
+                type="file"
+                className="visually-hidden"
+                accept=".xlsx,.xls"
+                aria-label="Choose staff Excel file to import"
+                onChange={(event) => {
+                  selectImportFile(event.target.files);
+                  event.target.value = '';
+                }}
+              />
+              <span className="employee-import-filename" aria-live="polite" title={file?.name}>
+                {file ? file.name : 'Drop Excel file or click to browse'}
+              </span>
+              <small>{isDraggingFile ? 'Drop file here' : '.xlsx or .xls · One file at a time'}</small>
+            </label>
 
             <button
               type="button"

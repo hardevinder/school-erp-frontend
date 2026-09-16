@@ -348,3 +348,27 @@
 .students-more-item.danger:hover {
   background: #fee2e2;
 }
+
+.student-import-panel {
+  padding: 16px;
+  border: 1px solid #dbe3ee;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.student-import-dropzone {
+  padding: 20px;
+  border: 2px dashed #a5b4fc;
+  border-radius: 10px;
+  background: #f8faff;
+  text-align: center;
+}
+
+.student-import-dropzone .form-control {
+  max-width: 480px;
+  margin: 0 auto;
+}
+
+.student-import-dropzone.is-disabled {
+  opacity: 0.65;
+}
