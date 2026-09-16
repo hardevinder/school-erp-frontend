@@ -112,32 +112,32 @@ const compactNumber = (n) =>
 
 const intIN = (n) => Number(n || 0).toLocaleString("en-IN");
 
-// Classic institutional palette — burgundy, antique gold and warm neutrals.
+// Enhanced colorful palette
 const palette = [
-  "#70151d",
-  "#b9852e",
-  "#9b4b52",
-  "#d1aa62",
-  "#543032",
-  "#8b6a45",
-  "#b96a6d",
-  "#7a6b5a",
-  "#8c242d",
-  "#c3954b",
-  "#6a3c3f",
-  "#a77b50",
+  "#ff3b30",
+  "#3b82f6",
+  "#22c55e",
+  "#f59e0b",
+  "#a855f7",
+  "#14b8a6",
+  "#84cc16",
+  "#ec4899",
+  "#10b981",
+  "#f97316",
+  "#8b5cf6",
+  "#06b6d4",
 ];
 
-// Keep legacy dashboard cards in the same premium family instead of rainbow gradients.
+// Enhanced gradient palette
 const cardGradients = [
-  "linear-gradient(135deg, #5f1017 0%, #81212a 100%)",
-  "linear-gradient(135deg, #721820 0%, #99323a 100%)",
-  "linear-gradient(135deg, #9a6728 0%, #c09345 100%)",
-  "linear-gradient(135deg, #4f2528 0%, #774148 100%)",
-  "linear-gradient(135deg, #7d2029 0%, #a64a52 100%)",
-  "linear-gradient(135deg, #6c5035 0%, #967551 100%)",
-  "linear-gradient(135deg, #8a3540 0%, #b45c65 100%)",
-  "linear-gradient(135deg, #7b5b2c 0%, #af843d 100%)",
+  "linear-gradient(135deg, #6366f1 0%, #3b82f6 100%)",
+  "linear-gradient(135deg, #22c55e 0%, #16a34a 100%)",
+  "linear-gradient(135deg, #f59e0b 0%, #d97706 100%)",
+  "linear-gradient(135deg, #06b6d4 0%, #0891b2 100%)",
+  "linear-gradient(135deg, #ef4444 0%, #dc2626 100%)",
+  "linear-gradient(135deg, #6b7280 0%, #4b5563 100%)",
+  "linear-gradient(135deg, #ec4899 0%, #db2777 100%)",
+  "linear-gradient(135deg, #84cc16 0%, #4d7c0f 100%)",
 ];
 
 // Download helper (PNG)
@@ -570,10 +570,10 @@ const Dashboard = () => {
     labels: ["Collected", "Pending till date", "Future session due"],
     datasets: [{
       data: [receivedSession, pendingTillDate, futureSessionPending],
-      backgroundColor: ["#74151d", "#c55e63", "#c39545"],
-      borderColor: ["#5c0f16", "#a9454b", "#a7792d"],
+      backgroundColor: ["#10b981", "#ef4444", "#f59e0b"],
+      borderColor: ["#059669", "#dc2626", "#d97706"],
       borderWidth: 2,
-      hoverOffset: 8,
+      hoverOffset: 10,
     }],
   }), [receivedSession, pendingTillDate, futureSessionPending]);
 
@@ -1457,7 +1457,7 @@ const Dashboard = () => {
         <section className="mb-4">
           <div className="d-flex align-items-end justify-content-between flex-wrap gap-2 mb-3">
             <div>
-              <span className="badge rounded-pill mb-2" style={{ background: "#f6e7cb", color: "#7b541e", border: "1px solid #e5c68d" }}>Revenue Intelligence</span>
+              <span className="badge rounded-pill bg-success-subtle text-success border border-success-subtle mb-2">Revenue Intelligence</span>
               <h4 className="fw-bold mb-1">Session Collection Outlook</h4>
               <div className="text-muted small">Collected, currently overdue and upcoming session receivables in one reconciled view.</div>
             </div>
@@ -1466,10 +1466,10 @@ const Dashboard = () => {
 
           <div className="row g-3 mb-3">
             {[
-              { label: "Pending Till Date", value: pendingTillDate, icon: "bi-hourglass-split", color: "#9f333b", soft: "#fff4f1", note: "Due as of today" },
-              { label: "Whole Session Pending", value: pendingWholeSession, icon: "bi-calendar2-range", color: "#a8752b", soft: "#fff8ec", note: "Current + future installments" },
-              { label: "Expected Session Collection", value: expectedSessionCollection, icon: "bi-bullseye", color: "#70151d", soft: "#fff5f2", note: "Received + net pending" },
-              { label: "Collection Progress", value: collectionProgress, icon: "bi-graph-up-arrow", color: "#b07b2b", soft: "#fff8e9", note: `${formatCurrency(receivedSession)} collected`, percent: true },
+              { label: "Pending Till Date", value: pendingTillDate, icon: "bi-hourglass-split", color: "#dc2626", soft: "#fff1f2", note: "Due as of today" },
+              { label: "Whole Session Pending", value: pendingWholeSession, icon: "bi-calendar2-range", color: "#d97706", soft: "#fff7ed", note: "Current + future installments" },
+              { label: "Expected Session Collection", value: expectedSessionCollection, icon: "bi-bullseye", color: "#2563eb", soft: "#eff6ff", note: "Received + net pending" },
+              { label: "Collection Progress", value: collectionProgress, icon: "bi-graph-up-arrow", color: "#059669", soft: "#ecfdf5", note: `${formatCurrency(receivedSession)} collected`, percent: true },
             ].map((card) => (
               <div className="col-12 col-sm-6 col-xl-3" key={card.label}>
                 <div className="card border-0 shadow-sm h-100 overflow-hidden" style={{ borderRadius: 18, background: `linear-gradient(145deg, #fff, ${card.soft})` }}>
@@ -1487,8 +1487,8 @@ const Dashboard = () => {
 
           <div className="row g-3 mb-3">
             {[
-              { title: "Academic Fee", icon: "bi-mortarboard-fill", color: "#74151d", gradient: "linear-gradient(145deg,#fffaf5,#ffffff)", data: pendingByType.academic, received: totalFeeReceived },
-              { title: "Van Fee", icon: "bi-truck-front-fill", color: "#ad792c", gradient: "linear-gradient(145deg,#fff9ee,#ffffff)", data: pendingByType.van, received: totalVanFee },
+              { title: "Academic Fee", icon: "bi-mortarboard-fill", color: "#4338ca", gradient: "linear-gradient(135deg,#eef2ff,#ffffff)", data: pendingByType.academic, received: totalFeeReceived },
+              { title: "Van Fee", icon: "bi-truck-front-fill", color: "#047857", gradient: "linear-gradient(135deg,#ecfdf5,#ffffff)", data: pendingByType.van, received: totalVanFee },
             ].map((item) => {
               const sessionTotal = item.received + item.data.whole;
               const receivedPercent = sessionTotal > 0 ? (item.received / sessionTotal) * 100 : 0;
@@ -1510,7 +1510,7 @@ const Dashboard = () => {
                       <div className="col-6 col-xl-3"><div className="rounded-3 bg-white bg-opacity-75 border p-3 h-100"><div className="small text-muted mb-1">Received</div><div className="fw-bold" style={{ color: item.color }}>{loading.report ? "…" : formatCurrency(item.received)}</div></div></div>
                       <div className="col-6 col-xl-3"><div className="rounded-3 bg-white bg-opacity-75 border p-3 h-100"><div className="small text-muted mb-1">Pending Till Date</div><div className="fw-bold text-danger">{loading.finance ? "…" : formatCurrency(item.data.till)}</div></div></div>
                       <div className="col-6 col-xl-3"><div className="rounded-3 bg-white bg-opacity-75 border p-3 h-100"><div className="small text-muted mb-1">Total Till Date</div><div className="fw-bold text-dark">{loading.finance ? "…" : formatCurrency(totalTillDate)}</div></div></div>
-                      <div className="col-6 col-xl-3"><div className="rounded-3 bg-white bg-opacity-75 border p-3 h-100"><div className="small text-muted mb-1">Session Pending</div><div className="fw-bold" style={{ color: "#a8752b" }}>{loading.finance ? "…" : formatCurrency(item.data.whole)}</div></div></div>
+                      <div className="col-6 col-xl-3"><div className="rounded-3 bg-white bg-opacity-75 border p-3 h-100"><div className="small text-muted mb-1">Session Pending</div><div className="fw-bold" style={{ color: "#d97706" }}>{loading.finance ? "…" : formatCurrency(item.data.whole)}</div></div></div>
                     </div>
                   </div>
                 </div>
@@ -1519,51 +1519,19 @@ const Dashboard = () => {
             })}
           </div>
 
-          <div
-            className="card border-0"
-            style={{
-              borderRadius: 18,
-              overflow: "hidden",
-              border: "1px solid #ead9c3",
-              boxShadow: "0 12px 34px rgba(92, 28, 32, .08)",
-              background: "#fffdf9",
-            }}
-          >
+          <div className="card border-0 shadow-sm" style={{ borderRadius: 20, overflow: "hidden" }}>
             <div className="row g-0 align-items-stretch">
-              <div
-                className="col-12 col-lg-5 p-4 p-xl-5"
-                style={{
-                  background: "linear-gradient(145deg,#4d0b10 0%,#74151d 58%,#8e2c34 100%)",
-                  color: "white",
-                }}
-              >
-                <div className="text-uppercase small mb-2 fw-semibold" style={{ letterSpacing: ".11em", color: "#e9c777" }}>Financial health</div>
-                <h4 className="fw-bold mb-2">Collection vs Receivables</h4>
-                <p className="mb-4" style={{ color: "rgba(255,255,255,.72)", maxWidth: 430 }}>A concise view of receipts, dues and future installments for the selected session.</p>
-                <div className="d-flex justify-content-between py-3" style={{ borderBottom: "1px solid rgba(255,255,255,.15)" }}><span style={{ color: "rgba(255,255,255,.70)" }}>Academic received</span><strong>{formatCurrency(totalFeeReceived)}</strong></div>
-                <div className="d-flex justify-content-between py-3" style={{ borderBottom: "1px solid rgba(255,255,255,.15)" }}><span style={{ color: "rgba(255,255,255,.70)" }}>Van received</span><strong>{formatCurrency(totalVanFee)}</strong></div>
-                <div className="d-flex justify-content-between py-3"><span style={{ color: "rgba(255,255,255,.70)" }}>Future installments</span><strong style={{ color: "#f2d28d" }}>{formatCurrency(futureSessionPending)}</strong></div>
+              <div className="col-12 col-lg-5 p-4 p-xl-5" style={{ background: "linear-gradient(145deg,#0f172a,#1e3a5f)", color: "white" }}>
+                <div className="text-uppercase small text-info mb-2 fw-semibold" style={{ letterSpacing: ".1em" }}>Financial health</div>
+                <h4 className="fw-bold">Collection vs Receivables</h4>
+                <p className="text-white-50 mb-4">A clear view of cash collected, overdue fees, and installments that become due later in the session.</p>
+                <div className="d-flex justify-content-between border-bottom border-light border-opacity-25 py-3"><span className="text-white-50">Academic received</span><strong>{formatCurrency(totalFeeReceived)}</strong></div>
+                <div className="d-flex justify-content-between border-bottom border-light border-opacity-25 py-3"><span className="text-white-50">Van received</span><strong>{formatCurrency(totalVanFee)}</strong></div>
+                <div className="d-flex justify-content-between py-3"><span className="text-white-50">Future installments</span><strong>{formatCurrency(futureSessionPending)}</strong></div>
               </div>
-              <div className="col-12 col-lg-7 p-4 p-xl-5" style={{ background: "linear-gradient(145deg,#fffdf9,#fbf4ea)" }}>
-                <div className="d-flex justify-content-between align-items-start gap-3 mb-3">
-                  <div>
-                    <div className="text-uppercase small fw-bold" style={{ letterSpacing: ".08em", color: "#a7752d" }}>Session mix</div>
-                    <div className="fw-bold" style={{ color: "#5d151b", fontSize: 18 }}>Receivable composition</div>
-                  </div>
-                  <span className="badge rounded-pill" style={{ background: "#f4e5cb", color: "#7b531c", border: "1px solid #e5c892" }}>{selectedSessionName || "Session"}</span>
-                </div>
-                <div className="position-relative mx-auto" style={{ height: 250, maxWidth: 560 }}>
-                  {loading.finance && !feeOutlook ? (
-                    <div className="h-100 d-flex align-items-center justify-content-center" style={{ color: "#806d61" }}><span className="spinner-border spinner-border-sm me-2" />Preparing collection outlook…</div>
-                  ) : (receivedSession + pendingTillDate + futureSessionPending) <= 0 ? (
-                    <div className="h-100 d-flex flex-column align-items-center justify-content-center text-center px-4">
-                      <div className="d-grid mb-3" style={{ width: 64, height: 64, placeItems: "center", borderRadius: "50%", color: "#74151d", background: "#f6e7df", border: "1px solid #ead1bf" }}><i className="bi bi-pie-chart fs-3" /></div>
-                      <div className="fw-bold mb-1" style={{ color: "#5d151b" }}>No collection movement yet</div>
-                      <div className="small" style={{ color: "#88746a", maxWidth: 360 }}>The collection mix will appear here as soon as receipts or session dues are available.</div>
-                    </div>
-                  ) : (
-                    <Doughnut ref={financeRef} data={financeChartData} options={financeChartOptions} />
-                  )}
+              <div className="col-12 col-lg-7 p-4 bg-white">
+                <div className="position-relative mx-auto" style={{ height: 320, maxWidth: 620 }}>
+                  {loading.finance && !feeOutlook ? <div className="h-100 d-flex align-items-center justify-content-center text-muted"><span className="spinner-border spinner-border-sm me-2" />Preparing collection outlook…</div> : <Doughnut ref={financeRef} data={financeChartData} options={financeChartOptions} />}
                 </div>
               </div>
             </div>

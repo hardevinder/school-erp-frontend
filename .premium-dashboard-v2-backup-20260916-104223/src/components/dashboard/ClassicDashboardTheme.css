@@ -1,0 +1,98 @@
+.classic-dashboard-theme {
+  --classic-burgundy: #65151e;
+  --classic-burgundy-dark: #450b12;
+  --classic-gold: #b7862e;
+  --classic-ivory: #f7f1e8;
+  --classic-border: #e9ddcd;
+  --classic-text: #302725;
+  background: linear-gradient(180deg, #f8f4ed 0%, #f5efe7 100%) !important;
+  color: var(--classic-text);
+}
+
+.classic-dashboard-theme .dashboard-overlay {
+  background:
+    radial-gradient(circle at 92% 2%, rgba(183,134,46,.08), transparent 25rem),
+    linear-gradient(180deg, rgba(255,255,255,.18), transparent) !important;
+}
+
+.classic-dashboard-theme .dashboard-header-card {
+  background: rgba(255,253,249,.94) !important;
+  border: 1px solid var(--classic-border) !important;
+  border-left: 4px solid var(--classic-burgundy) !important;
+  box-shadow: 0 10px 28px rgba(61,10,16,.07) !important;
+  backdrop-filter: blur(10px);
+}
+.classic-dashboard-theme .dashboard-header-card h2 { color: var(--classic-burgundy-dark); font-family: Georgia, "Times New Roman", serif !important; }
+.classic-dashboard-theme .dashboard-header-card .text-muted { color: #7a6b64 !important; }
+.classic-dashboard-theme .form-select { border-color: #dfd2c3; background-color: #fffdf9; }
+.classic-dashboard-theme .form-select:focus { border-color: var(--classic-gold); box-shadow: 0 0 0 .2rem rgba(183,134,46,.12); }
+
+.classic-dashboard-theme .btn-primary {
+  --bs-btn-bg: var(--classic-burgundy);
+  --bs-btn-border-color: var(--classic-burgundy);
+  --bs-btn-hover-bg: #541019;
+  --bs-btn-hover-border-color: #541019;
+  --bs-btn-active-bg: #430b11;
+  --bs-btn-active-border-color: #430b11;
+}
+.classic-dashboard-theme .btn-outline-primary {
+  --bs-btn-color: var(--classic-burgundy);
+  --bs-btn-border-color: #b98b91;
+  --bs-btn-hover-bg: var(--classic-burgundy);
+  --bs-btn-hover-border-color: var(--classic-burgundy);
+}
+
+.classic-dashboard-theme .quick-links-inner {
+  background: rgba(255,253,249,.97) !important;
+  border: 1px solid var(--classic-border) !important;
+  box-shadow: 0 12px 30px rgba(61,10,16,.07) !important;
+}
+.classic-dashboard-theme .quick-link-section {
+  background: linear-gradient(145deg, #fffdf9, #faf4eb) !important;
+  border-color: #eadfce !important;
+}
+.classic-dashboard-theme .quick-section-icon {
+  background: linear-gradient(145deg, #741b25, #4b0d14) !important;
+  color: #f0d792 !important;
+  box-shadow: 0 8px 18px rgba(75,13,20,.17) !important;
+}
+.classic-dashboard-theme .quick-section-title { color: #4b0d14 !important; }
+.classic-dashboard-theme .quick-section-subtitle { color: #796b64 !important; }
+.classic-dashboard-theme .quick-link-card { border-color: #eadfce !important; }
+
+.classic-dashboard-theme .section-badge {
+  border: 1px solid #e0c995 !important;
+  background: #f5e7c6 !important;
+  color: #6f4611 !important;
+}
+.classic-dashboard-theme .section-title { color: #4b0d14 !important; font-family: Georgia, "Times New Roman", serif !important; }
+.classic-dashboard-theme .section-subtitle { color: #7a6b64 !important; }
+
+.classic-dashboard-theme .card {
+  overflow: hidden;
+  border: 1px solid var(--classic-border) !important;
+  border-radius: 18px !important;
+  background: #fffdf9 !important;
+  box-shadow: 0 9px 26px rgba(61,10,16,.055) !important;
+}
+.classic-dashboard-theme .card:hover { box-shadow: 0 15px 35px rgba(61,10,16,.085) !important; }
+.classic-dashboard-theme .card-header.text-white {
+  background: linear-gradient(120deg, #5c1119, #761c26) !important;
+  border-bottom: 1px solid rgba(201,155,67,.28) !important;
+}
+.classic-dashboard-theme .card-header.text-white .btn-light { color: #5b131b !important; }
+.classic-dashboard-theme .table thead th { color: #76665f !important; }
+.classic-dashboard-theme .table tbody tr:hover { background: #fbf5ed !important; }
+
+.classic-dashboard-theme .badge.bg-primary-subtle,
+.classic-dashboard-theme .badge.text-bg-primary {
+  background: #f5e7c6 !important;
+  color: #6f4611 !important;
+  border-color: #e0c995 !important;
+}
+
+.classic-dashboard-theme .pulse-dot { background: #9a701f !important; }
+
+@media (max-width: 767.98px) {
+  .classic-dashboard-theme .dashboard-header-card { border-left-width: 3px !important; }
+}

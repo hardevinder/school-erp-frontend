@@ -10,8 +10,8 @@ const colors = ['#2563eb', '#0d9488', '#d97706', '#7c3aed', '#e11d48', '#64748b'
 export function WorkspaceTabs({ value, onChange, compact = false }) {
   return <div className={`dashboard-workspaces ${compact ? 'is-compact' : ''}`} role="tablist" aria-label="Choose EduBridge workspace">
     {[
-      { key: 'LMS', icon: 'bi-mortarboard', label: 'LMS' },
       { key: 'ERP', icon: 'bi-buildings', label: 'ERP' },
+      { key: 'LMS', icon: 'bi-mortarboard', label: 'LMS' },
     ].map((item) => <button type="button" role="tab" key={item.key} aria-selected={value === item.key}
       onClick={() => onChange(item.key)} className={value === item.key ? 'selected' : ''}>
       <i className={`bi ${item.icon}`} aria-hidden="true" /><span>{item.label}</span>

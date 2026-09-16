@@ -134,10 +134,8 @@ export default function Sidebar({ headerHeight = 56 }) {
   const isMobile = useIsMobile();
   const { isCollege } = useInstitution();
   const initialExpanded = (() => {
-    // V5 starts desktop navigation open by default. Once the user collapses
-    // or expands it, their choice is remembered independently.
-    const saved = localStorage.getItem("sidebarExpandedV5");
-    return saved === null ? true : saved === "true";
+    const saved = localStorage.getItem("sidebarExpanded");
+    return saved === null ? false : saved === "true";
   })();
 
   const [isExpanded, setIsExpanded] = useState(initialExpanded);
@@ -148,7 +146,7 @@ export default function Sidebar({ headerHeight = 56 }) {
   }, [isExpanded]);
 
   useEffect(() => {
-    localStorage.setItem("sidebarExpandedV5", String(isExpanded));
+    localStorage.setItem("sidebarExpanded", String(isExpanded));
   }, [isExpanded]);
 
   useEffect(() => {
@@ -2029,115 +2027,69 @@ export default function Sidebar({ headerHeight = 56 }) {
           </div>
         </div>
 
-        {workspace === "LMS" && isExpanded ? (
-          <nav className="sidebar-lms-direct-nav" aria-label="LMS navigation">
-            <div className="sidebar-lms-direct-head">
-              <span><i className="bi bi-mortarboard-fill" aria-hidden="true" /> LMS Menu</span>
-              <small>{allItems.length} tools</small>
-            </div>
+        <nav className="sidebar-category-nav mt-1" aria-label="Menu categories">
+          {dashboardItem && (
+            <button
+              type="button"
+              className={`sidebar-category sidebar-dashboard-link ${
+                isPathActive(dashboardItem.path) ? "route-active selected" : ""
+              }`}
+              onClick={() => {
+                setActiveMenuGroup("");
+                handleMenuClick(dashboardItem);
+              }}
+              title={!isExpanded ? "Dashboard" : undefined}
+            >
+              <span
+                className="sidebar-category-icon"
+                style={{ backgroundImage: sidebarGradients[0] }}
+              >
+                <i className="bi bi-speedometer2" aria-hidden="true" />
+              </span>
+              <span className="sidebar-category-label">Dashboard</span>
+              <span className="sidebar-category-direct">Direct</span>
+              <i className="bi bi-arrow-up-right sidebar-category-arrow" aria-hidden="true" />
+            </button>
+          )}
 
-            {filteredGroups.map((group) => (
-              <div className="sidebar-lms-direct-group" key={group.heading}>
-                <div className="sidebar-lms-direct-group-title">
-                  <span>{group.heading}</span>
-                  <span>{group.items.length}</span>
-                </div>
-                <div className="sidebar-lms-direct-items">
-                  {group.items.map((item) => {
-                    const active = isPathActive(item.path);
-                    return (
-                      <button
-                        key={item.key}
-                        type="button"
-                        className={`sidebar-lms-direct-item ${active ? "active" : ""}`}
-                        onClick={() => handleMenuClick(item)}
-                        title={item.label}
-                      >
-                        <span className="sidebar-lms-direct-icon">
-                          <i className={`bi ${item.icon || "bi-circle"}`} aria-hidden="true" />
-                        </span>
-                        <span className="sidebar-lms-direct-label">{item.label}</span>
-                        {active ? (
-                          <span className="sidebar-lms-direct-current">Now</span>
-                        ) : (
-                          <i className="bi bi-chevron-right sidebar-lms-direct-arrow" aria-hidden="true" />
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
+          {filteredGroups.map((group, gi) => {
+            const containsActiveRoute = group.items.some((item) => isPathActive(item.path));
+            const selected = selectedGroup?.heading === group.heading;
+            const groupIcon = group.items[0]?.icon || "bi-grid";
 
-            {filteredGroups.length === 0 && (
-              <div className="sidebar-lms-direct-empty">No LMS menu items match “{q}”.</div>
-            )}
-          </nav>
-        ) : (
-          <nav className="sidebar-category-nav mt-1" aria-label="Menu categories">
-            {dashboardItem && (
+            return (
               <button
+                key={group.heading}
                 type="button"
-                className={`sidebar-category sidebar-dashboard-link ${
-                  isPathActive(dashboardItem.path) ? "route-active selected" : ""
+                className={`sidebar-category ${selected ? "selected" : ""} ${
+                  containsActiveRoute ? "route-active" : ""
                 }`}
-                onClick={() => {
-                  setActiveMenuGroup("");
-                  handleMenuClick(dashboardItem);
-                }}
-                title={!isExpanded ? "Dashboard" : undefined}
+                onClick={() =>
+                  setActiveMenuGroup((current) =>
+                    current === group.heading ? "" : group.heading
+                  )
+                }
+                aria-expanded={selected}
+                aria-controls="sidebar-submenu-panel"
+                title={!isExpanded ? group.heading : undefined}
               >
                 <span
                   className="sidebar-category-icon"
-                  style={{ backgroundImage: sidebarGradients[0] }}
+                  style={{ backgroundImage: sidebarGradients[gi % sidebarGradients.length] }}
                 >
-                  <i className="bi bi-speedometer2" aria-hidden="true" />
+                  <i className={`bi ${groupIcon}`} aria-hidden="true" />
                 </span>
-                <span className="sidebar-category-label">Dashboard</span>
-                <span className="sidebar-category-direct">Direct</span>
-                <i className="bi bi-arrow-up-right sidebar-category-arrow" aria-hidden="true" />
+                <span className="sidebar-category-label">{group.heading}</span>
+                <span className="sidebar-category-count">{group.items.length}</span>
+                <i className="bi bi-chevron-right sidebar-category-arrow" aria-hidden="true" />
               </button>
-            )}
+            );
+          })}
 
-            {filteredGroups.map((group, gi) => {
-              const containsActiveRoute = group.items.some((item) => isPathActive(item.path));
-              const selected = selectedGroup?.heading === group.heading;
-              const groupIcon = group.items[0]?.icon || "bi-grid";
-
-              return (
-                <button
-                  key={group.heading}
-                  type="button"
-                  className={`sidebar-category ${selected ? "selected" : ""} ${
-                    containsActiveRoute ? "route-active" : ""
-                  }`}
-                  onClick={() =>
-                    setActiveMenuGroup((current) =>
-                      current === group.heading ? "" : group.heading
-                    )
-                  }
-                  aria-expanded={selected}
-                  aria-controls="sidebar-submenu-panel"
-                  title={!isExpanded ? group.heading : undefined}
-                >
-                  <span
-                    className="sidebar-category-icon"
-                    style={{ backgroundImage: sidebarGradients[gi % sidebarGradients.length] }}
-                  >
-                    <i className={`bi ${groupIcon}`} aria-hidden="true" />
-                  </span>
-                  <span className="sidebar-category-label">{group.heading}</span>
-                  <span className="sidebar-category-count">{group.items.length}</span>
-                  <i className="bi bi-chevron-right sidebar-category-arrow" aria-hidden="true" />
-                </button>
-              );
-            })}
-
-            {filteredGroups.length === 0 && (
-              <div className="px-3 py-2 text-muted small">No menu items match “{q}”.</div>
-            )}
-          </nav>
-        )}
+          {filteredGroups.length === 0 && (
+            <div className="px-3 py-2 text-muted small">No menu items match “{q}”.</div>
+          )}
+        </nav>
       </aside>
 
       {q.trim() && (

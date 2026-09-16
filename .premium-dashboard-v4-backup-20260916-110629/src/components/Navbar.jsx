@@ -19,6 +19,7 @@ import { FaBell } from "react-icons/fa";
 
 import { useRoles } from "../hooks/useRoles";
 import BranchSwitcher from "./BranchSwitcher";
+import { useInstitution } from "../institution/InstitutionContext";
 
 const CollegeNavbar = ({
   notificationsCount = 0,
@@ -41,8 +42,7 @@ const CollegeNavbar = ({
   const [userName, setUserName] =
     useState("");
 
-  const [college, setCollege] =
-    useState(null);
+  const { institution, terms } = useInstitution();
 
   const [family, setFamily] =
     useState(null);
@@ -106,44 +106,17 @@ const CollegeNavbar = ({
      COLLEGE BRANDING
   ===================================================== */
 
-  useEffect(() => {
-    if (!API_BASE) return;
-
-    axios
-      .get(`${API_BASE}/schools`)
-      .then((res) => {
-        const rows =
-          Array.isArray(res.data)
-            ? res.data
-            : Array.isArray(
-                res.data?.data
-              )
-            ? res.data.data
-            : [];
-
-        if (rows.length) {
-          setCollege(rows[0]);
-        }
-      })
-      .catch((err) => {
-        console.warn(
-          "Unable to fetch college:",
-          err?.message
-        );
-      });
-  }, [API_BASE]);
-
-  const collegeName =
-    college?.name ||
-    "EduBridge Demo College";
+  const collegeName = institution?.name?.trim() || "EduBridge";
 
   const fallbackLogo =
     `${process.env.PUBLIC_URL}/images/DemoLogo.png`;
 
-  const collegeLogo =
-    college?.logo
-      ? `${API_BASE}${college.logo}`
-      : fallbackLogo;
+  const institutionLogo = institution?.logo || "";
+  const collegeLogo = institutionLogo
+    ? /^(https?:)?\/\//i.test(institutionLogo)
+      ? institutionLogo
+      : `${API_BASE}/${institutionLogo.replace(/^\/+/, "")}`
+    : fallbackLogo;
 
   /* =====================================================
      DEFAULT PROFILE PHOTO
@@ -1032,7 +1005,7 @@ const CollegeNavbar = ({
               </strong>
 
               <small>
-                College Management
+                {terms.institution} Management
               </small>
             </div>
           </Link>
@@ -1303,11 +1276,36 @@ const CollegeNavbar = ({
       <style>{`
 
         .college-navbar {
-          min-height: 68px;
-          background: linear-gradient(90deg, rgba(255,253,249,.985), rgba(250,244,236,.985));
-          backdrop-filter: blur(18px);
-          border-bottom: 1px solid #e7d7c2;
-          box-shadow: 0 8px 26px rgba(92, 28, 32, .07);
+          min-height: 72px;
+
+          background:
+            rgba(
+              255,
+              255,
+              255,
+              .96
+            );
+
+          backdrop-filter:
+            blur(18px);
+
+          border-bottom:
+            1px solid
+            rgba(
+              13,
+              49,
+              95,
+              .10
+            );
+
+          box-shadow:
+            0 7px 24px
+            rgba(
+              12,
+              56,
+              98,
+              .07
+            );
         }
 
 
@@ -1335,9 +1333,23 @@ const CollegeNavbar = ({
 
           border-radius: 12px;
 
-          border: 1px solid #ead9c5;
+          border:
+            1px solid
+            rgba(
+              13,
+              49,
+              95,
+              .08
+            );
 
-          box-shadow: 0 5px 15px rgba(92, 28, 32, .08);
+          box-shadow:
+            0 5px 15px
+            rgba(
+              13,
+              49,
+              95,
+              .08
+            );
         }
 
 
@@ -1354,7 +1366,7 @@ const CollegeNavbar = ({
           white-space:
             nowrap;
 
-          color: #65131a;
+          color: #0d315f;
 
           font-family:
             Georgia,
@@ -1371,7 +1383,7 @@ const CollegeNavbar = ({
 
           margin-top: 2px;
 
-          color: #a27635;
+          color: #4680b4;
 
           font-size: 9px;
 
@@ -1388,10 +1400,21 @@ const CollegeNavbar = ({
         .college-role-select {
           min-width: 165px;
 
-          border: 1px solid #ead9c5 !important;
+          border:
+            1px solid
+            rgba(
+              13,
+              49,
+              95,
+              .08
+            ) !important;
+
           border-radius: 10px;
-          background: #fbf4eb;
-          color: #6d2027;
+
+          background:
+            #f4f8fc;
+
+          color: #24496d;
 
           font-size: 11px;
 
@@ -1421,7 +1444,7 @@ const CollegeNavbar = ({
 
           text-decoration: none;
 
-          color: #6f5449;
+          color: #50667b;
 
           transition: .18s ease;
         }
@@ -1438,8 +1461,17 @@ const CollegeNavbar = ({
 
           border-radius: 11px;
 
-          background: #fffaf4;
-          border: 1px solid #eadbca;
+          background:
+            #f4f8fc;
+
+          border:
+            1px solid
+            rgba(
+              13,
+              49,
+              95,
+              .08
+            );
 
           transition:
             .18s ease;
@@ -1459,7 +1491,7 @@ const CollegeNavbar = ({
 
 
         .college-quick-link:hover {
-          color: #74151d;
+          color: #2476c8;
 
           transform:
             translateY(-1px);
@@ -1467,21 +1499,38 @@ const CollegeNavbar = ({
 
 
         .college-quick-link:hover > span {
-          background: #f8eee3;
-          border-color: #dfc39d;
+          background:
+            #edf6ff;
+
+          border-color:
+            #c9e1fa;
         }
 
 
         .college-quick-link.active {
-          color: #74151d;
+          color: #1467b7;
         }
 
 
         .college-quick-link.active > span {
-          background: linear-gradient(135deg, #6a1119, #8e2a33);
-          color: #fff;
-          border-color: #74151d;
-          box-shadow: 0 0 0 3px rgba(116, 21, 29, .08);
+          background:
+            linear-gradient(
+              135deg,
+              #e7f3ff,
+              #d5eaff
+            );
+
+          border-color:
+            #9ac9f4;
+
+          box-shadow:
+            0 0 0 3px
+            rgba(
+              36,
+              118,
+              200,
+              .08
+            );
         }
 
 
@@ -1498,16 +1547,25 @@ const CollegeNavbar = ({
 
           border-radius: 12px;
 
-          border: 1px solid #ead9c5;
-          background: #fffaf4;
-          color: #74151d;
+          border:
+            1px solid
+            rgba(
+              13,
+              49,
+              95,
+              .10
+            );
+
+          background: #f6f9fc;
+
+          color: #426480;
         }
 
 
         .college-navbar__bell:hover {
-          color: #5f1017;
-          background: #f7eadc;
-          border-color: #dfc39d;
+          color: #2476c8;
+
+          background: #edf6ff;
         }
 
 
@@ -1528,22 +1586,25 @@ const CollegeNavbar = ({
 
           border-radius: 13px;
 
-          border: 1px solid #ead9c5;
-          background: #fffdf9;
-          color: #652026;
+          border:
+            1px solid
+            rgba(
+              13,
+              49,
+              95,
+              .10
+            );
+
+          background:
+            #ffffff;
+
+          color: #304b65;
 
           font-size: 12px;
 
           font-weight: 650;
         }
 
-
-
-        .college-profile-button:hover {
-          background: #fbf1e7;
-          border-color: #dfc39d;
-          color: #5f1017;
-        }
 
         .college-profile-button img {
           width: 31px;
@@ -1563,11 +1624,25 @@ const CollegeNavbar = ({
 
           padding: 7px;
 
-          border: 1px solid #ead9c5;
+          border:
+            1px solid
+            rgba(
+              13,
+              49,
+              95,
+              .08
+            );
 
           border-radius: 13px;
 
-          box-shadow: 0 14px 40px rgba(92, 28, 32, .14);
+          box-shadow:
+            0 14px 40px
+            rgba(
+              17,
+              56,
+              91,
+              .14
+            );
         }
 
 
@@ -1582,41 +1657,6 @@ const CollegeNavbar = ({
           font-size: 12px;
         }
 
-
-
-
-        .college-navbar .branch-switcher .input-group-text {
-          background: #f7eee4 !important;
-          border-color: #e7d5bf !important;
-          color: #74151d !important;
-        }
-
-        .college-navbar .branch-switcher .form-select {
-          background-color: #fffaf4 !important;
-          border-color: #e7d5bf !important;
-          color: #5f2a2f !important;
-          font-weight: 650;
-        }
-
-        .college-navbar .branch-switcher .form-select:focus,
-        .college-role-select:focus {
-          border-color: #c99a4a !important;
-          box-shadow: 0 0 0 3px rgba(201,154,74,.12) !important;
-        }
-
-        .college-quick-link small {
-          color: #6f5a4e;
-        }
-
-        .college-quick-link.active small,
-        .college-quick-link:hover small {
-          color: #74151d;
-        }
-
-        .college-profile-menu .dropdown-item:hover {
-          background: #fbf1e7;
-          color: #74151d;
-        }
 
         @media (
           max-width: 1200px

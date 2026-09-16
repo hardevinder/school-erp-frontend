@@ -1,0 +1,2745 @@
+import React, { useEffect, useMemo, useState } from "react";
+import api from "../api";
+import Swal from "sweetalert2";
+
+const emptyRoom = {
+  room_code: "",
+  name: "",
+  building: "",
+  floor: "",
+  layout_type: "individual",
+  rows_count: 5,
+  seats_per_row: 6,
+  students_per_bench: 1,
+  capacity: 30,
+};
+
+const emptyPlan = {
+  exam_id: "",
+  session_id: "",
+  name: "",
+  exam_date: "",
+  start_time: "",
+  end_time: "",
+  allocation_mode: "roll_number",
+  mix_classes: true,
+};
+
+
+const defaultSmartRules = {
+  enabled: false,
+  avoid_same_class_horizontal: true,
+  avoid_same_class_vertical: true,
+  avoid_same_class_diagonal: false,
+  gender_mode: "no_restriction",
+  max_trials: 60,
+};
+
+const defaultRoomRules = {
+  allowed_stages: [],
+  allowed_class_section_keys: [],
+  excluded_class_section_keys: [],
+  allowed_gender: "any",
+  max_same_class_per_room: "",
+};
+
+const normalizedRoomLayoutType = (value) =>
+  String(value || "").toLowerCase() === "bench" ? "bench" : "individual";
+
+const roomLayoutCapacity = (room = {}) => {
+  const rows = Math.max(1, Number(room.rows_count || 1));
+  const columns = Math.max(1, Number(room.seats_per_row || 1));
+  const studentsPerBench = normalizedRoomLayoutType(room.layout_type) === "bench"
+    ? Math.min(Math.max(2, Number(room.students_per_bench || 2)), 4)
+    : 1;
+  return rows * columns * studentsPerBench;
+};
+
+const roomLayoutText = (room = {}) => {
+  if (normalizedRoomLayoutType(room.layout_type) === "bench") {
+    return `${Number(room.seats_per_row || 0)} columns × ${Number(room.rows_count || 0)} benches × ${Number(room.students_per_bench || 2)} students`;
+  }
+  return `${Number(room.rows_count || 0)} rows × ${Number(room.seats_per_row || 0)} seats`;
+};
+
+const normalizedRoomRulesForUi = (rules) => ({
+  ...defaultRoomRules,
+  ...(rules || {}),
+  allowed_stages: Array.isArray(rules?.allowed_stages) ? rules.allowed_stages : [],
+  allowed_class_section_keys: Array.isArray(rules?.allowed_class_section_keys)
+    ? rules.allowed_class_section_keys.map(String)
+    : [],
+  excluded_class_section_keys: Array.isArray(rules?.excluded_class_section_keys)
+    ? rules.excluded_class_section_keys.map(String)
+    : [],
+  allowed_gender: rules?.allowed_gender || "any",
+  max_same_class_per_room: rules?.max_same_class_per_room || "",
+});
+
+const listFrom = (response, key) => response?.data?.[key] || response?.data || [];
+
+const normalizeTime = (value) => String(value || "").slice(0, 5);
+
+const slotKey = (slot) =>
+  slot?.key ||
+  `${slot?.exam_date || ""}|${normalizeTime(slot?.start_time)}|${normalizeTime(slot?.end_time)}`;
+
+const formatDate = (value) => {
+  if (!value) return "";
+  const parsed = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+};
+
+const shiftName = (startTime) => {
+  const hour = Number.parseInt(normalizeTime(startTime).split(":")[0], 10);
+  if (!Number.isFinite(hour)) return "Exam Shift";
+  if (hour < 12) return "Morning Shift";
+  if (hour < 17) return "Afternoon Shift";
+  return "Evening Shift";
+};
+
+const slotLabel = (slot) =>
+  `${formatDate(slot?.exam_date)} · ${normalizeTime(slot?.start_time)}–${normalizeTime(slot?.end_time)} · ${slot?.class_count || 0} class/section group${Number(slot?.class_count || 0) === 1 ? "" : "s"}`;
+
+
+const naturalCompare = (left, right) =>
+  String(left ?? "").localeCompare(String(right ?? ""), undefined, {
+    numeric: true,
+    sensitivity: "base",
+  });
+
+const filenameFromDisposition = (disposition, fallback) => {
+  const value = String(disposition || "");
+  const utf8Match = value.match(/filename\*=UTF-8''([^;]+)/i);
+  if (utf8Match?.[1]) {
+    try {
+      return decodeURIComponent(utf8Match[1].replace(/["']/g, ""));
+    } catch (_) {
+      return utf8Match[1].replace(/["']/g, "");
+    }
+  }
+  const regularMatch = value.match(/filename="?([^";]+)"?/i);
+  return regularMatch?.[1]?.trim() || fallback;
+};
+
+const blobErrorMessage = async (error, fallback) => {
+  const payload = error?.response?.data;
+  if (!(payload instanceof Blob)) {
+    return error?.response?.data?.message || error?.message || fallback;
+  }
+  try {
+    const text = await payload.text();
+    const parsed = JSON.parse(text);
+    return parsed?.message || fallback;
+  } catch (_) {
+    return fallback;
+  }
+};
+
+const visualRowLabel = (zeroBasedIndex) => {
+  let value = Number(zeroBasedIndex) + 1;
+  let label = "";
+  while (value > 0) {
+    value -= 1;
+    label = String.fromCharCode(65 + (value % 26)) + label;
+    value = Math.floor(value / 26);
+  }
+  return label || "A";
+};
+
+const visualRowIndex = (value) => {
+  const text = String(value || "").trim().toUpperCase();
+  if (!/^[A-Z]+$/.test(text)) return null;
+  let result = 0;
+  for (const char of text) result = result * 26 + (char.charCodeAt(0) - 64);
+  return result - 1;
+};
+
+const visualSeatClassLabel = (seat) => {
+  const className = seat?.student?.Class?.class_name || seat?.schedule?.class?.class_name || "Class";
+  const sectionName = seat?.student?.Section?.section_name || seat?.schedule?.section?.section_name || "";
+  return [className, sectionName].filter(Boolean).join(" ");
+};
+
+const visualToneIndex = (value, total = 10) => {
+  const text = String(value || "");
+  let hash = 0;
+  for (let index = 0; index < text.length; index += 1) {
+    hash = (hash * 31 + text.charCodeAt(index)) >>> 0;
+  }
+  return total ? hash % total : 0;
+};
+
+
+const selectedStudentsForRule = (group, rule) => {
+  if (!rule?.enabled) return [];
+  const students = group?.students || [];
+  const type = rule.selection_type || "all";
+
+  if (type === "all") return students;
+  if (type === "roll_range") {
+    const from = Number.parseInt(rule.range_from, 10);
+    const to = Number.parseInt(rule.range_to, 10);
+    if (!Number.isInteger(from) || !Number.isInteger(to) || from > to) return [];
+    return students.filter((student) => {
+      const roll = Number(student.roll_number);
+      return Number.isFinite(roll) && roll >= from && roll <= to;
+    });
+  }
+  if (type === "admission_range") {
+    const from = String(rule.range_from || "").trim();
+    const to = String(rule.range_to || "").trim();
+    if (!from || !to || naturalCompare(from, to) > 0) return [];
+    return students.filter((student) => {
+      const admission = String(student.admission_number || "").trim();
+      return admission && naturalCompare(admission, from) >= 0 && naturalCompare(admission, to) <= 0;
+    });
+  }
+  if (type === "manual") {
+    const selected = new Set((rule.student_ids || []).map(String));
+    return students.filter((student) => selected.has(String(student.id)));
+  }
+  return [];
+};
+
+export default function ExamSeatingManagement() {
+  const [tab, setTab] = useState("planner");
+  const [rooms, setRooms] = useState([]);
+  const [plans, setPlans] = useState([]);
+  const [exams, setExams] = useState([]);
+  const [sessions, setSessions] = useState([]);
+  const [createScheduleSlots, setCreateScheduleSlots] = useState([]);
+  const [activeScheduleSlots, setActiveScheduleSlots] = useState([]);
+  const [selectedCreateSlotKey, setSelectedCreateSlotKey] = useState("");
+  const [scheduleMismatch, setScheduleMismatch] = useState(null);
+  const [loadingScheduleSlots, setLoadingScheduleSlots] = useState(false);
+  const [planNameTouched, setPlanNameTouched] = useState(false);
+  const [employees, setEmployees] = useState([]);
+  const [roomForm, setRoomForm] = useState(emptyRoom);
+  const [editingRoomId, setEditingRoomId] = useState(null);
+  const [planForm, setPlanForm] = useState(emptyPlan);
+  const [activePlanId, setActivePlanId] = useState("");
+  const [activePlan, setActivePlan] = useState(null);
+  const [seats, setSeats] = useState([]);
+  const [dashboard, setDashboard] = useState(null);
+  const [selectedRoomIds, setSelectedRoomIds] = useState([]);
+  const [smartMode, setSmartMode] = useState(false);
+  const [smartRules, setSmartRules] = useState(defaultSmartRules);
+  const [roomRules, setRoomRules] = useState({});
+  const [studentGroups, setStudentGroups] = useState([]);
+  const [studentSelections, setStudentSelections] = useState({});
+  const [studentSearches, setStudentSearches] = useState({});
+  const [invigilators, setInvigilators] = useState({});
+  const [invigilatorOptions, setInvigilatorOptions] = useState({ rooms: [], summary: null });
+  const [busy, setBusy] = useState(false);
+  const [aiRoomFile, setAiRoomFile] = useState(null);
+  const [aiRoomDraft, setAiRoomDraft] = useState([]);
+  const [aiRoomWarnings, setAiRoomWarnings] = useState([]);
+  const [aiRoomDocument, setAiRoomDocument] = useState(null);
+  const [aiRoomBusy, setAiRoomBusy] = useState(false);
+  const [showVisualLayout, setShowVisualLayout] = useState(false);
+  const [visualRoomId, setVisualRoomId] = useState("");
+
+  const activeRooms = useMemo(() => rooms.filter((room) => room.is_active !== false), [rooms]);
+  const matchingSlot = useMemo(() => {
+    if (!activePlan) return null;
+    return (activeScheduleSlots || []).find(
+      (slot) =>
+        String(slot.exam_date) === String(activePlan.exam_date) &&
+        normalizeTime(slot.start_time) === normalizeTime(activePlan.start_time) &&
+        normalizeTime(slot.end_time) === normalizeTime(activePlan.end_time)
+    ) || null;
+  }, [activeScheduleSlots, activePlan]);
+
+  const matchingSchedules = matchingSlot?.schedules || [];
+
+  const selectionSummary = useMemo(() => {
+    const enabledGroups = studentGroups.filter(
+      (group) => studentSelections[group.key]?.enabled
+    );
+    const selectedCount = enabledGroups.reduce(
+      (sum, group) =>
+        sum + selectedStudentsForRule(group, studentSelections[group.key]).length,
+      0
+    );
+    const roomCapacity = (activePlan?.rooms || []).reduce(
+      (sum, planRoom) =>
+        sum + Number(planRoom.capacity_override || planRoom.room?.capacity || 0),
+      0
+    );
+    return {
+      enabledGroups: enabledGroups.length,
+      selectableGroups: studentGroups.filter((group) => Number(group.student_count || 0) > 0).length,
+      selectedCount,
+      roomCapacity,
+      remainingCapacity: roomCapacity - selectedCount,
+    };
+  }, [studentGroups, studentSelections, activePlan]);
+
+  const visualRoomGroups = useMemo(() => (activePlan?.rooms || []).map((planRoom) => {
+    const room = planRoom.room || {};
+    const roomSeats = seats.filter((seat) => Number(seat.plan_room_id) === Number(planRoom.id));
+    const layoutType = normalizedRoomLayoutType(room.layout_type);
+    const configuredRows = Math.max(1, Number(room.rows_count || 0));
+    const configuredColumns = Math.max(1, Number(room.seats_per_row || 0));
+    const studentsPerBench = layoutType === "bench"
+      ? Math.min(Math.max(2, Number(room.students_per_bench || 2)), 4)
+      : 1;
+    const slotColumns = configuredColumns * studentsPerBench;
+    const highestRow = roomSeats.reduce((max, seat) => {
+      const index = visualRowIndex(seat.row_label);
+      return index == null ? max : Math.max(max, index + 1);
+    }, 0);
+    const highestSlotColumn = roomSeats.reduce(
+      (max, seat) => Math.max(max, Number(seat.column_number || 0)),
+      0
+    );
+    const capacity = Math.max(
+      1,
+      Number(planRoom.capacity_override || room.capacity || configuredRows * slotColumns || roomSeats.length)
+    );
+    const rows = Math.max(configuredRows, highestRow, Math.ceil(capacity / Math.max(slotColumns, 1)), 1);
+    const columns = layoutType === "bench"
+      ? Math.max(configuredColumns, Math.ceil(highestSlotColumn / studentsPerBench), 1)
+      : Math.max(configuredColumns, highestSlotColumn, 1);
+    const seatMap = new Map();
+    roomSeats.forEach((seat) => {
+      seatMap.set(`${String(seat.row_label || "").toUpperCase()}:${Number(seat.column_number)}`, seat);
+    });
+    const classes = [...new Set(roomSeats.map(visualSeatClassLabel).filter(Boolean))].sort(naturalCompare);
+    return {
+      planRoom,
+      room,
+      seats: roomSeats,
+      seatMap,
+      layoutType,
+      studentsPerBench,
+      slotColumns: columns * studentsPerBench,
+      rows,
+      columns,
+      capacity,
+      classes,
+      emptySeats: Math.max(0, capacity - roomSeats.length),
+    };
+  }), [activePlan, seats]);
+
+  const activeVisualRoom = useMemo(() => {
+    if (!visualRoomGroups.length) return null;
+    return visualRoomGroups.find((group) => String(group.planRoom.id) === String(visualRoomId)) || visualRoomGroups[0];
+  }, [visualRoomGroups, visualRoomId]);
+
+  const hasStaleAssignments = useMemo(() => {
+    if (!seats.length) return false;
+    const validScheduleIds = new Set(matchingSchedules.map((schedule) => String(schedule.id)));
+    return !validScheduleIds.size || seats.some((seat) => !validScheduleIds.has(String(seat.exam_schedule_id)));
+  }, [matchingSchedules, seats]);
+
+  const invigilatorOptionsByRoom = useMemo(() => {
+    const map = new Map();
+    (invigilatorOptions.rooms || []).forEach((room) => map.set(String(room.plan_room_id), room));
+    return map;
+  }, [invigilatorOptions]);
+
+  // Manual mode remains open: show every loaded teacher, but hide anyone
+  // already selected in another room of the same plan/shift.
+  const invigilatorCandidatesForRoom = (planRoomId) => {
+    const roomKey = String(planRoomId);
+    const currentEmployeeId = String(invigilators[roomKey] || "");
+    const usedElsewhere = new Set(
+      Object.entries(invigilators)
+        .filter(([otherRoomId, employeeId]) => String(otherRoomId) !== roomKey && employeeId)
+        .map(([, employeeId]) => String(employeeId))
+    );
+    return employees.filter(
+      (employee) => String(employee.id) === currentEmployeeId || !usedElsewhere.has(String(employee.id))
+    );
+  };
+
+  const loadBase = async () => {
+    try {
+      const [roomRes, planRes, examRes, sessionRes, employeeRes] =
+        await Promise.all([
+          api.get("/exam-seating/rooms"),
+          api.get("/exam-seating/plans"),
+          api.get("/exams"),
+          api.get("/sessions"),
+          api.get("/exam-seating/employees"),
+        ]);
+      const loadedSessions = listFrom(sessionRes, "sessions");
+      setRooms(listFrom(roomRes, "rooms"));
+      setPlans(listFrom(planRes, "plans"));
+      setExams(listFrom(examRes, "exams"));
+      setSessions(loadedSessions);
+      setEmployees(listFrom(employeeRes, "employees"));
+      setPlanForm((current) => {
+        if (current.session_id) return current;
+        const preferredSession =
+          loadedSessions.find((item) => item.is_active) || loadedSessions[0];
+        return preferredSession
+          ? { ...current, session_id: String(preferredSession.id) }
+          : current;
+      });
+    } catch (error) {
+      console.error(error);
+      Swal.fire("Unable to load", error?.response?.data?.message || "Could not load seating-plan data", "error");
+    }
+  };
+
+  useEffect(() => {
+    loadBase();
+  }, []);
+
+  const fetchScheduleSlots = async (examId, sessionId) => {
+    if (!examId || !sessionId) return [];
+    const response = await api.get("/exam-seating/schedule-options", {
+      params: { exam_id: examId, session_id: sessionId },
+    });
+    return listFrom(response, "slots");
+  };
+
+  const applyCreateSlot = (slot, options = {}) => {
+    if (!slot) return;
+    const selectedExamId = options.examId || planForm.exam_id;
+    const exam = exams.find((item) => String(item.id) === String(selectedExamId));
+    const generatedName = `${exam?.name || "Examination"} – ${formatDate(slot.exam_date)} – ${shiftName(slot.start_time)}`;
+
+    setSelectedCreateSlotKey(slotKey(slot));
+    setPlanForm((current) => ({
+      ...current,
+      exam_id: selectedExamId,
+      exam_date: slot.exam_date,
+      start_time: normalizeTime(slot.start_time),
+      end_time: normalizeTime(slot.end_time),
+      name: !planNameTouched || options.forceName ? generatedName : current.name,
+    }));
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const load = async () => {
+      if (!planForm.exam_id || !planForm.session_id) {
+        setCreateScheduleSlots([]);
+        setSelectedCreateSlotKey("");
+        return;
+      }
+
+      setLoadingScheduleSlots(true);
+      try {
+        const slots = await fetchScheduleSlots(
+          planForm.exam_id,
+          planForm.session_id
+        );
+        if (cancelled) return;
+        setCreateScheduleSlots(slots);
+
+        const selected =
+          slots.find((slot) => slotKey(slot) === selectedCreateSlotKey) ||
+          slots[0] ||
+          null;
+
+        if (selected) {
+          applyCreateSlot(selected, { examId: planForm.exam_id });
+        } else {
+          setSelectedCreateSlotKey("");
+          setPlanForm((current) => ({
+            ...current,
+            exam_date: "",
+          }));
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.error(error);
+          setCreateScheduleSlots([]);
+          setSelectedCreateSlotKey("");
+        }
+      } finally {
+        if (!cancelled) setLoadingScheduleSlots(false);
+      }
+    };
+
+    load();
+    return () => {
+      cancelled = true;
+    };
+    // selectedCreateSlotKey is intentionally excluded: changing a slot must not refetch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [planForm.exam_id, planForm.session_id, exams]);
+
+  const openPlan = async (planId) => {
+    if (!planId) {
+      setActivePlanId("");
+      setActivePlan(null);
+      setActiveScheduleSlots([]);
+      setScheduleMismatch(null);
+      setSeats([]);
+      setDashboard(null);
+      setStudentGroups([]);
+      setStudentSelections({});
+      setStudentSearches({});
+      setSmartMode(false);
+      setSmartRules(defaultSmartRules);
+      setRoomRules({});
+      setInvigilators({});
+      setInvigilatorOptions({ rooms: [], summary: null });
+      return;
+    }
+    setBusy(true);
+    try {
+      const [planRes, dashRes, studentRes] = await Promise.all([
+        api.get(`/exam-seating/plans/${planId}`),
+        api.get(`/exam-seating/plans/${planId}/dashboard`),
+        api.get(`/exam-seating/plans/${planId}/student-options`),
+      ]);
+      const plan = planRes.data?.plan;
+      const loadedSeats = planRes.data?.seats || [];
+      const slots = await fetchScheduleSlots(plan.exam_id, plan.session_id);
+      const exactSlot = slots.find(
+        (slot) =>
+          String(slot.exam_date) === String(plan.exam_date) &&
+          normalizeTime(slot.start_time) === normalizeTime(plan.start_time) &&
+          normalizeTime(slot.end_time) === normalizeTime(plan.end_time)
+      );
+
+      setActivePlanId(String(planId));
+      setActivePlan(plan);
+      setActiveScheduleSlots(slots);
+      setSeats(loadedSeats);
+      setDashboard(dashRes.data);
+      setInvigilatorOptions({ rooms: [], summary: null });
+      setSelectedRoomIds((plan?.rooms || []).map((item) => String(item.exam_room_id)));
+      const loadedSmartRules = { ...defaultSmartRules, ...(plan?.smart_rules || {}) };
+      setSmartRules(loadedSmartRules);
+      setSmartMode(Boolean(loadedSmartRules.enabled));
+      const loadedRoomRules = {};
+      (plan?.rooms || []).forEach((planRoom) => {
+        loadedRoomRules[String(planRoom.exam_room_id)] = normalizedRoomRulesForUi(planRoom.room_rules);
+      });
+      setRoomRules(loadedRoomRules);
+      const loadedStudentGroups = listFrom(studentRes, "groups");
+      const selectionMap = {};
+      for (const group of loadedStudentGroups) {
+        const allocatedIds = (group.allocated_student_ids || []).map(String);
+        selectionMap[group.key] = {
+          // Do not auto-enable an empty class/section. Empty scheduled groups
+          // should not block Analyze/Allocate with a misleading warning.
+          enabled: Number(group.student_count || 0) > 0,
+          selection_type: allocatedIds.length ? "manual" : "all",
+          range_from: "",
+          range_to: "",
+          student_ids: allocatedIds,
+        };
+      }
+      setStudentGroups(loadedStudentGroups);
+      setStudentSelections(selectionMap);
+      setStudentSearches({});
+      setScheduleMismatch(exactSlot ? null : slots[0] || null);
+
+      const dutyMap = {};
+      (plan?.rooms || []).forEach((planRoom) => {
+        const mainDuty =
+          (planRoom.invigilators || []).find(
+            (duty) => duty.duty_role === "main"
+          ) || planRoom.invigilators?.[0];
+        dutyMap[String(planRoom.id)] = mainDuty
+          ? String(mainDuty.employee_id)
+          : "";
+      });
+      setInvigilators(dutyMap);
+    } catch (error) {
+      Swal.fire(
+        "Unable to open",
+        error?.response?.data?.message || "Failed to load plan",
+        "error"
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const useRecommendedSchedule = async () => {
+    if (!activePlan || !scheduleMismatch) return;
+
+    if (seats.length) {
+      return Swal.fire(
+        "Seats already allocated",
+        "This plan already contains seat assignments. Create a new plan or clear/reallocate seats before changing its examination shift.",
+        "warning"
+      );
+    }
+
+    const confirmation = await Swal.fire({
+      title: "Use scheduled examination slot?",
+      html: `Change this draft plan to <strong>${slotLabel(scheduleMismatch)}</strong>?`,
+      icon: "question",
+      showCancelButton: true,
+      confirmButtonText: "Use this schedule",
+    });
+    if (!confirmation.isConfirmed) return;
+
+    setBusy(true);
+    try {
+      await api.put(`/exam-seating/plans/${activePlan.id}`, {
+        exam_date: scheduleMismatch.exam_date,
+        start_time: normalizeTime(scheduleMismatch.start_time),
+        end_time: normalizeTime(scheduleMismatch.end_time),
+      });
+      await loadBase();
+      await openPlan(activePlan.id);
+      Swal.fire(
+        "Schedule selected",
+        "Date, shift and class schedules have been loaded automatically.",
+        "success"
+      );
+    } catch (error) {
+      Swal.fire(
+        "Could not update plan",
+        error?.response?.data?.message || "Failed to use scheduled slot",
+        "error"
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const resetRoomEditor = () => {
+    setEditingRoomId(null);
+    setRoomForm({ ...emptyRoom });
+  };
+
+  const startEditRoom = (room) => {
+    setEditingRoomId(room.id);
+    setRoomForm({
+      room_code: room.room_code || "",
+      name: room.name || "",
+      building: room.building || "",
+      floor: room.floor || "",
+      layout_type: normalizedRoomLayoutType(room.layout_type),
+      rows_count: Number(room.rows_count || 1),
+      seats_per_row: Number(room.seats_per_row || 1),
+      students_per_bench: normalizedRoomLayoutType(room.layout_type) === "bench"
+        ? Number(room.students_per_bench || 2)
+        : 1,
+      capacity: Number(room.capacity || 1),
+    });
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const saveRoom = async (event) => {
+    event.preventDefault();
+    setBusy(true);
+    const payload = {
+      ...roomForm,
+      layout_type: normalizedRoomLayoutType(roomForm.layout_type),
+      rows_count: Number(roomForm.rows_count),
+      seats_per_row: Number(roomForm.seats_per_row),
+      students_per_bench: normalizedRoomLayoutType(roomForm.layout_type) === "bench"
+        ? Number(roomForm.students_per_bench || 2)
+        : 1,
+      capacity: Number(roomForm.capacity),
+    };
+
+    try {
+      if (editingRoomId) {
+        await api.put(`/exam-seating/rooms/${editingRoomId}`, payload);
+        resetRoomEditor();
+        await loadBase();
+        Swal.fire("Room updated", "Room details and layout were updated successfully.", "success");
+      } else {
+        await api.post("/exam-seating/rooms", payload);
+        resetRoomEditor();
+        await loadBase();
+        Swal.fire("Room created", "The room is now available for seating plans.", "success");
+      }
+    } catch (error) {
+      Swal.fire(
+        "Not saved",
+        error?.response?.data?.message || (editingRoomId ? "Failed to update room" : "Failed to create room"),
+        "error"
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const toggleRoomStatus = async (room) => {
+    try {
+      await api.put(`/exam-seating/rooms/${room.id}`, { is_active: !room.is_active });
+      if (String(editingRoomId) === String(room.id)) resetRoomEditor();
+      await loadBase();
+    } catch (error) {
+      Swal.fire("Not updated", error?.response?.data?.message || "Failed to update room", "error");
+    }
+  };
+
+  const deleteRoom = async (room) => {
+    const confirmation = await Swal.fire({
+      title: "Delete examination room?",
+      text: `${room.room_code} — ${room.name} will be permanently removed. Rooms already used in a seating plan cannot be deleted.`,
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "Delete room",
+      cancelButtonText: "Cancel",
+      confirmButtonColor: "#dc3545",
+      reverseButtons: true,
+    });
+    if (!confirmation.isConfirmed) return;
+
+    setBusy(true);
+    try {
+      await api.delete(`/exam-seating/rooms/${room.id}/permanent`);
+      if (String(editingRoomId) === String(room.id)) resetRoomEditor();
+      setSelectedRoomIds((current) => current.filter((id) => String(id) !== String(room.id)));
+      await loadBase();
+      Swal.fire("Room deleted", "The unused examination room was deleted permanently.", "success");
+    } catch (error) {
+      const message = error?.response?.data?.message || "Failed to delete room";
+      if (error?.response?.status === 409) {
+        Swal.fire("Room is in use", message, "info");
+      } else {
+        Swal.fire("Not deleted", message, "error");
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const updateAiRoomDraft = (index, field, value) => {
+    setAiRoomDraft((current) =>
+      current.map((room, roomIndex) => {
+        if (roomIndex !== index) return room;
+        const next = { ...room, [field]: value };
+        if (field === "room_code") {
+          next.existing = false;
+          next.duplicate_in_draft = false;
+        }
+        if (field === "rows_count" || field === "seats_per_row") {
+          const rows = Number(field === "rows_count" ? value : next.rows_count);
+          const perRow = Number(field === "seats_per_row" ? value : next.seats_per_row);
+          if (rows > 0 && perRow > 0) next.capacity = rows * perRow;
+        }
+        return next;
+      })
+    );
+  };
+
+  const aiRoomValidationErrors = (room) => {
+    const errors = [];
+    const rows = Number(room?.rows_count);
+    const perRow = Number(room?.seats_per_row);
+    const capacity = Number(room?.capacity);
+    if (!String(room?.room_code || "").trim()) errors.push("room code");
+    if (!String(room?.name || "").trim()) errors.push("room name");
+    if (!Number.isInteger(rows) || rows <= 0) errors.push("rows");
+    if (!Number.isInteger(perRow) || perRow <= 0) errors.push("seats per row");
+    if (!Number.isInteger(capacity) || capacity <= 0) errors.push("capacity");
+    if (rows > 0 && perRow > 0 && capacity > rows * perRow) errors.push("capacity exceeds layout");
+    return errors;
+  };
+
+  const analyzeAiRoomFile = async () => {
+    if (!aiRoomFile) {
+      return Swal.fire(
+        "Choose a room file",
+        "Upload an Excel sheet, PDF, screenshot, scan or handwritten room list.",
+        "warning"
+      );
+    }
+
+    const formData = new FormData();
+    formData.append("file", aiRoomFile);
+    setAiRoomBusy(true);
+    try {
+      const response = await api.post("/exam-seating/rooms/ai-analyze", formData);
+      const extracted = Array.isArray(response.data?.rooms) ? response.data.rooms : [];
+      setAiRoomDraft(extracted.map((room) => ({ ...room, _selected: !room.existing })));
+      setAiRoomWarnings(Array.isArray(response.data?.warnings) ? response.data.warnings : []);
+      setAiRoomDocument(response.data?.document || null);
+      if (!extracted.length) {
+        Swal.fire(
+          "No rooms found",
+          "AI could not identify a room table. Try a clearer screenshot, scan, PDF or Excel sheet.",
+          "warning"
+        );
+      }
+    } catch (error) {
+      Swal.fire(
+        "AI Room Setup failed",
+        error?.response?.data?.message || "Could not analyze this room file",
+        "error"
+      );
+    } finally {
+      setAiRoomBusy(false);
+    }
+  };
+
+  const clearAiRoomDraft = () => {
+    setAiRoomFile(null);
+    setAiRoomDraft([]);
+    setAiRoomWarnings([]);
+    setAiRoomDocument(null);
+  };
+
+  const createAiRooms = async () => {
+    const selected = aiRoomDraft.filter((room) => room._selected !== false);
+    if (!selected.length) {
+      return Swal.fire("Select rooms", "Select at least one AI-detected room to create.", "warning");
+    }
+
+    const invalid = selected
+      .map((room, index) => ({ room, index, errors: aiRoomValidationErrors(room) }))
+      .filter((item) => item.errors.length);
+    if (invalid.length) {
+      return Swal.fire(
+        "Review room details",
+        `${invalid.length} selected room(s) still have missing or invalid layout values.`,
+        "warning"
+      );
+    }
+
+    const confirmation = await Swal.fire({
+      title: `Create ${selected.length} examination room${selected.length === 1 ? "" : "s"}?`,
+      text: "Only the reviewed, selected rows will be added to Room Master.",
+      icon: "question",
+      showCancelButton: true,
+      confirmButtonText: "Create rooms",
+    });
+    if (!confirmation.isConfirmed) return;
+
+    setAiRoomBusy(true);
+    try {
+      const response = await api.post("/exam-seating/rooms/bulk", {
+        rooms: selected.map((room) => ({
+          room_code: String(room.room_code || "").trim(),
+          name: String(room.name || "").trim(),
+          building: String(room.building || "").trim(),
+          floor: String(room.floor || "").trim(),
+          rows_count: Number(room.rows_count),
+          seats_per_row: Number(room.seats_per_row),
+          capacity: Number(room.capacity),
+          is_active: true,
+        })),
+      });
+      const created = Number(response.data?.created_count || 0);
+      const skipped = Number(response.data?.skipped_count || 0);
+      await loadBase();
+      clearAiRoomDraft();
+      Swal.fire(
+        "Room Master updated",
+        `${created} room(s) created${skipped ? `; ${skipped} existing room code(s) skipped` : ""}.`,
+        "success"
+      );
+    } catch (error) {
+      const validationErrors = error?.response?.data?.validation_errors;
+      Swal.fire(
+        "Rooms not created",
+        Array.isArray(validationErrors) && validationErrors.length
+          ? validationErrors.slice(0, 5).join("\n")
+          : error?.response?.data?.message || "Failed to create AI room draft",
+        "error"
+      );
+    } finally {
+      setAiRoomBusy(false);
+    }
+  };
+
+  const createPlan = async (event) => {
+    event.preventDefault();
+    setBusy(true);
+    try {
+      const response = await api.post("/exam-seating/plans", planForm);
+      const created = response.data?.plan;
+      setPlanForm((current) => ({
+        ...emptyPlan,
+        session_id: current.session_id,
+      }));
+      setPlanNameTouched(false);
+      setSelectedCreateSlotKey("");
+      setCreateScheduleSlots([]);
+      await loadBase();
+      await openPlan(created.id);
+      Swal.fire(
+        "Plan created",
+        "Scheduled classes were selected automatically. Add rooms and allocate students.",
+        "success"
+      );
+    } catch (error) {
+      Swal.fire("Not saved", error?.response?.data?.message || "Failed to create plan", "error");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const deletePlan = async (plan) => {
+    if (!plan) return;
+    if (plan.status !== "draft") {
+      Swal.fire(
+        "Cannot delete published plan",
+        "Unpublish the seating plan first, then delete it from the draft list.",
+        "info"
+      );
+      return;
+    }
+
+    const confirm = await Swal.fire({
+      title: "Delete seating plan?",
+      text: `“${plan.name}” will be permanently deleted along with its room selections, seat assignments and invigilator duties.`,
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "Delete plan",
+      cancelButtonText: "Cancel",
+      reverseButtons: true,
+      focusCancel: true,
+    });
+    if (!confirm.isConfirmed) return;
+
+    setBusy(true);
+    try {
+      await api.delete(`/exam-seating/plans/${plan.id}`);
+      if (String(activePlanId) === String(plan.id)) {
+        await openPlan("");
+      }
+      await loadBase();
+      Swal.fire("Plan deleted", "The draft seating plan was deleted successfully.", "success");
+    } catch (error) {
+      Swal.fire(
+        "Delete failed",
+        error?.response?.data?.message || "Failed to delete seating plan",
+        "error"
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const savePlanRooms = async () => {
+    if (!activePlan || !selectedRoomIds.length) {
+      return Swal.fire("Select rooms", "Choose at least one active room.", "warning");
+    }
+    let clearAssignments = false;
+    if (seats.length) {
+      const confirm = await Swal.fire({
+        title: "Replace rooms?",
+        text: "Existing seat assignments will be cleared and must be generated again.",
+        icon: "warning",
+        showCancelButton: true,
+        confirmButtonText: "Replace rooms",
+      });
+      if (!confirm.isConfirmed) return;
+      clearAssignments = true;
+    }
+    setBusy(true);
+    try {
+      await api.put(`/exam-seating/plans/${activePlan.id}/rooms`, {
+        rooms: selectedRoomIds.map((id, index) => ({
+          exam_room_id: Number(id),
+          display_order: index,
+          room_rules: normalizedRoomRulesForUi(roomRules[String(id)]),
+        })),
+        clear_assignments: clearAssignments,
+        smart_rules: { ...smartRules, enabled: smartMode },
+      });
+      await openPlan(activePlan.id);
+      Swal.fire("Rooms saved", "The plan rooms have been updated.", "success");
+    } catch (error) {
+      Swal.fire("Not saved", error?.response?.data?.message || "Failed to update rooms", "error");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+
+  const updateRoomRule = (roomId, patch) => {
+    const key = String(roomId);
+    setRoomRules((current) => ({
+      ...current,
+      [key]: {
+        ...normalizedRoomRulesForUi(current[key]),
+        ...patch,
+      },
+    }));
+  };
+
+  const toggleRoomStage = (roomId, stage, checked) => {
+    const current = normalizedRoomRulesForUi(roomRules[String(roomId)]);
+    const values = new Set(current.allowed_stages || []);
+    if (checked) values.add(stage);
+    else values.delete(stage);
+    updateRoomRule(roomId, { allowed_stages: [...values] });
+  };
+
+  const updateStudentSelection = (groupKey, patch) => {
+    setStudentSelections((current) => ({
+      ...current,
+      [groupKey]: {
+        enabled: true,
+        selection_type: "all",
+        range_from: "",
+        range_to: "",
+        student_ids: [],
+        ...(current[groupKey] || {}),
+        ...patch,
+      },
+    }));
+  };
+
+  const toggleStudentGroup = (group, enabled) => {
+    updateStudentSelection(group.key, { enabled });
+  };
+
+  const setAllStudentGroupsEnabled = (enabled) => {
+    setStudentSelections((current) => {
+      const next = { ...current };
+      for (const group of studentGroups) {
+        const hasStudents = Number(group.student_count || 0) > 0;
+        next[group.key] = {
+          enabled: hasStudents ? enabled : false,
+          selection_type: "all",
+          range_from: "",
+          range_to: "",
+          student_ids: [],
+          ...(current[group.key] || {}),
+          enabled: hasStudents ? enabled : false,
+        };
+      }
+      return next;
+    });
+  };
+
+  const changeSelectionType = (group, selectionType) => {
+    const currentRule = studentSelections[group.key] || { enabled: true, selection_type: "all" };
+    const currentlySelected = selectedStudentsForRule(group, currentRule).map((student) => String(student.id));
+    updateStudentSelection(group.key, {
+      selection_type: selectionType,
+      range_from: "",
+      range_to: "",
+      student_ids:
+        selectionType === "manual"
+          ? (currentlySelected.length ? currentlySelected : (group.students || []).map((student) => String(student.id)))
+          : currentRule.student_ids || [],
+    });
+  };
+
+  const toggleManualStudent = (groupKey, studentId, selected) => {
+    const currentIds = new Set(
+      (studentSelections[groupKey]?.student_ids || []).map(String)
+    );
+    if (selected) currentIds.add(String(studentId));
+    else currentIds.delete(String(studentId));
+    updateStudentSelection(groupKey, { student_ids: [...currentIds] });
+  };
+
+  const buildAllocationPayload = () => {
+    const enabledGroups = studentGroups.filter(
+      (group) => studentSelections[group.key]?.enabled
+    );
+    if (!enabledGroups.length) {
+      return { errorTitle: "Select classes", errorMessage: "Choose at least one class/section." };
+    }
+
+    for (const group of enabledGroups) {
+      const selected = selectedStudentsForRule(group, studentSelections[group.key]);
+      if (!selected.length) {
+        return {
+          errorTitle: "No students selected",
+          errorMessage: `Select at least one student from ${group.class_name} ${group.section_name || ""}.`,
+        };
+      }
+    }
+
+    if (selectionSummary.roomCapacity && selectionSummary.selectedCount > selectionSummary.roomCapacity) {
+      return {
+        errorTitle: "Insufficient room capacity",
+        errorMessage: `${selectionSummary.selectedCount} students are selected but saved rooms have capacity ${selectionSummary.roomCapacity}.`,
+      };
+    }
+
+    const scheduleIds = [
+      ...new Set(enabledGroups.flatMap((group) => group.schedule_ids || []).map(Number)),
+    ];
+    const studentSelectionsPayload = enabledGroups.map((group) => {
+      const rule = studentSelections[group.key];
+      return {
+        enabled: true,
+        class_id: Number(group.class_id),
+        section_id: group.section_id == null ? null : Number(group.section_id),
+        exam_schedule_id: Number(group.representative_schedule_id),
+        selection_type: rule.selection_type || "all",
+        range_from: rule.range_from || null,
+        range_to: rule.range_to || null,
+        student_ids: (rule.student_ids || []).map(Number),
+      };
+    });
+
+    return {
+      payload: {
+        exam_schedule_ids: scheduleIds,
+        student_selections: studentSelectionsPayload,
+        allocation_mode: activePlan?.allocation_mode || "roll_number",
+        mix_classes: activePlan?.mix_classes !== false,
+        allocation_strategy: smartMode ? "smart" : "standard",
+        smart_mode: smartMode,
+        smart_rules: { ...smartRules, enabled: smartMode },
+        clear_existing: true,
+      },
+    };
+  };
+
+  const formatBestEffortRelaxations = (relaxations) => {
+    if (!relaxations || !Number(relaxations.total || 0)) return "No selected same-class rule needed relaxation.";
+    const parts = [];
+    if (Number(relaxations.same_class_horizontal || 0)) {
+      parts.push(`${relaxations.same_class_horizontal} side-by-side`);
+    }
+    if (Number(relaxations.same_class_vertical || 0)) {
+      parts.push(`${relaxations.same_class_vertical} front/back`);
+    }
+    if (Number(relaxations.same_class_diagonal || 0)) {
+      parts.push(`${relaxations.same_class_diagonal} diagonal`);
+    }
+    return `${relaxations.total} unavoidable same-class adjustment(s): ${parts.join(", ")}.`;
+  };
+
+  const showBestEffortPrompt = async (data, title = "Rules need adjustment") => {
+    const suggestions = data?.suggestions || [];
+    const unassigned = data?.unassigned_by_class || [];
+    const relaxes = data?.best_effort_relaxes || [];
+    const detail = [
+      data?.message || "The selected strict rules cannot all be satisfied.",
+      unassigned.length
+        ? `Strict mode leaves: ${unassigned.map((item) => `${item.class_name} (${item.count})`).join(", ")}`
+        : "",
+      relaxes.length
+        ? `Strict-first mode keeps these rules active: ${relaxes.join(", ")}. It accepts an individual conflict only after a complete strict arrangement becomes impossible.`
+        : "",
+      "No selected rule is switched off globally. Room capacity and room/class/gender restrictions remain hard limits.",
+      suggestions.length ? `Suggestions:\n• ${suggestions.join("\n• ")}` : "",
+    ].filter(Boolean).join("\n\n");
+
+    return Swal.fire({
+      title,
+      text: detail,
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "Try Best Adjustment",
+      cancelButtonText: "Adjust Rules",
+      reverseButtons: true,
+      focusCancel: true,
+    });
+  };
+
+  const analyzeSmartAllocation = async () => {
+    if (!activePlan) return;
+    const built = buildAllocationPayload();
+    if (!built.payload) {
+      return Swal.fire(built.errorTitle, built.errorMessage, "warning");
+    }
+    if (!smartMode) {
+      return Swal.fire("Enable Smart AI", "Turn on Smart AI Seating before analyzing rules.", "info");
+    }
+
+    setBusy(true);
+    try {
+      const response = await api.post(
+        `/exam-seating/plans/${activePlan.id}/smart-analyze`,
+        built.payload
+      );
+      const warnings = response.data?.warnings || [];
+      const extra = warnings.length ? `\n\nWarnings:\n• ${warnings.join("\n• ")}` : "";
+      Swal.fire(
+        "Rules are feasible",
+        `${response.data?.student_count || 0} students can be seated with all selected hard rules. ${response.data?.remaining_capacity ?? 0} physical seats will remain.${extra}`,
+        "success"
+      );
+    } catch (error) {
+      const data = error?.response?.data || {};
+      if (data.best_effort_available) {
+        const choice = await showBestEffortPrompt(data);
+        if (choice.isConfirmed) {
+          setBusy(false);
+          return autoAllocate({ bestEffort: true });
+        }
+      } else {
+        const suggestions = data.suggestions || [];
+        const unassigned = data.unassigned_by_class || [];
+        const detail = [
+          data.message || "The selected rules cannot all be satisfied.",
+          unassigned.length
+            ? `Unassigned: ${unassigned.map((item) => `${item.class_name} (${item.count})`).join(", ")}`
+            : "",
+          suggestions.length ? `Suggestions:\n• ${suggestions.join("\n• ")}` : "",
+        ].filter(Boolean).join("\n\n");
+        Swal.fire("Rules need adjustment", detail, "warning");
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const autoAllocate = async ({ bestEffort = false } = {}) => {
+    if (!activePlan) return;
+    const built = buildAllocationPayload();
+    if (!built.payload) {
+      return Swal.fire(built.errorTitle, built.errorMessage, "warning");
+    }
+    if (bestEffort) built.payload.best_effort = true;
+
+    setBusy(true);
+    try {
+      const response = await api.post(`/exam-seating/plans/${activePlan.id}/auto-allocate`, built.payload);
+      await openPlan(activePlan.id);
+      const warnings = response.data?.warnings || [];
+      const relaxationText = response.data?.best_effort
+        ? ` ${formatBestEffortRelaxations(response.data?.relaxations)}`
+        : "";
+      Swal.fire(
+        response.data?.best_effort
+          ? "Strict-first best adjustment generated"
+          : (smartMode ? "Smart seating generated" : "Seats allocated"),
+        `${response.data?.student_count || 0} selected students were assigned. ${response.data?.remaining_capacity ?? 0} seats remain.${relaxationText}${warnings.length ? ` ${warnings.join(" ")}` : ""}`,
+        response.data?.best_effort && Number(response.data?.relaxations?.total || 0) ? "warning" : "success"
+      );
+    } catch (error) {
+      const data = error?.response?.data || {};
+      if (!bestEffort && data.best_effort_available) {
+        const choice = await showBestEffortPrompt(data, "Strict allocation stopped");
+        if (choice.isConfirmed) {
+          setBusy(false);
+          return autoAllocate({ bestEffort: true });
+        }
+      } else {
+        const suggestions = data.suggestions || [];
+        Swal.fire(
+          bestEffort ? "Best adjustment could not complete" : "Allocation stopped",
+          `${data.message || "Failed to allocate students"}${suggestions.length ? `\n\nSuggestions:\n• ${suggestions.join("\n• ")}` : ""}`,
+          "error"
+        );
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const applySmartInvigilatorRecommendations = (data) => {
+    const roomOptions = data.rooms || [];
+    setInvigilatorOptions({ rooms: roomOptions, summary: data.summary || null });
+    const next = {};
+    (activePlan?.rooms || []).forEach((planRoom) => {
+      next[String(planRoom.id)] = "";
+    });
+    roomOptions.forEach((room) => {
+      if (!room.recommended_employee_id) return;
+      next[String(room.plan_room_id)] = String(room.recommended_employee_id);
+    });
+    setInvigilators(next);
+  };
+
+  const smartAssignInvigilators = async () => {
+    if (!activePlan) return;
+    setBusy(true);
+    try {
+      const strictResponse = await api.get(
+        `/exam-seating/plans/${activePlan.id}/invigilator-options?mode=strict`
+      );
+      const strictData = strictResponse.data || {};
+      const strictSummary = strictData.summary || {};
+
+      if (strictSummary.complete) {
+        applySmartInvigilatorRecommendations(strictData);
+        await Swal.fire(
+          "AI teacher allocation ready",
+          `${strictSummary.recommended_count || 0} room(s) assigned. The system used teachers from the classes seated in the rooms, excluded teachers of the scheduled exam subject, prevented duplicate/overlapping duties, and preferred teachers with fewer previous duties. Please review and save.`,
+          "success"
+        );
+        return;
+      }
+
+      const missing = Number(strictSummary.room_count || 0) - Number(strictSummary.strict_recommended_count || 0);
+      const choice = await Swal.fire({
+        title: "Strict AI allocation is not fully possible",
+        html: `The system could satisfy all smart teacher rules for <b>${strictSummary.strict_recommended_count || 0} of ${strictSummary.room_count || 0}</b> rooms.<br><br><b>${Math.max(0, missing)} room(s)</b> need an adjustment.<br><br>Best Possible will keep every rule strict for as many rooms as possible. It will first relax the same-class preference only where necessary, and it will consider a scheduled-subject teacher only as the final fallback. Duplicate teachers and overlapping duties are never allowed.`,
+        icon: "warning",
+        showCancelButton: true,
+        confirmButtonText: "Try Best Possible",
+        cancelButtonText: "Assign manually",
+        reverseButtons: true,
+      });
+      if (!choice.isConfirmed) {
+        setInvigilatorOptions({ rooms: strictData.rooms || [], summary: strictSummary });
+        return;
+      }
+
+      const bestResponse = await api.get(
+        `/exam-seating/plans/${activePlan.id}/invigilator-options?mode=best-fit`
+      );
+      const bestData = bestResponse.data || {};
+      const bestSummary = bestData.summary || {};
+      applySmartInvigilatorRecommendations(bestData);
+
+      const sameClassRelaxed = Number(bestSummary.relaxation_counts?.same_class_preference || 0);
+      const subjectRelaxed = Number(bestSummary.relaxation_counts?.scheduled_subject_exclusion || 0);
+      const unassigned = Number(bestSummary.room_count || 0) - Number(bestSummary.recommended_count || 0);
+      const detailParts = [
+        `${bestSummary.recommended_count || 0} of ${bestSummary.room_count || 0} room(s) assigned`,
+        `${sameClassRelaxed} same-class preference adjustment(s)`,
+        `${subjectRelaxed} scheduled-subject last-resort adjustment(s)`,
+      ];
+      if (unassigned > 0) detailParts.push(`${unassigned} room(s) still require manual assignment`);
+
+      await Swal.fire(
+        bestSummary.complete ? "Best possible AI allocation ready" : "Best possible allocation prepared",
+        `${detailParts.join(". ")}. Duplicate-teacher and overlapping-duty rules were kept strict. Teachers with fewer past duties were preferred within each rule level. Please review and save.`,
+        bestSummary.complete ? "success" : "warning"
+      );
+    } catch (error) {
+      Swal.fire(
+        "AI teacher allocation failed",
+        error?.response?.data?.message || "Could not prepare invigilator recommendations",
+        "error"
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const saveInvigilators = async () => {
+    if (!activePlan) return;
+    const assignments = Object.entries(invigilators)
+      .filter(([, employeeId]) => employeeId)
+      .map(([planRoomId, employeeId]) => ({
+        plan_room_id: Number(planRoomId),
+        employee_id: Number(employeeId),
+        duty_role: "main",
+      }));
+    if (!assignments.length) return Swal.fire("Assign teachers", "Select at least one invigilator.", "warning");
+    setBusy(true);
+    try {
+      await api.put(`/exam-seating/plans/${activePlan.id}/invigilators`, {
+        assignments,
+        replace_existing: true,
+      });
+      await openPlan(activePlan.id);
+      Swal.fire("Duties assigned", "Teachers can now see their invigilation duties.", "success");
+    } catch (error) {
+      Swal.fire("Not assigned", error?.response?.data?.message || "Failed to assign invigilators", "error");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const publishPlan = async () => {
+    if (!activePlan) return;
+    const action = activePlan.status === "published" ? "unpublish" : "publish";
+    const confirm = await Swal.fire({
+      title: action === "publish" ? "Publish seating plan?" : "Move plan back to draft?",
+      text: action === "publish" ? "Students will receive their room and seat details." : "The plan will stop showing as an active published plan.",
+      icon: "question",
+      showCancelButton: true,
+      confirmButtonText: action === "publish" ? "Publish" : "Unpublish",
+    });
+    if (!confirm.isConfirmed) return;
+    setBusy(true);
+    try {
+      await api.post(`/exam-seating/plans/${activePlan.id}/${action}`, {});
+      await loadBase();
+      await openPlan(activePlan.id);
+      Swal.fire(action === "publish" ? "Published" : "Draft restored", action === "publish" ? "Seat notifications have been processed." : "You can edit the plan again.", "success");
+    } catch (error) {
+      Swal.fire("Action failed", error?.response?.data?.message || `Failed to ${action} plan`, "error");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const downloadLandscapePdf = async () => {
+    if (!activePlan) {
+      Swal.fire("Select a plan", "Open a seating plan before downloading the PDF.", "info");
+      return;
+    }
+
+    if (!seats.length) {
+      Swal.fire("No seating data", "Allocate students before downloading the seating-plan PDF.", "info");
+      return;
+    }
+
+    setBusy(true);
+    try {
+      const response = await api.get(`/exam-seating/plans/${activePlan.id}/pdf`, {
+        params: { report: "room-wise" },
+        responseType: "blob",
+      });
+
+      const contentType = response.headers?.["content-type"] || "application/pdf";
+      const blob = response.data instanceof Blob
+        ? response.data
+        : new Blob([response.data], { type: contentType });
+
+      const fallbackName = `exam-seating-${activePlan.exam_date || activePlan.id}.pdf`;
+      const filename = filenameFromDisposition(
+        response.headers?.["content-disposition"],
+        fallbackName
+      );
+
+      const objectUrl = window.URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = objectUrl;
+      anchor.download = filename;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.setTimeout(() => window.URL.revokeObjectURL(objectUrl), 1000);
+    } catch (error) {
+      console.error("Backend seating PDF download failed:", error);
+      Swal.fire(
+        "PDF download failed",
+        await blobErrorMessage(
+          error,
+          "Could not generate the landscape seating-plan PDF on the server."
+        ),
+        "error"
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const downloadVisualLayoutPdf = async () => {
+    if (!activePlan) {
+      Swal.fire("Select a plan", "Open a seating plan before downloading the visual layout.", "info");
+      return;
+    }
+    if (!seats.length) {
+      Swal.fire("No seating data", "Allocate students before downloading the visual room layout.", "info");
+      return;
+    }
+
+    setBusy(true);
+    try {
+      const response = await api.get(`/exam-seating/plans/${activePlan.id}/pdf`, {
+        params: { report: "visual-layout" },
+        responseType: "blob",
+      });
+      const contentType = response.headers?.["content-type"] || "application/pdf";
+      const blob = response.data instanceof Blob
+        ? response.data
+        : new Blob([response.data], { type: contentType });
+      const fallbackName = `exam-seating-${activePlan.exam_date || activePlan.id}-visual-layout.pdf`;
+      const filename = filenameFromDisposition(
+        response.headers?.["content-disposition"],
+        fallbackName
+      );
+      const objectUrl = window.URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = objectUrl;
+      anchor.download = filename;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.setTimeout(() => window.URL.revokeObjectURL(objectUrl), 1000);
+    } catch (error) {
+      console.error("Visual seating PDF download failed:", error);
+      Swal.fire(
+        "Visual PDF download failed",
+        await blobErrorMessage(error, "Could not generate the one-room-per-page visual seating PDF."),
+        "error"
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const openVisualLayout = () => {
+    if (!activePlan) {
+      Swal.fire("Select a plan", "Open a seating plan first.", "info");
+      return;
+    }
+    if (!seats.length) {
+      Swal.fire("No seating data", "Generate the seating plan before opening the visual room layout.", "info");
+      return;
+    }
+    const preferred = visualRoomGroups.find((group) => group.seats.length) || visualRoomGroups[0];
+    if (!preferred) {
+      Swal.fire("No rooms", "Save at least one room in this seating plan.", "info");
+      return;
+    }
+    setVisualRoomId(String(preferred.planRoom.id));
+    setShowVisualLayout(true);
+  };
+
+  const showVisualSeatDetails = (seat) => {
+    if (!seat) return;
+    const student = seat.student || {};
+    const details = [
+      `Seat: ${seat.seat_number || `${seat.row_label}-${seat.column_number}`}`,
+      `Class: ${visualSeatClassLabel(seat)}`,
+      student.roll_number != null ? `Roll No.: ${student.roll_number}` : null,
+      student.admission_number ? `Admission No.: ${student.admission_number}` : null,
+      student.gender ? `Gender: ${student.gender}` : null,
+      seat.schedule?.subject?.name ? `Subject: ${seat.schedule.subject.name}` : null,
+    ].filter(Boolean).join("\n");
+    Swal.fire({
+      title: student.name || "Student details",
+      text: details,
+      icon: "info",
+      confirmButtonText: "Close",
+    });
+  };
+
+  const toggleSelection = (value, selected, setter) => {
+    setter((current) =>
+      selected ? [...new Set([...current, String(value)])] : current.filter((item) => String(item) !== String(value))
+    );
+  };
+
+  return (
+    <div className="container-fluid py-3 exam-seating-page">
+      <style>{`
+        .exam-seating-workflow-row { position: relative; z-index: 1; }
+        .exam-seating-workflow-card { min-height: 580px; overflow: hidden; }
+        .exam-seating-scroll-body {
+          height: 455px !important;
+          max-height: 455px !important;
+          min-height: 0 !important;
+          overflow-y: auto !important;
+          overflow-x: hidden !important;
+        }
+        .exam-seating-workflow-card .card-footer { flex: 0 0 auto; }
+        .exam-student-manual-list { max-height: 170px; overflow-y: auto; background: #fff; }
+        .min-width-0 { min-width: 0; }
+        .exam-seating-list-card { position: relative; z-index: 0; clear: both; }
+        .exam-visual-backdrop {
+          position: fixed; inset: 0; z-index: 1040; background: rgba(15, 23, 42, 0.62);
+          padding: 20px; display: flex; align-items: center; justify-content: center;
+        }
+        .exam-visual-dialog {
+          width: min(1500px, 97vw); height: min(930px, 94vh); background: #fff;
+          border-radius: 16px; box-shadow: 0 24px 70px rgba(15, 23, 42, 0.35);
+          display: flex; flex-direction: column; overflow: hidden;
+        }
+        .exam-visual-header { padding: 14px 18px; border-bottom: 1px solid #e2e8f0; background: #fff; }
+        .exam-visual-room-tabs { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 3px; }
+        .exam-visual-room-tab { white-space: nowrap; }
+        .exam-visual-body { flex: 1 1 auto; min-height: 0; overflow: auto; background: #f8fafc; padding: 18px; }
+        .exam-visual-canvas { min-width: 720px; max-width: 1450px; margin: 0 auto; }
+        .exam-visual-board {
+          width: min(620px, 72%); margin: 6px auto 20px; padding: 8px 18px;
+          border-radius: 8px; background: #111827; color: #fff; text-align: center;
+          font-size: 13px; font-weight: 700; letter-spacing: .04em;
+        }
+        .exam-visual-row { display: flex; align-items: stretch; gap: 10px; margin-bottom: 10px; }
+        .exam-visual-row-label {
+          width: 34px; flex: 0 0 34px; display: flex; align-items: center; justify-content: center;
+          font-weight: 800; color: #475569;
+        }
+        .exam-visual-seat-grid { display: grid; gap: 10px; flex: 1 1 auto; }
+        .exam-visual-bench-heads { display: grid; gap: 12px; margin: 0 0 8px 44px; }
+        .exam-visual-bench-head { font-size: 12px; font-weight: 800; text-align: center; color: #334155; }
+        .exam-visual-bench-grid { display: grid; gap: 12px; flex: 1 1 auto; }
+        .exam-visual-bench { border: 2px solid #94a3b8; border-radius: 12px; padding: 7px; background: #fff; }
+        .exam-visual-bench-label { font-size: 10px; font-weight: 800; color: #64748b; text-align: center; margin-bottom: 6px; }
+        .exam-visual-bench-slots { display: grid; gap: 6px; }
+        .exam-visual-bench .exam-visual-seat { min-height: 74px; }
+        .exam-visual-seat {
+          min-height: 82px; border: 2px solid #cbd5e1; border-radius: 10px; padding: 7px 6px;
+          display: flex; flex-direction: column; align-items: center; justify-content: center;
+          text-align: center; line-height: 1.15; transition: transform .12s ease, box-shadow .12s ease;
+          color: #0f172a; background: #fff; width: 100%;
+        }
+        button.exam-visual-seat:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(15, 23, 42, .13); }
+        .exam-visual-seat-number { font-weight: 800; font-size: 12px; margin-bottom: 4px; }
+        .exam-visual-seat-class { font-weight: 700; font-size: 12px; }
+        .exam-visual-seat-meta { font-size: 10px; color: #475569; margin-top: 3px; }
+        .exam-visual-seat-name { font-size: 10px; color: #334155; margin-top: 3px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .exam-visual-seat.empty { background: #f8fafc; border-color: #cbd5e1; border-style: dashed; color: #94a3b8; }
+        .exam-visual-seat.blocked { background: #e5e7eb; border-color: #cbd5e1; color: #9ca3af; opacity: .72; }
+        .exam-visual-seat.tone-0, .exam-visual-legend.tone-0 { background: #dbeafe; border-color: #2563eb; }
+        .exam-visual-seat.tone-1, .exam-visual-legend.tone-1 { background: #dcfce7; border-color: #16a34a; }
+        .exam-visual-seat.tone-2, .exam-visual-legend.tone-2 { background: #fef3c7; border-color: #d97706; }
+        .exam-visual-seat.tone-3, .exam-visual-legend.tone-3 { background: #fce7f3; border-color: #db2777; }
+        .exam-visual-seat.tone-4, .exam-visual-legend.tone-4 { background: #ede9fe; border-color: #7c3aed; }
+        .exam-visual-seat.tone-5, .exam-visual-legend.tone-5 { background: #cffafe; border-color: #0891b2; }
+        .exam-visual-seat.tone-6, .exam-visual-legend.tone-6 { background: #ffedd5; border-color: #ea580c; }
+        .exam-visual-seat.tone-7, .exam-visual-legend.tone-7 { background: #f3e8ff; border-color: #9333ea; }
+        .exam-visual-seat.tone-8, .exam-visual-legend.tone-8 { background: #ecfccb; border-color: #65a30d; }
+        .exam-visual-seat.tone-9, .exam-visual-legend.tone-9 { background: #ffe4e6; border-color: #e11d48; }
+        .exam-visual-legend { width: 13px; height: 13px; border: 2px solid; border-radius: 4px; display: inline-block; flex: 0 0 13px; }
+        .exam-visual-door { text-align: right; font-size: 12px; font-weight: 700; color: #64748b; margin-top: 8px; }
+        @media (max-width: 1199.98px) {
+          .exam-seating-workflow-card { min-height: auto; }
+          .exam-seating-scroll-body { height: auto !important; max-height: 360px !important; }
+        }
+        @page { size: A4 landscape; margin: 10mm; }
+        @media print {
+          .no-print, .sidebar, nav { display: none !important; }
+          .exam-seating-page { padding: 0 !important; }
+          .print-card { break-inside: avoid; }
+          .exam-seating-list-card { box-shadow: none !important; border: 0 !important; }
+          .exam-seating-list-card .table-responsive { overflow: visible !important; }
+          .exam-seating-list-card table { width: 100% !important; font-size: 9px !important; }
+          .exam-seating-list-card th, .exam-seating-list-card td { white-space: normal !important; padding: 3px !important; }
+        }
+      `}</style>
+
+      <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3 no-print">
+        <div>
+          <h2 className="mb-1">Examination Seating Planner</h2>
+          <div className="text-muted">Rooms → students → invigilators → publish → attendance</div>
+        </div>
+        <div className="btn-group">
+          <button className={`btn ${tab === "planner" ? "btn-primary" : "btn-outline-primary"}`} onClick={() => setTab("planner")}>Planner</button>
+          <button className={`btn ${tab === "rooms" ? "btn-primary" : "btn-outline-primary"}`} onClick={() => setTab("rooms")}>Room Master</button>
+        </div>
+      </div>
+
+      {tab === "rooms" && (
+        <div className="row g-3">
+          <div className="col-12">
+            <div className="card shadow-sm border-primary-subtle">
+              <div className="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+                <div>
+                  <div className="fw-semibold">✨ AI Room Setup</div>
+                  <div className="small text-muted">Excel, PDF, screenshot, scan or handwritten room list → review → create Room Master</div>
+                </div>
+                {aiRoomDocument?.detected_language && (
+                  <span className="badge text-bg-light border">Detected: {aiRoomDocument.detected_language}</span>
+                )}
+              </div>
+              <div className="card-body">
+                <div className="row g-2 align-items-end">
+                  <div className="col-lg-8">
+                    <label className="form-label">Room list / layout document</label>
+                    <input
+                      type="file"
+                      className="form-control"
+                      accept=".xlsx,.xls,.pdf,.jpg,.jpeg,.png,.webp"
+                      onChange={(event) => setAiRoomFile(event.target.files?.[0] || null)}
+                    />
+                    <div className="form-text">You can upload a typed sheet, phone photo, screenshot or handwritten page. Maximum 25 MB.</div>
+                  </div>
+                  <div className="col-lg-4 d-grid">
+                    <button type="button" className="btn btn-primary" disabled={aiRoomBusy || !aiRoomFile} onClick={analyzeAiRoomFile}>
+                      {aiRoomBusy ? "Analyzing room layout..." : "Analyze with AI"}
+                    </button>
+                  </div>
+                </div>
+
+                {!!aiRoomWarnings.length && (
+                  <div className="alert alert-warning py-2 mt-3 mb-0">
+                    {aiRoomWarnings.map((warning, index) => <div key={`${warning}-${index}`}>{warning}</div>)}
+                  </div>
+                )}
+
+                {!!aiRoomDraft.length && (
+                  <div className="mt-3">
+                    <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+                      <div>
+                        <span className="fw-semibold">AI draft: {aiRoomDraft.length} room(s)</span>
+                        <span className="text-muted small ms-2">Review highlighted or low-confidence values before creating.</span>
+                      </div>
+                      <div className="d-flex gap-2">
+                        <button type="button" className="btn btn-sm btn-outline-secondary" disabled={aiRoomBusy} onClick={clearAiRoomDraft}>Clear draft</button>
+                        <button type="button" className="btn btn-sm btn-success" disabled={aiRoomBusy || !aiRoomDraft.some((room) => room._selected !== false)} onClick={createAiRooms}>
+                          {aiRoomBusy ? "Creating..." : `Create selected rooms (${aiRoomDraft.filter((room) => room._selected !== false).length})`}
+                        </button>
+                      </div>
+                    </div>
+                    <div className="table-responsive border rounded">
+                      <table className="table table-sm align-middle mb-0" style={{ minWidth: 1100 }}>
+                        <thead className="table-light">
+                          <tr>
+                            <th style={{ width: 42 }}>Use</th>
+                            <th>Room code</th>
+                            <th>Room name</th>
+                            <th>Building</th>
+                            <th>Floor</th>
+                            <th style={{ width: 90 }}>Rows</th>
+                            <th style={{ width: 100 }}>Per row</th>
+                            <th style={{ width: 100 }}>Capacity</th>
+                            <th>Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {aiRoomDraft.map((room, index) => {
+                            const validationErrors = aiRoomValidationErrors(room);
+                            const review = room.needs_review || validationErrors.length > 0 || room.existing || room.duplicate_in_draft;
+                            return (
+                              <tr key={room.client_id || index} className={review ? "table-warning" : ""}>
+                                <td>
+                                  <input
+                                    type="checkbox"
+                                    className="form-check-input"
+                                    checked={room._selected !== false}
+                                    onChange={(event) => updateAiRoomDraft(index, "_selected", event.target.checked)}
+                                  />
+                                </td>
+                                <td><input className="form-control form-control-sm" value={room.room_code || ""} onChange={(event) => updateAiRoomDraft(index, "room_code", event.target.value)} /></td>
+                                <td><input className="form-control form-control-sm" value={room.name || ""} onChange={(event) => updateAiRoomDraft(index, "name", event.target.value)} /></td>
+                                <td><input className="form-control form-control-sm" value={room.building || ""} onChange={(event) => updateAiRoomDraft(index, "building", event.target.value)} /></td>
+                                <td><input className="form-control form-control-sm" value={room.floor || ""} onChange={(event) => updateAiRoomDraft(index, "floor", event.target.value)} /></td>
+                                <td><input type="number" min="1" className="form-control form-control-sm" value={room.rows_count || ""} onChange={(event) => updateAiRoomDraft(index, "rows_count", event.target.value)} /></td>
+                                <td><input type="number" min="1" className="form-control form-control-sm" value={room.seats_per_row || ""} onChange={(event) => updateAiRoomDraft(index, "seats_per_row", event.target.value)} /></td>
+                                <td><input type="number" min="1" className="form-control form-control-sm" value={room.capacity || ""} onChange={(event) => updateAiRoomDraft(index, "capacity", event.target.value)} /></td>
+                                <td>
+                                  {room.existing ? (
+                                    <span className="badge text-bg-secondary">Existing</span>
+                                  ) : review ? (
+                                    <span className="badge text-bg-warning">Review</span>
+                                  ) : (
+                                    <span className="badge text-bg-success">Ready</span>
+                                  )}
+                                  {!!room.warnings?.length && (
+                                    <div className="small text-muted mt-1" title={room.warnings.join("\n")}>{room.warnings[0]}</div>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+          <div className="col-lg-4">
+            <form className="card shadow-sm" onSubmit={saveRoom}>
+              <div className="card-header d-flex justify-content-between align-items-center gap-2">
+                <span className="fw-semibold">{editingRoomId ? "Edit examination room" : "Create examination room"}</span>
+                {editingRoomId && <span className="badge text-bg-warning">Editing</span>}
+              </div>
+              <div className="card-body row g-3">
+                <div className="col-5"><label className="form-label">Room code</label><input required className="form-control" value={roomForm.room_code} onChange={(e) => setRoomForm({ ...roomForm, room_code: e.target.value })} /></div>
+                <div className="col-7"><label className="form-label">Room name</label><input required className="form-control" value={roomForm.name} onChange={(e) => setRoomForm({ ...roomForm, name: e.target.value })} /></div>
+                <div className="col-6"><label className="form-label">Building</label><input className="form-control" value={roomForm.building} onChange={(e) => setRoomForm({ ...roomForm, building: e.target.value })} /></div>
+                <div className="col-6"><label className="form-label">Floor</label><input className="form-control" value={roomForm.floor} onChange={(e) => setRoomForm({ ...roomForm, floor: e.target.value })} /></div>
+                <div className="col-12">
+                  <label className="form-label">Layout type</label>
+                  <select
+                    className="form-select"
+                    value={roomForm.layout_type || "individual"}
+                    onChange={(e) => {
+                      const layout_type = e.target.value;
+                      const students_per_bench = layout_type === "bench" ? 2 : 1;
+                      const next = { ...roomForm, layout_type, students_per_bench };
+                      next.capacity = roomLayoutCapacity(next);
+                      setRoomForm(next);
+                    }}
+                  >
+                    <option value="individual">Individual seats</option>
+                    <option value="bench">Bench layout (multiple students per bench)</option>
+                  </select>
+                </div>
+                <div className="col-4">
+                  <label className="form-label">{roomForm.layout_type === "bench" ? "Benches / column" : "Rows"}</label>
+                  <input type="number" min="1" className="form-control" value={roomForm.rows_count} onChange={(e) => { const next = { ...roomForm, rows_count: e.target.value }; next.capacity = roomLayoutCapacity(next); setRoomForm(next); }} />
+                </div>
+                <div className="col-4">
+                  <label className="form-label">{roomForm.layout_type === "bench" ? "Vertical columns" : "Per row"}</label>
+                  <input type="number" min="1" className="form-control" value={roomForm.seats_per_row} onChange={(e) => { const next = { ...roomForm, seats_per_row: e.target.value }; next.capacity = roomLayoutCapacity(next); setRoomForm(next); }} />
+                </div>
+                {roomForm.layout_type === "bench" && (
+                  <div className="col-4">
+                    <label className="form-label">Students / bench</label>
+                    <input type="number" min="2" max="4" className="form-control" value={roomForm.students_per_bench || 2} onChange={(e) => { const next = { ...roomForm, students_per_bench: e.target.value }; next.capacity = roomLayoutCapacity(next); setRoomForm(next); }} />
+                  </div>
+                )}
+                <div className={roomForm.layout_type === "bench" ? "col-12" : "col-4"}>
+                  <label className="form-label">Usable capacity</label>
+                  <input type="number" min="1" max={roomLayoutCapacity(roomForm)} className="form-control" value={roomForm.capacity} onChange={(e) => setRoomForm({ ...roomForm, capacity: e.target.value })} />
+                  {roomForm.layout_type === "bench" && <div className="form-text">Example: 4 vertical columns × 6 benches × 2 students = 48 seats.</div>}
+                </div>
+              </div>
+              <div className="card-footer d-flex gap-2">
+                <button disabled={busy} className="btn btn-primary flex-grow-1">
+                  {busy ? "Saving..." : editingRoomId ? "Update room" : "Create room"}
+                </button>
+                {editingRoomId && (
+                  <button type="button" disabled={busy} className="btn btn-outline-secondary" onClick={resetRoomEditor}>
+                    Cancel
+                  </button>
+                )}
+              </div>
+            </form>
+          </div>
+          <div className="col-lg-8">
+            <div className="card shadow-sm">
+              <div className="card-header fw-semibold">Reusable rooms</div>
+              <div className="table-responsive">
+                <table className="table table-hover mb-0">
+                  <thead><tr><th>Code</th><th>Name</th><th>Layout</th><th>Capacity</th><th>Status</th><th>Actions</th></tr></thead>
+                  <tbody>
+                    {rooms.map((room) => (
+                      <tr key={room.id}>
+                        <td className="fw-semibold">{room.room_code}</td><td>{room.name}<div className="small text-muted">{[room.building, room.floor].filter(Boolean).join(" · ")}</div></td>
+                        <td>{roomLayoutText(room)}<div className="small text-muted">{normalizedRoomLayoutType(room.layout_type) === "bench" ? "Bench layout" : "Individual seats"}</div></td><td>{room.capacity}</td>
+                        <td><span className={`badge ${room.is_active ? "text-bg-success" : "text-bg-secondary"}`}>{room.is_active ? "Active" : "Archived"}</span></td>
+                        <td>
+                          <div className="d-flex flex-wrap gap-2">
+                            <button type="button" disabled={busy} className="btn btn-sm btn-outline-primary" onClick={() => startEditRoom(room)}>Edit</button>
+                            <button type="button" disabled={busy} className="btn btn-sm btn-outline-secondary" onClick={() => toggleRoomStatus(room)}>{room.is_active ? "Archive" : "Restore"}</button>
+                            <button type="button" disabled={busy} className="btn btn-sm btn-outline-danger" onClick={() => deleteRoom(room)}>Delete</button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                    {!rooms.length && <tr><td colSpan="6" className="text-center text-muted py-4">No rooms created yet.</td></tr>}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {tab === "planner" && (
+        <>
+          <div className="row g-3 no-print">
+            <div className="col-xl-4">
+              <form className="card shadow-sm h-100" onSubmit={createPlan}>
+                <div className="card-header fw-semibold">1. Create plan/shift</div>
+                <div className="card-body row g-3">
+                  <div className="col-12">
+                    <label className="form-label">Plan name</label>
+                    <input
+                      required
+                      className="form-control"
+                      placeholder="Generated automatically from exam schedule"
+                      value={planForm.name}
+                      onChange={(e) => {
+                        setPlanNameTouched(true);
+                        setPlanForm({ ...planForm, name: e.target.value });
+                      }}
+                    />
+                  </div>
+                  <div className="col-6">
+                    <label className="form-label">Session</label>
+                    <select
+                      required
+                      className="form-select"
+                      value={planForm.session_id}
+                      onChange={(e) => {
+                        setPlanNameTouched(false);
+                        setSelectedCreateSlotKey("");
+                        setPlanForm({
+                          ...planForm,
+                          session_id: e.target.value,
+                          exam_id: "",
+                          name: "",
+                          exam_date: "",
+                        });
+                      }}
+                    >
+                      <option value="">Select</option>
+                      {sessions.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.name}{item.is_active ? " (Current)" : ""}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="col-6">
+                    <label className="form-label">Exam</label>
+                    <select
+                      required
+                      className="form-select"
+                      value={planForm.exam_id}
+                      onChange={(e) => {
+                        setPlanNameTouched(false);
+                        setSelectedCreateSlotKey("");
+                        setPlanForm({
+                          ...planForm,
+                          exam_id: e.target.value,
+                          name: "",
+                          exam_date: "",
+                        });
+                      }}
+                    >
+                      <option value="">Select</option>
+                      {exams.map((item) => (
+                        <option key={item.id} value={item.id}>{item.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="col-12">
+                    <label className="form-label">Scheduled date and shift</label>
+                    <select
+                      required
+                      className="form-select"
+                      disabled={loadingScheduleSlots || !planForm.exam_id}
+                      value={selectedCreateSlotKey}
+                      onChange={(e) => {
+                        const selected = createScheduleSlots.find(
+                          (slot) => slotKey(slot) === e.target.value
+                        );
+                        applyCreateSlot(selected);
+                      }}
+                    >
+                      <option value="">
+                        {loadingScheduleSlots
+                          ? "Loading scheduled dates..."
+                          : createScheduleSlots.length
+                            ? "Select scheduled date and shift"
+                            : "No examination schedule available"}
+                      </option>
+                      {createScheduleSlots.map((slot) => (
+                        <option key={slotKey(slot)} value={slotKey(slot)}>
+                          {slotLabel(slot)}
+                        </option>
+                      ))}
+                    </select>
+                    {planForm.exam_id && !loadingScheduleSlots && !createScheduleSlots.length && (
+                      <div className="small text-danger mt-1">
+                        Create the Exam Schedule first. A seating plan can only use scheduled examination dates.
+                      </div>
+                    )}
+                  </div>
+                  <div className="col-6">
+                    <label className="form-label">Date</label>
+                    <input readOnly className="form-control" value={planForm.exam_date ? formatDate(planForm.exam_date) : "Auto-selected"} />
+                  </div>
+                  <div className="col-3">
+                    <label className="form-label">Start</label>
+                    <input readOnly className="form-control" value={planForm.start_time || ""} />
+                  </div>
+                  <div className="col-3">
+                    <label className="form-label">End</label>
+                    <input readOnly className="form-control" value={planForm.end_time || ""} />
+                  </div>
+                </div>
+                <div className="card-footer"><button disabled={busy || !selectedCreateSlotKey} className="btn btn-primary w-100">Create seating plan</button></div>
+              </form>
+            </div>
+            <div className="col-xl-8">
+              <div className="card shadow-sm h-100">
+                <div className="card-header fw-semibold">Open existing plan</div>
+                <div className="card-body">
+                  <select className="form-select mb-3" value={activePlanId} onChange={(e) => openPlan(e.target.value)}>
+                    <option value="">Select a seating plan</option>
+                    {plans.map((plan) => <option key={plan.id} value={plan.id}>{plan.exam_date} · {plan.name} · {plan.status}</option>)}
+                  </select>
+                  <div className="table-responsive">
+                    <table className="table table-sm align-middle">
+                      <thead><tr><th>Date</th><th>Plan</th><th>Time</th><th>Status</th><th className="text-end">Actions</th></tr></thead>
+                      <tbody>
+                        {plans.slice(0, 8).map((plan) => (
+                          <tr key={plan.id}>
+                            <td>{plan.exam_date}</td>
+                            <td>{plan.name}</td>
+                            <td>{plan.start_time}–{plan.end_time}</td>
+                            <td>
+                              <span className={`badge ${plan.status === "published" ? "text-bg-success" : "text-bg-secondary"}`}>
+                                {plan.status}
+                              </span>
+                            </td>
+                            <td className="text-end">
+                              <div className="d-inline-flex gap-2">
+                                <button
+                                  type="button"
+                                  className="btn btn-sm btn-outline-primary"
+                                  disabled={busy}
+                                  onClick={() => openPlan(plan.id)}
+                                >
+                                  Open
+                                </button>
+                                {plan.status === "draft" && (
+                                  <button
+                                    type="button"
+                                    className="btn btn-sm btn-outline-danger"
+                                    disabled={busy}
+                                    onClick={() => deletePlan(plan)}
+                                  >
+                                    Delete
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {activePlan && (
+            <div className="mt-3">
+              <div className="card shadow-sm mb-3 print-card">
+                <div className="card-body d-flex flex-wrap justify-content-between align-items-center gap-3">
+                  <div><h4 className="mb-1">{activePlan.name}</h4><div className="text-muted">{activePlan.exam?.name} · {activePlan.exam_date} · {activePlan.start_time}–{activePlan.end_time}</div></div>
+                  <div className="d-flex flex-wrap gap-2 no-print">
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      disabled={busy || !seats.length}
+                      onClick={downloadLandscapePdf}
+                    >
+                      {busy ? "Preparing PDF…" : "Download landscape PDF"}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-outline-primary"
+                      disabled={busy || !seats.length}
+                      onClick={openVisualLayout}
+                    >
+                      Visual room layout
+                    </button>
+                    <button type="button" className="btn btn-outline-secondary" onClick={() => window.print()}>Landscape print preview</button>
+                    {activePlan.status === "draft" && (
+                      <button
+                        type="button"
+                        className="btn btn-outline-danger"
+                        disabled={busy}
+                        onClick={() => deletePlan(activePlan)}
+                      >
+                        Delete plan
+                      </button>
+                    )}
+                    <button disabled={busy || hasStaleAssignments} title={hasStaleAssignments ? "Reallocate students before publishing" : ""} className={`btn ${activePlan.status === "published" ? "btn-outline-warning" : "btn-success"}`} onClick={publishPlan}>{activePlan.status === "published" ? "Unpublish" : "Publish to apps"}</button>
+                  </div>
+                </div>
+              </div>
+
+              {dashboard?.summary && (
+                <div className="row g-2 mb-3 no-print">
+                  {[['Rooms', dashboard.summary.rooms], ['Students', dashboard.summary.total_students], ['Present', dashboard.summary.present], ['Absent', dashboard.summary.absent], ['Late', dashboard.summary.late], ['Pending', dashboard.summary.pending]].map(([label, value]) => <div className="col-6 col-md-2" key={label}><div className="card text-center shadow-sm print-card"><div className="card-body py-2"><div className="small text-muted">{label}</div><div className="fs-4 fw-bold">{value}</div></div></div></div>)}
+                </div>
+              )}
+
+              {hasStaleAssignments && (
+                <div className="alert alert-warning d-flex justify-content-between align-items-center gap-3 no-print">
+                  <div>
+                    <div className="fw-semibold">Old seat assignments belong to another schedule.</div>
+                    <div className="small">The scheduled classes and the room-wise student list do not match. Reallocate students before publishing.</div>
+                  </div>
+                  <button type="button" className="btn btn-warning btn-sm text-nowrap" disabled={busy || !(activePlan.rooms || []).length} onClick={autoAllocate}>Reallocate now</button>
+                </div>
+              )}
+
+              <div className={`card shadow-sm mb-3 no-print ${smartMode ? "border-primary" : ""}`}>
+                <div className="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+                  <div>
+                    <span className="fw-semibold">✨ AI Smart Seating Rules</span>
+                    <div className="small text-muted">Constraint-based allocation with automatic conflict detection.</div>
+                  </div>
+                  <div className="form-check form-switch m-0">
+                    <input
+                      className="form-check-input"
+                      type="checkbox"
+                      role="switch"
+                      id="smartSeatingToggle"
+                      checked={smartMode}
+                      disabled={busy || activePlan.status !== "draft"}
+                      onChange={(event) => {
+                        const enabled = event.target.checked;
+                        setSmartMode(enabled);
+                        setSmartRules((current) => ({ ...current, enabled }));
+                      }}
+                    />
+                    <label className="form-check-label fw-semibold" htmlFor="smartSeatingToggle">
+                      {smartMode ? "Smart AI enabled" : "Use standard allocation"}
+                    </label>
+                  </div>
+                </div>
+                {smartMode && (
+                  <div className="card-body">
+                    <div className="row g-3 align-items-end">
+                      <div className="col-lg-6">
+                        <div className="fw-semibold small mb-2">Same-class separation</div>
+                        <div className="d-flex flex-wrap gap-3">
+                          <label className="form-check">
+                            <input
+                              className="form-check-input"
+                              type="checkbox"
+                              checked={smartRules.avoid_same_class_horizontal !== false}
+                              onChange={(event) => setSmartRules((current) => ({ ...current, avoid_same_class_horizontal: event.target.checked }))}
+                            />
+                            <span className="form-check-label">No same class on same bench / side-by-side</span>
+                          </label>
+                          <label className="form-check">
+                            <input
+                              className="form-check-input"
+                              type="checkbox"
+                              checked={smartRules.avoid_same_class_vertical !== false}
+                              onChange={(event) => setSmartRules((current) => ({ ...current, avoid_same_class_vertical: event.target.checked }))}
+                            />
+                            <span className="form-check-label">No same class front/back</span>
+                          </label>
+                          <label className="form-check">
+                            <input
+                              className="form-check-input"
+                              type="checkbox"
+                              checked={Boolean(smartRules.avoid_same_class_diagonal)}
+                              onChange={(event) => setSmartRules((current) => ({ ...current, avoid_same_class_diagonal: event.target.checked }))}
+                            />
+                            <span className="form-check-label">No same class diagonal</span>
+                          </label>
+                        </div>
+                      </div>
+                      <div className="col-md-6 col-lg-3">
+                        <label className="form-label small fw-semibold">Boys / Girls arrangement</label>
+                        <select
+                          className="form-select"
+                          value={smartRules.gender_mode || "no_restriction"}
+                          onChange={(event) => setSmartRules((current) => ({ ...current, gender_mode: event.target.value }))}
+                        >
+                          <option value="no_restriction">No restriction</option>
+                          <option value="alternate">Alternate in each row</option>
+                          <option value="separate_rows">Separate rows</option>
+                          <option value="separate_rooms">Separate rooms</option>
+                        </select>
+                      </div>
+                      <div className="col-md-6 col-lg-3">
+                        <button
+                          type="button"
+                          className="btn btn-outline-primary w-100"
+                          disabled={busy || activePlan.status !== "draft" || !(activePlan.rooms || []).length}
+                          onClick={analyzeSmartAllocation}
+                        >
+                          Analyze rules before allocation
+                        </button>
+                      </div>
+                    </div>
+                    <div className="small text-muted mt-2">
+                      Primary / Middle / Senior is inferred from class names (Nursery–5, 6–8, 9–12). Room-specific restrictions are configured below.
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="row g-3 no-print exam-seating-workflow-row align-items-stretch">
+                <div className="col-xl-4">
+                  <div className="card shadow-sm h-100 d-flex flex-column exam-seating-workflow-card">
+                    <div className="card-header fw-semibold">2. Select rooms</div>
+                    <div className="card-body flex-grow-1 exam-seating-scroll-body">
+                      {activeRooms.map((room) => {
+                        const selected = selectedRoomIds.includes(String(room.id));
+                        const rules = normalizedRoomRulesForUi(roomRules[String(room.id)]);
+                        return (
+                          <div key={room.id} className={`border rounded p-2 mb-2 ${selected ? "border-primary" : ""}`}>
+                            <label className="d-flex align-items-center gap-2 mb-0">
+                              <input
+                                type="checkbox"
+                                checked={selected}
+                                onChange={(e) => toggleSelection(room.id, e.target.checked, setSelectedRoomIds)}
+                              />
+                              <span>
+                                <strong>{room.room_code}</strong> — {room.name}
+                                <span className="d-block small text-muted">Capacity {room.capacity} ({roomLayoutText(room)})</span>
+                              </span>
+                            </label>
+
+                            {selected && smartMode && (
+                              <div className="mt-2 pt-2 border-top">
+                                <div className="small fw-semibold mb-1">Allowed school stage <span className="text-muted fw-normal">(none = any)</span></div>
+                                <div className="d-flex flex-wrap gap-2 mb-2">
+                                  {["primary", "middle", "senior"].map((stage) => (
+                                    <label className="form-check form-check-inline m-0" key={stage}>
+                                      <input
+                                        className="form-check-input"
+                                        type="checkbox"
+                                        checked={(rules.allowed_stages || []).includes(stage)}
+                                        onChange={(event) => toggleRoomStage(room.id, stage, event.target.checked)}
+                                      />
+                                      <span className="form-check-label text-capitalize small">{stage}</span>
+                                    </label>
+                                  ))}
+                                </div>
+
+                                <label className="form-label small mb-1">Allowed class / sections <span className="text-muted">(blank = any)</span></label>
+                                <select
+                                  multiple
+                                  className="form-select form-select-sm mb-2"
+                                  size={Math.min(4, Math.max(2, studentGroups.length || 2))}
+                                  value={rules.allowed_class_section_keys || []}
+                                  onChange={(event) => updateRoomRule(room.id, {
+                                    allowed_class_section_keys: Array.from(event.target.selectedOptions).map((option) => option.value),
+                                  })}
+                                >
+                                  {studentGroups.map((group) => (
+                                    <option key={group.key} value={group.key}>
+                                      {group.class_name} {group.section_name || ""}
+                                    </option>
+                                  ))}
+                                </select>
+                                {(rules.allowed_class_section_keys || []).length > 0 && (
+                                  <button
+                                    type="button"
+                                    className="btn btn-link btn-sm p-0 mb-2"
+                                    onClick={() => updateRoomRule(room.id, { allowed_class_section_keys: [] })}
+                                  >
+                                    Allow any selected class
+                                  </button>
+                                )}
+
+                                <div className="row g-2">
+                                  <div className="col-7">
+                                    <label className="form-label small mb-1">Room gender</label>
+                                    <select
+                                      className="form-select form-select-sm"
+                                      value={rules.allowed_gender || "any"}
+                                      onChange={(event) => updateRoomRule(room.id, { allowed_gender: event.target.value })}
+                                    >
+                                      <option value="any">Boys & girls / any</option>
+                                      <option value="Male">Boys only</option>
+                                      <option value="Female">Girls only</option>
+                                      <option value="Other">Other only</option>
+                                    </select>
+                                  </div>
+                                  <div className="col-5">
+                                    <label className="form-label small mb-1">Max same class</label>
+                                    <input
+                                      type="number"
+                                      min="1"
+                                      className="form-control form-control-sm"
+                                      placeholder="No limit"
+                                      value={rules.max_same_class_per_room || ""}
+                                      onChange={(event) => updateRoomRule(room.id, { max_same_class_per_room: event.target.value })}
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <div className="card-footer"><button disabled={busy || activePlan.status !== "draft"} className="btn btn-primary w-100" onClick={savePlanRooms}>Save selected rooms</button></div>
+                  </div>
+                </div>
+
+                <div className="col-xl-4">
+                  <div className="card shadow-sm h-100 d-flex flex-column exam-seating-workflow-card">
+                    <div className="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+                      <span className="fw-semibold">3. Select classes &amp; students</span>
+                      {studentGroups.length > 0 && (
+                        <div className="d-flex flex-wrap align-items-center gap-2">
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-outline-primary"
+                            disabled={busy || selectionSummary.selectableGroups === 0 || selectionSummary.enabledGroups === selectionSummary.selectableGroups}
+                            onClick={() => setAllStudentGroupsEnabled(true)}
+                          >
+                            Select all classes
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-outline-secondary"
+                            disabled={busy || selectionSummary.enabledGroups === 0}
+                            onClick={() => setAllStudentGroupsEnabled(false)}
+                          >
+                            Deselect all classes
+                          </button>
+                          <span className="badge text-bg-success">
+                            {selectionSummary.selectedCount} selected
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                    <div className="card-body flex-grow-1 exam-seating-scroll-body">
+                      {studentGroups.map((group) => {
+                        const rule = studentSelections[group.key] || {
+                          enabled: Number(group.student_count || 0) > 0,
+                          selection_type: "all",
+                          range_from: "",
+                          range_to: "",
+                          student_ids: [],
+                        };
+                        const selectedStudents = selectedStudentsForRule(group, rule);
+                        const search = String(studentSearches[group.key] || "").trim().toLowerCase();
+                        const visibleStudents = (group.students || []).filter((student) => {
+                          if (!search) return true;
+                          return [student.name, student.admission_number, student.roll_number]
+                            .some((value) => String(value ?? "").toLowerCase().includes(search));
+                        });
+                        const manualIds = new Set((rule.student_ids || []).map(String));
+
+                        return (
+                          <div key={group.key} className={`border rounded p-2 mb-2 ${rule.enabled ? "bg-white" : "bg-light text-muted"}`}>
+                            <div className="d-flex align-items-start gap-2">
+                              <input
+                                className="form-check-input mt-1"
+                                type="checkbox"
+                                checked={Boolean(rule.enabled)}
+                                disabled={Number(group.student_count || 0) === 0}
+                                onChange={(event) => toggleStudentGroup(group, event.target.checked)}
+                              />
+                              <div className="flex-grow-1 min-width-0">
+                                <div className="d-flex justify-content-between gap-2">
+                                  <strong>{group.class_name} {group.section_name}</strong>
+                                  <span className="badge text-bg-light border">
+                                    {selectedStudents.length}/{group.student_count}
+                                  </span>
+                                </div>
+                                <div className="small text-muted text-truncate" title={(group.subjects || []).map((subject) => subject.name).join(", ")}>
+                                  {(group.subjects || []).map((subject) => subject.name).join(", ")}
+                                </div>
+
+                                <select
+                                  className="form-select form-select-sm mt-2"
+                                  value={rule.selection_type || "all"}
+                                  disabled={!rule.enabled}
+                                  onChange={(event) => changeSelectionType(group, event.target.value)}
+                                >
+                                  <option value="all">All students</option>
+                                  <option value="roll_range">Roll-number range</option>
+                                  <option value="admission_range">Admission-number range</option>
+                                  <option value="manual">Select students manually</option>
+                                </select>
+
+                                {rule.enabled && ["roll_range", "admission_range"].includes(rule.selection_type) && (
+                                  <div className="row g-2 mt-1">
+                                    <div className="col-6">
+                                      <input
+                                        type={rule.selection_type === "roll_range" ? "number" : "text"}
+                                        min={rule.selection_type === "roll_range" ? "1" : undefined}
+                                        className="form-control form-control-sm"
+                                        placeholder="From"
+                                        value={rule.range_from || ""}
+                                        onChange={(event) => updateStudentSelection(group.key, { range_from: event.target.value })}
+                                      />
+                                    </div>
+                                    <div className="col-6">
+                                      <input
+                                        type={rule.selection_type === "roll_range" ? "number" : "text"}
+                                        min={rule.selection_type === "roll_range" ? "1" : undefined}
+                                        className="form-control form-control-sm"
+                                        placeholder="To"
+                                        value={rule.range_to || ""}
+                                        onChange={(event) => updateStudentSelection(group.key, { range_to: event.target.value })}
+                                      />
+                                    </div>
+                                  </div>
+                                )}
+
+                                {rule.enabled && rule.selection_type === "manual" && (
+                                  <div className="mt-2">
+                                    <input
+                                      className="form-control form-control-sm"
+                                      placeholder="Search name, admission or roll no."
+                                      value={studentSearches[group.key] || ""}
+                                      onChange={(event) => setStudentSearches((current) => ({ ...current, [group.key]: event.target.value }))}
+                                    />
+                                    <div className="d-flex gap-2 my-2">
+                                      <button
+                                        type="button"
+                                        className="btn btn-sm btn-outline-primary"
+                                        onClick={() => updateStudentSelection(group.key, {
+                                          student_ids: [...new Set([
+                                            ...(rule.student_ids || []).map(String),
+                                            ...visibleStudents.map((student) => String(student.id)),
+                                          ])],
+                                        })}
+                                      >
+                                        Select visible
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="btn btn-sm btn-outline-secondary"
+                                        onClick={() => updateStudentSelection(group.key, { student_ids: [] })}
+                                      >
+                                        Clear
+                                      </button>
+                                    </div>
+                                    <div className="exam-student-manual-list border rounded">
+                                      {visibleStudents.map((student) => (
+                                        <label key={student.id} className="d-flex align-items-center gap-2 px-2 py-1 border-bottom small">
+                                          <input
+                                            type="checkbox"
+                                            checked={manualIds.has(String(student.id))}
+                                            onChange={(event) => toggleManualStudent(group.key, student.id, event.target.checked)}
+                                          />
+                                          <span className="flex-grow-1">
+                                            {student.roll_number != null ? `${student.roll_number}. ` : ""}{student.name}
+                                          </span>
+                                          <span className="text-muted">{student.admission_number || "—"}</span>
+                                        </label>
+                                      ))}
+                                      {!visibleStudents.length && (
+                                        <div className="small text-muted text-center p-2">No matching students.</div>
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+
+                      {!studentGroups.length && (
+                        <div className="alert alert-warning mb-0">
+                          <div className="fw-semibold">This plan does not match a scheduled date/shift.</div>
+                          {scheduleMismatch ? (
+                            <>
+                              <div className="small mt-1">Recommended: {slotLabel(scheduleMismatch)}</div>
+                              <button
+                                type="button"
+                                className="btn btn-sm btn-warning mt-2"
+                                disabled={busy || activePlan.status !== "draft"}
+                                onClick={useRecommendedSchedule}
+                              >
+                                Use scheduled date automatically
+                              </button>
+                            </>
+                          ) : (
+                            <div className="small mt-1">No Exam Schedule exists for this exam and session.</div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    <div className="card-footer">
+                      <div className="small d-flex justify-content-between mb-2">
+                        <span>{selectionSummary.enabledGroups} class/section group(s)</span>
+                        <span className={selectionSummary.remainingCapacity < 0 ? "text-danger fw-semibold" : "text-muted"}>
+                          Capacity: {selectionSummary.selectedCount}/{selectionSummary.roomCapacity}
+                        </span>
+                      </div>
+                      <button
+                        disabled={busy || activePlan.status !== "draft" || !(activePlan.rooms || []).length || !selectionSummary.enabledGroups || !selectionSummary.selectedCount}
+                        className="btn btn-primary w-100"
+                        onClick={autoAllocate}
+                      >
+                        {smartMode
+                          ? (seats.length ? "Regenerate Smart Seating" : "Generate Smart Seating")
+                          : (seats.length ? "Reallocate selected students" : "Allocate selected students")}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="col-xl-4">
+                  <div className="card shadow-sm h-100 d-flex flex-column exam-seating-workflow-card">
+                    <div className="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+                      <span className="fw-semibold">4. Assign main invigilators</span>
+                      <span className="badge text-bg-light border">Manual + AI Smart Assign</span>
+                    </div>
+                    <div className="card-body flex-grow-1 exam-seating-scroll-body">
+                      {(activePlan.rooms || []).length > 0 && (
+                        <div className="alert alert-light border small py-2">
+                          <strong>Manual:</strong> all available teachers remain open for selection. <strong>AI Smart Assign:</strong> first prefers teachers from the classes seated in the room, excludes teachers of the scheduled exam subject, and balances previous duties. If strict matching is impossible, the system asks before preparing the best possible adjustment.
+                        </div>
+                      )}
+                      {(activePlan.rooms || []).map((planRoom) => {
+                        const candidates = invigilatorCandidatesForRoom(planRoom.id);
+                        const roomMeta = invigilatorOptionsByRoom.get(String(planRoom.id));
+                        const selectedEmployeeId = String(invigilators[String(planRoom.id)] || "");
+                        const selectedByAi = roomMeta && String(roomMeta.recommended_employee_id || "") === selectedEmployeeId;
+                        let aiNote = "";
+                        if (selectedByAi) {
+                          if (Number(roomMeta.recommendation_tier) === 0) aiNote = "AI strict match";
+                          else if (Number(roomMeta.recommendation_tier) === 1) aiNote = "AI best fit: same-class preference relaxed";
+                          else if (Number(roomMeta.recommendation_tier) === 2) aiNote = "AI last resort: scheduled-subject rule relaxed";
+                        }
+                        return (
+                          <div className="mb-3" key={planRoom.id}>
+                            <label className="form-label mb-1">{planRoom.room?.room_code} — {planRoom.room?.name}</label>
+                            <select
+                              className="form-select"
+                              value={selectedEmployeeId}
+                              onChange={(e) => {
+                                setInvigilators({ ...invigilators, [String(planRoom.id)]: e.target.value });
+                                setInvigilatorOptions({ rooms: [], summary: null });
+                              }}
+                            >
+                              <option value="">Select teacher</option>
+                              {candidates.map((employee) => (
+                                <option key={employee.id} value={employee.id}>
+                                  {employee.name}{employee.designation ? ` — ${employee.designation}` : ""}
+                                </option>
+                              ))}
+                            </select>
+                            <div className="form-text d-flex flex-wrap justify-content-between gap-1">
+                              <span>{candidates.length} available teacher(s)</span>
+                              {aiNote && <span className={Number(roomMeta?.recommendation_tier) === 0 ? "text-success" : "text-warning"}>{aiNote}</span>}
+                            </div>
+                          </div>
+                        );
+                      })}
+                      {!(activePlan.rooms || []).length && <div className="text-muted">Save plan rooms first.</div>}
+                    </div>
+                    <div className="card-footer d-grid gap-2">
+                      <button
+                        type="button"
+                        disabled={busy || !(activePlan.rooms || []).length}
+                        className="btn btn-outline-primary"
+                        onClick={smartAssignInvigilators}
+                      >
+                        AI Smart Assign Teachers
+                      </button>
+                      <button
+                        type="button"
+                        disabled={busy || !(activePlan.rooms || []).length}
+                        className="btn btn-primary"
+                        onClick={saveInvigilators}
+                      >
+                        Save duty assignments
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="card shadow-sm mt-3 print-card exam-seating-list-card">
+                <div className="card-header d-flex justify-content-between"><span className="fw-semibold">Room-wise seating list</span><span>{seats.length} students</span></div>
+                <div className="table-responsive">
+                  <table className="table table-bordered table-sm align-middle mb-0">
+                    <thead><tr><th>Room</th><th>Seat</th><th>Student</th><th>Admission</th><th>Class</th><th>Subject</th><th>Attendance</th><th>Remark</th></tr></thead>
+                    <tbody>
+                      {seats.map((seat) => <tr key={seat.id}><td>{(activePlan.rooms || []).find((room) => Number(room.id) === Number(seat.plan_room_id))?.room?.room_code || seat.plan_room_id}</td><td className="fw-bold">{seat.seat_number}</td><td>{seat.student?.name}</td><td>{seat.student?.admission_number}</td><td>{seat.student?.Class?.class_name} {seat.student?.Section?.section_name}</td><td>{seat.schedule?.subject?.name}</td><td>{seat.attendance_status}</td><td>{seat.attendance_remark || ""}</td></tr>)}
+                      {!seats.length && <tr><td colSpan="8" className="text-center text-muted py-4">No seats allocated yet.</td></tr>}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {showVisualLayout && activeVisualRoom && (
+        <div
+          className="exam-visual-backdrop no-print"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Visual examination room layout"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setShowVisualLayout(false);
+          }}
+        >
+          <div className="exam-visual-dialog">
+            <div className="exam-visual-header">
+              <div className="d-flex flex-wrap justify-content-between align-items-start gap-3">
+                <div>
+                  <h5 className="mb-1">Visual Room Layout</h5>
+                  <div className="small text-muted">
+                    BookMyShow-style seat map · click an occupied seat for student details
+                  </div>
+                </div>
+                <div className="d-flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    disabled={busy}
+                    onClick={downloadVisualLayoutPdf}
+                  >
+                    {busy ? "Preparing PDF…" : "Download layout PDF (1 room/page)"}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-outline-secondary btn-sm"
+                    onClick={() => setShowVisualLayout(false)}
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+
+              <div className="exam-visual-room-tabs mt-3">
+                {visualRoomGroups.map((group) => {
+                  const isActive = String(group.planRoom.id) === String(activeVisualRoom.planRoom.id);
+                  return (
+                    <button
+                      key={group.planRoom.id}
+                      type="button"
+                      className={`btn btn-sm exam-visual-room-tab ${isActive ? "btn-primary" : "btn-outline-primary"}`}
+                      onClick={() => setVisualRoomId(String(group.planRoom.id))}
+                    >
+                      {group.room?.room_code || `Room ${group.planRoom.id}`}
+                      {group.room?.name ? ` - ${group.room.name}` : ""}
+                      {` (${group.seats.length}/${group.capacity})`}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="exam-visual-body">
+              <div className="exam-visual-canvas">
+                <div className="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-2">
+                  <div>
+                    <h5 className="mb-1">
+                      {activeVisualRoom.room?.room_code || "Room"}
+                      {activeVisualRoom.room?.name ? ` - ${activeVisualRoom.room.name}` : ""}
+                    </h5>
+                    <div className="small text-muted">
+                      {activeVisualRoom.layoutType === "bench"
+                        ? `${activeVisualRoom.columns} vertical columns × ${activeVisualRoom.rows} benches × ${activeVisualRoom.studentsPerBench} students`
+                        : `${activeVisualRoom.rows} rows × ${activeVisualRoom.columns} seats`}
+                      {` · Capacity ${activeVisualRoom.capacity} · Assigned ${activeVisualRoom.seats.length} · Empty ${activeVisualRoom.emptySeats}`}
+                    </div>
+                  </div>
+                  <div className="small text-muted text-end">
+                    <div>{activePlan.name}</div>
+                    <div>{activePlan.exam_date} · {activePlan.start_time}–{activePlan.end_time}</div>
+                  </div>
+                </div>
+
+                <div className="exam-visual-board">BLACKBOARD / FRONT</div>
+
+                {activeVisualRoom.layoutType === "bench" ? (
+                  <div style={{ minWidth: `${Math.max(900, activeVisualRoom.columns * 250 + 44)}px` }}>
+                    <div
+                      className="exam-visual-bench-heads"
+                      style={{ gridTemplateColumns: `repeat(${activeVisualRoom.columns}, minmax(220px, 1fr))` }}
+                    >
+                      {Array.from({ length: activeVisualRoom.columns }).map((_, columnIndex) => (
+                        <div className="exam-visual-bench-head" key={`head-${columnIndex + 1}`}>
+                          Column-{String(columnIndex + 1).padStart(2, "0")}
+                        </div>
+                      ))}
+                    </div>
+                    {Array.from({ length: activeVisualRoom.rows }).map((_, rowIndex) => {
+                      const rowLabel = visualRowLabel(rowIndex);
+                      return (
+                        <div className="exam-visual-row" key={rowLabel}>
+                          <div className="exam-visual-row-label">B{rowIndex + 1}</div>
+                          <div
+                            className="exam-visual-bench-grid"
+                            style={{ gridTemplateColumns: `repeat(${activeVisualRoom.columns}, minmax(220px, 1fr))` }}
+                          >
+                            {Array.from({ length: activeVisualRoom.columns }).map((__, benchColumnIndex) => {
+                              const benchColumn = benchColumnIndex + 1;
+                              return (
+                                <div className="exam-visual-bench" key={`${rowLabel}:bench:${benchColumn}`}>
+                                  <div className="exam-visual-bench-label">Bench {rowIndex + 1}</div>
+                                  <div
+                                    className="exam-visual-bench-slots"
+                                    style={{ gridTemplateColumns: `repeat(${activeVisualRoom.studentsPerBench}, minmax(92px, 1fr))` }}
+                                  >
+                                    {Array.from({ length: activeVisualRoom.studentsPerBench }).map((___, benchPositionIndex) => {
+                                      const benchPosition = benchPositionIndex + 1;
+                                      const slotColumn = benchColumnIndex * activeVisualRoom.studentsPerBench + benchPosition;
+                                      const physicalIndex = rowIndex * activeVisualRoom.slotColumns + slotColumn;
+                                      const seat = activeVisualRoom.seatMap.get(`${rowLabel}:${slotColumn}`);
+                                      const blocked = physicalIndex > activeVisualRoom.capacity;
+                                      const fallbackSeatNumber = `C${String(benchColumn).padStart(2, "0")}-B${String(rowIndex + 1).padStart(2, "0")}-${String.fromCharCode(64 + benchPosition)}`;
+                                      if (blocked) {
+                                        return (
+                                          <div className="exam-visual-seat blocked" key={`${rowLabel}:${slotColumn}`}>
+                                            <div className="exam-visual-seat-number">{fallbackSeatNumber}</div>
+                                            <div className="exam-visual-seat-meta">N/A</div>
+                                          </div>
+                                        );
+                                      }
+                                      if (!seat) {
+                                        return (
+                                          <div className="exam-visual-seat empty" key={`${rowLabel}:${slotColumn}`}>
+                                            <div className="exam-visual-seat-number">{fallbackSeatNumber}</div>
+                                            <div className="exam-visual-seat-meta">EMPTY</div>
+                                          </div>
+                                        );
+                                      }
+                                      const classLabel = visualSeatClassLabel(seat);
+                                      const identity = seat.student?.roll_number != null
+                                        ? `Roll ${seat.student.roll_number}`
+                                        : (seat.student?.admission_number ? `Adm ${seat.student.admission_number}` : "");
+                                      return (
+                                        <button
+                                          type="button"
+                                          key={seat.id || `${rowLabel}:${slotColumn}`}
+                                          className={`exam-visual-seat tone-${visualToneIndex(classLabel)}`}
+                                          title={`${seat.student?.name || "Student"} · ${classLabel} · ${identity}`}
+                                          onClick={() => showVisualSeatDetails(seat)}
+                                        >
+                                          <div className="exam-visual-seat-number">{seat.seat_number || fallbackSeatNumber}</div>
+                                          <div className="exam-visual-seat-class">{classLabel}</div>
+                                          {identity && <div className="exam-visual-seat-meta">{identity}</div>}
+                                          <div className="exam-visual-seat-name">{seat.student?.name || "Student"}</div>
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div style={{ minWidth: `${Math.max(720, activeVisualRoom.columns * 118 + 44)}px` }}>
+                    {Array.from({ length: activeVisualRoom.rows }).map((_, rowIndex) => {
+                      const rowLabel = visualRowLabel(rowIndex);
+                      return (
+                        <div className="exam-visual-row" key={rowLabel}>
+                          <div className="exam-visual-row-label">{rowLabel}</div>
+                          <div
+                            className="exam-visual-seat-grid"
+                            style={{ gridTemplateColumns: `repeat(${activeVisualRoom.columns}, minmax(105px, 1fr))` }}
+                          >
+                            {Array.from({ length: activeVisualRoom.columns }).map((__, columnIndex) => {
+                              const columnNumber = columnIndex + 1;
+                              const physicalIndex = rowIndex * activeVisualRoom.columns + columnNumber;
+                              const seat = activeVisualRoom.seatMap.get(`${rowLabel}:${columnNumber}`);
+                              const blocked = physicalIndex > activeVisualRoom.capacity;
+                              if (blocked) {
+                                return (
+                                  <div className="exam-visual-seat blocked" key={`${rowLabel}:${columnNumber}`}>
+                                    <div className="exam-visual-seat-number">{rowLabel}{columnNumber}</div>
+                                    <div className="exam-visual-seat-meta">N/A</div>
+                                  </div>
+                                );
+                              }
+                              if (!seat) {
+                                return (
+                                  <div className="exam-visual-seat empty" key={`${rowLabel}:${columnNumber}`}>
+                                    <div className="exam-visual-seat-number">{rowLabel}{columnNumber}</div>
+                                    <div className="exam-visual-seat-meta">EMPTY</div>
+                                  </div>
+                                );
+                              }
+
+                              const classLabel = visualSeatClassLabel(seat);
+                              const identity = seat.student?.roll_number != null
+                                ? `Roll ${seat.student.roll_number}`
+                                : (seat.student?.admission_number ? `Adm ${seat.student.admission_number}` : "");
+                              return (
+                                <button
+                                  type="button"
+                                  key={seat.id || `${rowLabel}:${columnNumber}`}
+                                  className={`exam-visual-seat tone-${visualToneIndex(classLabel)}`}
+                                  title={`${seat.student?.name || "Student"} · ${classLabel} · ${identity}`}
+                                  onClick={() => showVisualSeatDetails(seat)}
+                                >
+                                  <div className="exam-visual-seat-number">{seat.seat_number || `${rowLabel}-${columnNumber}`}</div>
+                                  <div className="exam-visual-seat-class">{classLabel}</div>
+                                  {identity && <div className="exam-visual-seat-meta">{identity}</div>}
+                                  <div className="exam-visual-seat-name">{seat.student?.name || "Student"}</div>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                <div className="d-flex flex-wrap align-items-center gap-3 mt-2">
+                  <span className="small fw-semibold text-muted">Class key:</span>
+                  {activeVisualRoom.classes.map((classLabel) => (
+                    <span key={classLabel} className="d-inline-flex align-items-center gap-1 small text-muted">
+                      <span className={`exam-visual-legend tone-${visualToneIndex(classLabel)}`} />
+                      {classLabel}
+                    </span>
+                  ))}
+                  {!activeVisualRoom.classes.length && <span className="small text-muted">No students assigned.</span>}
+                </div>
+                <div className="exam-visual-door">DOOR / ENTRY →</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

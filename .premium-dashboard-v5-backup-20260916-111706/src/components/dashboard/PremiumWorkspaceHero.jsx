@@ -26,18 +26,18 @@ const resolveLogo = (school) => {
 
 const WORKSPACES = [
   {
-    value: "LMS",
-    kicker: "Teaching & Learning",
-    title: "Learning Management System",
-    description: "Classes, content, homework, tests, assessments and results.",
-    icon: "bi-mortarboard",
-  },
-  {
     value: "ERP",
     kicker: "Administration & Operations",
     title: "School ERP",
     description: "Students, fees, attendance, HR, transport and examinations.",
     icon: "bi-buildings",
+  },
+  {
+    value: "LMS",
+    kicker: "Teaching & Learning",
+    title: "Learning Management System",
+    description: "Classes, content, homework, tests, assessments and results.",
+    icon: "bi-mortarboard",
   },
 ];
 
@@ -89,7 +89,7 @@ export default function PremiumWorkspaceHero({
   };
 
   return (
-    <section className="premium-portal" aria-label="LMS and ERP workspace selector">
+    <section className="premium-portal" aria-label="ERP and LMS workspace selector">
       <div className="premium-portal__head">
         <div className="premium-portal__identity">
           <div className={`premium-portal__crest ${logo ? "" : "show-fallback"}`}>
@@ -124,7 +124,7 @@ export default function PremiumWorkspaceHero({
         </div>
 
         <div className="premium-portal__hint">
-          <span>LMS + ERP</span>
+          <span>ERP + LMS</span>
           <strong>Choose your workspace</strong>
         </div>
       </div>
