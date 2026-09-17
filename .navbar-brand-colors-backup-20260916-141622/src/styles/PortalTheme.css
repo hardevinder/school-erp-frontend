@@ -1,0 +1,124 @@
+:root {
+  --theme-primary: #66131b;
+  --theme-primary-dark: #470a11;
+  --theme-accent: #c49a45;
+  --theme-sidebar-bg: #fcf8f2;
+  --theme-navbar-bg: #fffdf9;
+  --theme-dashboard-bg: #f6f3ee;
+  --theme-surface: #fffdfa;
+  --theme-text: #261f1d;
+  --theme-primary-rgb: 102, 19, 27;
+  --theme-accent-rgb: 196, 154, 69;
+}
+
+/* PORTAL_THEME_V1 — theme the app chrome while preserving semantic status colours. */
+.app-sidebar {
+  background: linear-gradient(180deg, var(--theme-sidebar-bg), var(--theme-sidebar-bg)) !important;
+  border-right-color: rgba(var(--theme-accent-rgb), .34) !important;
+  color: var(--theme-text) !important;
+}
+.app-sidebar .sidebar-top { background: var(--theme-sidebar-bg) !important; }
+.app-sidebar .toggle-btn,
+.app-sidebar .sidebar-search-clear:hover,
+.app-sidebar .sidebar-submenu-header h2,
+.app-sidebar .sidebar-lms-direct-head { color: var(--theme-primary) !important; }
+.app-sidebar .sidebar-search:focus-within { border-color: var(--theme-accent) !important; box-shadow: 0 0 0 3px rgba(var(--theme-accent-rgb), .12) !important; }
+.app-sidebar .sidebar-category:hover { background: rgba(var(--theme-primary-rgb), .055) !important; }
+.app-sidebar .sidebar-category.selected,
+.sb-collapsed .app-sidebar .sidebar-category.selected {
+  color: var(--theme-primary-dark) !important;
+  background: linear-gradient(135deg, rgba(var(--theme-primary-rgb), .09), var(--theme-surface)) !important;
+  border-color: rgba(var(--theme-accent-rgb), .5) !important;
+}
+.app-sidebar .sidebar-category.route-active::before,
+.app-sidebar .sidebar-lms-direct-item.active::before { background: var(--theme-accent) !important; }
+.app-sidebar .sidebar-category-icon,
+.app-sidebar .sidebar-category[style] .sidebar-category-icon,
+.app-sidebar .sidebar-lms-direct-item.active .sidebar-lms-direct-icon {
+  background-color: var(--theme-primary) !important;
+  background-image: linear-gradient(145deg, var(--theme-primary), var(--theme-primary-dark)) !important;
+  border-color: rgba(var(--theme-accent-rgb), .55) !important;
+  color: var(--theme-accent) !important;
+}
+.app-sidebar .sidebar-category.selected .sidebar-category-icon {
+  background-image: linear-gradient(145deg, var(--theme-primary), var(--theme-primary-dark)) !important;
+  border-color: var(--theme-accent) !important;
+}
+.app-sidebar .sidebar-category.selected .sidebar-category-label,
+.app-sidebar .sidebar-lms-direct-item.active,
+.app-sidebar .sidebar-lms-direct-item:hover { color: var(--theme-primary) !important; }
+.app-sidebar .sidebar-submenu-panel,
+.app-sidebar .sidebar-mega-panel,
+.app-sidebar .sidebar-lms-direct-icon { background: var(--theme-surface) !important; }
+.app-sidebar .sidebar-submenu-eyebrow,
+.app-sidebar .sidebar-lms-direct-head > span i { color: var(--theme-accent) !important; }
+
+/* Navbar is rendered with component-scoped CSS, so important declarations intentionally win. */
+.college-navbar {
+  background: linear-gradient(90deg, var(--theme-navbar-bg), var(--theme-navbar-bg)) !important;
+  border-bottom-color: rgba(var(--theme-accent-rgb), .34) !important;
+  box-shadow: 0 8px 26px rgba(var(--theme-primary-rgb), .07) !important;
+}
+.college-navbar .college-navbar__brand strong,
+.college-navbar .college-quick-link:hover,
+.college-navbar .college-quick-link.active,
+.college-navbar .college-navbar__bell,
+.college-navbar .college-quick-link.active small,
+.college-navbar .college-quick-link:hover small,
+.college-navbar .college-profile-menu .dropdown-item:hover,
+.college-navbar .branch-switcher .input-group-text { color: var(--theme-primary) !important; }
+.college-navbar .college-navbar__brand small { color: var(--theme-accent) !important; }
+.college-navbar .college-quick-link.active > span {
+  background: linear-gradient(135deg, var(--theme-primary-dark), var(--theme-primary)) !important;
+  border-color: var(--theme-primary) !important;
+  box-shadow: 0 0 0 3px rgba(var(--theme-primary-rgb), .08) !important;
+}
+.college-navbar .college-quick-link > span,
+.college-navbar .college-navbar__bell,
+.college-navbar .college-profile-button,
+.college-navbar .branch-switcher .form-select { background: var(--theme-surface) !important; }
+.college-navbar .college-role-select:focus,
+.college-navbar .branch-switcher .form-select:focus { border-color: var(--theme-accent) !important; box-shadow: 0 0 0 3px rgba(var(--theme-accent-rgb), .14) !important; }
+
+/* Dashboard / workspace */
+.classic-dashboard-theme {
+  --premium-burgundy: var(--theme-primary) !important;
+  --premium-burgundy-dark: var(--theme-primary-dark) !important;
+  --premium-gold: var(--theme-accent) !important;
+  --premium-ivory: var(--theme-dashboard-bg) !important;
+  --premium-paper: var(--theme-surface) !important;
+  --premium-text: var(--theme-text) !important;
+  background: var(--theme-dashboard-bg) !important;
+}
+.classic-dashboard-theme .dashboard-header-card,
+.classic-dashboard-theme .quick-links-inner { background: var(--theme-surface) !important; }
+.classic-dashboard-theme .dashboard-header-card h2,
+.classic-dashboard-theme .quick-section-icon,
+.classic-dashboard-theme .quick-section-title { color: var(--theme-primary) !important; }
+.classic-dashboard-theme .btn-primary {
+  --bs-btn-bg: var(--theme-primary) !important;
+  --bs-btn-border-color: var(--theme-primary) !important;
+  --bs-btn-hover-bg: var(--theme-primary-dark) !important;
+  --bs-btn-hover-border-color: var(--theme-primary-dark) !important;
+}
+.classic-dashboard-theme .btn-outline-primary {
+  --bs-btn-color: var(--theme-primary) !important;
+  --bs-btn-border-color: var(--theme-primary) !important;
+  --bs-btn-hover-bg: var(--theme-primary) !important;
+  --bs-btn-hover-border-color: var(--theme-primary) !important;
+}
+.classic-workspace-shell { background: var(--theme-dashboard-bg) !important; }
+.premium-portal {
+  background: linear-gradient(118deg, var(--theme-primary-dark), var(--theme-primary) 70%) !important;
+  border-color: rgba(var(--theme-accent-rgb), .48) !important;
+  box-shadow: 0 14px 36px rgba(var(--theme-primary-rgb), .15) !important;
+}
+.premium-portal__eyebrow,
+.premium-portal__meta i { color: var(--theme-accent) !important; background-color: var(--theme-accent) !important; }
+.premium-workspace-card.is-active { border-color: var(--theme-accent) !important; box-shadow: inset 0 3px 0 var(--theme-accent), 0 10px 24px rgba(var(--theme-primary-rgb), .14) !important; }
+.premium-workspace-card__icon,
+.premium-workspace-card__action { color: var(--theme-primary) !important; }
+.premium-workspace-card.is-active .premium-workspace-card__icon { background: linear-gradient(145deg, var(--theme-primary), var(--theme-primary-dark)) !important; color: var(--theme-accent) !important; }
+
+/* Bootstrap primary actions inside portal settings / common screens. */
+.portal-theme-aware .text-primary { color: var(--theme-primary) !important; }

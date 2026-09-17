@@ -8,6 +8,7 @@ import DashboardSupportBanner from "../components/DashboardSupportBanner";
 import { InstitutionProvider } from "../institution/InstitutionContext"; // GLOBAL_INSTITUTION_UI_V2
 import InstitutionTerminologyBridge from "../institution/InstitutionTerminologyBridge";
 import { BranchProvider } from "../branch/BranchContext"; // EDUBRIDGE_MULTI_BRANCH_PROVIDER_V1
+import "../styles/PortalTheme.css"; // PORTAL_THEME_V1
 
 const DASHBOARD_PATHS = new Set([
   "/dashboard",

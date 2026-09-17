@@ -156,6 +156,17 @@ export default function Sidebar({ headerHeight = 56 }) {
   }, [location.pathname, isMobile]);
 
   const isSuperAdmin = roleLower === "superadmin" || roleLower === "super_admin";
+  const storedPermissions = useMemo(() => {
+    const values = [];
+    for (const storage of [localStorage, sessionStorage]) {
+      try {
+        const parsed = JSON.parse(storage.getItem("permissions") || "[]");
+        if (Array.isArray(parsed)) values.push(...parsed);
+      } catch (_) {}
+    }
+    return new Set(values.map((value) => String(value || "").trim().toLowerCase()).filter(Boolean));
+  }, []);
+  const canManagePortalTheme = isSuperAdmin || storedPermissions.has("manage_portal_theme");
   const isAdmin = isSuperAdmin || roleLower === "admin";
   const isPrincipal = roleLower === "principal";
   const isAcademic = roleLower === "academic_coordinator" || roleLower === "coordinator";
@@ -436,6 +447,7 @@ export default function Sidebar({ headerHeight = 56 }) {
           { key: "final-result-summary", label: "Final Result Summary", icon: "bi-bar-chart-line", path: "/reports/final-result-summary", roles: ["examination"] },
           { key: "report-card-formats", label: "Report Card Formats", icon: "bi-file-earmark-font", path: "/report-card-formats", roles: ["examination"] },
           { key: "report-card-template-studio", label: "Smart Report Card Templates", icon: "bi-magic", path: "/report-card-template-studio", roles: ["examination"] },
+          { key: "report-card-designer", label: "Visual Report Card Designer", icon: "bi-brush", path: "/report-card-designer", roles: ["examination"] },
           { key: "assign-report-card-format", label: "Assign Report Format", icon: "bi-link", path: "/assign-report-card-format", roles: ["examination"] },
           { key: "student-remarks-entry", label: "Student Remarks Entry", icon: "bi-chat-square-text", path: "/student-remarks-entry", roles: ["examination"] },
           { key: "report-card-generator", label: "Print Report Cards", icon: "bi-printer", path: "/report-card-generator", roles: ["examination"] },
@@ -1292,6 +1304,7 @@ export default function Sidebar({ headerHeight = 56 }) {
           { key: "exam-schedules", label: "Exam Schedule", icon: "bi-calendar2-check", path: "/exam-schedules" },
           { key: "report-card-formats", label: "Report Card Format", icon: "bi-file-earmark-font", path: "/report-card-formats" },
           { key: "report-card-template-studio", label: "Smart Report Card Templates", icon: "bi-magic", path: "/report-card-template-studio" },
+          { key: "report-card-designer", label: "Visual Report Card Designer", icon: "bi-brush", path: "/report-card-designer" },
           { key: "assign-report-card-format", label: "Assign Report Format", icon: "bi-link", path: "/assign-report-card-format" },
         ],
       });
@@ -1744,6 +1757,23 @@ export default function Sidebar({ headerHeight = 56 }) {
       }
     }
 
+    // PORTAL_THEME_V1 — permission-based institution branding.
+    if (canManagePortalTheme) {
+      let institutionGroup = groups.find((g) => ["Institution Info", "School Info"].includes(g.heading));
+      if (!institutionGroup) {
+        institutionGroup = { heading: "Institution Info", items: [] };
+        groups.push(institutionGroup);
+      }
+      if (!institutionGroup.items.some((item) => item?.path === "/portal-theme")) {
+        institutionGroup.items.push({
+          key: "portal-theme",
+          label: "Portal Theme",
+          icon: "bi-palette-fill",
+          path: "/portal-theme",
+        });
+      }
+    }
+
     // EDUBRIDGE_SUPPORT_SIDEBAR_V1 — visible to every authenticated role.
     groups.push({
       heading: "Support",
@@ -1815,6 +1845,7 @@ export default function Sidebar({ headerHeight = 56 }) {
     isInventoryRole,
     roleLower,
     isCollege,
+    canManagePortalTheme,
   ]);
 
   const filteredGroups = useMemo(() => {

@@ -1424,3 +1424,304 @@ body.sb-expanded {
     margin-bottom: 2px;
   }
 }
+
+/* =========================================================
+   V6 — SMARTPREP-INSPIRED DEEP BURGUNDY NAVIGATION
+   The navigation remains ours; only the visual language is
+   unified into a premium institutional burgundy/gold shell.
+   ========================================================= */
+:root {
+  --sidebar-border: rgba(225, 183, 118, .22);
+  --sidebar-text: #f8efeb;
+  --sidebar-muted: #d6bcb5;
+  --sidebar-soft: rgba(255,255,255,.06);
+  --sidebar-hover: rgba(255,255,255,.075);
+  --sidebar-active: linear-gradient(90deg, rgba(211,165,84,.18), rgba(255,255,255,.055));
+  --sidebar-shadow: 10px 0 30px rgba(50, 5, 9, .16);
+  --sidebar-shadow-soft: 0 6px 18px rgba(35, 0, 4, .18);
+}
+
+.app-sidebar {
+  background:
+    radial-gradient(circle at 20% 0%, rgba(218,171,90,.08), transparent 220px),
+    linear-gradient(180deg, #6a1318 0%, #570b10 48%, #43070b 100%) !important;
+  border-right: 1px solid rgba(224, 184, 119, .20) !important;
+  box-shadow: var(--sidebar-shadow) !important;
+  color: #f8efeb !important;
+}
+
+.sidebar-top {
+  background: linear-gradient(180deg, rgba(105,18,24,.98), rgba(89,11,16,.97)) !important;
+  border-bottom: 1px solid rgba(224,184,119,.18) !important;
+  box-shadow: 0 7px 20px rgba(44,0,5,.10) !important;
+}
+
+.toggle-btn {
+  color: #f0d6a1 !important;
+  background: rgba(255,255,255,.06) !important;
+  border-color: rgba(228,194,137,.28) !important;
+  box-shadow: none !important;
+}
+
+.toggle-btn:hover {
+  color: #fff7e8 !important;
+  background: rgba(255,255,255,.10) !important;
+  border-color: rgba(228,194,137,.46) !important;
+  box-shadow: none !important;
+}
+
+.sidebar-search {
+  border-color: rgba(235,205,158,.20) !important;
+  background: rgba(255,255,255,.065) !important;
+  color: #e0c8c0 !important;
+}
+
+.sidebar-search:focus-within {
+  border-color: rgba(218,171,90,.60) !important;
+  background: rgba(255,255,255,.095) !important;
+  box-shadow: 0 0 0 3px rgba(218,171,90,.10) !important;
+}
+
+.sidebar-search input { color: #fff8f4 !important; }
+.sidebar-search input::placeholder { color: #c9aaa4 !important; }
+.sidebar-search-icon { color: #e1c699 !important; }
+.sidebar-search-clear { color: #cfb4ac !important; }
+.sidebar-search-clear:hover { background: rgba(255,255,255,.09) !important; color: #fff !important; }
+
+.sidebar-category-nav { padding-top: 7px !important; }
+
+.sidebar-category {
+  color: #ead9d5 !important;
+  border-color: transparent !important;
+  border-radius: 11px !important;
+}
+
+.sidebar-category:hover {
+  background: rgba(255,255,255,.065) !important;
+  color: #fff !important;
+  transform: translateX(1px) !important;
+}
+
+.sidebar-category.selected {
+  color: #fff !important;
+  background: linear-gradient(90deg, rgba(211,165,84,.18) 0%, rgba(255,255,255,.075) 100%) !important;
+  border-color: rgba(222,184,119,.30) !important;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.025), 0 6px 16px rgba(38,0,4,.11) !important;
+}
+
+.sidebar-category.route-active::before {
+  left: -1px !important;
+  top: 9px !important;
+  bottom: 9px !important;
+  width: 3px !important;
+  background: linear-gradient(180deg, #f0cf8c, #c89437) !important;
+  box-shadow: 0 0 10px rgba(228,183,95,.30) !important;
+}
+
+.sidebar-category-icon,
+.sidebar-category[style] .sidebar-category-icon {
+  width: 35px !important;
+  height: 35px !important;
+  border-radius: 10px !important;
+  background: rgba(255,255,255,.055) !important;
+  background-image: none !important;
+  border: 1px solid rgba(255,255,255,.07) !important;
+  color: #efd8ad !important;
+  box-shadow: none !important;
+}
+
+.sidebar-category.selected .sidebar-category-icon {
+  background: rgba(218,171,90,.17) !important;
+  background-image: none !important;
+  border-color: rgba(232,196,131,.26) !important;
+  color: #ffe8b7 !important;
+  box-shadow: none !important;
+}
+
+.sidebar-category-label,
+.sb-collapsed .sidebar-category-label {
+  color: #ead9d5 !important;
+  font-weight: 620 !important;
+}
+
+.sidebar-category:hover .sidebar-category-label,
+.sidebar-category.selected .sidebar-category-label,
+.sb-collapsed .sidebar-category.selected .sidebar-category-label {
+  color: #fff !important;
+  font-weight: 720 !important;
+}
+
+.sidebar-category-count,
+.sidebar-category.selected .sidebar-category-count {
+  background: rgba(255,255,255,.085) !important;
+  border: 1px solid rgba(255,255,255,.07) !important;
+  color: #e7cda6 !important;
+}
+
+.sidebar-category-direct {
+  background: rgba(218,171,90,.16) !important;
+  color: #f2d79e !important;
+}
+
+.sidebar-category-arrow { color: #cdaea6 !important; }
+
+.sidebar-dashboard-link {
+  background: rgba(255,255,255,.035) !important;
+  border-color: rgba(255,255,255,.055) !important;
+}
+
+.sidebar-dashboard-link::after { background: rgba(234,201,146,.13) !important; }
+
+.sb-collapsed .sidebar-category.selected {
+  background: linear-gradient(180deg, rgba(211,165,84,.18), rgba(255,255,255,.06)) !important;
+}
+
+.app-sidebar::-webkit-scrollbar-track { background: transparent !important; }
+.app-sidebar::-webkit-scrollbar-thumb {
+  background: rgba(231,205,165,.25) !important;
+  border: 3px solid transparent !important;
+  background-clip: padding-box !important;
+}
+.app-sidebar::-webkit-scrollbar-thumb:hover {
+  background: rgba(231,205,165,.38) !important;
+  background-clip: padding-box !important;
+}
+
+/* LMS stays fully open, but now reads as one clean burgundy navigation system. */
+.sidebar-lms-direct-nav { padding-top: 7px !important; }
+
+.sidebar-lms-direct-head { color: #f4dfb5 !important; }
+.sidebar-lms-direct-head > span i { color: #efc96f !important; }
+.sidebar-lms-direct-head small {
+  border-color: rgba(231,197,137,.22) !important;
+  background: rgba(218,171,90,.13) !important;
+  color: #f0d49b !important;
+}
+
+.sidebar-lms-direct-group {
+  border-top-color: rgba(236,204,151,.14) !important;
+}
+
+.sidebar-lms-direct-group-title { color: #d8bdb5 !important; }
+.sidebar-lms-direct-group-title span:last-child { color: #e8c888 !important; }
+
+.sidebar-lms-direct-item {
+  color: #eadad5 !important;
+  border-color: transparent !important;
+  border-radius: 9px !important;
+}
+
+.sidebar-lms-direct-item:hover {
+  background: rgba(255,255,255,.065) !important;
+  border-color: rgba(255,255,255,.07) !important;
+  color: #fff !important;
+}
+
+.sidebar-lms-direct-item.active {
+  background: linear-gradient(90deg, rgba(211,165,84,.18), rgba(255,255,255,.06)) !important;
+  border-color: rgba(229,191,123,.28) !important;
+  color: #fff !important;
+  box-shadow: none !important;
+}
+
+.sidebar-lms-direct-item.active::before {
+  background: linear-gradient(180deg, #f0cf8c, #c89437) !important;
+}
+
+.sidebar-lms-direct-icon,
+.sidebar-lms-direct-item.active .sidebar-lms-direct-icon {
+  background: rgba(255,255,255,.055) !important;
+  border-color: rgba(255,255,255,.08) !important;
+  color: #efd4a1 !important;
+}
+
+.sidebar-lms-direct-item.active .sidebar-lms-direct-icon {
+  background: rgba(218,171,90,.17) !important;
+  color: #ffe5ab !important;
+}
+
+.sidebar-lms-direct-label { color: inherit !important; }
+.sidebar-lms-direct-arrow { color: #c9aaa3 !important; }
+.sidebar-lms-direct-current {
+  background: rgba(218,171,90,.17) !important;
+  color: #f1d28f !important;
+}
+.sidebar-lms-direct-empty { color: #ceb1a9 !important; }
+
+/* ERP flyout panels keep the same dark institutional language. */
+.sidebar-submenu-panel,
+.sidebar-mega-panel {
+  background: linear-gradient(180deg, #5b0d12, #46080c) !important;
+  border-color: rgba(229,191,123,.20) !important;
+  box-shadow: 18px 12px 38px rgba(37,0,4,.25) !important;
+}
+
+.sidebar-submenu-header {
+  background: linear-gradient(145deg, #68151b, #540b10) !important;
+  border-bottom-color: rgba(230,194,134,.16) !important;
+}
+.sidebar-submenu-eyebrow { color: #e7c77e !important; }
+.sidebar-submenu-header h2 { color: #fff !important; }
+.sidebar-submenu-header p { color: #d3b7af !important; }
+.sidebar-submenu-close {
+  border-color: rgba(233,202,151,.18) !important;
+  background: rgba(255,255,255,.06) !important;
+  color: #ebd3cc !important;
+}
+.sidebar-submenu-close:hover { background: rgba(255,255,255,.10) !important; color: #fff !important; }
+
+.sidebar-submenu-search {
+  border-color: rgba(233,202,151,.18) !important;
+  background: rgba(255,255,255,.06) !important;
+  color: #d5b9b0 !important;
+}
+.sidebar-submenu-search:focus-within {
+  border-color: rgba(218,171,90,.58) !important;
+  background: rgba(255,255,255,.09) !important;
+  box-shadow: 0 0 0 3px rgba(218,171,90,.09) !important;
+}
+.sidebar-submenu-search input { color: #fff !important; }
+.sidebar-submenu-search button { color: #d6b9b1 !important; }
+.sidebar-submenu-search button:hover { background: rgba(255,255,255,.08) !important; color: #fff !important; }
+.sidebar-submenu-empty { color: #cfb1a9 !important; }
+
+.sidebar-submenu-item { color: #ead9d4 !important; }
+.sidebar-submenu-item:hover {
+  background: rgba(255,255,255,.065) !important;
+  border-color: rgba(255,255,255,.07) !important;
+}
+.sidebar-submenu-item.active {
+  background: linear-gradient(90deg, rgba(211,165,84,.17), rgba(255,255,255,.055)) !important;
+  border-color: rgba(229,191,123,.25) !important;
+}
+.sidebar-submenu-icon,
+.sidebar-submenu-item.active .sidebar-submenu-icon {
+  background: rgba(255,255,255,.06) !important;
+  color: #f0d59f !important;
+  border-color: rgba(255,255,255,.08) !important;
+}
+.sidebar-submenu-label { color: #fff !important; }
+.sidebar-submenu-path { color: #c9aaa3 !important; }
+.sidebar-submenu-arrow { color: #c7aaa3 !important; }
+
+/* Phone/tablet navigation stays visually related without becoming too heavy. */
+@media (max-width: 991.98px) {
+  .bottom-nav,
+  .bottom-nav-drawer,
+  .bn-sheet {
+    background: #5a0d12 !important;
+    border-color: rgba(225,184,119,.20) !important;
+    color: #f5e9e5 !important;
+  }
+
+  .bottom-nav .bn-item,
+  .bn-list-item,
+  .bn-li-title,
+  .bn-li-sub { color: #e6d3ce !important; }
+
+  .bottom-nav .bn-item.active,
+  .bn-list-item.active {
+    color: #fff !important;
+    background: rgba(218,171,90,.15) !important;
+  }
+}

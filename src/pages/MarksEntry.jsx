@@ -647,20 +647,23 @@ const MarksEntry = () => {
         );
       }
 
+      // MARKS_ENTRY_SAVE_RELOAD_FIX_V1
       await api.post("/marks-entry/save", {
         exam_schedule_id: examScheduleId,
         marksData,
       });
 
-      Swal.fire(
+      // Reload the exact marks-entry scope before reporting success so the
+      // screen reflects what the backend can actually read back.
+      await fetchMarksEntryData();
+
+      await Swal.fire(
         "Success",
         evaluationMode === "GRADE"
           ? "Grades saved successfully"
           : "Marks saved successfully",
         "success"
       );
-
-      fetchMarksEntryData();
     } catch (err) {
       showApiError("Error", err, "Failed to save entry");
     }

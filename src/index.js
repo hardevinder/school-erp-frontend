@@ -11,6 +11,8 @@ import "bootstrap-icons/font/bootstrap-icons.css";
 import { installBranchFetch } from "./branch/installBranchFetch"; // EDUBRIDGE_MULTI_BRANCH_FETCH_V1
 import { installBranchAxios } from "./branch/installBranchAxios"; // EDUBRIDGE_MULTI_BRANCH_AXIOS_V1
 import "./branchSelectionPersistence";
+import "./theme/PortalThemeOverrides.css"; // PORTAL_THEME_OVERRIDE_V2
+import "./theme/PortalDynamicExtended.css"; // PORTAL_DYNAMIC_EXTENDED_V4
 installBranchFetch();
 installBranchAxios();
 

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import api from "../../api";
 import { useBranch } from "../../branch/BranchContext";
 import { useInstitution } from "../../institution/InstitutionContext";
@@ -49,6 +49,11 @@ export default function PremiumWorkspaceHero({
   const { institution } = useInstitution();
   const { activeBranch, allBranches } = useBranch();
   const [fallbackSchool, setFallbackSchool] = useState(null);
+  // WORKSPACE_DRAG_CUSTOMIZE_V1
+  const [workspaceOrder, setWorkspaceOrder] = useState(["LMS", "ERP"]);
+  const [isCustomizingWorkspaces, setIsCustomizingWorkspaces] = useState(false);
+  const draggedWorkspaceRef = useRef(null);
+
 
   useEffect(() => {
     if (institution?.name) return undefined;
@@ -82,6 +87,80 @@ export default function PremiumWorkspaceHero({
     ? "All Branches"
     : activeBranch?.name || activeBranch?.branch_name || "Current Branch";
   const roleLabel = titleCase(role || "Administration");
+
+  const workspaceOrderStorageKey = useMemo(() => {
+    const institutionKey = school?.id || school?.school_id || schoolName || "institution";
+    return `edubridge.workspace-order.${institutionKey}.${roleLabel}`;
+  }, [school?.id, school?.school_id, schoolName, roleLabel]);
+
+  useEffect(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem(workspaceOrderStorageKey) || "null");
+      const valid = Array.isArray(stored)
+        ? stored.filter((value) => WORKSPACES.some((item) => item.value === value))
+        : [];
+      const missing = WORKSPACES.map((item) => item.value).filter((value) => !valid.includes(value));
+      setWorkspaceOrder([...valid, ...missing]);
+    } catch (_) {
+      setWorkspaceOrder(WORKSPACES.map((item) => item.value));
+    }
+  }, [workspaceOrderStorageKey]);
+
+  const orderedWorkspaces = useMemo(() => {
+    const byValue = new Map(WORKSPACES.map((item) => [item.value, item]));
+    const ordered = workspaceOrder.map((value) => byValue.get(value)).filter(Boolean);
+    const missing = WORKSPACES.filter((item) => !workspaceOrder.includes(item.value));
+    return [...ordered, ...missing];
+  }, [workspaceOrder]);
+
+  const persistWorkspaceOrder = (nextOrder) => {
+    setWorkspaceOrder(nextOrder);
+    try {
+      localStorage.setItem(workspaceOrderStorageKey, JSON.stringify(nextOrder));
+    } catch (_) {
+      // localStorage can be unavailable in restricted/private browser modes.
+    }
+  };
+
+  const handleWorkspaceDragStart = (event, value) => {
+    if (!isCustomizingWorkspaces) {
+      event.preventDefault();
+      return;
+    }
+    draggedWorkspaceRef.current = value;
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", value);
+    // React's event.currentTarget may be null by the time requestAnimationFrame runs.
+    // Capture the DOM node synchronously before leaving the event handler.
+    const draggedElement = event.currentTarget;
+    requestAnimationFrame(() => draggedElement?.classList.add("is-dragging"));
+  };
+
+  const handleWorkspaceDragOver = (event) => {
+    if (!isCustomizingWorkspaces) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+  };
+
+  const handleWorkspaceDrop = (event, targetValue) => {
+    if (!isCustomizingWorkspaces) return;
+    event.preventDefault();
+    const sourceValue = draggedWorkspaceRef.current || event.dataTransfer.getData("text/plain");
+    if (!sourceValue || sourceValue === targetValue) return;
+
+    const next = [...workspaceOrder];
+    const sourceIndex = next.indexOf(sourceValue);
+    const targetIndex = next.indexOf(targetValue);
+    if (sourceIndex < 0 || targetIndex < 0) return;
+    next.splice(sourceIndex, 1);
+    next.splice(targetIndex, 0, sourceValue);
+    persistWorkspaceOrder(next);
+  };
+
+  const handleWorkspaceDragEnd = (event) => {
+    draggedWorkspaceRef.current = null;
+    event.currentTarget?.classList?.remove("is-dragging");
+  };
 
   const selectWorkspace = (value) => {
     if (typeof onSelectWorkspace === "function") onSelectWorkspace(value);
@@ -123,22 +202,44 @@ export default function PremiumWorkspaceHero({
           </div>
         </div>
 
-        <div className="premium-portal__hint">
-          <span>LMS + ERP</span>
-          <strong>Choose your workspace</strong>
+        <div className="premium-portal__head-actions">
+          <div className="premium-portal__hint">
+            <span>LMS + ERP</span>
+            <strong>{isCustomizingWorkspaces ? "Drag cards to reorder" : "Choose your workspace"}</strong>
+          </div>
+
+          <button
+            type="button"
+            className={`premium-portal__customize ${isCustomizingWorkspaces ? "is-active" : ""}`}
+            onClick={() => setIsCustomizingWorkspaces((current) => !current)}
+            aria-pressed={isCustomizingWorkspaces}
+            aria-label={isCustomizingWorkspaces ? "Finish customizing workspace order" : "Customize workspace order"}
+            title={isCustomizingWorkspaces ? "Done" : "Customize"}
+          >
+            <i className={`bi ${isCustomizingWorkspaces ? "bi-check-lg" : "bi-sliders"}`} aria-hidden="true" />
+          </button>
         </div>
       </div>
 
       <div className="premium-portal__workspaces">
-        {WORKSPACES.map((item) => {
+        {orderedWorkspaces.map((item) => {
           const selected = workspace === item.value;
           return (
             <button
               key={item.value}
               type="button"
-              className={`premium-workspace-card ${selected ? "is-active" : ""}`}
-              onClick={() => selectWorkspace(item.value)}
+              className={`premium-workspace-card ${selected ? "is-active" : ""} ${isCustomizingWorkspaces ? "is-customizing" : ""}`}
+              onClick={() => {
+                if (!isCustomizingWorkspaces) selectWorkspace(item.value);
+              }}
+              draggable={isCustomizingWorkspaces}
+              onDragStart={(event) => handleWorkspaceDragStart(event, item.value)}
+              onDragOver={handleWorkspaceDragOver}
+              onDrop={(event) => handleWorkspaceDrop(event, item.value)}
+              onDragEnd={handleWorkspaceDragEnd}
               aria-pressed={selected}
+              aria-grabbed={isCustomizingWorkspaces ? undefined : false}
+              title={isCustomizingWorkspaces ? `Drag ${item.value} to reorder` : undefined}
             >
               <span className="premium-workspace-card__icon">
                 <i className={`bi ${item.icon}`} aria-hidden="true" />
@@ -151,8 +252,17 @@ export default function PremiumWorkspaceHero({
               </span>
 
               <span className="premium-workspace-card__action">
-                <span>{selected ? "Current" : "Open"}</span>
-                <i className={`bi ${selected ? "bi-check2" : "bi-arrow-right"}`} aria-hidden="true" />
+                {isCustomizingWorkspaces ? (
+                  <>
+                    <span>Drag</span>
+                    <i className="bi bi-grip-vertical" aria-hidden="true" />
+                  </>
+                ) : (
+                  <>
+                    <span>{selected ? "Current" : "Open"}</span>
+                    <i className={`bi ${selected ? "bi-check2" : "bi-arrow-right"}`} aria-hidden="true" />
+                  </>
+                )}
               </span>
             </button>
           );

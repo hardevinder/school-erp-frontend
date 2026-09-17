@@ -479,6 +479,7 @@ const CollegeNavbar = ({
     [
       "token",
       "roles",
+      "permissions",
       "activeRole",
       "family",
       "activeStudentAdmission",
@@ -1656,6 +1657,170 @@ const CollegeNavbar = ({
             display: none;
           }
 
+        }
+
+
+        /* =====================================================
+           V6 — DEEP BURGUNDY TOP BAR
+           Matches the premium sidebar/workspace shell while
+           keeping all existing controls and behaviours intact.
+           ===================================================== */
+        .college-navbar {
+          min-height: 70px;
+          background:
+            radial-gradient(circle at 88% -60%, rgba(230,190,118,.11), transparent 240px),
+            linear-gradient(90deg, #641116 0%, #560a0f 52%, #45070b 100%);
+          border-bottom: 1px solid rgba(225,183,118,.24);
+          box-shadow: 0 8px 26px rgba(45,0,5,.16);
+          backdrop-filter: none;
+        }
+
+        .college-navbar__brand img {
+          background: #fffdf9;
+          border-color: rgba(226,190,128,.68);
+          box-shadow: 0 5px 15px rgba(30,0,3,.24);
+        }
+
+        .college-navbar__brand strong {
+          color: #fff9f5;
+          font-family: inherit;
+          font-weight: 780;
+          letter-spacing: -.01em;
+        }
+
+        .college-navbar__brand small {
+          color: #e7c77f;
+          letter-spacing: .12em;
+        }
+
+        .college-role-select {
+          border-color: rgba(230,197,140,.24) !important;
+          background-color: rgba(255,255,255,.075) !important;
+          color: #fff3ef !important;
+          font-weight: 760;
+          box-shadow: none !important;
+        }
+
+        .college-role-select option {
+          background: #561016;
+          color: #fff;
+        }
+
+        .college-quick-link {
+          color: #e2cbc5;
+        }
+
+        .college-quick-link > span {
+          background: rgba(255,255,255,.06);
+          border-color: rgba(229,196,140,.18);
+          color: #efd9b0;
+        }
+
+        .college-quick-link small {
+          color: #dbc1bb;
+          font-weight: 720;
+        }
+
+        .college-quick-link:hover,
+        .college-quick-link.active {
+          color: #fff;
+        }
+
+        .college-quick-link:hover > span {
+          background: rgba(255,255,255,.10);
+          border-color: rgba(230,197,140,.30);
+        }
+
+        .college-quick-link:hover small,
+        .college-quick-link.active small {
+          color: #fff;
+        }
+
+        .college-quick-link.active > span {
+          background: rgba(217,167,78,.18);
+          color: #ffe3a8;
+          border-color: rgba(233,197,129,.38);
+          box-shadow: inset 0 0 0 1px rgba(255,255,255,.025);
+        }
+
+        .college-navbar__bell {
+          border-color: rgba(229,196,140,.20);
+          background: rgba(255,255,255,.065);
+          color: #efd8ab;
+        }
+
+        .college-navbar__bell:hover {
+          color: #fff1d2;
+          background: rgba(255,255,255,.10);
+          border-color: rgba(229,196,140,.34);
+        }
+
+        .college-profile-button {
+          border-color: rgba(229,196,140,.20);
+          background: rgba(255,255,255,.065);
+          color: #fff0eb;
+          box-shadow: none;
+        }
+
+        .college-profile-button:hover {
+          background: rgba(255,255,255,.10);
+          border-color: rgba(229,196,140,.34);
+          color: #fff;
+        }
+
+        .college-profile-button img {
+          border: 1px solid rgba(229,196,140,.24);
+          background: #fff;
+        }
+
+        .college-navbar .branch-switcher .input-group-text {
+          background: rgba(218,171,90,.14) !important;
+          border-color: rgba(229,196,140,.22) !important;
+          color: #f1d394 !important;
+        }
+
+        .college-navbar .branch-switcher .form-select {
+          background-color: rgba(255,255,255,.075) !important;
+          border-color: rgba(229,196,140,.22) !important;
+          color: #fff3ef !important;
+          font-weight: 700;
+        }
+
+        .college-navbar .branch-switcher .form-select option {
+          background: #561016;
+          color: #fff;
+        }
+
+        .college-navbar .branch-switcher .form-select:focus,
+        .college-role-select:focus {
+          border-color: rgba(231,191,112,.64) !important;
+          box-shadow: 0 0 0 3px rgba(218,171,90,.10) !important;
+        }
+
+        .college-profile-menu {
+          border-color: #dcc49a;
+          background: #fffaf4;
+          box-shadow: 0 16px 40px rgba(45,0,5,.22);
+        }
+
+        .college-profile-menu .dropdown-item {
+          color: #5b2227;
+        }
+
+        .college-profile-menu .dropdown-item:hover {
+          background: #f5e8de;
+          color: #641116;
+        }
+
+        .college-navbar .navbar-toggler,
+        .college-navbar .btn-light {
+          border-color: rgba(229,196,140,.22) !important;
+          background: rgba(255,255,255,.07) !important;
+          color: #fff !important;
+        }
+
+        @media (max-width: 767px) {
+          .college-navbar { min-height: 66px; }
         }
 
       `}</style>

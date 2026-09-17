@@ -9,6 +9,13 @@ import React, {
 } from "react";
 import api from "../api";
 import "./dashboard/ClassicDashboardTheme.css";
+import {
+  DashboardLayoutProvider,
+  DashboardCustomizeToolbar,
+  DashboardSectionStack,
+  DashboardSection,
+  DashboardGrid,
+} from "./dashboard/CustomizableDashboard";
 import { Link, useNavigate } from "react-router-dom"; // ✅ ADDED (no reload navigation)
 
 // Charts
@@ -112,33 +119,83 @@ const compactNumber = (n) =>
 
 const intIN = (n) => Number(n || 0).toLocaleString("en-IN");
 
-// Classic institutional palette — burgundy, antique gold and warm neutrals.
-const palette = [
-  "#70151d",
-  "#b9852e",
-  "#9b4b52",
-  "#d1aa62",
-  "#543032",
-  "#8b6a45",
-  "#b96a6d",
-  "#7a6b5a",
-  "#8c242d",
-  "#c3954b",
-  "#6a3c3f",
-  "#a77b50",
+// DASHBOARD_DYNAMIC_THEME_V3
+// Read the institution's saved portal palette and derive dashboard/chart shades from it.
+const DASHBOARD_THEME_FALLBACK = Object.freeze({
+  primary: "#66131b",
+  primaryDark: "#470a11",
+  accent: "#c49a45",
+  surface: "#fffdfa",
+  dashboardBg: "#f6f3ee",
+  text: "#261f1d",
+});
+
+const isHex6 = (value) => /^#[0-9a-f]{6}$/i.test(String(value || "").trim());
+
+const mixHex = (from, to, toWeight = 0.5) => {
+  const clean = (value, fallback) => (isHex6(value) ? value : fallback).slice(1);
+  const a = clean(from, "#000000");
+  const b = clean(to, "#ffffff");
+  const w = Math.max(0, Math.min(1, Number(toWeight) || 0));
+  const channel = (offset) => {
+    const av = parseInt(a.slice(offset, offset + 2), 16);
+    const bv = parseInt(b.slice(offset, offset + 2), 16);
+    return Math.round(av * (1 - w) + bv * w).toString(16).padStart(2, "0");
+  };
+  return `#${channel(0)}${channel(2)}${channel(4)}`;
+};
+
+const readDashboardTheme = () => {
+  if (typeof document === "undefined" || typeof window === "undefined") {
+    return { ...DASHBOARD_THEME_FALLBACK };
+  }
+  const styles = window.getComputedStyle(document.documentElement);
+  const read = (name, fallback) => {
+    const value = styles.getPropertyValue(name).trim();
+    return isHex6(value) ? value.toLowerCase() : fallback;
+  };
+  const primary = read("--edb-saved-primary", DASHBOARD_THEME_FALLBACK.primary);
+  const primaryDark = read("--edb-saved-primary-dark", DASHBOARD_THEME_FALLBACK.primaryDark);
+  const accent = read("--edb-saved-accent", DASHBOARD_THEME_FALLBACK.accent);
+  const surface = read("--edb-saved-surface", DASHBOARD_THEME_FALLBACK.surface);
+  const dashboardBg = read("--edb-saved-dashboard-bg", DASHBOARD_THEME_FALLBACK.dashboardBg);
+  const text = read("--edb-saved-text", DASHBOARD_THEME_FALLBACK.text);
+  return { primary, primaryDark, accent, surface, dashboardBg, text };
+};
+
+const sameDashboardTheme = (a, b) =>
+  Object.keys(DASHBOARD_THEME_FALLBACK).every((key) => a?.[key] === b?.[key]);
+
+const buildDashboardPalette = ({ primary, primaryDark, accent, surface }) => [
+  primary,
+  accent,
+  mixHex(primary, surface, 0.28),
+  mixHex(accent, surface, 0.28),
+  primaryDark,
+  mixHex(accent, "#000000", 0.18),
+  mixHex(primary, accent, 0.35),
+  mixHex(primary, accent, 0.68),
+  mixHex(primary, surface, 0.48),
+  mixHex(accent, surface, 0.48),
+  mixHex(primaryDark, "#000000", 0.12),
+  mixHex(accent, "#000000", 0.30),
 ];
 
-// Keep legacy dashboard cards in the same premium family instead of rainbow gradients.
-const cardGradients = [
-  "linear-gradient(135deg, #5f1017 0%, #81212a 100%)",
-  "linear-gradient(135deg, #721820 0%, #99323a 100%)",
-  "linear-gradient(135deg, #9a6728 0%, #c09345 100%)",
-  "linear-gradient(135deg, #4f2528 0%, #774148 100%)",
-  "linear-gradient(135deg, #7d2029 0%, #a64a52 100%)",
-  "linear-gradient(135deg, #6c5035 0%, #967551 100%)",
-  "linear-gradient(135deg, #8a3540 0%, #b45c65 100%)",
-  "linear-gradient(135deg, #7b5b2c 0%, #af843d 100%)",
-];
+const buildDashboardCardGradients = ({ primary, primaryDark, accent, surface }) => {
+  const accentDark = mixHex(accent, "#000000", 0.22);
+  const blend35 = mixHex(primary, accent, 0.35);
+  const blend65 = mixHex(primary, accent, 0.65);
+  return [
+    `linear-gradient(135deg, ${primaryDark} 0%, ${primary} 100%)`,
+    `linear-gradient(135deg, ${primary} 0%, ${blend35} 100%)`,
+    `linear-gradient(135deg, ${accentDark} 0%, ${accent} 100%)`,
+    `linear-gradient(135deg, ${mixHex(primaryDark, surface, 0.12)} 0%, ${mixHex(primary, surface, 0.18)} 100%)`,
+    `linear-gradient(135deg, ${blend35} 0%, ${blend65} 100%)`,
+    `linear-gradient(135deg, ${mixHex(accentDark, primary, 0.20)} 0%, ${mixHex(accent, primary, 0.18)} 100%)`,
+    `linear-gradient(135deg, ${mixHex(primary, accent, 0.22)} 0%, ${mixHex(primary, accent, 0.48)} 100%)`,
+    `linear-gradient(135deg, ${mixHex(accentDark, primary, 0.24)} 0%, ${mixHex(accent, primary, 0.34)} 100%)`,
+  ];
+};
 
 // Download helper (PNG)
 const downloadChart = (chartRef, filename = "chart.png") => {
@@ -255,12 +312,54 @@ const isAdmissionType = (item, type) =>
 // ---------- COMPONENT ----------
 const Dashboard = () => {
   const navigate = useNavigate(); // ✅ ADDED
+
+  // Keep dashboard DOM + Chart.js colors synchronized with the saved Portal Theme.
+  const [dashboardTheme, setDashboardTheme] = useState(() => readDashboardTheme());
+
+  useEffect(() => {
+    if (typeof document === "undefined" || typeof MutationObserver === "undefined") return undefined;
+
+    const syncTheme = () => {
+      const next = readDashboardTheme();
+      setDashboardTheme((current) => (sameDashboardTheme(current, next) ? current : next));
+    };
+
+    syncTheme();
+    const root = document.documentElement;
+    const observer = new MutationObserver(syncTheme);
+    observer.observe(root, {
+      attributes: true,
+      attributeFilter: ["style", "data-portal-theme"],
+    });
+    window.addEventListener("storage", syncTheme);
+    window.addEventListener("portal-theme-changed", syncTheme);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("storage", syncTheme);
+      window.removeEventListener("portal-theme-changed", syncTheme);
+    };
+  }, []);
+
+  const palette = useMemo(() => buildDashboardPalette(dashboardTheme), [dashboardTheme]);
+  const cardGradients = useMemo(
+    () => buildDashboardCardGradients(dashboardTheme),
+    [dashboardTheme]
+  );
   const storedRoles = useMemo(() => getStoredRoles(), []);
   const storedPermissions = useMemo(() => getStoredPermissions(), []);
   const canManagePermissions = useMemo(
     () =>
       storedPermissions.includes("permissions_manage") ||
       storedRoles.includes("superadmin"),
+    [storedPermissions, storedRoles]
+  );
+  const canCustomizeDashboard = useMemo(
+    () =>
+      storedPermissions.includes("customize_dashboard_layout") ||
+      storedRoles.includes("superadmin") ||
+      storedRoles.includes("super_admin") ||
+      storedRoles.includes("super admin"),
     [storedPermissions, storedRoles]
   );
 
@@ -566,16 +665,20 @@ const Dashboard = () => {
     }, { academic: { till: 0, whole: 0 }, van: { till: 0, whole: 0 } });
   }, [feeOutlook]);
 
-  const financeChartData = useMemo(() => ({
-    labels: ["Collected", "Pending till date", "Future session due"],
-    datasets: [{
-      data: [receivedSession, pendingTillDate, futureSessionPending],
-      backgroundColor: ["#74151d", "#c55e63", "#c39545"],
-      borderColor: ["#5c0f16", "#a9454b", "#a7792d"],
-      borderWidth: 2,
-      hoverOffset: 8,
-    }],
-  }), [receivedSession, pendingTillDate, futureSessionPending]);
+  const financeChartData = useMemo(() => {
+    const pendingShade = mixHex(dashboardTheme.primary, dashboardTheme.surface, 0.34);
+    const accentDark = mixHex(dashboardTheme.accent, "#000000", 0.20);
+    return {
+      labels: ["Collected", "Pending till date", "Future session due"],
+      datasets: [{
+        data: [receivedSession, pendingTillDate, futureSessionPending],
+        backgroundColor: [dashboardTheme.primary, pendingShade, dashboardTheme.accent],
+        borderColor: [dashboardTheme.primaryDark, mixHex(pendingShade, "#000000", 0.16), accentDark],
+        borderWidth: 2,
+        hoverOffset: 8,
+      }],
+    };
+  }, [receivedSession, pendingTillDate, futureSessionPending, dashboardTheme]);
 
   const financeChartOptions = useMemo(() => ({
     responsive: true,
@@ -685,7 +788,7 @@ const Dashboard = () => {
         },
       ],
     };
-  }, [summary]);
+  }, [summary, palette]);
 
   const pieChartOptions = useMemo(
     () => ({
@@ -763,7 +866,7 @@ const Dashboard = () => {
         pointBorderWidth: 2,
         pointBorderColor: palette[idx % palette.length],
       })),
-    [uniqueCategories, uniqueDates, dayWiseSummary]
+    [uniqueCategories, uniqueDates, dayWiseSummary, palette]
   );
 
   const lineChartData = useMemo(
@@ -842,7 +945,7 @@ const Dashboard = () => {
         borderWidth: 2,
         borderRadius: 8,
       })),
-    [uniqueAdmissionTypes, uniqueClasses, sortedClassWiseCount]
+    [uniqueAdmissionTypes, uniqueClasses, sortedClassWiseCount, palette]
   );
   const barChartData = useMemo(
     () => ({ labels: uniqueClasses, datasets: barDatasets }),
@@ -1164,6 +1267,10 @@ const Dashboard = () => {
 
   /* -------------------------------- RENDER ------------------------------- */
   return (
+    <DashboardLayoutProvider
+      dashboardKey="admin_erp"
+      canCustomize={canCustomizeDashboard}
+    >
     <div
       className="dashboard-bg dashboard-surface classic-dashboard-theme"
       style={{
@@ -1244,7 +1351,8 @@ const Dashboard = () => {
             </small>
           </div>
 
-          <div className="d-flex gap-2">
+          <div className="d-flex gap-2 flex-wrap justify-content-end">
+            <DashboardCustomizeToolbar />
             <button
               className={`btn btn-outline-${autoRefresh ? "secondary" : "success"} shadow-sm`}
               onClick={() => setAutoRefresh((v) => !v)}
@@ -1283,6 +1391,8 @@ const Dashboard = () => {
           </div>
         ) : null}
 
+        <DashboardSectionStack>
+        <DashboardSection sectionId="quick-actions">
         {/* Organized Quick Actions */}
         <div className="quick-links mb-4">
           <div className="quick-links-inner px-4 py-3 rounded shadow-lg bg-white bg-opacity-95">
@@ -1334,7 +1444,9 @@ const Dashboard = () => {
             </div>
           </div>
         </div>
+        </DashboardSection>
 
+        <DashboardSection sectionId="institution-snapshot">
         <SectionHeader
           badge="Overview"
           title="Institution Snapshot"
@@ -1402,9 +1514,15 @@ const Dashboard = () => {
 
           {/* KPI cards */}
           <div className="col-12 col-lg-8">
-            <div className="row g-4">
+            <DashboardGrid sectionId="snapshot-kpis" gap={16}>
               {kpis.map((kpi, i) => (
-                <div key={kpi.label} className="col-12 col-sm-6 col-xl-4">
+                <div
+                  key={kpi.label}
+                  className="col-12"
+                  data-dashboard-card-id={`snapshot-${kpi.label}`}
+                  data-dashboard-default-span="4"
+                  data-dashboard-min-span="3"
+                >
                   <div
                     className="card text-white shadow-lg border-0 h-100 kpi-card hover-lift"
                     style={{
@@ -1450,52 +1568,66 @@ const Dashboard = () => {
                   </div>
                 </div>
               ))}
-            </div>
+            </DashboardGrid>
           </div>
         </div>
+        </DashboardSection>
 
+        <DashboardSection sectionId="revenue-intelligence">
         <section className="mb-4">
           <div className="d-flex align-items-end justify-content-between flex-wrap gap-2 mb-3">
             <div>
-              <span className="badge rounded-pill mb-2" style={{ background: "#f6e7cb", color: "#7b541e", border: "1px solid #e5c68d" }}>Revenue Intelligence</span>
+              <span className="badge rounded-pill mb-2" style={{ background: mixHex(dashboardTheme.accent, dashboardTheme.surface, 0.82), color: mixHex(dashboardTheme.accent, "#000000", 0.32), border: `1px solid ${mixHex(dashboardTheme.accent, dashboardTheme.surface, 0.58)}` }}>Revenue Intelligence</span>
               <h4 className="fw-bold mb-1">Session Collection Outlook</h4>
               <div className="text-muted small">Collected, currently overdue and upcoming session receivables in one reconciled view.</div>
             </div>
             <div className="small text-muted"><i className="bi bi-calendar-check me-1" />As on {new Date().toLocaleDateString("en-IN")}</div>
           </div>
 
-          <div className="row g-3 mb-3">
+          <DashboardGrid sectionId="revenue-kpis" gap={16}>
             {[
-              { label: "Pending Till Date", value: pendingTillDate, icon: "bi-hourglass-split", color: "#9f333b", soft: "#fff4f1", note: "Due as of today" },
-              { label: "Whole Session Pending", value: pendingWholeSession, icon: "bi-calendar2-range", color: "#a8752b", soft: "#fff8ec", note: "Current + future installments" },
-              { label: "Expected Session Collection", value: expectedSessionCollection, icon: "bi-bullseye", color: "#70151d", soft: "#fff5f2", note: "Received + net pending" },
-              { label: "Collection Progress", value: collectionProgress, icon: "bi-graph-up-arrow", color: "#b07b2b", soft: "#fff8e9", note: `${formatCurrency(receivedSession)} collected`, percent: true },
+              { label: "Pending Till Date", value: pendingTillDate, icon: "bi-hourglass-split", color: dashboardTheme.primary, soft: mixHex(dashboardTheme.primary, dashboardTheme.surface, 0.90), note: "Due as of today" },
+              { label: "Whole Session Pending", value: pendingWholeSession, icon: "bi-calendar2-range", color: dashboardTheme.accent, soft: mixHex(dashboardTheme.accent, dashboardTheme.surface, 0.90), note: "Current + future installments" },
+              { label: "Expected Session Collection", value: expectedSessionCollection, icon: "bi-bullseye", color: dashboardTheme.primaryDark, soft: mixHex(dashboardTheme.primary, dashboardTheme.surface, 0.93), note: "Received + net pending" },
+              { label: "Collection Progress", value: collectionProgress, icon: "bi-graph-up-arrow", color: mixHex(dashboardTheme.accent, "#000000", 0.18), soft: mixHex(dashboardTheme.accent, dashboardTheme.surface, 0.92), note: `${formatCurrency(receivedSession)} collected`, percent: true },
             ].map((card) => (
-              <div className="col-12 col-sm-6 col-xl-3" key={card.label}>
+              <div
+                className="col-12"
+                key={card.label}
+                data-dashboard-card-id={`revenue-${card.label}`}
+                data-dashboard-default-span="3"
+                data-dashboard-min-span="3"
+              >
                 <div className="card border-0 shadow-sm h-100 overflow-hidden" style={{ borderRadius: 18, background: `linear-gradient(145deg, #fff, ${card.soft})` }}>
                   <div className="card-body p-4">
                     <div className="d-flex justify-content-between align-items-start gap-3">
                       <div><div className="small text-uppercase fw-semibold text-muted mb-2" style={{ letterSpacing: ".04em" }}>{card.label}</div><div className="h3 fw-bold mb-1" style={{ color: card.color }}>{loading.finance ? "…" : card.percent ? `${card.value.toFixed(1)}%` : formatCurrency(card.value)}</div><div className="small text-muted">{card.note}</div></div>
                       <div className="d-grid place-items-center rounded-4 flex-shrink-0" style={{ width: 48, height: 48, display: "grid", placeItems: "center", color: card.color, background: card.soft }}><i className={`bi ${card.icon} fs-4`} /></div>
                     </div>
-                    {card.percent && <div className="progress mt-3" style={{ height: 7, background: "#dbe7e2" }}><div className="progress-bar" style={{ width: `${card.value}%`, background: card.color }} /></div>}
+                    {card.percent && <div className="progress mt-3" style={{ height: 7, background: mixHex(dashboardTheme.primary, dashboardTheme.surface, 0.88) }}><div className="progress-bar" style={{ width: `${card.value}%`, background: card.color }} /></div>}
                   </div>
                 </div>
               </div>
             ))}
-          </div>
+          </DashboardGrid>
 
-          <div className="row g-3 mb-3">
+          <DashboardGrid sectionId="revenue-fee-types" gap={16}>
             {[
-              { title: "Academic Fee", icon: "bi-mortarboard-fill", color: "#74151d", gradient: "linear-gradient(145deg,#fffaf5,#ffffff)", data: pendingByType.academic, received: totalFeeReceived },
-              { title: "Van Fee", icon: "bi-truck-front-fill", color: "#ad792c", gradient: "linear-gradient(145deg,#fff9ee,#ffffff)", data: pendingByType.van, received: totalVanFee },
+              { title: "Academic Fee", icon: "bi-mortarboard-fill", color: dashboardTheme.primary, gradient: `linear-gradient(145deg,${mixHex(dashboardTheme.primary, dashboardTheme.surface, 0.94)},${dashboardTheme.surface})`, data: pendingByType.academic, received: totalFeeReceived },
+              { title: "Van Fee", icon: "bi-truck-front-fill", color: dashboardTheme.accent, gradient: `linear-gradient(145deg,${mixHex(dashboardTheme.accent, dashboardTheme.surface, 0.94)},${dashboardTheme.surface})`, data: pendingByType.van, received: totalVanFee },
             ].map((item) => {
               const sessionTotal = item.received + item.data.whole;
               const receivedPercent = sessionTotal > 0 ? (item.received / sessionTotal) * 100 : 0;
               const pendingPercent = sessionTotal > 0 ? (item.data.whole / sessionTotal) * 100 : 0;
               const totalTillDate = item.received + item.data.till;
               return (
-              <div className="col-12 col-lg-6" key={item.title}>
+              <div
+                className="col-12"
+                key={item.title}
+                data-dashboard-card-id={`revenue-type-${item.title}`}
+                data-dashboard-default-span="6"
+                data-dashboard-min-span="4"
+              >
                 <div className="card border-0 shadow-sm h-100" style={{ borderRadius: 18, background: item.gradient, borderLeft: `5px solid ${item.color}` }}>
                   <div className="card-body p-4">
                     <div className="d-flex align-items-center justify-content-between mb-3">
@@ -1504,62 +1636,66 @@ const Dashboard = () => {
                     </div>
                     <div className="bg-white bg-opacity-75 rounded-4 border p-3 mb-3">
                       <div className="d-flex justify-content-between align-items-center mb-2 small"><span className="fw-semibold" style={{ color: item.color }}>Received {receivedPercent.toFixed(1)}%</span><span className="fw-semibold text-danger">Pending {pendingPercent.toFixed(1)}%</span></div>
-                      <div className="progress" style={{ height: 10, background: "#fee2e2" }}><div className="progress-bar" role="progressbar" aria-label={`${item.title} received percentage`} style={{ width: `${receivedPercent}%`, background: item.color }} /></div>
+                      <div className="progress" style={{ height: 10, background: mixHex(item.color, dashboardTheme.surface, 0.86) }}><div className="progress-bar" role="progressbar" aria-label={`${item.title} received percentage`} style={{ width: `${receivedPercent}%`, background: item.color }} /></div>
                     </div>
                     <div className="row g-2">
                       <div className="col-6 col-xl-3"><div className="rounded-3 bg-white bg-opacity-75 border p-3 h-100"><div className="small text-muted mb-1">Received</div><div className="fw-bold" style={{ color: item.color }}>{loading.report ? "…" : formatCurrency(item.received)}</div></div></div>
                       <div className="col-6 col-xl-3"><div className="rounded-3 bg-white bg-opacity-75 border p-3 h-100"><div className="small text-muted mb-1">Pending Till Date</div><div className="fw-bold text-danger">{loading.finance ? "…" : formatCurrency(item.data.till)}</div></div></div>
                       <div className="col-6 col-xl-3"><div className="rounded-3 bg-white bg-opacity-75 border p-3 h-100"><div className="small text-muted mb-1">Total Till Date</div><div className="fw-bold text-dark">{loading.finance ? "…" : formatCurrency(totalTillDate)}</div></div></div>
-                      <div className="col-6 col-xl-3"><div className="rounded-3 bg-white bg-opacity-75 border p-3 h-100"><div className="small text-muted mb-1">Session Pending</div><div className="fw-bold" style={{ color: "#a8752b" }}>{loading.finance ? "…" : formatCurrency(item.data.whole)}</div></div></div>
+                      <div className="col-6 col-xl-3"><div className="rounded-3 bg-white bg-opacity-75 border p-3 h-100"><div className="small text-muted mb-1">Session Pending</div><div className="fw-bold" style={{ color: dashboardTheme.accent }}>{loading.finance ? "…" : formatCurrency(item.data.whole)}</div></div></div>
                     </div>
                   </div>
                 </div>
               </div>
               );
             })}
-          </div>
+          </DashboardGrid>
 
+          <DashboardGrid sectionId="revenue-health" gap={16}>
           <div
             className="card border-0"
+            data-dashboard-card-id="collection-vs-receivables"
+            data-dashboard-default-span="12"
+            data-dashboard-min-span="6"
             style={{
               borderRadius: 18,
               overflow: "hidden",
-              border: "1px solid #ead9c3",
-              boxShadow: "0 12px 34px rgba(92, 28, 32, .08)",
-              background: "#fffdf9",
+              border: `1px solid ${mixHex(dashboardTheme.primary, dashboardTheme.surface, 0.82)}`,
+              boxShadow: `0 12px 34px ${mixHex(dashboardTheme.primaryDark, dashboardTheme.surface, 0.90)}`,
+              background: dashboardTheme.surface,
             }}
           >
             <div className="row g-0 align-items-stretch">
               <div
                 className="col-12 col-lg-5 p-4 p-xl-5"
                 style={{
-                  background: "linear-gradient(145deg,#4d0b10 0%,#74151d 58%,#8e2c34 100%)",
+                  background: `linear-gradient(145deg,${dashboardTheme.primaryDark} 0%,${dashboardTheme.primary} 58%,${mixHex(dashboardTheme.primary, dashboardTheme.surface, 0.18)} 100%)`,
                   color: "white",
                 }}
               >
-                <div className="text-uppercase small mb-2 fw-semibold" style={{ letterSpacing: ".11em", color: "#e9c777" }}>Financial health</div>
+                <div className="text-uppercase small mb-2 fw-semibold" style={{ letterSpacing: ".11em", color: mixHex(dashboardTheme.accent, "#ffffff", 0.28) }}>Financial health</div>
                 <h4 className="fw-bold mb-2">Collection vs Receivables</h4>
                 <p className="mb-4" style={{ color: "rgba(255,255,255,.72)", maxWidth: 430 }}>A concise view of receipts, dues and future installments for the selected session.</p>
                 <div className="d-flex justify-content-between py-3" style={{ borderBottom: "1px solid rgba(255,255,255,.15)" }}><span style={{ color: "rgba(255,255,255,.70)" }}>Academic received</span><strong>{formatCurrency(totalFeeReceived)}</strong></div>
                 <div className="d-flex justify-content-between py-3" style={{ borderBottom: "1px solid rgba(255,255,255,.15)" }}><span style={{ color: "rgba(255,255,255,.70)" }}>Van received</span><strong>{formatCurrency(totalVanFee)}</strong></div>
-                <div className="d-flex justify-content-between py-3"><span style={{ color: "rgba(255,255,255,.70)" }}>Future installments</span><strong style={{ color: "#f2d28d" }}>{formatCurrency(futureSessionPending)}</strong></div>
+                <div className="d-flex justify-content-between py-3"><span style={{ color: "rgba(255,255,255,.70)" }}>Future installments</span><strong style={{ color: mixHex(dashboardTheme.accent, "#ffffff", 0.38) }}>{formatCurrency(futureSessionPending)}</strong></div>
               </div>
-              <div className="col-12 col-lg-7 p-4 p-xl-5" style={{ background: "linear-gradient(145deg,#fffdf9,#fbf4ea)" }}>
+              <div className="col-12 col-lg-7 p-4 p-xl-5" style={{ background: `linear-gradient(145deg,${dashboardTheme.surface},${mixHex(dashboardTheme.accent, dashboardTheme.surface, 0.94)})` }}>
                 <div className="d-flex justify-content-between align-items-start gap-3 mb-3">
                   <div>
-                    <div className="text-uppercase small fw-bold" style={{ letterSpacing: ".08em", color: "#a7752d" }}>Session mix</div>
-                    <div className="fw-bold" style={{ color: "#5d151b", fontSize: 18 }}>Receivable composition</div>
+                    <div className="text-uppercase small fw-bold" style={{ letterSpacing: ".08em", color: dashboardTheme.accent }}>Session mix</div>
+                    <div className="fw-bold" style={{ color: dashboardTheme.primaryDark, fontSize: 18 }}>Receivable composition</div>
                   </div>
-                  <span className="badge rounded-pill" style={{ background: "#f4e5cb", color: "#7b531c", border: "1px solid #e5c892" }}>{selectedSessionName || "Session"}</span>
+                  <span className="badge rounded-pill" style={{ background: mixHex(dashboardTheme.accent, dashboardTheme.surface, 0.82), color: mixHex(dashboardTheme.accent, "#000000", 0.34), border: `1px solid ${mixHex(dashboardTheme.accent, dashboardTheme.surface, 0.60)}` }}>{selectedSessionName || "Session"}</span>
                 </div>
                 <div className="position-relative mx-auto" style={{ height: 250, maxWidth: 560 }}>
                   {loading.finance && !feeOutlook ? (
-                    <div className="h-100 d-flex align-items-center justify-content-center" style={{ color: "#806d61" }}><span className="spinner-border spinner-border-sm me-2" />Preparing collection outlook…</div>
+                    <div className="h-100 d-flex align-items-center justify-content-center" style={{ color: mixHex(dashboardTheme.text, dashboardTheme.surface, 0.38) }}><span className="spinner-border spinner-border-sm me-2" />Preparing collection outlook…</div>
                   ) : (receivedSession + pendingTillDate + futureSessionPending) <= 0 ? (
                     <div className="h-100 d-flex flex-column align-items-center justify-content-center text-center px-4">
-                      <div className="d-grid mb-3" style={{ width: 64, height: 64, placeItems: "center", borderRadius: "50%", color: "#74151d", background: "#f6e7df", border: "1px solid #ead1bf" }}><i className="bi bi-pie-chart fs-3" /></div>
-                      <div className="fw-bold mb-1" style={{ color: "#5d151b" }}>No collection movement yet</div>
-                      <div className="small" style={{ color: "#88746a", maxWidth: 360 }}>The collection mix will appear here as soon as receipts or session dues are available.</div>
+                      <div className="d-grid mb-3" style={{ width: 64, height: 64, placeItems: "center", borderRadius: "50%", color: dashboardTheme.primary, background: mixHex(dashboardTheme.primary, dashboardTheme.surface, 0.90), border: `1px solid ${mixHex(dashboardTheme.primary, dashboardTheme.surface, 0.76)}` }}><i className="bi bi-pie-chart fs-3" /></div>
+                      <div className="fw-bold mb-1" style={{ color: dashboardTheme.primaryDark }}>No collection movement yet</div>
+                      <div className="small" style={{ color: mixHex(dashboardTheme.text, dashboardTheme.surface, 0.42), maxWidth: 360 }}>The collection mix will appear here as soon as receipts or session dues are available.</div>
                     </div>
                   ) : (
                     <Doughnut ref={financeRef} data={financeChartData} options={financeChartOptions} />
@@ -1568,21 +1704,30 @@ const Dashboard = () => {
               </div>
             </div>
           </div>
+          </DashboardGrid>
         </section>
+        </DashboardSection>
 
+        <DashboardSection sectionId="fee-category-summary">
         <SectionHeader
           badge="Fee Section"
           title="Fee Category Summary"
           subtitle="Category-wise collection, concession, van fee and total share."
         />
-        <div className="row g-4 mb-4">
+        <DashboardGrid sectionId="fee-category-cards" gap={16}>
           {Object.entries(summary).map(([category, totals], index) => {
             const share =
               totalForShare > 0
                 ? (totals.totalFeeReceived / totalForShare) * 100
                 : 0;
             return (
-              <div key={category} className="col-12 col-md-6 col-xl-4">
+              <div
+                key={category}
+                className="col-12"
+                data-dashboard-card-id={`fee-category-${category}`}
+                data-dashboard-default-span="4"
+                data-dashboard-min-span="3"
+              >
                 <div
                   className="card h-100 shadow-lg hover-lift"
                   style={{ background: "rgba(255, 255, 255, 0.95)" }}
@@ -1652,16 +1797,18 @@ const Dashboard = () => {
               </div>
             );
           })}
-        </div>
+        </DashboardGrid>
+        </DashboardSection>
 
+        <DashboardSection sectionId="fee-analytics">
         <SectionHeader
           badge="Analytics"
           title="Fee Analytics"
           subtitle="Collection distribution and session trend by fee category."
         />
-        <div className="row g-4 mb-4">
+        <DashboardGrid sectionId="fee-analytics-cards" gap={16}>
           {/* PIE (fees) */}
-          <div className="col-12 col-xl-6">
+          <div className="col-12" data-dashboard-card-id="fee-distribution" data-dashboard-default-span="6" data-dashboard-min-span="4">
             <div className="card h-100 shadow-lg hover-lift">
               <div
                 className="card-header text-white d-flex align-items-center justify-content-between"
@@ -1713,7 +1860,7 @@ const Dashboard = () => {
           </div>
 
           {/* LINE (fees trend) */}
-          <div className="col-12 col-xl-6">
+          <div className="col-12" data-dashboard-card-id="fee-trend" data-dashboard-default-span="6" data-dashboard-min-span="4">
             <div className="card h-100 shadow-lg hover-lift">
               <div
                 className="card-header text-white d-flex align-items-center justify-content-between"
@@ -1763,16 +1910,18 @@ const Dashboard = () => {
               </div>
             </div>
           </div>
-        </div>
+        </DashboardGrid>
+        </DashboardSection>
 
+        <DashboardSection sectionId="student-demographics">
         <SectionHeader
           badge="Students"
           title="Student Demographics"
           subtitle="Gender, caste and religion summaries in one clean section."
         />
-        <div className="row g-4 mb-4">
+        <DashboardGrid sectionId="demographic-cards" gap={16}>
           {/* Gender Pie */}
-          <div className="col-12 col-xl-4">
+          <div className="col-12" data-dashboard-card-id="gender-distribution" data-dashboard-default-span="4" data-dashboard-min-span="3">
             <div className="card h-100 shadow-lg hover-lift">
               <div
                 className="card-header text-white d-flex align-items-center justify-content-between"
@@ -1844,7 +1993,7 @@ const Dashboard = () => {
           </div>
 
           {/* Caste Bar */}
-          <div className="col-12 col-xl-4">
+          <div className="col-12" data-dashboard-card-id="caste-distribution" data-dashboard-default-span="4" data-dashboard-min-span="3">
             <div className="card h-100 shadow-lg hover-lift">
               <div
                 className="card-header text-white d-flex align-items-center justify-content-between"
@@ -1907,7 +2056,7 @@ const Dashboard = () => {
           </div>
 
           {/* Religion Bar */}
-          <div className="col-12 col-xl-4">
+          <div className="col-12" data-dashboard-card-id="religion-distribution" data-dashboard-default-span="4" data-dashboard-min-span="3">
             <div className="card h-100 shadow-lg hover-lift">
               <div
                 className="card-header text-white d-flex align-items-center justify-content-between"
@@ -1969,15 +2118,17 @@ const Dashboard = () => {
               </div>
             </div>
           </div>
-        </div>
+        </DashboardGrid>
+        </DashboardSection>
 
+        <DashboardSection sectionId="enrollments">
         <SectionHeader
           badge="Enrollments"
           title="Class-wise Enrollment Order"
           subtitle="Classes are ordered by classId/class order, so display stays correct for PG to senior classes."
         />
-        <div className="row g-4 mb-4">
-          <div className="col-12">
+        <DashboardGrid sectionId="enrollment-cards" gap={16}>
+          <div className="col-12" data-dashboard-card-id="class-enrollment-table" data-dashboard-default-span="12" data-dashboard-min-span="6">
             <div className="card shadow-lg hover-lift">
               <div
                 className="card-header text-white d-flex align-items-center justify-content-between"
@@ -2083,15 +2234,17 @@ const Dashboard = () => {
               </div>
             </div>
           </div>
-        </div>
+        </DashboardGrid>
+        </DashboardSection>
 
+        <DashboardSection sectionId="student-count">
         <SectionHeader
           badge="Students"
           title="Student Count by Class"
           subtitle="Bar chart follows the same classId order as the enrollment table."
         />
-        <div className="row g-4 mb-5">
-          <div className="col-12">
+        <DashboardGrid sectionId="student-count-cards" gap={16}>
+          <div className="col-12" data-dashboard-card-id="student-count-chart" data-dashboard-default-span="12" data-dashboard-min-span="6">
             <div className="card shadow-lg hover-lift">
               <div
                 className="card-header text-white d-flex align-items-center justify-content-between"
@@ -2140,7 +2293,9 @@ const Dashboard = () => {
               </div>
             </div>
           </div>
-        </div>
+        </DashboardGrid>
+        </DashboardSection>
+        </DashboardSectionStack>
 
         {/* Styles */}
         <style>{`
@@ -2381,6 +2536,7 @@ const Dashboard = () => {
         />
       </div>
     </div>
+    </DashboardLayoutProvider>
   );
 };
 

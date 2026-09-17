@@ -182,6 +182,7 @@ import ReportCardFormats from "./pages/ReportCardFormats";
 import AssignReportCardFormat from "./pages/AssignReportCardFormat";
 import ReportCardGenerator from "./pages/ReportCardGenerator";
 import ReportCardTemplateStudio from "./pages/ReportCardTemplateStudio";
+import ReportCardVisualDesigner from "./pages/ReportCardVisualDesigner";
 import StudentRemarksEntry from "./pages/StudentRemarksEntry";
 import StudentPromotionDecisionEntry from "./pages/StudentPromotionDecisionEntry";
 import StudentTransport from "./pages/StudentTransport";
@@ -199,6 +200,7 @@ import UserTracking from "./pages/UserTracking";
 import Houses from "./pages/Houses";
 import StudentFeeReport from "./pages/StudentFeeReport";
 import RolePermissions from "./pages/RolePermissions";
+import PortalThemeSettings from "./pages/PortalThemeSettings"; // PORTAL_THEME_V1
 import Messages from "./pages/Messages";
 import SecureSchoolChat from "./pages/SecureSchoolChat"; // SCHOOL_CHAT_V16_IMPORT
 
@@ -1239,6 +1241,17 @@ function App() {
               </RequirePermission>
             }
           />
+          <Route
+            path="/portal-theme"
+            element={
+              <RequirePermission
+                permissions={["manage_portal_theme"]}
+                fallbackRoles={["superadmin", "super_admin"]}
+              >
+                <PortalThemeSettings />
+              </RequirePermission>
+            }
+          />
           <Route path="/student-user-accounts" element={<StudentUserAccounts />} />
 
           {/* Departments / Employees */}
@@ -1770,6 +1783,7 @@ function App() {
           <Route path="/report-card-formats" element={<ReportCardFormats />} />
           <Route path="/assign-report-card-format" element={<AssignReportCardFormat />} />
           <Route path="/report-card-template-studio" element={<ReportCardTemplateStudio />} />
+          <Route path="/report-card-designer" element={<ReportCardVisualDesigner />} />
           <Route path="/report-card-generator" element={<ReportCardGenerator />} />
           <Route path="/academic-years" element={<AcademicYearManagement />} />
 
