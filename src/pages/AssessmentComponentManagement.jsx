@@ -10,6 +10,7 @@ const defaultFormData = {
   max_marks: "",
   component_type: "MARKS",
   is_internal: false,
+  scholastic_type: "Scholastic",
   is_practical: false,
   is_active: true,
 };
@@ -21,6 +22,8 @@ const AssessmentComponentManagement = () => {
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("ALL");
+  const [natureFilter, setNatureFilter] = useState("ALL");
+  const [academicFilter, setAcademicFilter] = useState("ALL");
   const [statusFilter, setStatusFilter] = useState("ALL");
 
   const filteredComponents = useMemo(() => {
@@ -33,14 +36,27 @@ const AssessmentComponentManagement = () => {
         String(component.abbreviation || "").toLowerCase().includes(query);
       const matchesType =
         typeFilter === "ALL" || component.component_type === typeFilter;
+      const matchesNature =
+        natureFilter === "ALL" ||
+        (natureFilter === "INTERNAL" && Boolean(component.is_internal)) ||
+        (natureFilter === "EXTERNAL" && !component.is_internal);
+      const matchesAcademic =
+        academicFilter === "ALL" ||
+        (component.scholastic_type || "Scholastic") === academicFilter;
       const matchesStatus =
         statusFilter === "ALL" ||
         (statusFilter === "ACTIVE" && Boolean(component.is_active)) ||
         (statusFilter === "INACTIVE" && !component.is_active);
 
-      return matchesSearch && matchesType && matchesStatus;
+      return (
+        matchesSearch &&
+        matchesType &&
+        matchesNature &&
+        matchesAcademic &&
+        matchesStatus
+      );
     });
-  }, [components, search, typeFilter, statusFilter]);
+  }, [components, search, typeFilter, natureFilter, academicFilter, statusFilter]);
 
   useEffect(() => {
     fetchComponents();
@@ -60,6 +76,10 @@ const AssessmentComponentManagement = () => {
     const { name, value, type, checked } = e.target;
 
     let val = type === "checkbox" ? checked : value;
+
+    if (name === "is_internal" && type !== "checkbox") {
+      val = value === "INTERNAL";
+    }
 
     setFormData((prev) => {
       const updated = {
@@ -89,6 +109,7 @@ const AssessmentComponentManagement = () => {
           : "",
       component_type: comp.component_type || "MARKS",
       is_internal: Boolean(comp.is_internal),
+      scholastic_type: comp.scholastic_type || "Scholastic",
       is_practical: Boolean(comp.is_practical),
       is_active:
         comp.is_active === undefined || comp.is_active === null
@@ -118,6 +139,11 @@ const AssessmentComponentManagement = () => {
 
     if (!["MARKS", "GRADE"].includes(formData.component_type)) {
       Swal.fire("Warning", "Please select a valid component type", "warning");
+      return false;
+    }
+
+    if (!["Scholastic", "Co-Scholastic"].includes(formData.scholastic_type)) {
+      Swal.fire("Warning", "Please select Scholastic or Co-Scholastic", "warning");
       return false;
     }
 
@@ -151,6 +177,7 @@ const AssessmentComponentManagement = () => {
       component_type: formData.component_type,
       max_marks: isGrade ? 0 : Number(formData.max_marks || 0),
       is_internal: Boolean(formData.is_internal),
+      scholastic_type: formData.scholastic_type,
       is_practical: Boolean(formData.is_practical),
       is_active: Boolean(formData.is_active),
     };
@@ -277,18 +304,30 @@ const AssessmentComponentManagement = () => {
               )}
             </div>
 
-            <div className="col-md-1 mb-3 form-check mt-4">
-              <input
-                type="checkbox"
+            <div className="col-md-2 mb-3">
+              <label className="form-label">Assessment Nature *</label>
+              <select
                 name="is_internal"
-                checked={formData.is_internal}
+                value={formData.is_internal ? "INTERNAL" : "EXTERNAL"}
                 onChange={handleChange}
-                className="form-check-input"
-                id="internalCheck"
-              />
-              <label htmlFor="internalCheck" className="form-check-label">
-                Internal
-              </label>
+                className="form-select"
+              >
+                <option value="INTERNAL">Internal</option>
+                <option value="EXTERNAL">External</option>
+              </select>
+            </div>
+
+            <div className="col-md-2 mb-3">
+              <label className="form-label">Academic Category *</label>
+              <select
+                name="scholastic_type"
+                value={formData.scholastic_type}
+                onChange={handleChange}
+                className="form-select"
+              >
+                <option value="Scholastic">Scholastic</option>
+                <option value="Co-Scholastic">Co-Scholastic</option>
+              </select>
             </div>
 
             <div className="col-md-1 mb-3 form-check mt-4">
@@ -372,6 +411,28 @@ const AssessmentComponentManagement = () => {
               </select>
 
               <select
+                value={natureFilter}
+                onChange={(event) => setNatureFilter(event.target.value)}
+                className="form-select"
+                aria-label="Filter by assessment nature"
+              >
+                <option value="ALL">Internal + External</option>
+                <option value="INTERNAL">Internal</option>
+                <option value="EXTERNAL">External</option>
+              </select>
+
+              <select
+                value={academicFilter}
+                onChange={(event) => setAcademicFilter(event.target.value)}
+                className="form-select"
+                aria-label="Filter by academic category"
+              >
+                <option value="ALL">Scholastic + Co-Scholastic</option>
+                <option value="Scholastic">Scholastic</option>
+                <option value="Co-Scholastic">Co-Scholastic</option>
+              </select>
+
+              <select
                 value={statusFilter}
                 onChange={(event) => setStatusFilter(event.target.value)}
                 className="form-select"
@@ -382,13 +443,19 @@ const AssessmentComponentManagement = () => {
                 <option value="INACTIVE">Inactive</option>
               </select>
 
-              {(search || typeFilter !== "ALL" || statusFilter !== "ALL") && (
+              {(search ||
+                typeFilter !== "ALL" ||
+                natureFilter !== "ALL" ||
+                academicFilter !== "ALL" ||
+                statusFilter !== "ALL") && (
                 <button
                   type="button"
                   className="btn btn-outline-secondary"
                   onClick={() => {
                     setSearch("");
                     setTypeFilter("ALL");
+                    setNatureFilter("ALL");
+                    setAcademicFilter("ALL");
                     setStatusFilter("ALL");
                   }}
                 >
@@ -408,7 +475,8 @@ const AssessmentComponentManagement = () => {
                     <th>Abbr.</th>
                     <th>Type</th>
                     <th>Max Marks</th>
-                    <th>Internal</th>
+                    <th>Assessment Nature</th>
+                    <th>Academic Category</th>
                     <th>Practical</th>
                     <th>Active</th>
                     <th>Actions</th>
@@ -437,7 +505,22 @@ const AssessmentComponentManagement = () => {
                           ? "-"
                           : comp.max_marks ?? 0}
                       </td>
-                      <td>{comp.is_internal ? "Yes" : "No"}</td>
+                      <td>
+                        <span className={`badge ${comp.is_internal ? "bg-success" : "bg-secondary"}`}>
+                          {comp.is_internal ? "Internal" : "External"}
+                        </span>
+                      </td>
+                      <td>
+                        <span
+                          className={`badge ${
+                            (comp.scholastic_type || "Scholastic") === "Co-Scholastic"
+                              ? "bg-warning text-dark"
+                              : "bg-dark"
+                          }`}
+                        >
+                          {comp.scholastic_type || "Scholastic"}
+                        </span>
+                      </td>
                       <td>{comp.is_practical ? "Yes" : "No"}</td>
                       <td>{comp.is_active ? "Yes" : "No"}</td>
                       <td>

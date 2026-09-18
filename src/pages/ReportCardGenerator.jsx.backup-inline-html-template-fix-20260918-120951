@@ -115,20 +115,63 @@ const buildStudentPhotoURL = (value) => {
 };
 
 
-const buildPublicAssetURL = (value) => {
-  if (isEmptyPhotoValue(value)) return "";
+const extractFirstImgSrcFromHtml = (html = "") => {
+  const raw = String(html || "");
+  if (!raw || !/<img\b/i.test(raw)) return "";
 
-  const raw = String(value || "").trim().replace(/\\/g, "/");
+  const match = raw.match(/<img\b[^>]*\bsrc\s*=\s*["']([^"']+)["'][^>]*>/i);
+  return match?.[1] ? String(match[1]).trim() : "";
+};
+
+const splitUrlPreservingQuery = (value = "") => {
+  const raw = String(value || "").trim();
+  const hashIndex = raw.indexOf("#");
+  const hash = hashIndex >= 0 ? raw.slice(hashIndex) : "";
+  const withoutHash = hashIndex >= 0 ? raw.slice(0, hashIndex) : raw;
+  const queryIndex = withoutHash.indexOf("?");
+  const query = queryIndex >= 0 ? withoutHash.slice(queryIndex) : "";
+  const pathOnly = queryIndex >= 0 ? withoutHash.slice(0, queryIndex) : withoutHash;
+  return { pathOnly, query, hash };
+};
+
+const normalizeUploadAssetURL = (value) => {
+  let raw = String(value || "").trim().replace(/\\/g, "/");
   if (isEmptyPhotoValue(raw)) return "";
 
-  if (/^(data:|blob:|https?:\/\/)/i.test(raw)) return raw;
-  if (raw.startsWith("//")) return `${window.location.protocol}${raw}`;
+  // Sometimes DB/header_html may contain a full <img ... src="..."> tag.
+  const extractedSrc = extractFirstImgSrcFromHtml(raw);
+  if (extractedSrc) raw = extractedSrc;
 
-  const clean = raw.replace(/^\/+/, "");
-  if (clean.startsWith("uploads/")) return `${assetBase}/${encodeAssetPath(clean)}`;
+  // Decode once so encoded upload paths / wrapped URLs can be repaired.
+  const decoded = safeDecodeURIComponent(raw).trim().replace(/\\/g, "/");
 
-  return `${assetBase}/${encodeAssetPath(clean)}`;
+  if (/^data:image\//i.test(decoded) || /^blob:/i.test(decoded)) return decoded;
+  if (decoded.startsWith("//")) return `${window.location.protocol}${decoded}`;
+
+  // If an old saved URL points to localhost / another host but contains /uploads/,
+  // rebuild it with the current API asset host. This is important for PDF rendering.
+  const uploadMatch = decoded.match(/\/uploads\/(.+)$/i);
+  if (uploadMatch?.[1]) {
+    const { pathOnly, query, hash } = splitUrlPreservingQuery(uploadMatch[1]);
+    return `${assetBase}/uploads/${encodeAssetPath(pathOnly)}${query}${hash}`;
+  }
+
+  if (/^https?:\/\//i.test(decoded)) return decoded;
+
+  const clean = decoded.replace(/^\/+/, "");
+  if (!clean) return "";
+
+  if (clean.startsWith("uploads/")) {
+    const rest = clean.replace(/^uploads\/+/, "");
+    const { pathOnly, query, hash } = splitUrlPreservingQuery(rest);
+    return `${assetBase}/uploads/${encodeAssetPath(pathOnly)}${query}${hash}`;
+  }
+
+  const { pathOnly, query, hash } = splitUrlPreservingQuery(clean);
+  return `${assetBase}/${encodeAssetPath(pathOnly)}${query}${hash}`;
 };
+
+const buildPublicAssetURL = (value) => normalizeUploadAssetURL(value);
 
 const getStudentPhotoCandidates = (info = {}) => [
   info?.photo,
@@ -186,7 +229,14 @@ const imageUrlToDataURL = async (url) => {
   if (!url || url === NO_PHOTO_SVG || /^data:/i.test(url)) return url;
 
   try {
-    const res = await fetch(url, {
+    // Browser <img> can display cross-origin images without CORS, but JS fetch
+    // needs CORS before we can convert the image to base64 for the backend PDF renderer.
+    // Server.js must send CORS headers for /uploads.
+    const fetchUrl = /^https?:\/\//i.test(url)
+      ? `${url}${url.includes("?") ? "&" : "?"}_pdf_img=${Date.now()}`
+      : url;
+
+    const res = await fetch(fetchUrl, {
       method: "GET",
       mode: "cors",
       credentials: "omit",
@@ -202,7 +252,7 @@ const imageUrlToDataURL = async (url) => {
   } catch (error) {
     // Keep the original URL as fallback. If server-side PDF browser can access it,
     // it will still print. For guaranteed data URLs, ensure /uploads has CORS headers.
-    console.warn("Student photo could not be embedded as data URL:", url, error?.message || error);
+    console.warn("Image could not be embedded as data URL. Add CORS headers on /uploads in server.js:", url, error?.message || error);
     return url;
   }
 };
@@ -249,17 +299,6 @@ const formatDisplayDate = (raw) => {
   return s;
 };
 
-
-const hasVisualReportCardLayout = (template) => {
-  if (!template) return false;
-  let layout = template.layout_json;
-  if (typeof layout === "string") {
-    try { layout = JSON.parse(layout); } catch (_) { layout = null; }
-  }
-  const elements = Array.isArray(layout) ? layout : layout?.elements;
-  return Boolean(Array.isArray(elements) && elements.length);
-};
-
 /* ============================================================
  * ✅ Smart report-card template helpers
  * Used by the reusable PDF/image background template renderer.
@@ -279,6 +318,15 @@ const smartTemplateAliases = (value) => {
 };
 
 
+const hasVisualReportCardLayout = (template) => {
+  if (!template) return false;
+  let layout = template.layout_json;
+  if (typeof layout === "string") {
+    try { layout = JSON.parse(layout); } catch (_) { layout = null; }
+  }
+  const elements = Array.isArray(layout) ? layout : layout?.elements;
+  return Boolean(Array.isArray(elements) && elements.length);
+};
 
 /* ============================================================
  * ✅ Attendance helpers
@@ -302,6 +350,67 @@ const buildAttendancePercent = (att) => {
   return Number(((p / t) * 100).toFixed(2));
 };
 
+
+/* ============================================================
+ * ✅ Report Card Health helpers
+ * Pulls data from /report-card-health and merges it into studentInfoMap.
+ * Health details are saved exam-wise, so for final report cards we try:
+ * 1) all selected exams, and
+ * 2) all loaded exams for the selected session/class as fallback.
+ * This prevents health details from missing if the user selected Term/Final
+ * exams differently while generating report cards.
+ * ============================================================ */
+const getHealthExamIds = (selectedExamIds = [], allExams = []) => {
+  const ids = [];
+
+  for (const id of Array.isArray(selectedExamIds) ? selectedExamIds : []) {
+    const n = Number(id);
+    if (Number.isFinite(n) && n > 0 && !ids.includes(n)) ids.push(n);
+  }
+
+  for (const exam of Array.isArray(allExams) ? allExams : []) {
+    const n = Number(exam?.id || exam?.exam_id);
+    if (Number.isFinite(n) && n > 0 && !ids.includes(n)) ids.push(n);
+  }
+
+  return ids;
+};
+
+const normalizeHealthRowsPayload = (payload) => {
+  const candidate = payload?.rows || payload?.data?.rows || payload?.data || payload;
+  return Array.isArray(candidate) ? candidate : [];
+};
+
+const mergeHealthRowIntoStudentInfo = (info = {}, health = {}) => {
+  if (!health || typeof health !== "object") return info;
+
+  return {
+    ...info,
+    health_detail_id: health.health_detail_id || health.id || info.health_detail_id || null,
+    height: health.height ?? info.height ?? "",
+    weight: health.weight ?? info.weight ?? "",
+    dental_checkup: health.dental_checkup ?? health.dental ?? info.dental_checkup ?? info.dental ?? "",
+    dental: health.dental_checkup ?? health.dental ?? info.dental ?? "",
+    vision: health.vision ?? info.vision ?? "",
+    blood_group_snapshot:
+      health.blood_group_snapshot ??
+      health.blood_group ??
+      health.profile_blood_group ??
+      info.blood_group_snapshot ??
+      info.blood_group ??
+      "",
+    blood_group:
+      health.blood_group_snapshot ??
+      health.blood_group ??
+      health.profile_blood_group ??
+      info.blood_group ??
+      "",
+    assessment_date: health.assessment_date ?? info.assessment_date ?? "",
+    health_present_days: health.present_days ?? info.health_present_days ?? null,
+    health_working_days: health.working_days ?? info.health_working_days ?? null,
+  };
+};
+
 const getPrimaryHealthInfo = (info = {}) => {
   const present = info?.health_present_days ?? info?.present_days ?? null;
   const working = info?.health_working_days ?? info?.working_days ?? null;
@@ -316,6 +425,41 @@ const getPrimaryHealthInfo = (info = {}) => {
     present_days: present !== null && present !== undefined && present !== "" ? present : "-",
     working_days: working !== null && working !== undefined && working !== "" ? working : "-",
   };
+};
+
+const parseDateForAge = (raw) => {
+  if (!raw) return null;
+  const s = String(raw).trim();
+  if (!s) return null;
+
+  let d = null;
+
+  const iso = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (iso) d = new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]));
+
+  const dmy = s.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+  if (!d && dmy) d = new Date(Number(dmy[3]), Number(dmy[2]) - 1, Number(dmy[1]));
+
+  if (!d) d = new Date(s);
+  return Number.isNaN(d.getTime()) ? null : d;
+};
+
+const buildAgeAtAssessmentText = (dobRaw, assessmentRaw) => {
+  const dob = parseDateForAge(dobRaw);
+  const onDate = parseDateForAge(assessmentRaw);
+
+  if (!dob || !onDate || onDate < dob) return "-";
+
+  let years = onDate.getFullYear() - dob.getFullYear();
+  let months = onDate.getMonth() - dob.getMonth();
+
+  if (onDate.getDate() < dob.getDate()) months -= 1;
+  if (months < 0) {
+    years -= 1;
+    months += 12;
+  }
+
+  return `${years} Yrs ${months} Mths`;
 };
 
 /* ============================================================
@@ -399,33 +543,38 @@ const isDrawingSubject = (name = "") => {
   return ["drawing", "art", "arts", "drawing / art", "art & craft", "craft"].includes(s);
 };
 
-const normalizeSubjectType = (value) =>
-  String(value || "Scholastic").trim() === "Co-Scholastic"
-    ? "Co-Scholastic"
-    : "Scholastic";
+const hasValidComponentRecord = (component = {}) => {
+  if (!component || typeof component !== "object") return false;
 
-const isCoScholasticComponent = (component = {}) =>
-  normalizeSubjectType(component?.subject_type ?? component?.subjectType) === "Co-Scholastic";
+  const subjectName = String(component.subject_name || "").trim();
+  if (!subjectName) return false;
+
+  const componentId = component.component_id ?? component.componentId;
+  const componentName =
+    component.component_name ||
+    component.componentName ||
+    component.name ||
+    component.full_name ||
+    component.abbreviation ||
+    component.abbr ||
+    component.code;
+
+  return (
+    componentId !== undefined &&
+    componentId !== null &&
+    String(componentId).trim() !== ""
+  ) || String(componentName || "").trim() !== "";
+};
 
 const getNonDrawingSubjects = (student) =>
   Array.from(
     new Set(
       (student?.components || [])
-        .filter((component) => !isCoScholasticComponent(component))
-        .map((component) => component.subject_name)
+        .filter(hasValidComponentRecord)
+        .map((c) => c.subject_name)
         .filter(Boolean)
     )
   ).filter((name) => !isDrawingSubject(name));
-
-const getCoScholasticSubjectNames = (student) =>
-  Array.from(
-    new Set(
-      (student?.components || [])
-        .filter(isCoScholasticComponent)
-        .map((component) => component.subject_name)
-        .filter(Boolean)
-    )
-  );
 
 const getDrawingGradeForTerm = (student, termId, exams, gradeSchema) => {
   if (!termId) return "-";
@@ -486,6 +635,7 @@ const FinalResultSummary = () => {
   });
 
   const [reportData, setReportData] = useState([]);
+  const [institutionProfile, setInstitutionProfile] = useState(null); // REPORT_CARD_DYNAMIC_INFO_V21
   const [loading, setLoading] = useState(false);
   const [reportFormat, setReportFormatState] = useState(null);
   const reportFormatRef = useRef(null);
@@ -551,24 +701,63 @@ const FinalResultSummary = () => {
   const getReportCardHeaderHtml = () => getReportCardFormatValue("header_html");
   const getReportCardFooterHtml = () => getReportCardFormatValue("footer_html");
 
-  const getReportCardSchoolLogoUrl = (formatAssets = {}) =>
-    formatAssets.school_logo_url || buildPublicAssetURL(getReportCardFormatValue("school_logo_url"));
+  const getSchoolLogoCandidateUrls = (formatAssets = {}) => {
+    const activeReportFormat = reportFormatRef.current || reportFormat || {};
 
-  const getReportCardBoardLogoUrl = (formatAssets = {}) =>
-    formatAssets.board_logo_url || buildPublicAssetURL(getReportCardFormatValue("board_logo_url"));
+    const rawCandidates = [
+      formatAssets.school_logo_url,
+      activeReportFormat.school_logo_url,
+      activeReportFormat.schoolLogoUrl,
+      activeReportFormat.logo_url,
+      activeReportFormat.logoUrl,
+      activeReportFormat.logo,
+      selectedReportTemplate?.school_logo_url,
+      selectedReportTemplate?.schoolLogoUrl,
+      selectedReportTemplate?.logo_url,
+      institutionProfile?.logo,
+      institutionProfile?.picture,
+      extractFirstImgSrcFromHtml(activeReportFormat.header_html),
+      extractFirstImgSrcFromHtml(selectedReportTemplate?.header_html),
+    ];
+
+    const seen = new Set();
+    return rawCandidates
+      .map((value) => buildPublicAssetURL(value))
+      .filter((url) => {
+        if (isEmptyPhotoValue(url)) return false;
+        const key = String(url).trim();
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+  };
+
+  const getReportCardSchoolLogoUrl = (formatAssets = {}) => {
+    const candidates = getSchoolLogoCandidateUrls(formatAssets);
+    return candidates[0] || "";
+  };
+
+  // Board logo intentionally hidden in report card print.
+  const getReportCardBoardLogoUrl = () => "";
 
   const prepareReportFormatAssetsForPdf = async () => {
-    const schoolLogoUrl = buildPublicAssetURL(getReportCardFormatValue("school_logo_url"));
-    const boardLogoUrl = buildPublicAssetURL(getReportCardFormatValue("board_logo_url"));
+    const schoolLogoCandidates = getSchoolLogoCandidateUrls();
 
-    const [schoolLogoDataUrl, boardLogoDataUrl] = await Promise.all([
-      schoolLogoUrl ? imageUrlToDataURL(schoolLogoUrl) : Promise.resolve(""),
-      boardLogoUrl ? imageUrlToDataURL(boardLogoUrl) : Promise.resolve(""),
-    ]);
+    for (const schoolLogoUrl of schoolLogoCandidates) {
+      const schoolLogoDataUrl = await imageUrlToDataURL(schoolLogoUrl);
+      if (/^data:image\//i.test(String(schoolLogoDataUrl || ""))) {
+        console.log("✅ SCHOOL LOGO EMBEDDED FOR PDF:", schoolLogoUrl);
+        return {
+          school_logo_url: schoolLogoDataUrl,
+          board_logo_url: "",
+        };
+      }
+    }
 
+    // Last fallback: keep a URL only if it exists. The <img> also has onerror to hide broken icon.
     return {
-      school_logo_url: schoolLogoDataUrl || schoolLogoUrl || "",
-      board_logo_url: boardLogoDataUrl || boardLogoUrl || "",
+      school_logo_url: schoolLogoCandidates[0] || "",
+      board_logo_url: "",
     };
   };
 
@@ -644,28 +833,48 @@ const FinalResultSummary = () => {
   };
 
   const loadReportFormatForClass = async (class_id, session_id) => {
-    if (!class_id) {
+    const isMissingId = (value) =>
+      value === undefined || value === null || String(value).trim() === "";
+
+    if (isMissingId(class_id)) {
       setReportFormat(null);
       return null;
     }
 
-    try {
-      const params = { class_id: Number(class_id) };
-      if (session_id) params.session_id = Number(session_id);
+    const params = { class_id: Number(class_id) };
+    if (!isMissingId(session_id)) params.session_id = Number(session_id);
 
-      const res = await api.get("/report-card-formats/format-by-class", { params });
-      const format = normalizeReportFormatResponse(res.data);
+    // ✅ Current backend route is /by-class.
+    // ✅ Keep /format-by-class as fallback for older deployments.
+    const endpoints = [
+      "/report-card-formats/by-class",
+      "/report-card-formats/format-by-class",
+    ];
 
-      console.log("✅ FORMAT-BY-CLASS RAW RESPONSE:", res.data);
-      console.log("✅ NORMALIZED REPORT FORMAT:", format);
+    let lastError = null;
 
-      setReportFormat(format);
-      return format;
-    } catch (error) {
-      console.warn("Report card format not found. Using selected template instead:", error);
-      setReportFormat(null);
-      return null;
+    for (const endpoint of endpoints) {
+      try {
+        const res = await api.get(endpoint, { params });
+        const format = normalizeReportFormatResponse(res.data);
+
+        console.log("✅ REPORT FORMAT RAW RESPONSE:", endpoint, res.data);
+        console.log("✅ NORMALIZED REPORT FORMAT:", format);
+
+        setReportFormat(format);
+        return format;
+      } catch (error) {
+        lastError = error;
+        console.warn(
+          `Report card format API failed for ${endpoint}:`,
+          error?.response?.status || error?.message || error
+        );
+      }
     }
+
+    console.warn("Report card format not found. Using selected template instead:", lastError);
+    setReportFormat(null);
+    return null;
   };
 
   const normalizeStudentListPayload = (payload) => {
@@ -836,12 +1045,22 @@ const FinalResultSummary = () => {
 
     return nextInfoMap;
   };
+  const loadInstitutionProfile = async () => {
+    try {
+      const res = await api.get("/schools/current/profile");
+      setInstitutionProfile(res?.data?.institution || res?.data?.school || res?.data || null);
+    } catch (error) {
+      console.warn("Report card institution profile unavailable:", error?.response?.status || error?.message || error);
+    }
+  };
+
 
   useEffect(() => {
     loadSessions();
     loadClasses();
     loadSections();
     loadGradeSchema();
+    loadInstitutionProfile();
   }, []);
 
   useEffect(() => {
@@ -1012,6 +1231,16 @@ const FinalResultSummary = () => {
     return selected;
   };
 
+  const hasAnySelectedComponent = (row = {}) => {
+    return (row.availableComponents || []).some((c) => {
+      const selectedIds = row.selected_components?.[String(c.term_id)] || [];
+      return selectedIds.includes(c.component_id);
+    });
+  };
+
+  const componentRowHasVisibleConfig = (row = {}) =>
+    !row?.subject_id || hasAnySelectedComponent(row);
+
   const loadSubjectComponentsAuto = async (class_id, subject_id, session_id) => {
     const params = { class_id, subject_id };
     if (session_id) params.session_id = Number(session_id);
@@ -1041,8 +1270,10 @@ const FinalResultSummary = () => {
       })
     );
 
-    return rows.length
-      ? rows
+    const rowsWithComponents = rows.filter(hasAnySelectedComponent);
+
+    return rowsWithComponents.length
+      ? rowsWithComponents
       : [{ subject_id: "", selected_components: {}, availableComponents: [] }];
   };
 
@@ -1143,6 +1374,21 @@ const FinalResultSummary = () => {
         filters.session_id
       );
 
+      if (!availableComponents.length) {
+        Swal.fire(
+          "No Components",
+          "This subject has no exam components, so it will not be shown on the report card.",
+          "info"
+        );
+
+        setFilters((prev) => {
+          const updated = [...prev.subjectComponents];
+          updated[index] = { subject_id: "", availableComponents: [], selected_components: {} };
+          return { ...prev, subjectComponents: updated };
+        });
+        return;
+      }
+
       setFilters((prev) => {
         const updated = [...prev.subjectComponents];
         updated[index] = { subject_id, availableComponents, selected_components };
@@ -1224,7 +1470,7 @@ const FinalResultSummary = () => {
 
     for (const url of endpoints) {
       try {
-        const params = { class_id, section_id, term_id };
+        const params = { class_id, section_id, term_id, source: "register" }; // REPORT_CARD_DYNAMIC_INFO_V21
         if (session_id) params.session_id = Number(session_id);
         const res = await api.get(url, { params });
 
@@ -1295,6 +1541,10 @@ const FinalResultSummary = () => {
     [term2Id, filters.subjectComponents]
   );
 
+  const hasTerm1ComponentColumns = term1Id && term1Components.length > 0;
+  const hasTerm2ComponentColumns = term2Id && term2Components.length > 0;
+  const hasAnyScholasticComponentColumns = hasTerm1ComponentColumns || hasTerm2ComponentColumns;
+
   const isCompInTerm = (c, termId) => {
     if (!termId) return false;
     const exTerm = exams.find((e) => e.id === c.exam_id)?.term_id;
@@ -1325,6 +1575,36 @@ const FinalResultSummary = () => {
   const g = items.find((x) => x?.grade != null && String(x.grade).trim() !== "");
   return g?.grade || "-";
 };
+
+  const hasSubjectTermComponent = (student, subjectName, termId, componentId) => {
+    if (!termId) return false;
+
+    return (student?.components || []).some(
+      (c) =>
+        c.subject_name === subjectName &&
+        isCompInTerm(c, termId) &&
+        Number(c.component_id) === Number(componentId)
+    );
+  };
+
+  const getDisplaySubjectsForStudent = (student) =>
+    getNonDrawingSubjects(student).filter((subjectName) => {
+      if (!hasAnyScholasticComponentColumns) return false;
+
+      const hasTerm1 =
+        hasTerm1ComponentColumns &&
+        term1Components.some((c) =>
+          hasSubjectTermComponent(student, subjectName, term1Id, c.component_id)
+        );
+
+      const hasTerm2 =
+        hasTerm2ComponentColumns &&
+        term2Components.some((c) =>
+          hasSubjectTermComponent(student, subjectName, term2Id, c.component_id)
+        );
+
+      return hasTerm1 || hasTerm2;
+    });
 
   const getSubjectComponentCount = (student, subjectName) => {
     const ids = new Set();
@@ -1419,19 +1699,17 @@ const FinalResultSummary = () => {
     );
 
     const marksTotal = hasAnyMarks(items) ? sumMarksOnly(items) : null;
-    const hasWeightedScore = items.some((item) => isNumeric(item?.weighted_marks));
+
     const wTotal = sumWeightedOnly(items);
     const wMax = sumMaxWeight(items);
-    const percent = hasWeightedScore && wMax > 0 ? (wTotal / wMax) * 100 : null;
+    const percent = wMax > 0 ? (wTotal / wMax) * 100 : null;
     const grade = percent != null ? gradeFromSchema(percent, gradeSchema) : pickGrade(items);
 
     return { marksTotal, percent, grade };
   };
 
   const getStudentTermOverall = (student, termId) => {
-    const items = (student.components || []).filter(
-      (c) => isCompInTerm(c, termId) && !isCoScholasticComponent(c)
-    );
+    const items = (student.components || []).filter((c) => isCompInTerm(c, termId));
     const wTotal = sumWeightedOnly(items);
     const wMax = sumMaxWeight(items);
     const percent = wMax > 0 ? (wTotal / wMax) * 100 : null;
@@ -1439,61 +1717,11 @@ const FinalResultSummary = () => {
     return { total_weighted: wTotal, percent, grade };
   };
 
-  const mergeCoScholasticSubjectRows = (areasMap, student) => {
-    const normalizeName = (value) => String(value || "").trim().toLowerCase();
-    const hasGrade = (row) => {
-      const grade = String(row?.grade || "").trim();
-      return grade && grade !== "-";
-    };
-
-    const existingByName = new Map();
-    for (const [key, value] of areasMap.entries()) {
-      const normalized = normalizeName(value?.area_name);
-      if (normalized && !existingByName.has(normalized)) existingByName.set(normalized, key);
-    }
-
-    getCoScholasticSubjectNames(student).forEach((subjectName, index) => {
-      const matching = (student?.components || []).find(
-        (component) =>
-          component.subject_name === subjectName && isCoScholasticComponent(component)
-      );
-      const subjectId = matching?.subject_id ?? matching?.subjectId ?? null;
-      const t1Grade = term1Id ? getSubjectTermStats(student, subjectName, term1Id)?.grade || "-" : "-";
-      const t2Grade = term2Id ? getSubjectTermStats(student, subjectName, term2Id)?.grade || "-" : "-";
-      const normalized = normalizeName(subjectName);
-      const existingKey = existingByName.get(normalized);
-
-      if (existingKey !== undefined) {
-        const current = areasMap.get(existingKey) || {};
-        areasMap.set(existingKey, {
-          ...current,
-          area_name: current.area_name || subjectName,
-          t1: hasGrade(current.t1) ? current.t1 : { grade: t1Grade },
-          t2: hasGrade(current.t2) ? current.t2 : { grade: t2Grade },
-        });
-        return;
-      }
-
-      const key = `__subject__${subjectId || normalized || index}`;
-      areasMap.set(key, {
-        area_name: subjectName,
-        t1: { grade: t1Grade },
-        t2: { grade: t2Grade },
-        serial_order: 10000 + index,
-        source: "subject",
-      });
-      existingByName.set(normalized, key);
-    });
-
-    return areasMap;
-  };
-
   // Build a stable, school-agnostic data object for Smart Report Card Templates.
   // The Template Studio maps visual fields to these paths once; every student reuses them.
   const buildSmartTemplateData = (student, infoOverride = {}) => {
     const info = infoOverride || {};
     const allComponents = Array.isArray(student?.components) ? student.components : [];
-    const scholasticComponents = allComponents.filter((component) => !isCoScholasticComponent(component));
     const session = (sessions || []).find((item) => String(item.id) === String(filters.session_id)) || {};
     const className = info?.Class?.class_name || info?.class_name || "";
     const sectionName = info?.Section?.section_name || info?.section_name || "";
@@ -1501,7 +1729,26 @@ const FinalResultSummary = () => {
     const health = getPrimaryHealthInfo(info);
 
     const termBucket = (termId) => {
-      const att = termId ? attendanceByTerm[String(termId)]?.[student.id] : null;
+      let att = termId ? attendanceByTerm[String(termId)]?.[student.id] : null;
+      // REPORT_CARD_ATTENDANCE_FALLBACK_V23
+      // If the dedicated term attendance endpoint returns 0/0, reuse the
+      // auto-calculated Attendance Register summary already returned by
+      // /report-card-health when it has a real working-day count.
+      if (!att || (Number(att?.total_days || 0) <= 0 && Number(att?.present_days || 0) <= 0)) {
+        const healthWorking = Number(
+          health?.working_days ?? health?.auto_attendance?.working_days ?? 0
+        );
+        const healthPresent = Number(
+          health?.present_days ?? health?.auto_attendance?.present_days ?? 0
+        );
+        if (healthWorking > 0) {
+          att = {
+            total_days: healthWorking,
+            present_days: healthPresent,
+            source: "report_card_health_attendance",
+          };
+        }
+      }
       const pct = buildAttendancePercent(att);
       return {
         present_days: att?.present_days ?? "",
@@ -1511,6 +1758,11 @@ const FinalResultSummary = () => {
         percentage_text: pct == null ? "-" : `${Number(pct.toFixed ? pct.toFixed(2) : pct)}%`,
       };
     };
+
+    const reportAttendance = termBucket(term1Id || term2Id);
+    const effectiveAssessmentDate = health?.assessment_date || health?.date || new Date();
+    const ageAtAssessment = buildAgeAtAssessmentText(dobRaw, effectiveAssessmentDate);
+    const schoolInfo = institutionProfile || {};
 
     const marks = {};
     const subjectData = {};
@@ -1590,14 +1842,225 @@ const FinalResultSummary = () => {
       }
     }
 
-    const subjectNames = [...new Set(scholasticComponents.map((c) => c?.subject_name || c?.subject).filter(Boolean))];
+    // SMART_TABLE_DYNAMIC_WEIGHTAGE_V1
+    // Build the scholastic table from the actual assessment components returned by
+    // /report-card/detailed-summary.  The visible value is the component's
+    // weighted contribution, not the raw entered marks.
+    const formatSmartNumber = (value) => {
+      if (!isNumeric(value)) return "";
+      const n = Number(value);
+      return Number.isInteger(n) ? n : Number(n.toFixed(2));
+    };
+
+    const componentColumnMap = new Map();
+    for (const c of allComponents) {
+      const subjectName = c?.subject_name || c?.Subject?.name || c?.subject || "";
+      if (!subjectName || isDrawingSubject(subjectName)) continue;
+
+      const examTermId = Number(
+        exams.find((e) => Number(e.id) === Number(c?.exam_id))?.term_id || c?.term_id || 0
+      );
+      const componentLabel =
+        c?.abbreviation ||
+        c?.abbr ||
+        c?.short_name ||
+        c?.shortName ||
+        c?.code ||
+        c?.component?.abbreviation ||
+        c?.component?.abbr ||
+        c?.component_name ||
+        c?.componentName ||
+        c?.name ||
+        `Component ${c?.component_id || ""}`;
+      const componentId = c?.component_id ?? c?.componentId ?? componentLabel;
+      const columnKey = `c_${smartTemplateSlug(examTermId || "overall")}_${smartTemplateSlug(componentId)}_${smartTemplateSlug(componentLabel)}`;
+      const mapKey = `${examTermId || 0}__${String(componentId)}`;
+      const weightage = isNumeric(c?.weightage_percent) ? Number(c.weightage_percent) : null;
+
+      if (!componentColumnMap.has(mapKey)) {
+        componentColumnMap.set(mapKey, {
+          key: columnKey,
+          term_id: examTermId || 0,
+          component_id: componentId,
+          label: componentLabel,
+          weightages: new Set(),
+          is_internal: c?.is_internal ?? c?.component?.is_internal ?? null,
+          scholastic_type: c?.scholastic_type ?? c?.component?.scholastic_type ?? "Scholastic",
+        });
+      }
+      if (weightage != null) componentColumnMap.get(mapKey).weightages.add(formatSmartNumber(weightage));
+    }
+
+    // REPORT_CARD_GROUPED_ASSESSMENT_V24
+    const isInternalAssessmentComponent = (label) => {
+      const key = smartTemplateSlug(label);
+      const internalTokens = [
+        "nb", "nsm", "notebook", "notebook_submission", "notebook_submission_maintenance",
+        "paw", "project_assessment_work", "project_and_assessment_work",
+        "ei", "effort_improvement", "effort_and_improvement",
+        "crd", "class_work_regulation_discipline", "classwork_regulation_discipline",
+        "cwr", "class_work_regulation", "cpd", "class_participation_discipline",
+        "sea", "subject_enrichment", "subject_enrichment_activity"
+      ];
+      return internalTokens.some((token) => key === token || key.includes(token));
+    };
+
+    // SMCIS_REPORT_CARD_EXTERNAL_FIRST_V2
+    // Keep External assessment components together first (PT, HY),
+    // then Internal components, while preserving relative order inside each group.
+    const smartComponentColumns = Array.from(componentColumnMap.values())
+      .map((column, index) => {
+        const explicit = column?.is_internal;
+        const isInternal =
+          explicit === true || explicit === 1 || explicit === "1"
+            ? true
+            : explicit === false || explicit === 0 || explicit === "0"
+            ? false
+            : isInternalAssessmentComponent(column?.label);
+        return { ...column, is_internal: isInternal, __original_order: index };
+      })
+      .sort((a, b) => {
+        if (Boolean(a.is_internal) !== Boolean(b.is_internal)) {
+          return a.is_internal ? 1 : -1;
+        }
+        return Number(a.__original_order || 0) - Number(b.__original_order || 0);
+      });
+    const multipleTerms = new Set(smartComponentColumns.map((c) => Number(c.term_id || 0)).filter(Boolean)).size > 1;
+    // SMCIS_EXACT_REFERENCE_WIDTHS_V5
+    const componentWidth = smartComponentColumns.length ? 10 : 10;
+
+    const smartColumns = [
+      { id: "subject", label: "SUBJECT", source: "name", width: 19, align: "left" },
+      ...smartComponentColumns.map((column) => {
+        const weights = Array.from(column.weightages).filter((v) => v !== "");
+        const weightText = weights.length === 1 ? ` (${weights[0]})` : weights.length > 1 ? ` (${weights.join("/")})` : "";
+        const termPrefix = multipleTerms
+          ? Number(column.term_id) === Number(term1Id)
+            ? "T1 "
+            : Number(column.term_id) === Number(term2Id)
+            ? "T2 "
+            : `T${column.term_id} `
+          : "";
+        return {
+          id: column.key,
+          label: `${termPrefix}${column.label}${weightText}`.replace(/\s+\(/, "\n("),
+          source: `cells.${column.key}.display`,
+          width: componentWidth,
+          weightage_source: "weightage_percent",
+          group:
+            column.is_internal === true || column.is_internal === 1 || column.is_internal === "1"
+              ? "INTERNAL ASSESSMENT"
+              : column.is_internal === false || column.is_internal === 0 || column.is_internal === "0"
+              ? "EXTERNAL ASSESSMENT"
+              : isInternalAssessmentComponent(column.label)
+              ? "INTERNAL ASSESSMENT"
+              : "EXTERNAL ASSESSMENT",
+          align: "center",
+        };
+      }),
+      { id: "total", label: "TOTAL", source: "total_weighted", width: 10, align: "center" },
+      { id: "grade", label: "GRADE", source: "grade", width: 10, align: "center" },
+    ];
+
+    const smartSubjectNames = [
+      ...new Set(
+        allComponents
+          .map((c) => c?.subject_name || c?.Subject?.name || c?.subject)
+          .filter((name) => name && !isDrawingSubject(name))
+      ),
+    ];
+
+    const smartRows = smartSubjectNames.map((subjectName) => {
+      const subjectRows = allComponents.filter(
+        (c) => (c?.subject_name || c?.Subject?.name || c?.subject) === subjectName
+      );
+      const cells = {};
+
+      for (const column of smartComponentColumns) {
+        const matchingRows = subjectRows.filter((c) => {
+          const tid = Number(
+            exams.find((e) => Number(e.id) === Number(c?.exam_id))?.term_id || c?.term_id || 0
+          );
+          const cid = c?.component_id ?? c?.componentId;
+          return Number(tid || 0) === Number(column.term_id || 0) && String(cid) === String(column.component_id);
+        });
+
+        if (!matchingRows.length) {
+          cells[column.key] = { display: "" };
+          continue;
+        }
+
+        const absent = matchingRows.some((row) =>
+          ["A", "AB", "ABSENT"].includes(String(row?.attendance || "").trim().toUpperCase())
+        );
+        const hasWeighted = matchingRows.some((row) => isNumeric(row?.weighted_marks));
+        const directGrade = pickGrade(matchingRows);
+        const weighted = hasWeighted ? formatSmartNumber(sumWeightedOnly(matchingRows)) : "";
+        const maxWeight = formatSmartNumber(sumMaxWeight(matchingRows));
+
+        cells[column.key] = {
+          display: absent ? "AB" : hasWeighted ? weighted : directGrade !== "-" ? directGrade : "",
+          weighted_marks: weighted,
+          weightage_percent: maxWeight,
+          grade: directGrade,
+          attendance: matchingRows[0]?.attendance || "",
+        };
+      }
+
+      const weightedTotal = sumWeightedOnly(subjectRows);
+      const maxWeight = sumMaxWeight(subjectRows);
+      const percentage = maxWeight > 0 ? (weightedTotal / maxWeight) * 100 : null;
+
+      return {
+        name: subjectName,
+        cells,
+        total_weighted: formatSmartNumber(weightedTotal),
+        max_weighted: formatSmartNumber(maxWeight),
+        total_display: maxWeight > 0 ? `${formatSmartNumber(weightedTotal)} / ${formatSmartNumber(maxWeight)}` : "",
+        percentage: percentage == null ? "" : Number(percentage.toFixed(2)),
+        grade: percentage == null ? pickGrade(subjectRows) : gradeFromSchema(percentage, gradeSchema),
+      };
+    });
+
+    const smartChartRows = [...smartRows];
+    const totalCells = {};
+    for (const column of smartComponentColumns) {
+      const values = smartRows
+        .map((row) => Number(row?.cells?.[column.key]?.weighted_marks))
+        .filter((value) => Number.isFinite(value));
+      const sum = values.reduce((a, b) => a + b, 0);
+      totalCells[column.key] = {
+        display: values.length ? formatSmartNumber(sum) : "",
+        weighted_marks: values.length ? formatSmartNumber(sum) : "",
+      };
+    }
+    const grandWeighted = smartRows.reduce((sum, row) => sum + (Number(row?.total_weighted) || 0), 0);
+    const grandMax = smartRows.reduce((sum, row) => sum + (Number(row?.max_weighted) || 0), 0);
+    smartRows.push({
+      name: "TOTAL",
+      cells: totalCells,
+      total_weighted: formatSmartNumber(grandWeighted),
+      max_weighted: formatSmartNumber(grandMax),
+      percentage: grandMax > 0 ? Number(((grandWeighted / grandMax) * 100).toFixed(2)) : "",
+      grade: "",
+      is_total: true,
+    });
+
+    const smartTable = {
+      columns: smartColumns,
+      rows: smartRows,
+      chart_rows: smartChartRows,
+      value_mode: "WEIGHTED_MARKS",
+      heading_max_mode: "WEIGHTAGE",
+    };
+
+    const subjectNames = [...new Set(allComponents.map((c) => c?.subject_name || c?.subject).filter(Boolean))];
     for (const subjectName of subjectNames) {
-      const rows = scholasticComponents.filter((c) => (c?.subject_name || c?.subject) === subjectName);
+      const rows = allComponents.filter((c) => (c?.subject_name || c?.subject) === subjectName);
       const raw = hasAnyMarks(rows) ? sumMarksOnly(rows) : null;
       const weighted = sumWeightedOnly(rows);
       const maxWeight = sumMaxWeight(rows);
-      const hasWeightedScore = rows.some((row) => isNumeric(row?.weighted_marks));
-      const pct = hasWeightedScore && maxWeight > 0 ? (weighted / maxWeight) * 100 : null;
+      const pct = maxWeight > 0 ? (weighted / maxWeight) * 100 : null;
       const entry = {
         name: subjectName,
         total_raw: raw ?? "-",
@@ -1642,547 +2105,95 @@ const FinalResultSummary = () => {
     addCoTerm(term1Id, "term1");
     addCoTerm(term2Id, "term2");
 
-    const coSubjectNames = getCoScholasticSubjectNames(student);
-    for (const subjectName of coSubjectNames) {
-      const t1Grade = term1Id ? getSubjectTermStats(student, subjectName, term1Id)?.grade || "-" : "-";
-      const t2Grade = term2Id ? getSubjectTermStats(student, subjectName, term2Id)?.grade || "-" : "-";
-      for (const key of smartTemplateAliases(subjectName)) {
-        coScholastic[key] = {
-          ...(coScholastic[key] || {}),
-          term1: t1Grade,
-          term2: t2Grade,
-        };
-      }
-    }
-
-    const drawingAlreadyHandled = coSubjectNames.some(isDrawingSubject);
     const drawingT1 = getDrawingGradeForTerm(student, term1Id, exams, gradeSchema);
     const drawingT2 = getDrawingGradeForTerm(student, term2Id, exams, gradeSchema);
-    if (!drawingAlreadyHandled && (drawingT1 !== "-" || drawingT2 !== "-")) {
+    if (drawingT1 !== "-" || drawingT2 !== "-") {
       coScholastic.drawing = { term1: drawingT1, term2: drawingT2 };
     }
 
-
-    // SMART_TEMPLATE_CO_SCHOLASTIC_ROWS_V2
-    // Inline/smart report-card templates use `co_scholastic.rows` for the
-    // Co-Scholastic table. Keep the older `coscholastic.<slug>.term*` object as
-    // well, but also expose real rows so Subject.Type = Co-Scholastic subjects
-    // appear in Part-2 instead of only disappearing from Part-1.
-    const coScholasticRowsByName = new Map();
-    const normalizeCoRowName = (value) => String(value || "").trim().toLowerCase();
-    const hasDisplayGrade = (value) => {
-      const grade = String(value ?? "").trim();
-      return Boolean(grade && grade !== "-");
-    };
-
-    const ensureCoRow = (name, serialOrder = 0, source = "area") => {
-      const cleanName = String(name || "").trim();
-      if (!cleanName) return null;
-      const key = normalizeCoRowName(cleanName);
-      if (!coScholasticRowsByName.has(key)) {
-        coScholasticRowsByName.set(key, {
-          name: cleanName,
-          term1: "-",
-          term2: "-",
-          serial_order: Number(serialOrder || 0),
-          source,
-        });
-      }
-      return coScholasticRowsByName.get(key);
-    };
-
-    const collectMappedCoRows = (termId, termKey) => {
-      if (!termId) return;
-      const bucket = coScholasticByTerm[String(termId)] || {};
-      const studentRows = Object.values(bucket[String(student.id)] || {});
-      studentRows.forEach((row, index) => {
-        const areaName = row?.area_name || row?.name || `Area ${index + 1}`;
-        const target = ensureCoRow(
-          areaName,
-          row?.serial_order ?? row?.area_order ?? index,
-          "area"
-        );
-        if (!target) return;
-        const grade = row?.grade || row?.value || "-";
-        if (hasDisplayGrade(grade) || !hasDisplayGrade(target[termKey])) {
-          target[termKey] = grade;
-        }
-      });
-    };
-
-    collectMappedCoRows(term1Id, "term1");
-    collectMappedCoRows(term2Id, "term2");
-
-    coSubjectNames.forEach((subjectName, index) => {
-      const target = ensureCoRow(subjectName, 10000 + index, "subject");
-      if (!target) return;
-      const t1Grade = term1Id
-        ? getSubjectTermStats(student, subjectName, term1Id)?.grade || "-"
-        : "-";
-      const t2Grade = term2Id
-        ? getSubjectTermStats(student, subjectName, term2Id)?.grade || "-"
-        : "-";
-      if (hasDisplayGrade(t1Grade) || !hasDisplayGrade(target.term1)) target.term1 = t1Grade;
-      if (hasDisplayGrade(t2Grade) || !hasDisplayGrade(target.term2)) target.term2 = t2Grade;
-    });
-
-    if (!drawingAlreadyHandled && (drawingT1 !== "-" || drawingT2 !== "-")) {
-      const target = ensureCoRow("Drawing", 9999, "drawing");
-      if (target) {
-        if (hasDisplayGrade(drawingT1)) target.term1 = drawingT1;
-        if (hasDisplayGrade(drawingT2)) target.term2 = drawingT2;
-      }
-    }
-
-    const smartCoScholasticRows = Array.from(coScholasticRowsByName.values())
-      .sort((a, b) => Number(a.serial_order || 0) - Number(b.serial_order || 0))
-      .map((row) => {
-        // A one-term report card (for example Half-Yearly) has one Grade column.
-        // If two terms are selected, prefer the later selected term while still
-        // exposing both values for future/custom templates.
-        const preferred = term2Id
-          ? [row.term2, row.term1]
-          : [row.term1, row.term2];
-        const grade = preferred.find(hasDisplayGrade) || "-";
-        return {
-          name: row.name,
-          grade,
-          term1_grade: row.term1 || "-",
-          term2_grade: row.term2 || "-",
-          source: row.source,
-        };
-      });
-
-    // SMCIS_DYNAMIC_CO_SCHOLASTIC_ROWS_V4
-    // SMCIS Dynamic Part-2 reads `co_scholastic.rows`.
-    // Build it from the Subject master FIRST (so a subject marked Co-Scholastic
-    // still appears even if the detailed-summary component list is incomplete),
-    // then merge the normal Co-Scholastic Area module rows and available grades.
-    const dynamicCoRowsV4Map = new Map();
-    const dynamicCoKeyV4 = (value) => String(value || "").trim().toLowerCase();
-    const dynamicHasGradeV4 = (value) => {
-      const grade = String(value ?? "").trim();
-      return Boolean(grade && grade !== "-");
-    };
-
-    const dynamicPutCoRowV4 = (name, grade = "-", serialOrder = 0, source = "area") => {
-      const cleanName = String(name || "").trim();
-      if (!cleanName) return;
-      const key = dynamicCoKeyV4(cleanName);
-      const nextGrade = dynamicHasGradeV4(grade) ? String(grade).trim() : "-";
-      const existing = dynamicCoRowsV4Map.get(key);
-
-      if (!existing) {
-        dynamicCoRowsV4Map.set(key, {
-          name: cleanName,
-          grade: nextGrade,
-          serial_order: Number(serialOrder || 0),
-          source,
-        });
-        return;
-      }
-
-      if (!dynamicHasGradeV4(existing.grade) && dynamicHasGradeV4(nextGrade)) {
-        existing.grade = nextGrade;
-      }
-      if (Number(serialOrder || 0) < Number(existing.serial_order || 0)) {
-        existing.serial_order = Number(serialOrder || 0);
-      }
-    };
-
-    // 1) Existing Co-Scholastic Area evaluations (Drawing, Work Education, etc.).
-    // For this SMCIS one-column Part-2 table, prefer the later selected term.
-    const dynamicPreferredTermV4 = term2Id || term1Id || null;
-    if (dynamicPreferredTermV4) {
-      const bucket = coScholasticByTerm[String(dynamicPreferredTermV4)] || {};
-      const areaRows = Object.values(bucket[String(student.id)] || {});
-      areaRows.forEach((row, index) => {
-        dynamicPutCoRowV4(
-          row?.area_name || row?.name || `Activity ${index + 1}`,
-          row?.grade || row?.value || "-",
-          row?.serial_order ?? row?.area_order ?? index,
-          "area"
-        );
-      });
-    }
-
-    // 2) Subject master is authoritative for Scholastic vs Co-Scholastic.
-    // Also merge any component-derived names as a fallback for older responses.
-    const dynamicCoSubjectCatalogV4 = new Map();
-    (subjects || []).forEach((subject, index) => {
-      if (normalizeSubjectType(subject?.type) !== "Co-Scholastic") return;
-      const name = String(subject?.name || "").trim();
-      if (!name) return;
-      dynamicCoSubjectCatalogV4.set(dynamicCoKeyV4(name), {
-        id: subject?.id ?? null,
-        name,
-        order: index,
-      });
-    });
-
-    (coSubjectNames || []).forEach((name, index) => {
-      const cleanName = String(name || "").trim();
-      if (!cleanName) return;
-      const key = dynamicCoKeyV4(cleanName);
-      if (dynamicCoSubjectCatalogV4.has(key)) return;
-      const matching = (student?.components || []).find(
-        (component) => dynamicCoKeyV4(component?.subject_name || component?.subject) === key
-      );
-      dynamicCoSubjectCatalogV4.set(key, {
-        id: matching?.subject_id ?? matching?.subjectId ?? null,
-        name: cleanName,
-        order: 1000 + index,
-      });
-    });
-
-    Array.from(dynamicCoSubjectCatalogV4.values()).forEach((subjectMeta, index) => {
-      const subjectName = subjectMeta.name;
-      const subjectId = subjectMeta.id;
-      const subjectKey = dynamicCoKeyV4(subjectName);
-      const subjectRows = (student?.components || []).filter((component) => {
-        const sameId =
-          subjectId != null &&
-          String(component?.subject_id ?? component?.subjectId ?? "") === String(subjectId);
-        const sameName =
-          dynamicCoKeyV4(component?.subject_name || component?.subject) === subjectKey;
-        return sameId || sameName;
-      });
-
-      const t1Grade = term1Id
-        ? getSubjectTermStats(student, subjectName, term1Id)?.grade || "-"
-        : "-";
-      const t2Grade = term2Id
-        ? getSubjectTermStats(student, subjectName, term2Id)?.grade || "-"
-        : "-";
-      const directGrade = subjectRows
-        .map(
-          (row) =>
-            row?.grade ??
-            row?.weighted_grade ??
-            row?.grade_obtained ??
-            row?.grade_value
-        )
-        .find(dynamicHasGradeV4);
-      const subjectGrade =
-        subjectId != null
-          ? student?.subject_grades?.[subjectId] ?? student?.subject_grades?.[String(subjectId)]
-          : null;
-
-      const preferredGrade = term2Id
-        ? [t2Grade, t1Grade, directGrade, subjectGrade].find(dynamicHasGradeV4)
-        : [t1Grade, t2Grade, directGrade, subjectGrade].find(dynamicHasGradeV4);
-
-      // Always add a Subject-master Co-Scholastic row. If grade entry has not
-      // been done yet it intentionally displays '-' instead of disappearing.
-      dynamicPutCoRowV4(
-        subjectName,
-        preferredGrade || "-",
-        10000 + Number(subjectMeta.order ?? index),
-        "subject"
-      );
-    });
-
-    // 3) Legacy Drawing fallback for old SMCIS records.
-    if (!(coSubjectNames || []).some(isDrawingSubject)) {
-      const drawingGrade = term2Id
-        ? [drawingT2, drawingT1].find(dynamicHasGradeV4)
-        : [drawingT1, drawingT2].find(dynamicHasGradeV4);
-      if (dynamicHasGradeV4(drawingGrade)) {
-        dynamicPutCoRowV4("Drawing", drawingGrade, 9999, "drawing");
-      }
-    }
-
-    const dynamicCoScholasticRowsV4 = Array.from(dynamicCoRowsV4Map.values())
-      .sort((a, b) => Number(a.serial_order || 0) - Number(b.serial_order || 0))
-      .map(({ name, grade, source }) => ({ name, grade: grade || "-", source }));
-
-    // SMCIS_DYNAMIC_ONLY_CO_SCHOLASTIC_V5
-    // IMPORTANT: this block is intentionally limited to the coded SMCIS
-    // Dynamic template. Other report-card templates keep their existing path.
-    const smcisDynamicCoScholasticRowsV5 = (() => {
-      if (selectedReportTemplate?.template_key !== "smcis_dynamic_term_report_card_v1") return [];
-
-      const rowsMap = new Map();
-      const keyOf = (value) => String(value || "").trim().toLowerCase();
-      const validGrade = (value) => {
-        const v = String(value ?? "").trim();
-        return Boolean(v && v !== "-");
-      };
-      const putRow = (name, grade = "-", order = 0, source = "area") => {
-        const cleanName = String(name || "").trim();
-        if (!cleanName) return;
-        const key = keyOf(cleanName);
-        const next = {
-          name: cleanName,
-          grade: validGrade(grade) ? String(grade).trim() : "-",
-          serial_order: Number(order || 0),
-          source,
-        };
-        const old = rowsMap.get(key);
-        if (!old) {
-          rowsMap.set(key, next);
-          return;
-        }
-        if (!validGrade(old.grade) && validGrade(next.grade)) old.grade = next.grade;
-        if (Number(next.serial_order) < Number(old.serial_order || 0)) old.serial_order = next.serial_order;
-      };
-
-      // 1) Existing Co-Scholastic Area module rows (Drawing etc.).
-      const displayTermId = term2Id || term1Id || null;
-      if (displayTermId) {
-        const bucket = coScholasticByTerm[String(displayTermId)] || {};
-        const areaRows = Object.values(bucket[String(student.id)] || {});
-        areaRows.forEach((row, index) => {
-          putRow(
-            row?.area_name || row?.name || `Activity ${index + 1}`,
-            row?.grade || row?.value || "-",
-            row?.serial_order ?? row?.area_order ?? index,
-            "area"
-          );
-        });
-      }
-
-      // 2) Subjects explicitly marked Co-Scholastic in Subject Master.
-      // This is the source needed for General Knowledge / Value Education etc.
-      (subjects || []).forEach((subject, index) => {
-        const type = String(subject?.type || "").trim().toLowerCase();
-        if (type !== "co-scholastic" && type !== "coscholastic") return;
-
-        const subjectName = String(subject?.name || "").trim();
-        if (!subjectName) return;
-        const subjectId = subject?.id;
-        const subjectKey = keyOf(subjectName);
-        const componentRows = (student?.components || []).filter((component) => {
-          const byId = subjectId != null && String(component?.subject_id ?? component?.subjectId ?? "") === String(subjectId);
-          const byName = keyOf(component?.subject_name || component?.subject) === subjectKey;
-          return byId || byName;
-        });
-
-        const directGrade = pickGrade(componentRows);
-        let termGrade = "-";
-        if (displayTermId) {
-          termGrade = getSubjectTermStats(student, subjectName, displayTermId)?.grade || "-";
-        }
-        const grade = validGrade(directGrade) ? directGrade : termGrade;
-
-        // Always include the row. If grade entry is pending, show '-'.
-        putRow(subjectName, grade, 10000 + index, "subject");
-      });
-
-      // 3) Old SMCIS data sometimes has Drawing only through the legacy helper.
-      const drawingGrade = term2Id
-        ? [drawingT2, drawingT1].find(validGrade)
-        : [drawingT1, drawingT2].find(validGrade);
-      if (validGrade(drawingGrade)) putRow("Drawing", drawingGrade, 9000, "drawing");
-
-      return Array.from(rowsMap.values())
-        .sort((a, b) => Number(a.serial_order || 0) - Number(b.serial_order || 0))
-        .map(({ name, grade, source }) => ({ name, grade: grade || "-", source }));
-    })();
-
-    // SMCIS_CODED_CO_SCHOLASTIC_V6
-    // This is ONLY the coded SMCIS inline-HTML report card. It does not change
-    // Visual Designer layouts or other report-card templates.
-    // Part-2 must contain BOTH:
-    //   1) every Co-Scholastic Area mapped to the class (even if grade is pending),
-    //   2) grade-only subjects whose Subject.type is Co-Scholastic.
-    const smcisCodedCoScholasticRowsV6 = (() => {
-      if (selectedReportTemplate?.template_key !== "smcis_dynamic_term_report_card_v1") return [];
-
-      const rowsByName = new Map();
-      const norm = (value) => String(value || "").trim().toLowerCase();
-      const isRealGrade = (value) => {
-        const v = String(value ?? "").trim();
-        return Boolean(v && v !== "-");
-      };
-      const isCoType = (value) => {
-        const v = norm(value).replace(/[_\s]+/g, "-");
-        return v === "co-scholastic" || v === "coscholastic";
-      };
-
-      const ensureRow = (name, serialOrder = 0, source = "area") => {
-        const cleanName = String(name || "").trim();
-        if (!cleanName) return null;
-        const key = norm(cleanName);
-        let row = rowsByName.get(key);
-        if (!row) {
-          row = {
-            name: cleanName,
-            term1: "-",
-            term2: "-",
-            serial_order: Number(serialOrder || 0),
-            source,
-          };
-          rowsByName.set(key, row);
-        } else {
-          const nextOrder = Number(serialOrder || 0);
-          if (nextOrder && (!row.serial_order || nextOrder < Number(row.serial_order))) {
-            row.serial_order = nextOrder;
-          }
-        }
-        return row;
-      };
-
-      const mergeAreaTerm = (termId, termKey) => {
-        if (!termId) return;
-        const bucket = coScholasticByTerm[String(termId)] || {};
-
-        // Seed ALL areas mapped for this class/term. This is the missing part in
-        // the previous patches: `_areas` exists even when a student grade has not
-        // yet been entered.
-        const mappedAreas = Array.isArray(bucket?._areas)
-          ? bucket._areas
-          : Object.values(bucket?._areas || {});
-
-        mappedAreas.forEach((area, index) => {
-          ensureRow(
-            area?.area_name || area?.name || `Activity ${index + 1}`,
-            area?.serial_order ?? index,
-            "mapped-area"
-          );
-        });
-
-        // Overlay this student's saved values on top of the mapped rows.
-        const studentRows = Object.values(bucket?.[String(student.id)] || {});
-        studentRows.forEach((item, index) => {
-          const target = ensureRow(
-            item?.area_name || item?.name || `Activity ${index + 1}`,
-            item?.serial_order ?? item?.area_order ?? index,
-            "area-value"
-          );
-          if (!target) return;
-          const grade = item?.grade || item?.value || "-";
-          if (isRealGrade(grade) || !isRealGrade(target[termKey])) {
-            target[termKey] = grade;
-          }
-        });
-      };
-
-      mergeAreaTerm(term1Id, "term1");
-      mergeAreaTerm(term2Id, "term2");
-
-      // Build a class-relevant Co-Scholastic subject catalogue. /subjects is a
-      // global list, so only keep subjects that have assessment components for
-      // this selected class OR are actually present in this student's result.
-      const componentSubjectIds = new Set(
-        (student?.components || [])
-          .map((c) => c?.subject_id ?? c?.subjectId)
-          .filter((id) => id != null && String(id).trim() !== "")
-          .map((id) => String(id))
-      );
-      const componentSubjectNames = new Set(
-        (student?.components || [])
-          .map((c) => norm(c?.subject_name || c?.subject || c?.Subject?.name))
-          .filter(Boolean)
-      );
-      const configuredSubjectIds = new Set(
-        (filters?.subjectComponents || [])
-          .filter((sc) => Array.isArray(sc?.availableComponents) && sc.availableComponents.length > 0)
-          .map((sc) => String(sc?.subject_id || ""))
-          .filter(Boolean)
-      );
-
-      const subjectCatalog = new Map();
-      (subjects || []).forEach((subject, index) => {
-        if (!isCoType(subject?.type)) return;
-        const id = subject?.id != null ? String(subject.id) : "";
-        const name = String(subject?.name || "").trim();
-        if (!name) return;
-        const relevant =
-          (id && (componentSubjectIds.has(id) || configuredSubjectIds.has(id))) ||
-          componentSubjectNames.has(norm(name));
-        if (!relevant) return;
-        subjectCatalog.set(norm(name), { id: subject?.id ?? null, name, order: index });
-      });
-
-      // Fallback to the detailed-summary metadata. This catches older data where
-      // the Subject master list was not loaded yet but subject_type is present.
-      (student?.components || []).forEach((component, index) => {
-        if (!isCoType(component?.subject_type ?? component?.subjectType)) return;
-        const name = String(component?.subject_name || component?.subject || component?.Subject?.name || "").trim();
-        if (!name) return;
-        const key = norm(name);
-        if (!subjectCatalog.has(key)) {
-          subjectCatalog.set(key, {
-            id: component?.subject_id ?? component?.subjectId ?? null,
-            name,
-            order: 1000 + index,
-          });
-        }
-      });
-
-      Array.from(subjectCatalog.values()).forEach((meta, index) => {
-        const target = ensureRow(meta.name, 10000 + Number(meta.order ?? index), "co-scholastic-subject");
-        if (!target) return;
-
-        const subjectRows = (student?.components || []).filter((component) => {
-          const sameId =
-            meta.id != null &&
-            String(component?.subject_id ?? component?.subjectId ?? "") === String(meta.id);
-          const sameName =
-            norm(component?.subject_name || component?.subject || component?.Subject?.name) === norm(meta.name);
-          return sameId || sameName;
-        });
-
-        const t1Grade = term1Id
-          ? getSubjectTermStats(student, meta.name, term1Id)?.grade || "-"
-          : "-";
-        const t2Grade = term2Id
-          ? getSubjectTermStats(student, meta.name, term2Id)?.grade || "-"
-          : "-";
-        const directGrade = subjectRows
-          .map((row) => row?.grade ?? row?.weighted_grade ?? row?.grade_obtained ?? row?.grade_value)
-          .find(isRealGrade);
-        const storedSubjectGrade = meta.id != null
-          ? student?.subject_grades?.[meta.id] ?? student?.subject_grades?.[String(meta.id)]
-          : null;
-
-        if (isRealGrade(t1Grade)) target.term1 = t1Grade;
-        if (isRealGrade(t2Grade)) target.term2 = t2Grade;
-
-        // If only one direct grade is available, use it for the report's selected
-        // term rather than hiding the subject.
-        const fallbackGrade = [directGrade, storedSubjectGrade].find(isRealGrade);
-        if (isRealGrade(fallbackGrade)) {
-          if (term2Id && !isRealGrade(target.term2)) target.term2 = fallbackGrade;
-          else if (!isRealGrade(target.term1)) target.term1 = fallbackGrade;
-        }
-      });
-
-      // Legacy SMCIS Drawing calculation: add only when no mapped/subject row
-      // with the same name already exists.
-      const drawingT1V6 = getDrawingGradeForTerm(student, term1Id, exams, gradeSchema);
-      const drawingT2V6 = getDrawingGradeForTerm(student, term2Id, exams, gradeSchema);
-      if (isRealGrade(drawingT1V6) || isRealGrade(drawingT2V6)) {
-        const drawing = ensureRow("Drawing", 9000, "legacy-drawing");
-        if (drawing) {
-          if (isRealGrade(drawingT1V6) && !isRealGrade(drawing.term1)) drawing.term1 = drawingT1V6;
-          if (isRealGrade(drawingT2V6) && !isRealGrade(drawing.term2)) drawing.term2 = drawingT2V6;
-        }
-      }
-
-      return Array.from(rowsByName.values())
-        .sort((a, b) => Number(a.serial_order || 0) - Number(b.serial_order || 0))
-        .map((row) => {
-          const preferred = term2Id ? [row.term2, row.term1] : [row.term1, row.term2];
-          return {
-            name: row.name,
-            grade: preferred.find(isRealGrade) || "-",
-            source: row.source,
-          };
-        });
-    })();
-
-    const weightedTotal = sumWeightedOnly(scholasticComponents);
-    const maxWeightTotal = sumMaxWeight(scholasticComponents);
+    const weightedTotal = sumWeightedOnly(allComponents);
+    const maxWeightTotal = sumMaxWeight(allComponents);
     const overallPct = maxWeightTotal > 0 ? (weightedTotal / maxWeightTotal) * 100 : null;
-    const rawTotal = hasAnyMarks(scholasticComponents) ? sumMarksOnly(scholasticComponents) : null;
-    const rawMax = scholasticComponents.reduce((sum, row) => sum + (isNumeric(row?.max_marks) ? Number(row.max_marks) : 0), 0);
+    const rawTotal = hasAnyMarks(allComponents) ? sumMarksOnly(allComponents) : null;
+    const rawMax = allComponents.reduce((sum, row) => sum + (isNumeric(row?.max_marks) ? Number(row.max_marks) : 0), 0);
     const term1Overall = term1Id ? getStudentTermOverall(student, term1Id) : null;
     const term2Overall = term2Id ? getStudentTermOverall(student, term2Id) : null;
     const r1 = term1Id ? remarksByTerm[String(term1Id)]?.[student.id] : null;
     const r2 = term2Id ? remarksByTerm[String(term2Id)]?.[student.id] : null;
     const promotion = term2Id ? promotionDecisionByTerm[String(term2Id)]?.[student.id] : null;
+
+    const selectedTermIdsForReport = [...new Set(
+      (filters?.exam_ids || [])
+        .map((examId) => Number(exams.find((e) => Number(e.id) === Number(examId))?.term_id || 0))
+        .filter(Boolean)
+    )];
+    const reportTermId = selectedTermIdsForReport.length === 1 ? selectedTermIdsForReport[0] : (term1Id || term2Id || null);
+    const reportExams = (filters?.exam_ids || [])
+      .map((examId) => exams.find((e) => Number(e.id) === Number(examId)))
+      .filter(Boolean);
+    const firstReportExam = reportExams[0] || null;
+    const reportTermLabel =
+      firstReportExam?.Term?.name ||
+      firstReportExam?.term?.name ||
+      firstReportExam?.term_name ||
+      (selectedTermIdsForReport.length === 1 ? firstReportExam?.name : null) ||
+      (selectedTermIdsForReport.length > 1 ? "FINAL REPORT" : "REPORT CARD");
+
+    const coScholasticRowsMap = new Map();
+    const collectCoRows = (termId, termKey) => {
+      if (!termId) return;
+      const bucket = coScholasticByTerm[String(termId)] || {};
+      const rows = Object.values(bucket[String(student.id)] || {});
+      rows.forEach((row) => {
+        const name = row?.area_name || row?.name || `Activity ${row?.area_id || ""}`;
+        const key = String(row?.area_id || smartTemplateSlug(name));
+        if (!coScholasticRowsMap.has(key)) coScholasticRowsMap.set(key, { name, term1: "", term2: "", grade: "" });
+        const target = coScholasticRowsMap.get(key);
+        const grade = row?.grade || row?.value || "";
+        target[termKey] = grade;
+        if (Number(termId) === Number(reportTermId)) target.grade = grade;
+      });
+    };
+    collectCoRows(term1Id, "term1");
+    collectCoRows(term2Id, "term2");
+    if (drawingT1 !== "-" || drawingT2 !== "-") {
+      coScholasticRowsMap.set("drawing", {
+        name: "Drawing",
+        term1: drawingT1 === "-" ? "" : drawingT1,
+        term2: drawingT2 === "-" ? "" : drawingT2,
+        grade: Number(reportTermId) === Number(term2Id) ? drawingT2 : drawingT1,
+      });
+    }
+
+    const coScholasticRows = Array.from(coScholasticRowsMap.values()).map((row) => ({
+      ...row,
+      grade: row.grade && row.grade !== "-" ? row.grade : (Number(reportTermId) === Number(term2Id) ? row.term2 : row.term1) || row.term2 || row.term1 || "-",
+    }));
+
+    const dynamicReportAttendance = termBucket(reportTermId || term1Id || term2Id);
+
+    const assessmentInfoRows = smartComponentColumns.map((column) => {
+      const weights = Array.from(column.weightages).filter((v) => v !== "");
+      return {
+        component: column.label || "Assessment",
+        assessment_type:
+          column.is_internal === true || column.is_internal === 1 || column.is_internal === "1"
+            ? "Internal"
+            : column.is_internal === false || column.is_internal === 0 || column.is_internal === "0"
+            ? "External"
+            : isInternalAssessmentComponent(column.label) ? "Internal" : "External",
+        weightage: weights.length ? `${weights.join("/")} Marks` : "-",
+      };
+    });
+
+    const gradingScaleRows = (gradeSchema || [])
+      .slice()
+      .sort((a, b) => Number(b?.max_percent || 0) - Number(a?.max_percent || 0))
+      .map((g) => ({
+        grade: g?.grade || "-",
+        scale: g?.description || "-",
+        marks: `${g?.min_percent ?? "-"}-${g?.max_percent ?? "-"}%`,
+      }));
 
     return {
       school: {
@@ -2190,8 +2201,16 @@ const FinalResultSummary = () => {
           getReportCardFormatValue("school_name") ||
           getReportCardFormatValue("institution_name") ||
           selectedReportTemplate?.school_name ||
+          schoolInfo?.name ||
           "",
-        logo_url: getReportCardSchoolLogoUrl() || "",
+        logo_url: getReportCardSchoolLogoUrl() || buildPublicAssetURL(schoolInfo?.logo || schoolInfo?.picture || "") || "",
+        address: schoolInfo?.address_line || schoolInfo?.address || "-",
+        email: schoolInfo?.email || "-",
+        phone: schoolInfo?.phone || "-",
+        website: schoolInfo?.website || "-",
+        affiliation_number: schoolInfo?.affiliation_number || "-",
+        udise_number: schoolInfo?.udise_number || "-",
+        school_code: schoolInfo?.school_code || "-",
       },
       smart_table: {
         rows: smartTableRows,
@@ -2206,7 +2225,15 @@ const FinalResultSummary = () => {
         class_section: [className, sectionName].filter(Boolean).join(" - ") || "-",
         father_name: info?.father_name || "-",
         mother_name: info?.mother_name || "-",
+        aadhaar_number: info?.aadhaar_number || info?.aadhar_number || info?.aadhaar || info?.aadhar || "-",
+        pen_number: info?.pen_number || info?.pen || "-",
+        gender: info?.gender || "-",
+        address: info?.address || "-",
+        father_phone: info?.father_phone || "-",
+        mother_phone: info?.mother_phone || "-",
         dob: formatDOB(dobRaw),
+        age_at_assessment: ageAtAssessment,
+        assessment_date: formatDisplayDate(effectiveAssessmentDate),
         blood_group: info?.blood_group_snapshot || info?.blood_group || info?.b_group || "-",
         photo_data_url: info?.__pdfPhotoSrc || getStudentPhotoURL(info) || "",
       },
@@ -2214,6 +2241,14 @@ const FinalResultSummary = () => {
         id: session?.id || filters.session_id || null,
         name: session?.name || "-",
       },
+      report: {
+        term_id: reportTermId,
+        term_label: String(reportTermLabel || "REPORT CARD").toUpperCase(),
+        generated_date: formatDisplayDate(new Date()),
+      },
+      assessment_info: { rows: assessmentInfoRows },
+      grading_scale: { rows: gradingScaleRows },
+      co_scholastic: { rows: coScholasticRows },
       result: {
         total_raw: rawTotal ?? "-",
         max_raw: rawMax || "-",
@@ -2223,10 +2258,16 @@ const FinalResultSummary = () => {
         percentage_text: overallPct == null ? "-" : `${Number(overallPct.toFixed(2))}%`,
         grade: overallPct == null ? "-" : gradeFromSchema(overallPct, gradeSchema),
         rank: hasDisplayRank(student?.rank) ? student.rank : "-",
+        declaration:
+          promotion?.promotion_status ||
+          promotion?.result_status ||
+          promotion?.status ||
+          "-",
         term1: term1Overall || {},
         term2: term2Overall || {},
       },
       attendance: {
+        report: dynamicReportAttendance,
         term1: termBucket(term1Id),
         term2: termBucket(term2Id),
       },
@@ -2238,11 +2279,9 @@ const FinalResultSummary = () => {
       health,
       promotion: promotion || {},
       marks,
+      smart_table: smartTable,
       subjects: subjectData,
       coscholastic: coScholastic,
-      co_scholastic: selectedReportTemplate?.template_key === "smcis_dynamic_term_report_card_v1"
-        ? { rows: smcisCodedCoScholasticRowsV6 }
-        : { rows: dynamicCoScholasticRowsV4 },
     };
   };
 
@@ -2255,7 +2294,7 @@ const FinalResultSummary = () => {
     setLoading(true);
 
     const subjectComponentsPayload = (filters.subjectComponents || [])
-      .filter((sc) => sc.subject_id)
+      .filter((sc) => sc.subject_id && hasAnySelectedComponent(sc))
       .map((sc) => ({
         subject_id: Number(sc.subject_id),
         selected_components: sc.selected_components || {},
@@ -2275,24 +2314,7 @@ const FinalResultSummary = () => {
 
     try {
       const res = await api.post("/report-card/detailed-summary", payload);
-      const subjectTypeById = new Map(
-        (subjects || []).map((subject) => [String(subject.id), normalizeSubjectType(subject.type)])
-      );
-      const subjectTypeByName = new Map(
-        (subjects || []).map((subject) => [String(subject.name || "").trim().toLowerCase(), normalizeSubjectType(subject.type)])
-      );
-      const reportStudents = (res.data.students || []).map((student) => ({
-        ...student,
-        components: (student?.components || []).map((component) => ({
-          ...component,
-          subject_type: normalizeSubjectType(
-            component?.subject_type ??
-              component?.subjectType ??
-              subjectTypeById.get(String(component?.subject_id ?? component?.subjectId ?? "")) ??
-              subjectTypeByName.get(String(component?.subject_name || "").trim().toLowerCase())
-          ),
-        })),
-      }));
+      const reportStudents = res.data.students || [];
 
       if (!reportStudents.length) {
         Swal.fire("No Data", "No students found for the selected filters", "info");
@@ -2340,6 +2362,49 @@ const FinalResultSummary = () => {
         }
       } catch (photoMergeError) {
         console.warn("Student photo fallback merge skipped:", photoMergeError);
+      }
+
+      // ✅ Report Card Health details for junior/primary + classes 1 to 8.
+      // Health is saved exam-wise, so try selected exams first and loaded exams as fallback.
+      try {
+        const healthExamIds = getHealthExamIds(exam_ids, exams);
+        const mergedHealthStudentIds = new Set();
+
+        for (const healthExamId of healthExamIds) {
+          const healthRes = await api.get("/report-card-health", {
+            params: {
+              session_id: Number(session_id),
+              class_id: Number(class_id),
+              section_id: Number(section_id),
+              exam_id: Number(healthExamId),
+            },
+          });
+
+          const healthRows = normalizeHealthRowsPayload(healthRes.data);
+          console.log("✅ REPORT CARD HEALTH ROWS:", {
+            exam_id: healthExamId,
+            count: healthRows.length,
+          });
+
+          for (const h of healthRows) {
+            const sid = Number(h.student_id || h.studentId || h.id);
+            if (!sid) continue;
+
+            // Do not overwrite a student once health details are found from a selected exam.
+            // The first matching exam in healthExamIds wins.
+            if (mergedHealthStudentIds.has(sid)) continue;
+
+            studentMap[sid] = mergeHealthRowIntoStudentInfo(studentMap[sid] || {}, h);
+            mergedHealthStudentIds.add(sid);
+          }
+        }
+      } catch (healthError) {
+        // Do not block report card generation if health details are not entered yet
+        // or the current user is not allowed to access this optional module.
+        console.warn(
+          "Report card health details skipped:",
+          healthError?.response?.status || healthError?.message || healthError
+        );
       }
 
       console.log("✅ REPORT CARD STUDENT SAMPLE:", Object.values(studentMap)[0]);
@@ -2469,37 +2534,45 @@ const FinalResultSummary = () => {
   const formatPercent = (p) => (p != null ? `${formatNumber(p)}%` : "-");
 
   const buildScholasticHeaderHtml_TermWise = () => {
-    const t1Cols = (term1Components?.length || 0) + (showTotals ? 2 : 0);
-    const t2Cols = (term2Components?.length || 0) + (showTotals ? 2 : 0);
-    const gCols = showTotals ? 2 : 0;
+    const showT1 = Boolean(hasTerm1ComponentColumns);
+    const showT2 = Boolean(hasTerm2ComponentColumns);
+    const showGrand = showTotals && (showT1 || showT2);
+
+    if (!showT1 && !showT2 && !showGrand) {
+      return `<tr><th class="th-subject">Subject</th></tr>`;
+    }
+
+    const t1Cols = showT1 ? term1Components.length + (showTotals ? 2 : 0) : 0;
+    const t2Cols = showT2 ? term2Components.length + (showTotals ? 2 : 0) : 0;
+    const gCols = showGrand ? 2 : 0;
 
     const top = `
       <tr>
         <th rowspan="2" class="th-subject">Subject</th>
-        <th colspan="${t1Cols}" class="th-term">${term1Id ? termLabel(term1Id) : "Term-I"}</th>
-        <th colspan="${t2Cols}" class="th-term">${term2Id ? termLabel(term2Id) : "Term-II"}</th>
-        ${showTotals ? `<th colspan="${gCols}" class="th-grand">Grand Total</th>` : ""}
+        ${showT1 ? `<th colspan="${t1Cols}" class="th-term">${termLabel(term1Id)}</th>` : ""}
+        ${showT2 ? `<th colspan="${t2Cols}" class="th-term">${termLabel(term2Id)}</th>` : ""}
+        ${showGrand ? `<th colspan="${gCols}" class="th-grand">Grand Total</th>` : ""}
       </tr>
     `;
 
     const bottom = `
       <tr>
-        ${term1Components.map((c) => `<th class="th-comp">${c.label}</th>`).join("")}
+        ${showT1 ? term1Components.map((c) => `<th class="th-comp">${c.label}</th>`).join("") : ""}
         ${
-          showTotals
+          showT1 && showTotals
             ? `<th class="th-comp strong">Total</th><th class="th-comp strong">Grade</th>`
             : ""
         }
 
-        ${term2Components.map((c) => `<th class="th-comp">${c.label}</th>`).join("")}
+        ${showT2 ? term2Components.map((c) => `<th class="th-comp">${c.label}</th>`).join("") : ""}
         ${
-          showTotals
+          showT2 && showTotals
             ? `<th class="th-comp strong">Total</th><th class="th-comp strong">Grade</th>`
             : ""
         }
 
         ${
-          showTotals
+          showGrand
             ? `<th class="th-comp strong">Total</th><th class="th-comp strong">Grade</th>`
             : ""
         }
@@ -2510,8 +2583,12 @@ const FinalResultSummary = () => {
   };
 
   const buildScholasticBodyRowHtml_TermWise = (student, subjectName) => {
-    const s1 = term1Id ? getSubjectTermStats(student, subjectName, term1Id) : null;
-    const s2 = term2Id ? getSubjectTermStats(student, subjectName, term2Id) : null;
+    const showT1 = Boolean(hasTerm1ComponentColumns);
+    const showT2 = Boolean(hasTerm2ComponentColumns);
+    const showGrand = showTotals && (showT1 || showT2);
+
+    const s1 = showT1 ? getSubjectTermStats(student, subjectName, term1Id) : null;
+    const s2 = showT2 ? getSubjectTermStats(student, subjectName, term2Id) : null;
 
     const allSubj = (student.components || []).filter((c) => c.subject_name === subjectName);
     const grandMarks = hasAnyMarks(allSubj) ? sumMarksOnly(allSubj) : null;
@@ -2523,29 +2600,31 @@ const FinalResultSummary = () => {
 
     let row = `<tr><td class="td-subject">${subjectName}</td>`;
 
-    for (const c of term1Components) {
-      const val = term1Id
-        ? getSubjectTermCompDisplay(student, subjectName, term1Id, c.component_id)
-        : "-";
-      row += `<td>${val}</td>`;
-    }
-    if (showTotals) {
-      row += `<td class="td-strong">${s1?.marksTotal != null ? s1.marksTotal : "-"}</td>`;
-      row += `<td class="td-strong">${s1?.grade || "-"}</td>`;
+    if (showT1) {
+      for (const c of term1Components) {
+        const val = getSubjectTermCompDisplay(student, subjectName, term1Id, c.component_id);
+        row += `<td>${val}</td>`;
+      }
+
+      if (showTotals) {
+        row += `<td class="td-strong">${s1?.marksTotal != null ? s1.marksTotal : "-"}</td>`;
+        row += `<td class="td-strong">${s1?.grade || "-"}</td>`;
+      }
     }
 
-    for (const c of term2Components) {
-      const val = term2Id
-        ? getSubjectTermCompDisplay(student, subjectName, term2Id, c.component_id)
-        : "-";
-      row += `<td>${val}</td>`;
-    }
-    if (showTotals) {
-      row += `<td class="td-strong">${s2?.marksTotal != null ? s2.marksTotal : "-"}</td>`;
-      row += `<td class="td-strong">${s2?.grade || "-"}</td>`;
+    if (showT2) {
+      for (const c of term2Components) {
+        const val = getSubjectTermCompDisplay(student, subjectName, term2Id, c.component_id);
+        row += `<td>${val}</td>`;
+      }
+
+      if (showTotals) {
+        row += `<td class="td-strong">${s2?.marksTotal != null ? s2.marksTotal : "-"}</td>`;
+        row += `<td class="td-strong">${s2?.grade || "-"}</td>`;
+      }
     }
 
-    if (showTotals) {
+    if (showGrand) {
       row += `<td class="td-strong">${grandMarks != null ? grandMarks : "-"}</td>`;
       row += `<td class="td-strong">${grandGrade || "-"}</td>`;
     }
@@ -2555,21 +2634,27 @@ const FinalResultSummary = () => {
   };
 
   const getScholasticColumnCount = () => {
+    const showT1 = Boolean(hasTerm1ComponentColumns);
+    const showT2 = Boolean(hasTerm2ComponentColumns);
+    const showGrand = showTotals && (showT1 || showT2);
+
     return (
       1 +
-      term1Components.length +
-      (showTotals ? 2 : 0) +
-      term2Components.length +
-      (showTotals ? 2 : 0) +
-      (showTotals ? 2 : 0)
+      (showT1 ? term1Components.length + (showTotals ? 2 : 0) : 0) +
+      (showT2 ? term2Components.length + (showTotals ? 2 : 0) : 0) +
+      (showGrand ? 2 : 0)
     );
   };
 
   const buildTotalsFooterRowHtml = (student) => {
-    if (!showTotals) return "";
+    const showT1 = Boolean(hasTerm1ComponentColumns);
+    const showT2 = Boolean(hasTerm2ComponentColumns);
+    const showGrand = showTotals && (showT1 || showT2);
 
-    const t1 = term1Id ? getStudentTermOverall(student, term1Id) : null;
-    const t2 = term2Id ? getStudentTermOverall(student, term2Id) : null;
+    if (!showTotals || (!showT1 && !showT2)) return "";
+
+    const t1 = showT1 ? getStudentTermOverall(student, term1Id) : null;
+    const t2 = showT2 ? getStudentTermOverall(student, term2Id) : null;
 
     const grandTotal = student?.total_weighted;
     const grandPct = student?.grand_percent_weighted;
@@ -2583,15 +2668,13 @@ const FinalResultSummary = () => {
         ? String(computedGrandGradeRaw).trim()
         : null;
 
-      const blank1 =
-        term1Components.length > 0
-          ? `<td colspan="${term1Components.length}" style="color:#0b1b3a !important;"></td>`
-          : "";
+    const blank1 = showT1
+      ? `<td colspan="${term1Components.length}" style="color:#0b1b3a !important;"></td>`
+      : "";
 
-      const blank2 =
-        term2Components.length > 0
-          ? `<td colspan="${term2Components.length}" style="color:#0b1b3a !important;"></td>`
-          : "";
+    const blank2 = showT2
+      ? `<td colspan="${term2Components.length}" style="color:#0b1b3a !important;"></td>`
+      : "";
 
     const rankRow = hasDisplayRank(student?.rank)
       ? `
@@ -2629,78 +2712,55 @@ const FinalResultSummary = () => {
     </div>
   `;
 
-    const term1PctCell = `
-    <div style="font-weight:900;color:#0b1b3a !important;">
-      ${formatPercent(t1?.percent)}
-    </div>
-  `;
-
-    const term2PctCell = `
-    <div style="font-weight:900;color:#0b1b3a !important;">
-      ${formatPercent(t2?.percent)}
-    </div>
-  `;
-
-    return `
-    <tr>
-      <td
-        class="td-total-label"
-        style="background:linear-gradient(180deg,#1e3a8a,#1e40af);color:#ffffff !important;font-weight:900;text-align:left;"
-      >
-        TOTAL
-      </td>
-
+    const term1Cells = showT1
+      ? `
       ${blank1}
-
-      <td
-        class="td-total"
-        style="background:#ffe066 !important;color:#0b1b3a !important;font-weight:900;"
-      >
+      <td class="td-total" style="background:#ffe066 !important;color:#0b1b3a !important;font-weight:900;">
         <div style="font-weight:900;font-size:11px;letter-spacing:0.1px;color:#0b1b3a !important;">
-          ${t1 ? formatNumber(t1.total_weighted) : "-"}
+          ${formatNumber(t1?.total_weighted)}
         </div>
       </td>
-
-      <td
-        class="td-total"
-        style="background:#ffe066 !important;color:#0b1b3a !important;font-weight:900;"
-      >
-        ${term1PctCell}
+      <td class="td-total" style="background:#ffe066 !important;color:#0b1b3a !important;font-weight:900;">
+        <div style="font-weight:900;color:#0b1b3a !important;">${formatPercent(t1?.percent)}</div>
       </td>
+    `
+      : "";
 
+    const term2Cells = showT2
+      ? `
       ${blank2}
-
-      <td
-        class="td-total"
-        style="background:#ffe066 !important;color:#0b1b3a !important;font-weight:900;"
-      >
+      <td class="td-total" style="background:#ffe066 !important;color:#0b1b3a !important;font-weight:900;">
         <div style="font-weight:900;font-size:11px;letter-spacing:0.1px;color:#0b1b3a !important;">
-          ${t2 ? formatNumber(t2.total_weighted) : "-"}
+          ${formatNumber(t2?.total_weighted)}
         </div>
       </td>
-
-      <td
-        class="td-total"
-        style="background:#ffe066 !important;color:#0b1b3a !important;font-weight:900;"
-      >
-        ${term2PctCell}
+      <td class="td-total" style="background:#ffe066 !important;color:#0b1b3a !important;font-weight:900;">
+        <div style="font-weight:900;color:#0b1b3a !important;">${formatPercent(t2?.percent)}</div>
       </td>
+    `
+      : "";
 
-      <td
-        class="td-grand"
-        style="background:#ffd43b !important;color:#0b1b3a !important;font-weight:900;"
-      >
+    const grandCells = showGrand
+      ? `
+      <td class="td-grand" style="background:#ffd43b !important;color:#0b1b3a !important;font-weight:900;">
         <div style="font-weight:900;font-size:11px;letter-spacing:0.1px;color:#0b1b3a !important;">
           ${formatNumber(grandTotal)}
         </div>
       </td>
-
-      <td
-        class="td-grand"
-        style="background:#ffd43b !important;color:#0b1b3a !important;font-weight:900;"
-      >
+      <td class="td-grand" style="background:#ffd43b !important;color:#0b1b3a !important;font-weight:900;">
         ${grandGradeCell}
       </td>
+    `
+      : "";
+
+    return `
+    <tr>
+      <td class="td-total-label" style="background:linear-gradient(180deg,#1e3a8a,#1e40af);color:#ffffff !important;font-weight:900;text-align:left;">
+        TOTAL
+      </td>
+      ${term1Cells}
+      ${term2Cells}
+      ${grandCells}
     </tr>
     ${rankRow}
   `;
@@ -2744,13 +2804,10 @@ const FinalResultSummary = () => {
       else areasMap.set(g.area_id, { area_name: g.area_name, t1: null, t2: g });
     });
 
-    mergeCoScholasticSubjectRows(areasMap, student);
-
-    const drawingAlreadyHandled = getCoScholasticSubjectNames(student).some(isDrawingSubject);
     const drawingT1 = getDrawingGradeForTerm(student, term1Id, exams, gradeSchema);
     const drawingT2 = getDrawingGradeForTerm(student, term2Id, exams, gradeSchema);
 
-    if (!drawingAlreadyHandled && (drawingT1 !== "-" || drawingT2 !== "-")) {
+    if (drawingT1 !== "-" || drawingT2 !== "-") {
       areasMap.set("__drawing__", {
         area_name: "Drawing",
         t1: { grade: drawingT1 },
@@ -3143,7 +3200,14 @@ const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
   };
 
   const getAllSubjectsForPrimary = (student) =>
-    Array.from(new Set((student?.components || []).map((c) => c.subject_name).filter(Boolean)));
+    Array.from(
+      new Set(
+        (student?.components || [])
+          .filter(hasValidComponentRecord)
+          .map((c) => c.subject_name)
+          .filter(Boolean)
+      )
+    ).filter((subjectName) => getPrimarySubjectComponents(student, subjectName).length > 0);
 
   const escapeRegExp = (value = "") => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -3162,7 +3226,7 @@ const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
     const compMap = new Map();
 
     (student?.components || [])
-      .filter((c) => c.subject_name === subjectName)
+      .filter((c) => c.subject_name === subjectName && hasValidComponentRecord(c))
       .forEach((c) => {
         const key = Number(c.component_id) || getPrimaryComponentName(c);
         if (!compMap.has(key)) {
@@ -3176,60 +3240,79 @@ const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
     return Array.from(compMap.values());
   };
 
+  const hasPrimaryComponentInTerm = (student, subjectName, termId, componentId) => {
+    if (!termId) return false;
+
+    return (student?.components || []).some(
+      (c) =>
+        c.subject_name === subjectName &&
+        isCompInTerm(c, termId) &&
+        Number(c.component_id) === Number(componentId)
+    );
+  };
+
   const buildPrimarySubjectTableHtml = (student, subjectName) => {
     const components = getPrimarySubjectComponents(student, subjectName);
-    const s1 = term1Id ? getSubjectTermStats(student, subjectName, term1Id) : null;
-    const s2 = term2Id ? getSubjectTermStats(student, subjectName, term2Id) : null;
+    if (!components.length) return "";
+
+    const showT1 =
+      term1Id &&
+      components.some((component) =>
+        hasPrimaryComponentInTerm(student, subjectName, term1Id, component.component_id)
+      );
+
+    const showT2 =
+      term2Id &&
+      components.some((component) =>
+        hasPrimaryComponentInTerm(student, subjectName, term2Id, component.component_id)
+      );
+
+    if (!showT1 && !showT2) return "";
+
+    const s1 = showT1 ? getSubjectTermStats(student, subjectName, term1Id) : null;
+    const s2 = showT2 ? getSubjectTermStats(student, subjectName, term2Id) : null;
+    const totalCols = 1 + (showT1 ? 1 : 0) + (showT2 ? 1 : 0);
 
     return `
       <table class="primary-subject-table">
         <thead>
           <tr>
-            <th colspan="3" class="primary-subject-title">${escapePrimaryHtml(subjectName)}</th>
+            <th colspan="${totalCols}" class="primary-subject-title">${escapePrimaryHtml(subjectName)}</th>
           </tr>
           <tr>
             <th class="skill-name-col">Assessment / Component</th>
-            <th>${term1Id ? termLabel(term1Id) : "Term-I"}</th>
-            <th>${term2Id ? termLabel(term2Id) : "Term-II"}</th>
+            ${showT1 ? `<th>${termLabel(term1Id)}</th>` : ""}
+            ${showT2 ? `<th>${termLabel(term2Id)}</th>` : ""}
           </tr>
         </thead>
         <tbody>
-          ${
-            components.length
-              ? components
-                  .map((component) => {
-                    const t1 = term1Id
-                      ? getSubjectTermCompDisplay(
-                          student,
-                          subjectName,
-                          term1Id,
-                          component.component_id
-                        )
-                      : "-";
-                    const t2 = term2Id
-                      ? getSubjectTermCompDisplay(
-                          student,
-                          subjectName,
-                          term2Id,
-                          component.component_id
-                        )
-                      : "-";
+          ${components
+            .filter(
+              (component) =>
+                (showT1 && hasPrimaryComponentInTerm(student, subjectName, term1Id, component.component_id)) ||
+                (showT2 && hasPrimaryComponentInTerm(student, subjectName, term2Id, component.component_id))
+            )
+            .map((component) => {
+              const t1 = showT1
+                ? getSubjectTermCompDisplay(student, subjectName, term1Id, component.component_id)
+                : "-";
+              const t2 = showT2
+                ? getSubjectTermCompDisplay(student, subjectName, term2Id, component.component_id)
+                : "-";
 
-                    return `
-                      <tr>
-                        <td class="skill-name">${escapePrimaryHtml(component.name)}</td>
-                        <td>${escapePrimaryHtml(t1)}</td>
-                        <td>${escapePrimaryHtml(t2)}</td>
-                      </tr>
-                    `;
-                  })
-                  .join("")
-              : `<tr><td colspan="3">No components available</td></tr>`
-          }
+              return `
+                <tr>
+                  <td class="skill-name">${escapePrimaryHtml(component.name)}</td>
+                  ${showT1 ? `<td>${escapePrimaryHtml(t1)}</td>` : ""}
+                  ${showT2 ? `<td>${escapePrimaryHtml(t2)}</td>` : ""}
+                </tr>
+              `;
+            })
+            .join("")}
           <tr class="primary-overall-row">
             <td>Overall Grade</td>
-            <td>${escapePrimaryHtml(s1?.grade || "-")}</td>
-            <td>${escapePrimaryHtml(s2?.grade || "-")}</td>
+            ${showT1 ? `<td>${escapePrimaryHtml(s1?.grade || "-")}</td>` : ""}
+            ${showT2 ? `<td>${escapePrimaryHtml(s2?.grade || "-")}</td>` : ""}
           </tr>
         </tbody>
       </table>
@@ -3251,8 +3334,6 @@ const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
       if (prev) map.set(g.area_id, { ...prev, t2: g });
       else map.set(g.area_id, { area_name: g.area_name, t1: null, t2: g });
     });
-
-    mergeCoScholasticSubjectRows(map, student);
 
     const rows = Array.from(map.values());
 
@@ -3280,172 +3361,263 @@ const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
           margin: 0;
           padding: 0;
           font-family: Arial, Helvetica, sans-serif;
-          font-size: 8.4px;
-          color: #111827;
-          background: #fff;
+          font-size: 8.2px;
+          color: #0f172a;
+          background: #fff7ed;
         }
         section.primary-card {
+          position: relative;
           page-break-after: always;
           page-break-inside: avoid;
           break-inside: avoid;
-          border: 2px solid #111;
+          border: 2px solid #7c3aed;
+          border-radius: 14px;
           padding: 5px;
           height: 200mm;
           max-height: 200mm;
           overflow: hidden;
+          background:
+            radial-gradient(520px 180px at 8% 0%, rgba(251,191,36,0.28), transparent 62%),
+            radial-gradient(520px 180px at 92% 0%, rgba(56,189,248,0.22), transparent 62%),
+            radial-gradient(460px 160px at 50% 100%, rgba(244,114,182,0.18), transparent 66%),
+            linear-gradient(180deg, #ffffff 0%, #fffaf0 100%);
         }
         section.primary-card:last-child { page-break-after: auto; }
+        section.primary-card::before,
+        section.primary-card::after {
+          content: '';
+          position: absolute;
+          width: 90px;
+          height: 90px;
+          border-radius: 999px;
+          opacity: 0.16;
+          pointer-events: none;
+        }
+        section.primary-card::before { right: -38px; top: -38px; background: #22c55e; }
+        section.primary-card::after { left: -42px; bottom: -42px; background: #fb7185; }
+        .primary-watermark {
+          position: absolute;
+          left: 50%;
+          top: 50%;
+          transform: translate(-50%, -50%);
+          width: 128mm;
+          max-height: 128mm;
+          object-fit: contain;
+          opacity: 0.105;
+          z-index: 20;
+          pointer-events: none;
+          mix-blend-mode: multiply;
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
+        }
         .primary-header {
+          position: relative;
+          z-index: 1;
           display: grid;
-          grid-template-columns: 70px 1fr 58px 62px;
-          gap: 5px;
+          grid-template-columns: 90px 1fr 86px;
+          gap: 4px;
           align-items: center;
-          border-bottom: 2px solid #111;
-          padding-bottom: 4px;
-          margin-bottom: 4px;
+          border: 1.6px solid #a78bfa;
+          border-radius: 12px;
+          padding: 3px 4px;
+          margin-bottom: 3px;
+          background: linear-gradient(90deg, #eef2ff 0%, #ecfeff 50%, #fff7ed 100%);
         }
         .primary-logo {
-          width: 62px;
-          height: 62px;
+          width: 82px;
+          height: 82px;
           object-fit: contain;
-        }
-        .primary-board-logo {
-          width: 50px;
-          height: 50px;
-          object-fit: contain;
-          justify-self: center;
         }
         .primary-photo {
-          width: 58px;
-          height: 68px;
+          width: 78px;
+          height: 90px;
           object-fit: cover;
-          border: 1px solid #111;
+          border: 2px solid #38bdf8;
+          border-radius: 10px;
           justify-self: end;
+          background: #fff;
         }
         .primary-school {
           text-align: center;
           line-height: 1.22;
           font-size: 9.4px;
+          color: #0f172a;
         }
         .primary-school h1 {
           margin: 0 0 3px 0;
           font-size: 15px;
+          color: #4c1d95;
           text-transform: uppercase;
+          letter-spacing: .25px;
         }
         .primary-title {
           display: inline-block;
-          margin-top: 4px;
+          margin-top: 3px;
           padding: 2px 14px;
-          border: 1px solid #111;
-          font-weight: 800;
+          border: 1px solid #7c3aed;
+          border-radius: 999px;
+          background: linear-gradient(90deg, #fde68a, #fbcfe8);
+          color: #581c87;
+          font-weight: 900;
           text-transform: uppercase;
           font-size: 9.4px;
         }
         .student-grid {
+          position: relative;
+          z-index: 1;
           display: grid;
-          grid-template-columns: repeat(3, 1fr);
-          border-top: 1px solid #111;
-          border-left: 1px solid #111;
-          margin-bottom: 4px;
+          grid-template-columns: repeat(4, 1fr);
+          gap: 3px;
+          margin-bottom: 3px;
         }
         .student-cell {
-          border-right: 1px solid #111;
-          border-bottom: 1px solid #111;
-          padding: 2px 4px;
-          min-height: 16px;
+          border: 1px solid #bae6fd;
+          border-radius: 9px;
+          padding: 1.8px 5px;
+          min-height: 15px;
           line-height: 1.08;
+          background: rgba(255,255,255,0.86);
+          box-shadow: inset 0 0 0 1px rgba(255,255,255,0.56);
         }
-        .label { font-weight: 800; }
+        .label { font-weight: 900; color: #7c2d12; }
         .subject-grid {
+          position: relative;
+          z-index: 1;
           display: grid;
           grid-template-columns: repeat(2, minmax(0, 1fr));
-          gap: 4px;
+          gap: 3px;
           align-items: stretch;
         }
         .primary-subject-table {
           width: 100%;
-          border-collapse: collapse;
+          border-collapse: separate;
+          border-spacing: 0;
           page-break-inside: avoid;
           break-inside: avoid;
-          margin-bottom: 3px;
+          margin-bottom: 2px;
           height: 100%;
+          overflow: hidden;
+          border: 1px solid #c4b5fd;
+          border-radius: 10px;
+          background: #fff;
         }
         .primary-subject-table th,
         .primary-subject-table td {
-          border: 1px solid #111;
-          padding: 2px 3px;
+          border-right: 1px solid #ddd6fe;
+          border-bottom: 1px solid #ddd6fe;
+          padding: 1.6px 3px;
           text-align: center;
           vertical-align: middle;
-          line-height: 1.05;
+          line-height: 1.03;
         }
+        .primary-subject-table tr:last-child td { border-bottom: 0; }
+        .primary-subject-table th:last-child,
+        .primary-subject-table td:last-child { border-right: 0; }
         .primary-subject-table th {
-          background: #e5e7eb;
-          font-weight: 800;
+          background: #e0f2fe;
+          color: #075985;
+          font-weight: 900;
         }
         .primary-subject-title {
-          background: #cbd5e1 !important;
+          background: linear-gradient(90deg, #7c3aed, #0ea5e9) !important;
+          color: #ffffff !important;
           text-transform: uppercase;
-          font-size: 8.2px;
-          letter-spacing: .15px;
+          font-size: 8.3px;
+          letter-spacing: .18px;
         }
         .skill-name-col { width: 72%; }
         .skill-name {
           text-align: left !important;
-          font-weight: 600;
+          font-weight: 700;
+          color: #1e293b;
           white-space: normal;
           word-break: normal;
         }
         .primary-overall-row td {
-          background: #f3f4f6;
-          font-weight: 800;
+          background: #fef3c7;
+          color: #7c2d12;
+          font-weight: 900;
         }
         .bottom-grid {
+          position: relative;
+          z-index: 1;
           display: grid;
-          grid-template-columns: 1fr 1fr 1fr;
-          gap: 4px;
+          grid-template-columns: 0.9fr 1.35fr 1fr;
+          gap: 3px;
           margin-top: 3px;
         }
         .small-box {
-          border: 1px solid #111;
-          min-height: 34px;
+          border: 1px solid #c4b5fd;
+          border-radius: 11px;
+          min-height: 38px;
+          overflow: hidden;
+          background: rgba(255,255,255,0.92);
         }
         .box-title {
-          background: #e5e7eb;
-          border-bottom: 1px solid #111;
+          border-bottom: 1px solid rgba(255,255,255,0.45);
           text-align: center;
-          font-weight: 800;
-          padding: 2px 4px;
+          font-weight: 900;
+          padding: 3px 5px;
           text-transform: uppercase;
+          color: #ffffff;
+          letter-spacing: .18px;
         }
-        .box-body { padding: 3px 4px; line-height: 1.15; }
+        .small-box:nth-child(1) .box-title { background: linear-gradient(90deg, #06b6d4, #3b82f6); }
+        .small-box:nth-child(2) .box-title { background: linear-gradient(90deg, #22c55e, #84cc16); }
+        .small-box:nth-child(3) .box-title { background: linear-gradient(90deg, #f97316, #ec4899); }
+        .box-body { padding: 3px 5px; line-height: 1.12; }
+        .health-chip-row { display:flex; flex-wrap:wrap; gap:3px; }
+        .health-chip {
+          display:inline-block;
+          padding: 2px 5px;
+          border-radius: 999px;
+          background: linear-gradient(90deg, #f0fdf4, #ecfeff);
+          border: 1px solid #86efac;
+          font-weight: 800;
+          margin: 1px 2px 1px 0;
+          color:#0f172a;
+        }
+        .health-chip:nth-child(2n) { background: linear-gradient(90deg, #eff6ff, #f5f3ff); border-color:#bfdbfe; }
+        .health-chip:nth-child(3n) { background: linear-gradient(90deg, #fff7ed, #fef3c7); border-color:#fed7aa; }
+        .health-chip b { color:#166534; }
         .sign-row {
+          position: relative;
+          z-index: 1;
           display: grid;
           grid-template-columns: repeat(3, 1fr);
-          gap: 16px;
-          margin-top: 7px;
+          gap: 12px;
+          margin-top: 5px;
           text-align: center;
-          font-weight: 800;
+          font-weight: 900;
+          color: #1e293b;
         }
         .signature-space {
-          height: 20px;
-          border-bottom: 1px solid #111;
+          height: 16px;
+          border-bottom: 1.4px dashed #7c3aed;
           margin-bottom: 3px;
         }
-        .sign-line {
-          padding-top: 0;
-          line-height: 1.05;
-        }
+        .sign-line { padding-top: 0; line-height: 1.05; }
         .grade-key {
-          margin-top: 4px;
-          border: 1px solid #111;
+          position: relative;
+          z-index: 1;
+          margin-top: 3px;
+          border: 1px solid #f9a8d4;
+          border-radius: 999px;
+          overflow: hidden;
           display: grid;
-          grid-template-columns: 1fr 1fr 1fr 1.6fr;
+          grid-template-columns: 1fr 1fr 1fr 1.7fr;
+          background: #fff;
         }
         .grade-key div {
-          border-right: 1px solid #111;
+          border-right: 1px solid #fbcfe8;
           padding: 2px 4px;
           text-align: center;
+          font-weight: 700;
         }
+        .grade-key div:nth-child(1) { background:#dcfce7; }
+        .grade-key div:nth-child(2) { background:#dbeafe; }
+        .grade-key div:nth-child(3) { background:#fef3c7; }
+        .grade-key div:nth-child(4) { background:#fce7f3; }
         .grade-key div:last-child { border-right: 0; }
       </style>
     `;
@@ -3458,7 +3630,6 @@ const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
 
       const effectiveHeaderHtml = getReportCardHeaderHtml();
       const effectiveSchoolLogoUrl = getReportCardSchoolLogoUrl(formatAssets);
-      const effectiveBoardLogoUrl = getReportCardBoardLogoUrl(formatAssets);
       const cleanHeaderHtml = sanitizeHeaderHtml(effectiveHeaderHtml);
 
       const dobValRaw = info?.Date_Of_Birth || info?.date_of_birth || info?.dob || "";
@@ -3468,13 +3639,27 @@ const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
       const a2 = term2Id ? attendanceByTerm[String(term2Id)]?.[student.id] : null;
       const r2 = term2Id ? remarksByTerm[String(term2Id)]?.[student.id] : null;
 
+      const health = getPrimaryHealthInfo(info);
+      const effectiveAssessmentDate = health.assessment_date || new Date();
+      const ageAtAssessment = buildAgeAtAssessmentText(dobValRaw, effectiveAssessmentDate);
+      const healthAttendanceText =
+        health.present_days !== "-" || health.working_days !== "-"
+          ? `${health.present_days} / ${health.working_days}`
+          : "-";
+      const healthAssessmentDateText = formatDisplayDate(effectiveAssessmentDate);
+
       return `
         <section class="primary-card">
+          ${
+            effectiveSchoolLogoUrl
+              ? `<img src="${escapePrimaryHtml(effectiveSchoolLogoUrl)}" class="primary-watermark" alt="School Logo Watermark" onerror="this.style.display='none';" />`
+              : ""
+          }
           <div class="primary-header">
             <div>
               ${
                 effectiveSchoolLogoUrl
-                  ? `<img src="${escapePrimaryHtml(effectiveSchoolLogoUrl)}" class="primary-logo" />`
+                  ? `<img src="${escapePrimaryHtml(effectiveSchoolLogoUrl)}" class="primary-logo" onerror="this.style.display='none';" />`
                   : `<div style="font-weight:800;text-align:center;">School<br/>Logo</div>`
               }
             </div>
@@ -3485,13 +3670,6 @@ const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
                   : `<h1>School Name</h1><div>Primary Section</div><div class="primary-title">Report Card</div>`
               }
             </div>
-            <div style="display:flex;justify-content:center;align-items:center;">
-              ${
-                effectiveBoardLogoUrl
-                  ? `<img src="${escapePrimaryHtml(effectiveBoardLogoUrl)}" alt="Board Logo" class="primary-board-logo" />`
-                  : `<span style="display:block;width:50px;height:50px;"></span>`
-              }
-            </div>
             <img src="${escapePrimaryHtml(studentPhotoSrc)}" alt="Student Photo" class="primary-photo" onerror="this.onerror=null;this.src='${NO_PHOTO_SVG}';" />
           </div>
 
@@ -3499,12 +3677,15 @@ const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
             <div class="student-cell"><span class="label">Student Name:</span> ${escapePrimaryHtml(info?.name)}</div>
             <div class="student-cell"><span class="label">Admission No.:</span> ${escapePrimaryHtml(info?.admission_number)}</div>
             <div class="student-cell"><span class="label">Class / Section:</span> ${escapePrimaryHtml(info?.Class?.class_name)} - ${escapePrimaryHtml(info?.Section?.section_name)}</div>
+            <div class="student-cell"><span class="label">Roll No.:</span> ${escapePrimaryHtml(info?.roll_number)}</div>
             <div class="student-cell"><span class="label">Date of Birth:</span> ${escapePrimaryHtml(dobVal)}</div>
+            <div class="student-cell"><span class="label">Age at Assessment:</span> ${escapePrimaryHtml(ageAtAssessment)}</div>
             <div class="student-cell"><span class="label">Mother's Name:</span> ${escapePrimaryHtml(info?.mother_name)}</div>
             <div class="student-cell"><span class="label">Father's Name:</span> ${escapePrimaryHtml(info?.father_name)}</div>
             <div class="student-cell"><span class="label">Session:</span> ${escapePrimaryHtml(sessions.find((x) => String(x.id) === String(filters.session_id))?.name || "-")}</div>
-            <div class="student-cell"><span class="label">Roll No.:</span> ${escapePrimaryHtml(info?.roll_number)}</div>
+            <div class="student-cell"><span class="label">Assessment Date:</span> ${escapePrimaryHtml(healthAssessmentDateText)}</div>
             <div class="student-cell"><span class="label">Class Teacher:</span> ${escapePrimaryHtml(info?.class_teacher_name || "-")}</div>
+            <div class="student-cell"><span class="label">Blood Group:</span> ${escapePrimaryHtml(health.blood_group)}</div>
           </div>
 
           <div class="subject-grid">
@@ -3521,13 +3702,17 @@ const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
               <div class="box-body">
                 <div><b>${term1Id ? termLabel(term1Id) : "Term-I"}:</b> ${escapePrimaryHtml(buildPresentTotalText(a1))}</div>
                 <div><b>${term2Id ? termLabel(term2Id) : "Term-II"}:</b> ${escapePrimaryHtml(buildPresentTotalText(a2))}</div>
+                <div><b>Health Entry:</b> ${escapePrimaryHtml(healthAttendanceText)}</div>
               </div>
             </div>
             <div class="small-box">
               <div class="box-title">Health Details</div>
-              <div class="box-body">
-                <div><b>Height:</b> ${escapePrimaryHtml(info?.height || "-")} &nbsp; <b>Weight:</b> ${escapePrimaryHtml(info?.weight || "-")}</div>
-                <div><b>Dental:</b> ${escapePrimaryHtml(info?.dental || "-")} &nbsp; <b>Vision:</b> ${escapePrimaryHtml(info?.vision || "-")} &nbsp; <b>Blood Group:</b> ${escapePrimaryHtml(info?.blood_group || "-")}</div>
+              <div class="box-body health-chip-row">
+                <span class="health-chip"><b>Height (cm):</b> ${escapePrimaryHtml(health.height)}</span>
+                <span class="health-chip"><b>Weight (kg):</b> ${escapePrimaryHtml(health.weight)}</span>
+                <span class="health-chip"><b>Dental Check-up:</b> ${escapePrimaryHtml(health.dental)}</span>
+                <span class="health-chip"><b>Vision:</b> ${escapePrimaryHtml(health.vision)}</span>
+                <span class="health-chip"><b>Blood Group:</b> ${escapePrimaryHtml(health.blood_group)}</span>
               </div>
             </div>
             <div class="small-box">
@@ -3580,7 +3765,32 @@ const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
       section { page-break-after: always; }
       section:last-child { page-break-after: auto; }
 
-      .card { margin-bottom: 0px; }
+      .card {
+        margin-bottom: 0px;
+        position: relative;
+        overflow: hidden;
+      }
+
+      .card > *:not(.watermark-logo) {
+        position: relative;
+        z-index: 1;
+      }
+
+      .watermark-logo {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        width: 340px;
+        max-height: 340px;
+        object-fit: contain;
+        opacity: 0.095;
+        z-index: 20;
+        pointer-events: none;
+        mix-blend-mode: multiply;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
 
       .panel {
         border: 1px solid rgba(199,210,254,0.85);
@@ -3655,17 +3865,6 @@ const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
         display: block;
         flex-shrink: 0;
         margin-left: 4px;
-      }
-
-      .header-board-logo {
-        height: 54px;
-        width: auto;
-        max-width: 60px;
-        object-fit: contain;
-        display: block;
-        background: transparent;
-        flex-shrink: 0;
-        margin-top: 4px;
       }
 
       .student-photo {
@@ -3876,6 +4075,49 @@ const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
         color:#475569;
       }
 
+      .health-panel{
+        display:grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 3px;
+        margin-top: 2px;
+      }
+
+      .health-metric{
+        border:1px solid rgba(191,219,254,0.95);
+        border-radius: 6px;
+        padding: 3px 4px;
+        background: linear-gradient(135deg, rgba(239,246,255,0.98), rgba(240,253,250,0.98));
+        line-height: 1.08;
+        min-height: 24px;
+      }
+
+      .health-metric:nth-child(2n){
+        background: linear-gradient(135deg, rgba(250,245,255,0.98), rgba(253,242,248,0.98));
+        border-color: rgba(216,180,254,0.9);
+      }
+
+      .health-metric:nth-child(3n){
+        background: linear-gradient(135deg, rgba(255,251,235,0.98), rgba(255,247,237,0.98));
+        border-color: rgba(253,186,116,0.9);
+      }
+
+      .health-label{
+        display:block;
+        font-size: 7px;
+        font-weight: 900;
+        text-transform: uppercase;
+        letter-spacing: .22px;
+        color:#0f766e;
+      }
+
+      .health-value{
+        display:block;
+        margin-top: 1px;
+        font-size: 8.5px;
+        font-weight: 900;
+        color:#0f172a;
+      }
+
       .remarks-card{
         border:1px solid rgba(226,232,240,0.9);
         border-radius: 7px;
@@ -3920,7 +4162,7 @@ const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
       const mergedInfoForPhoto = { ...student, ...info };
       const studentPhotoSrc = info?.__pdfPhotoSrc || getStudentPhotoURL(mergedInfoForPhoto);
 
-      const subjectsForStudent = getNonDrawingSubjects(student);
+      const subjectsForStudent = getDisplaySubjectsForStudent(student);
       const regularSubjectsForStudent = subjectsForStudent.filter(
         (subjectName) => getSubjectComponentCount(student, subjectName) > 2
       );
@@ -3928,7 +4170,8 @@ const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
         (subjectName) => getSubjectComponentCount(student, subjectName) <= 2
       );
 
-      const scholasticTable = `
+      const scholasticTable = subjectsForStudent.length && hasAnyScholasticComponentColumns
+        ? `
       <div class="section-title">
         <div class="section-title-left">
           <div class="section-pill">Scholastic</div>
@@ -3947,7 +4190,8 @@ const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
           : ""
       }
       ${buildCompactScholasticPdfHtml(student, compactSubjectsForStudent)}
-    `;
+    `
+        : "";
 
       const attendanceTable = buildAttendancePdfHtml_TermWise(student.id);
       const remarksBlock = buildTeacherRemarksPdfHtml_TermWise(student.id);
@@ -3956,7 +4200,6 @@ const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
       const effectiveHeaderHtml = getReportCardHeaderHtml();
       const effectiveFooterHtml = getReportCardFooterHtml();
       const effectiveSchoolLogoUrl = getReportCardSchoolLogoUrl(formatAssets);
-      const effectiveBoardLogoUrl = getReportCardBoardLogoUrl(formatAssets);
 
       const cleanHeaderHtml = sanitizeHeaderHtml(effectiveHeaderHtml);
 
@@ -3967,7 +4210,7 @@ const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
             <div class="header-left">
               ${
                 effectiveSchoolLogoUrl
-                  ? `<img src="${effectiveSchoolLogoUrl}" alt="School Logo" class="header-logo" />`
+                  ? `<img src="${effectiveSchoolLogoUrl}" alt="School Logo" class="header-logo" onerror="this.style.display='none';" />`
                   : `<span style="width:95px;display:block;"></span>`
               }
             </div>
@@ -3977,11 +4220,6 @@ const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
             </div>
 
             <div class="header-right">
-              ${
-                effectiveBoardLogoUrl
-                  ? `<img src="${escapePrimaryHtml(effectiveBoardLogoUrl)}" alt="Board Logo" class="header-board-logo" />`
-                  : ""
-              }
               <img src="${escapePrimaryHtml(studentPhotoSrc)}" alt="Student Photo" class="student-photo" onerror="this.onerror=null;this.src='${NO_PHOTO_SVG}';" />
             </div>
           </div>
@@ -3998,6 +4236,15 @@ const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
       const fatherVal = info?.father_name || "-";
       const motherVal = info?.mother_name || "-";
 
+      const health = getPrimaryHealthInfo(info);
+      const effectiveAssessmentDate = health.assessment_date || new Date();
+      const ageAtAssessment = buildAgeAtAssessmentText(dobValRaw, effectiveAssessmentDate);
+      const healthAssessmentDateText = formatDisplayDate(effectiveAssessmentDate);
+      const healthAttendanceText =
+        health.present_days !== "-" || health.working_days !== "-"
+          ? `${health.present_days} / ${health.working_days}`
+          : "-";
+
       const studentInfoBlock = `
       <div class="panel" style="margin-bottom:8px">
         <div class="grid-info">
@@ -4006,14 +4253,41 @@ const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
           <div class="kv"><b>Class / Section:</b> ${(info?.Class?.class_name || "-")} - ${(info?.Section?.section_name || "-")}</div>
 
           <div class="kv"><b>Date of Birth:</b> ${dobVal}</div>
+          <div class="kv"><b>Age at Assessment:</b> ${escapePrimaryHtml(ageAtAssessment)}</div>
+          <div class="kv"><b>Blood Group:</b> ${escapePrimaryHtml(health.blood_group)}</div>
+
           <div class="kv"><b>Mother's Name:</b> ${motherVal}</div>
           <div class="kv"><b>Father's Name:</b> ${fatherVal}</div>
+          <div class="kv"><b>Assessment Date:</b> ${escapePrimaryHtml(healthAssessmentDateText)}</div>
         </div>
+      </div>
+    `;
+
+      const healthDetailsBlock = `
+      <div class="section-title">
+        <div class="section-title-left">
+          <div class="section-pill">Health</div>
+          <h5 style="margin:0;color:#0b1b3a;font-size:10px">Health & Extra Details</h5>
+        </div>
+      </div>
+      <div class="health-panel">
+        <div class="health-metric"><span class="health-label">Attendance</span><span class="health-value">${escapePrimaryHtml(healthAttendanceText)}</span></div>
+        <div class="health-metric"><span class="health-label">Height (cm)</span><span class="health-value">${escapePrimaryHtml(health.height)}</span></div>
+        <div class="health-metric"><span class="health-label">Weight (kg)</span><span class="health-value">${escapePrimaryHtml(health.weight)}</span></div>
+        <div class="health-metric"><span class="health-label">Dental Check-up</span><span class="health-value">${escapePrimaryHtml(health.dental)}</span></div>
+        <div class="health-metric"><span class="health-label">Vision</span><span class="health-value">${escapePrimaryHtml(health.vision)}</span></div>
+        <div class="health-metric"><span class="health-label">Blood Group</span><span class="health-value">${escapePrimaryHtml(health.blood_group)}</span></div>
+        <div class="health-metric"><span class="health-label">Assessment Date</span><span class="health-value">${escapePrimaryHtml(healthAssessmentDateText)}</span></div>
       </div>
     `;
 
       return `
       <section class="card">
+        ${
+          effectiveSchoolLogoUrl
+            ? `<img src="${escapePrimaryHtml(effectiveSchoolLogoUrl)}" class="watermark-logo" alt="School Logo Watermark" onerror="this.style.display='none';" />`
+            : ""
+        }
         ${headerHtml}
         ${studentInfoBlock}
         ${scholasticTable}
@@ -4029,6 +4303,8 @@ const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
         <div class="two-col">
           <div>${attendanceTable}</div>
         </div>
+
+        ${healthDetailsBlock}
 
         ${remarksBlock}
         ${footerHtml}
@@ -4084,6 +4360,7 @@ const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
 
     const activeReportFormat = selectedReportFormat || reportFormatRef.current || reportFormat;
 
+    // Smart templates preserve the uploaded school design itself, so a legacy print format is not required.
     if (!isSmartReportTemplate && !activeReportFormat?.id) {
       return Swal.fire(
         "Select Format",
@@ -4221,13 +4498,10 @@ const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
       else areasMap.set(g.area_id, { area_name: g.area_name, t1: null, t2: g });
     });
 
-    mergeCoScholasticSubjectRows(areasMap, student);
-
-    const drawingAlreadyHandled = getCoScholasticSubjectNames(student).some(isDrawingSubject);
     const drawingT1 = getDrawingGradeForTerm(student, term1Id, exams, gradeSchema);
     const drawingT2 = getDrawingGradeForTerm(student, term2Id, exams, gradeSchema);
 
-    if (!drawingAlreadyHandled && (drawingT1 !== "-" || drawingT2 !== "-")) {
+    if (drawingT1 !== "-" || drawingT2 !== "-") {
       areasMap.set("__drawing__", {
         area_name: "Drawing",
         t1: { grade: drawingT1 },
@@ -4650,7 +4924,10 @@ const renderTeacherRemarksTermWise = (studentId) => {
         <div className="mt-4">
           <h5 className="mb-2">Subjects & Components</h5>
           <div className="d-flex flex-wrap gap-3">
-            {filters.subjectComponents.map((sc, i) => (
+            {filters.subjectComponents
+              .map((sc, i) => ({ sc, i }))
+              .filter(({ sc }) => componentRowHasVisibleConfig(sc))
+              .map(({ sc, i }) => (
               <div key={i} className="panel" style={{ minWidth: 260 }}>
                 <div className="d-flex gap-2">
                   <select
@@ -4762,7 +5039,11 @@ const renderTeacherRemarksTermWise = (studentId) => {
                       </option>
                     ))}
                   </select>
-                  <div className="text-muted small mt-1">{isSmartReportTemplate ? "Visual Designer template controls the complete PDF layout" : "Selected format controls PDF layout"}</div>
+                  <div className="text-muted small mt-1">
+                    {isSmartReportTemplate
+                      ? "Not required for Smart Templates — uploaded school design controls the PDF."
+                      : "Selected format controls PDF layout"}
+                  </div>
                 </div>
 
                 <div className="col-md-3">
@@ -4784,7 +5065,11 @@ const renderTeacherRemarksTermWise = (studentId) => {
                       </option>
                     ))}
                   </select>
-                  <div className="text-muted small mt-1">{isSmartReportTemplate ? "Visual Designer layout will be rendered with live ERP data" : "Selected template will be sent to backend"}</div>
+                  <div className="text-muted small mt-1">
+                    {isSmartReportTemplate
+                      ? "Smart Template: ERP data will be overlaid on the saved school design."
+                      : "Legacy template selected."}
+                  </div>
                 </div>
 
                 {pdfMode === "single" && (
@@ -4850,7 +5135,7 @@ const renderTeacherRemarksTermWise = (studentId) => {
               const info = studentInfoMap[student.id] || {};
               const studentPhotoSrc = getStudentPhotoURL(info);
 
-              const subjectsForStudent = getNonDrawingSubjects(student);
+              const subjectsForStudent = getDisplaySubjectsForStudent(student);
 
               const t1 = term1Id ? getStudentTermOverall(student, term1Id) : null;
               const t2 = term2Id ? getStudentTermOverall(student, term2Id) : null;
@@ -4863,8 +5148,6 @@ const renderTeacherRemarksTermWise = (studentId) => {
               const effectiveHeaderHtml = getReportCardHeaderHtml();
               const effectiveFooterHtml = getReportCardFooterHtml();
               const effectiveSchoolLogoUrl = getReportCardSchoolLogoUrl();
-              const effectiveBoardLogoUrl = getReportCardBoardLogoUrl();
-
               const cleanHeaderHtml = sanitizeHeaderHtml(effectiveHeaderHtml);
 
               return (
@@ -4941,11 +5224,13 @@ const renderTeacherRemarksTermWise = (studentId) => {
                     </div>
                   </div>
 
-                  <h5 style={{ fontSize: "18px" }}>Scholastic Areas (Term-wise)</h5>
+                  {subjectsForStudent.length && hasAnyScholasticComponentColumns ? (
+                    <>
+                      <h5 style={{ fontSize: "18px" }}>Scholastic Areas (Term-wise)</h5>
 
-                  <div className="table-responsive">
-                    <table className="table table-bordered text-center small">
-                      <thead>
+                      <div className="table-responsive">
+                        <table className="table table-bordered text-center small">
+                          <thead>
                         <tr>
                           <th
                             rowSpan={2}
@@ -4959,27 +5244,31 @@ const renderTeacherRemarksTermWise = (studentId) => {
                             Subject
                           </th>
 
-                          <th
-                            colSpan={term1Components.length + (showTotals ? 2 : 0)}
-                            style={{
-                              background: "linear-gradient(180deg,#dbeafe,#bfdbfe)",
-                              color: "#08335a",
-                            }}
-                          >
-                            {term1Id ? termLabel(term1Id) : "Term-I"}
-                          </th>
+                          {hasTerm1ComponentColumns && (
+                            <th
+                              colSpan={term1Components.length + (showTotals ? 2 : 0)}
+                              style={{
+                                background: "linear-gradient(180deg,#dbeafe,#bfdbfe)",
+                                color: "#08335a",
+                              }}
+                            >
+                              {termLabel(term1Id)}
+                            </th>
+                          )}
 
-                          <th
-                            colSpan={term2Components.length + (showTotals ? 2 : 0)}
-                            style={{
-                              background: "linear-gradient(180deg,#dbeafe,#bfdbfe)",
-                              color: "#08335a",
-                            }}
-                          >
-                            {term2Id ? termLabel(term2Id) : "Term-II"}
-                          </th>
+                          {hasTerm2ComponentColumns && (
+                            <th
+                              colSpan={term2Components.length + (showTotals ? 2 : 0)}
+                              style={{
+                                background: "linear-gradient(180deg,#dbeafe,#bfdbfe)",
+                                color: "#08335a",
+                              }}
+                            >
+                              {termLabel(term2Id)}
+                            </th>
+                          )}
 
-                          {showTotals && (
+                          {showTotals && hasAnyScholasticComponentColumns && (
                             <th
                               colSpan={2}
                               style={{
@@ -4993,31 +5282,33 @@ const renderTeacherRemarksTermWise = (studentId) => {
                         </tr>
 
                         <tr>
-                          {term1Components.map((c) => (
-                            <th key={`t1-${c.component_id}`} style={{ backgroundColor: "#eef6ff" }}>
-                              {c.label}
-                            </th>
-                          ))}
-                          {showTotals && (
+                          {hasTerm1ComponentColumns &&
+                            term1Components.map((c) => (
+                              <th key={`t1-${c.component_id}`} style={{ backgroundColor: "#eef6ff" }}>
+                                {c.label}
+                              </th>
+                            ))}
+                          {hasTerm1ComponentColumns && showTotals && (
                             <>
                               <th style={{ backgroundColor: "#eef6ff", fontWeight: "bold" }}>Total</th>
                               <th style={{ backgroundColor: "#eef6ff", fontWeight: "bold" }}>Grade</th>
                             </>
                           )}
 
-                          {term2Components.map((c) => (
-                            <th key={`t2-${c.component_id}`} style={{ backgroundColor: "#eef6ff" }}>
-                              {c.label}
-                            </th>
-                          ))}
-                          {showTotals && (
+                          {hasTerm2ComponentColumns &&
+                            term2Components.map((c) => (
+                              <th key={`t2-${c.component_id}`} style={{ backgroundColor: "#eef6ff" }}>
+                                {c.label}
+                              </th>
+                            ))}
+                          {hasTerm2ComponentColumns && showTotals && (
                             <>
                               <th style={{ backgroundColor: "#eef6ff", fontWeight: "bold" }}>Total</th>
                               <th style={{ backgroundColor: "#eef6ff", fontWeight: "bold" }}>Grade</th>
                             </>
                           )}
 
-                          {showTotals && (
+                          {showTotals && hasAnyScholasticComponentColumns && (
                             <>
                               <th style={{ backgroundColor: "#eef6ff", fontWeight: "bold" }}>Total</th>
                               <th style={{ backgroundColor: "#eef6ff", fontWeight: "bold" }}>Grade</th>
@@ -5052,35 +5343,33 @@ const renderTeacherRemarksTermWise = (studentId) => {
                                 {sub}
                               </td>
 
-                              {term1Components.map((c) => (
-                                <td key={`r1-${si}-${c.component_id}`}>
-                                  {term1Id
-                                    ? getSubjectTermCompDisplay(student, sub, term1Id, c.component_id)
-                                    : "-"}
-                                </td>
-                              ))}
-                              {showTotals && (
+                              {hasTerm1ComponentColumns &&
+                                term1Components.map((c) => (
+                                  <td key={`r1-${si}-${c.component_id}`}>
+                                    {getSubjectTermCompDisplay(student, sub, term1Id, c.component_id)}
+                                  </td>
+                                ))}
+                              {hasTerm1ComponentColumns && showTotals && (
                                 <>
                                   <td style={{ fontWeight: 900 }}>{s1?.marksTotal != null ? s1.marksTotal : "-"}</td>
                                   <td style={{ fontWeight: 900 }}>{s1?.grade || "-"}</td>
                                 </>
                               )}
 
-                              {term2Components.map((c) => (
-                                <td key={`r2-${si}-${c.component_id}`}>
-                                  {term2Id
-                                    ? getSubjectTermCompDisplay(student, sub, term2Id, c.component_id)
-                                    : "-"}
-                                </td>
-                              ))}
-                              {showTotals && (
+                              {hasTerm2ComponentColumns &&
+                                term2Components.map((c) => (
+                                  <td key={`r2-${si}-${c.component_id}`}>
+                                    {getSubjectTermCompDisplay(student, sub, term2Id, c.component_id)}
+                                  </td>
+                                ))}
+                              {hasTerm2ComponentColumns && showTotals && (
                                 <>
                                   <td style={{ fontWeight: 900 }}>{s2?.marksTotal != null ? s2.marksTotal : "-"}</td>
                                   <td style={{ fontWeight: 900 }}>{s2?.grade || "-"}</td>
                                 </>
                               )}
 
-                              {showTotals && (
+                              {showTotals && hasAnyScholasticComponentColumns && (
                                 <>
                                   <td style={{ fontWeight: 900 }}>
                                     <div className="grand-total-small">{gMarks != null ? gMarks : "-"}</div>
@@ -5092,7 +5381,7 @@ const renderTeacherRemarksTermWise = (studentId) => {
                           );
                         })}
 
-                        {showTotals && (
+                        {showTotals && hasAnyScholasticComponentColumns && (
                           <>
                             <tr>
                               <td
@@ -5107,25 +5396,33 @@ const renderTeacherRemarksTermWise = (studentId) => {
                                 TOTAL
                               </td>
 
-                              {term1Components.map((_, idx) => (
-                                <td key={`b1-${idx}`}></td>
-                              ))}
-                              <td style={{ backgroundColor: "#f2f7ff", fontWeight: 900 }}>
-                                <div className="grand-total-small">{t1 ? formatNumber(t1.total_weighted) : "-"}</div>
-                              </td>
-                              <td style={{ backgroundColor: "#f2f7ff", fontWeight: 900 }}>
-                                {formatPercent(t1?.percent)}
-                              </td>
+                              {hasTerm1ComponentColumns && (
+                                <>
+                                  {term1Components.map((_, idx) => (
+                                    <td key={`b1-${idx}`}></td>
+                                  ))}
+                                  <td style={{ backgroundColor: "#f2f7ff", fontWeight: 900 }}>
+                                    <div className="grand-total-small">{t1 ? formatNumber(t1.total_weighted) : "-"}</div>
+                                  </td>
+                                  <td style={{ backgroundColor: "#f2f7ff", fontWeight: 900 }}>
+                                    {formatPercent(t1?.percent)}
+                                  </td>
+                                </>
+                              )}
 
-                              {term2Components.map((_, idx) => (
-                                <td key={`b2-${idx}`}></td>
-                              ))}
-                              <td style={{ backgroundColor: "#f2f7ff", fontWeight: 900 }}>
-                                <div className="grand-total-small">{t2 ? formatNumber(t2.total_weighted) : "-"}</div>
-                              </td>
-                              <td style={{ backgroundColor: "#f2f7ff", fontWeight: 900 }}>
-                                {formatPercent(t2?.percent)}
-                              </td>
+                              {hasTerm2ComponentColumns && (
+                                <>
+                                  {term2Components.map((_, idx) => (
+                                    <td key={`b2-${idx}`}></td>
+                                  ))}
+                                  <td style={{ backgroundColor: "#f2f7ff", fontWeight: 900 }}>
+                                    <div className="grand-total-small">{t2 ? formatNumber(t2.total_weighted) : "-"}</div>
+                                  </td>
+                                  <td style={{ backgroundColor: "#f2f7ff", fontWeight: 900 }}>
+                                    {formatPercent(t2?.percent)}
+                                  </td>
+                                </>
+                              )}
 
                               <td style={{ backgroundColor: "#e0f2fe" }}>
                                 <div className="grand-total-small">{formatNumber(student.total_weighted)}</div>
@@ -5163,11 +5460,13 @@ const renderTeacherRemarksTermWise = (studentId) => {
                             )}
                           </>
                         )}
-                      </tbody>
-                    </table>
-                  </div>
+                          </tbody>
+                        </table>
+                      </div>
+                    </>
+                  ) : null}
 
-                  {gradeFooterText ? (
+                  {gradeFooterText && subjectsForStudent.length && hasAnyScholasticComponentColumns ? (
                     <div className="grade-footer-note">
                       <strong>Grade Scale:</strong> {gradeFooterText}
                     </div>
