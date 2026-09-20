@@ -660,6 +660,7 @@ const FinalResultSummary = () => {
   const [studentInfoMap, setStudentInfoMap] = useState({});
   const [coScholasticByTerm, setCoScholasticByTerm] = useState({});
   const [remarksByTerm, setRemarksByTerm] = useState({});
+  const [resultDeclarationByTerm, setResultDeclarationByTerm] = useState({});
   const [attendanceByTerm, setAttendanceByTerm] = useState({});
   const [promotionDecisionByTerm, setPromotionDecisionByTerm] = useState({});
   const [gradeSchema, setGradeSchema] = useState([]);
@@ -1329,6 +1330,7 @@ const FinalResultSummary = () => {
     setStudentInfoMap({});
     setCoScholasticByTerm({});
     setRemarksByTerm({});
+    setResultDeclarationByTerm({});
     setAttendanceByTerm({});
     setPromotionDecisionByTerm({});
     setReportFormat(null);
@@ -1359,6 +1361,7 @@ const FinalResultSummary = () => {
     setStudentInfoMap({});
     setCoScholasticByTerm({});
     setRemarksByTerm({});
+    setResultDeclarationByTerm({});
     setAttendanceByTerm({});
     setPromotionDecisionByTerm({});
     setReportFormat(null);
@@ -2333,6 +2336,12 @@ const FinalResultSummary = () => {
     const term2Overall = term2Id ? getStudentTermOverall(student, term2Id) : null;
     const r1 = term1Id ? remarksByTerm[String(term1Id)]?.[student.id] : null;
     const r2 = term2Id ? remarksByTerm[String(term2Id)]?.[student.id] : null;
+    const resultMeta1 = term1Id
+      ? resultDeclarationByTerm[String(term1Id)]?.[student.id]
+      : null;
+    const resultMeta2 = term2Id
+      ? resultDeclarationByTerm[String(term2Id)]?.[student.id]
+      : null;
     const promotion = term2Id ? promotionDecisionByTerm[String(term2Id)]?.[student.id] : null;
 
     const selectedTermIdsForReport = [...new Set(
@@ -2341,6 +2350,9 @@ const FinalResultSummary = () => {
         .filter(Boolean)
     )];
     const reportTermId = selectedTermIdsForReport.length === 1 ? selectedTermIdsForReport[0] : (term1Id || term2Id || null);
+    const reportResultMeta = selectedTermIdsForReport.length === 1
+      ? resultDeclarationByTerm[String(selectedTermIdsForReport[0])]?.[student.id] || null
+      : resultMeta2 || resultMeta1 || null;
     const reportExams = (filters?.exam_ids || [])
       .map((examId) => exams.find((e) => Number(e.id) === Number(examId)))
       .filter(Boolean);
@@ -2474,10 +2486,17 @@ const FinalResultSummary = () => {
         grade: overallPct == null ? "-" : gradeFromSchema(overallPct, gradeSchema),
         rank: hasDisplayRank(student?.rank) ? student.rank : "-",
         declaration:
+          reportResultMeta?.result_declaration ||
           promotion?.promotion_status ||
           promotion?.result_status ||
           promotion?.status ||
           "-",
+        declaration_date:
+          reportResultMeta?.result_declaration_date
+            ? formatDisplayDate(reportResultMeta.result_declaration_date)
+            : promotion?.promotion_date
+            ? formatDisplayDate(promotion.promotion_date)
+            : "-",
         term1: term1Overall || {},
         term2: term2Overall || {},
       },
@@ -2555,6 +2574,7 @@ const FinalResultSummary = () => {
         setStudentInfoMap({});
         setCoScholasticByTerm({});
         setRemarksByTerm({});
+        setResultDeclarationByTerm({});
         setAttendanceByTerm({});
         setPromotionDecisionByTerm({});
         setLoading(false);
@@ -2676,6 +2696,7 @@ const FinalResultSummary = () => {
       setCoScholasticByTerm(coByTerm);
 
       const remarksTermMap = {};
+      const resultDeclarationTermMap = {};
       for (const tid of termIdsLocal.slice(0, 2)) {
         try {
           const remarksRes = await api.get("/report-card/remarks-summary", {
@@ -2683,18 +2704,29 @@ const FinalResultSummary = () => {
           });
 
           const rm = {};
+          const resultMeta = {};
           for (const r of remarksRes.data.remarks || []) {
             const sid = r.student_id ?? r.studentId ?? r?.student?.id;
             const val = r.remark ?? r.remarks ?? r.text ?? r.comment ?? "";
-            if (sid) rm[Number(sid)] = (val || "").trim() || "-";
+            if (sid) {
+              const numericSid = Number(sid);
+              rm[numericSid] = (val || "").trim() || "-";
+              resultMeta[numericSid] = {
+                result_declaration: String(r.result_declaration || "").trim(),
+                result_declaration_date: r.result_declaration_date || null,
+              };
+            }
           }
           remarksTermMap[String(tid)] = rm;
+          resultDeclarationTermMap[String(tid)] = resultMeta;
         } catch (e) {
           console.warn("Remarks failed for term", tid, e);
           remarksTermMap[String(tid)] = {};
+          resultDeclarationTermMap[String(tid)] = {};
         }
       }
       setRemarksByTerm(remarksTermMap);
+      setResultDeclarationByTerm(resultDeclarationTermMap);
             const promotionTermMap = {};
       for (const tid of termIdsLocal.slice(0, 2)) {
         try {

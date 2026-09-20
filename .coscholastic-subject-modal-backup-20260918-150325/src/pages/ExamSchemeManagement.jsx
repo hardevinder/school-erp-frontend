@@ -1,5 +1,5 @@
 // src/pages/ExamSchemeManagement.jsx
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import api from "../api";
 import Swal from "sweetalert2";
 import "bootstrap/dist/css/bootstrap.min.css";
@@ -25,12 +25,6 @@ const safeMode = (m) => {
   const s = String(m || "").toUpperCase().trim();
   return s === "GRADE" ? "GRADE" : "MARKS";
 };
-
-// REPORT_CARD_SECTION_SUBJECT_PATCH_V2
-const normalizeSubjectType = (value) =>
-  String(value || "").trim() === "Co-Scholastic"
-    ? "Co-Scholastic"
-    : "Scholastic";
 
 const calculationOptions = [
   ["WEIGHTED_SUM", "Weighted Sum (recommended for PT-1 + PT-2)"],
@@ -213,12 +207,6 @@ const ExamSchemeManagement = () => {
   const [terms, setTerms] = useState([]);
   const [components, setComponents] = useState([]);
 
-  // Excel import/export for Exam Schemes
-  const schemeImportInputRef = useRef(null);
-  const [schemeImportDragging, setSchemeImportDragging] = useState(false);
-  const [schemeImporting, setSchemeImporting] = useState(false);
-  const [schemeExporting, setSchemeExporting] = useState(false);
-
   const [filters, setFilters] = useState({
     session_id: "",
     class_id: "",
@@ -231,7 +219,6 @@ const ExamSchemeManagement = () => {
   const [evaluationMode, setEvaluationMode] = useState(null);
   const [evaluationModeLoading, setEvaluationModeLoading] = useState(false);
   const [evaluationModeSaving, setEvaluationModeSaving] = useState(false);
-  const [modalSubjectType, setModalSubjectType] = useState("Scholastic");
 
   const [formData, setFormData] = useState(() => emptySchemeForm());
 
@@ -553,23 +540,15 @@ const ExamSchemeManagement = () => {
 
   const openModal = (scheme) => {
     if (scheme) {
-      const subjectId = strId(scheme.subject_id);
       setFormData(schemeToForm(scheme));
-      setModalSubjectType(
-        normalizeSubjectType(subjectById.get(subjectId)?.type ?? scheme.subject?.type)
-      );
       setIsEditing(true);
     } else {
-      const subjectId = filters.subject_id ? String(filters.subject_id) : "";
       setFormData(
         emptySchemeForm({
           session_id: filters.session_id ? String(filters.session_id) : "",
           class_id: filters.class_id ? String(filters.class_id) : "",
-          subject_id: subjectId,
+          subject_id: filters.subject_id ? String(filters.subject_id) : "",
         })
-      );
-      setModalSubjectType(
-        normalizeSubjectType(subjectById.get(subjectId)?.type)
       );
       setIsEditing(false);
     }
@@ -577,11 +556,7 @@ const ExamSchemeManagement = () => {
   };
 
   const openDuplicateModal = (scheme) => {
-    const subjectId = strId(scheme.subject_id);
     setFormData(schemeToForm(scheme, { duplicate: true }));
-    setModalSubjectType(
-      normalizeSubjectType(subjectById.get(subjectId)?.type ?? scheme.subject?.type)
-    );
     setIsEditing(false);
     setShowModal(true);
   };
@@ -590,13 +565,6 @@ const ExamSchemeManagement = () => {
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
-
-    if (name === "subject_id") {
-      setModalSubjectType(
-        normalizeSubjectType(subjectById.get(String(value))?.type)
-      );
-    }
-
     setFormData((prev) => {
       const next = {
         ...prev,
@@ -694,58 +662,18 @@ const ExamSchemeManagement = () => {
       );
     }
 
-    let schemeSaved = false;
     try {
       if (isEditing) {
         await api.put(`/exam-schemes/${payload.id}`, payload);
       } else {
         await api.post("/exam-schemes", payload);
       }
-      schemeSaved = true;
-
-      const desiredSubjectType = normalizeSubjectType(modalSubjectType);
-      const currentSubject = subjectById.get(String(payload.subject_id));
-      const currentSubjectType = normalizeSubjectType(currentSubject?.type);
-
-      if (currentSubjectType !== desiredSubjectType) {
-        const subjectRes = await api.put(`/subjects/${payload.subject_id}`, {
-          type: desiredSubjectType,
-        });
-        const savedSubject = subjectRes?.data?.subject;
-        setSubjects((current) =>
-          (current || []).map((subject) =>
-            String(subject.id) === String(payload.subject_id)
-              ? {
-                  ...subject,
-                  ...(savedSubject || {}),
-                  type: desiredSubjectType,
-                }
-              : subject
-          )
-        );
-      }
-
-      Swal.fire(
-        "Success",
-        desiredSubjectType === "Co-Scholastic"
-          ? "Scheme saved. This subject will appear in the Co-Scholastic section of the report card."
-          : "Assessment scheme saved successfully.",
-        "success"
-      );
+      Swal.fire("Success", "Assessment scheme saved successfully.", "success");
       closeModal();
       fetchSchemes();
     } catch (e) {
-      const msg =
-        e?.response?.data?.message ||
-        e?.response?.data?.error ||
-        "Failed to save.";
-      Swal.fire(
-        "Error",
-        schemeSaved
-          ? `Scheme was saved, but subject classification could not be updated: ${msg}`
-          : msg,
-        "error"
-      );
+      const msg = e?.response?.data?.message || "Failed to save.";
+      Swal.fire("Error", msg, "error");
     }
   };
 
@@ -1208,147 +1136,6 @@ const ExamSchemeManagement = () => {
     }
   };
 
-  const exportParams = () => {
-    const params = {};
-    if (filters.session_id) params.session_id = filters.session_id;
-    if (filters.class_id) params.class_id = filters.class_id;
-    if (filters.subject_id) params.subject_id = filters.subject_id;
-    if (filters.term_id) params.term_id = filters.term_id;
-    if (filters.component_id) params.component_id = filters.component_id;
-    return params;
-  };
-
-  const handleExportSchemes = async () => {
-    try {
-      setSchemeExporting(true);
-      const response = await api.get("/exam-schemes/export", {
-        params: exportParams(),
-        responseType: "blob",
-      });
-
-      const disposition = response.headers?.["content-disposition"] || "";
-      const match = disposition.match(/filename\*?=(?:UTF-8''|\")?([^\";]+)/i);
-      const serverName = match?.[1]
-        ? decodeURIComponent(match[1].replace(/\"/g, ""))
-        : "";
-      const date = new Date().toISOString().slice(0, 10);
-      const filename = serverName || `exam_schemes_${date}.xlsx`;
-
-      const blob = new Blob([response.data], {
-        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      });
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
-    } catch (error) {
-      Swal.fire(
-        "Export Failed",
-        error?.response?.data?.message || "Unable to export exam schemes.",
-        "error"
-      );
-    } finally {
-      setSchemeExporting(false);
-    }
-  };
-
-  const importSchemeFile = async (file) => {
-    if (!file) return;
-
-    const lowerName = String(file.name || "").toLowerCase();
-    if (!lowerName.endsWith(".xlsx")) {
-      return Swal.fire(
-        "Unsupported File",
-        "Please use an .xlsx file. Export the scheme first if you need a ready template.",
-        "warning"
-      );
-    }
-
-    const confirm = await Swal.fire({
-      title: "Import Exam Schemes?",
-      html: `
-        <div style="text-align:left">
-          <div><b>File:</b> ${file.name}</div>
-          <div style="margin-top:8px">Only missing scheme rows will be added.</div>
-          <div style="font-size:13px;color:#666;margin-top:4px">
-            Existing rows with the same Session + Class + Subject + Term + Component are skipped.
-          </div>
-        </div>
-      `,
-      icon: "question",
-      showCancelButton: true,
-      confirmButtonText: "Import",
-    });
-    if (!confirm.isConfirmed) return;
-
-    const data = new FormData();
-    data.append("file", file);
-
-    try {
-      setSchemeImporting(true);
-      Swal.fire({
-        title: "Importing exam schemes...",
-        text: "Please wait",
-        allowOutsideClick: false,
-        didOpen: () => Swal.showLoading(),
-      });
-
-      const response = await api.post("/exam-schemes/import", data, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
-
-      const added = Number(response?.data?.count || 0);
-      const skipped = Array.isArray(response?.data?.skipped)
-        ? response.data.skipped
-        : [];
-
-      await Swal.fire({
-        title: "Import Complete ✅",
-        html: `
-          <div style="text-align:left;display:inline-block;min-width:260px">
-            <div><b>Added:</b> ${added}</div>
-            <div><b>Skipped:</b> ${skipped.length}</div>
-            ${
-              skipped.length
-                ? `<div style="font-size:12px;color:#666;margin-top:6px">Skipped rows are existing/duplicate or contain an unknown master value.</div>`
-                : ""
-            }
-          </div>
-        `,
-        icon: "success",
-      });
-
-      await fetchSchemes();
-      if (hasExactSchemeContext) await fetchEvaluationMode();
-    } catch (error) {
-      Swal.fire(
-        "Import Failed",
-        error?.response?.data?.message || "Unable to import exam schemes.",
-        "error"
-      );
-    } finally {
-      setSchemeImporting(false);
-      if (schemeImportInputRef.current) schemeImportInputRef.current.value = "";
-    }
-  };
-
-  const handleSchemeFileInput = (event) => {
-    const file = event.target.files?.[0];
-    importSchemeFile(file);
-  };
-
-  const handleSchemeDrop = (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    setSchemeImportDragging(false);
-    const file = event.dataTransfer?.files?.[0];
-    importSchemeFile(file);
-  };
-
   const isFiltered = !!(
     filters.session_id ||
     filters.class_id ||
@@ -1378,32 +1165,6 @@ const ExamSchemeManagement = () => {
           </Button>
 
           <Button
-            variant="outline-success"
-            onClick={handleExportSchemes}
-            disabled={schemeExporting}
-            title="Export the currently filtered Exam Scheme rows to Excel"
-          >
-            {schemeExporting ? "Exporting..." : "⬇️ Export Excel"}
-          </Button>
-
-          <Button
-            variant="outline-secondary"
-            onClick={() => schemeImportInputRef.current?.click()}
-            disabled={schemeImporting}
-            title="Import only missing Exam Scheme rows from an exported .xlsx file"
-          >
-            {schemeImporting ? "Importing..." : "⬆️ Import Excel"}
-          </Button>
-
-          <input
-            ref={schemeImportInputRef}
-            type="file"
-            accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            onChange={handleSchemeFileInput}
-            style={{ display: "none" }}
-          />
-
-          <Button
             variant="outline-danger"
             onClick={handleDeleteAllSchemes}
             disabled={!isFiltered || !schemes.length}
@@ -1414,55 +1175,6 @@ const ExamSchemeManagement = () => {
           <Button variant="success" onClick={() => openModal()}>
             ➕ Add Scheme
           </Button>
-        </div>
-      </div>
-
-      <div
-        onDragEnter={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          setSchemeImportDragging(true);
-        }}
-        onDragOver={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          setSchemeImportDragging(true);
-        }}
-        onDragLeave={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          if (e.currentTarget === e.target) setSchemeImportDragging(false);
-        }}
-        onDrop={handleSchemeDrop}
-        onClick={() => !schemeImporting && schemeImportInputRef.current?.click()}
-        role="button"
-        tabIndex={0}
-        onKeyDown={(e) => {
-          if ((e.key === "Enter" || e.key === " ") && !schemeImporting) {
-            e.preventDefault();
-            schemeImportInputRef.current?.click();
-          }
-        }}
-        className={`mb-3 rounded-3 text-center ${
-          schemeImportDragging
-            ? "border border-2 border-primary bg-light"
-            : "border border-2 border-secondary-subtle"
-        }`}
-        style={{
-          borderStyle: "dashed",
-          padding: "10px 14px",
-          cursor: schemeImporting ? "wait" : "pointer",
-          transition: "all .15s ease",
-        }}
-        title="Drop an exported Exam Scheme .xlsx file here"
-      >
-        <div className="fw-semibold">
-          {schemeImportDragging
-            ? "Drop Excel file here"
-            : "📥 Drop Exam Scheme Excel here or click to browse"}
-        </div>
-        <div className="small text-muted">
-          Import is duplicate-safe: existing scheme rows are skipped; only missing rows are added.
         </div>
       </div>
 
@@ -1740,31 +1452,6 @@ const ExamSchemeManagement = () => {
                   </option>
                 ))}
               </select>
-            </div>
-
-            <div className="col-12">
-              <div className="border rounded p-3 bg-light">
-                <div className="row g-2 align-items-end">
-                  <div className="col-12 col-md-6">
-                    <label className="fw-semibold">Report Card Section</label>
-                    <select
-                      className="form-control"
-                      value={modalSubjectType}
-                      onChange={(e) => setModalSubjectType(e.target.value)}
-                      disabled={!formData.subject_id}
-                    >
-                      <option value="Scholastic">Scholastic</option>
-                      <option value="Co-Scholastic">Co-Scholastic</option>
-                    </select>
-                  </div>
-                  <div className="col-12 col-md-6">
-                    <small className="text-muted">
-                      This is a subject-level setting. Co-Scholastic subjects are excluded from
-                      Scholastic totals/rank and shown above mapped Co-Scholastic areas on the report card.
-                    </small>
-                  </div>
-                </div>
-              </div>
             </div>
 
             <div className="col-12 col-md-6">

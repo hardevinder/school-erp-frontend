@@ -5,7 +5,16 @@ import "bootstrap/dist/css/bootstrap.min.css";
 
 const HEADER_Z = 1030;
 
-/* ---------------- Role Helpers (same as CoScholasticEntry) ---------------- */
+const DEFAULT_RESULT_DECLARATIONS = [
+  { value: "PASS", label: "Pass" },
+  { value: "FAIL", label: "Fail" },
+  { value: "PROMOTED", label: "Promoted" },
+  { value: "DETAINED", label: "Detained" },
+  { value: "NEEDS IMPROVEMENT", label: "Needs Improvement" },
+  { value: "COMPARTMENT", label: "Compartment" },
+  { value: "RESULT WITHHELD", label: "Result Withheld" },
+];
+
 const getRoleFlags = () => {
   const singleRole = localStorage.getItem("userRole");
   const multiRoles = JSON.parse(localStorage.getItem("roles") || "[]");
@@ -36,27 +45,41 @@ const StudentRemarksEntry = () => {
     term_id: "",
   });
 
-  // Teacher/incharge assigned list
   const [assignedClasses, setAssignedClasses] = useState([]);
-
-  // Global meta from backend
-  const [classSections, setClassSections] = useState([]);
   const [sessions, setSessions] = useState([]);
-
-  // Fallback global lists
   const [classes, setClasses] = useState([]);
   const [sections, setSections] = useState([]);
-
   const [terms, setTerms] = useState([]);
+
   const [students, setStudents] = useState([]);
   const [remarksMap, setRemarksMap] = useState({});
+  const [resultDeclarationMap, setResultDeclarationMap] = useState({});
+  const [resultDeclarationDateMap, setResultDeclarationDateMap] = useState({});
+  const [resultDeclarationOptions, setResultDeclarationOptions] = useState(
+    DEFAULT_RESULT_DECLARATIONS
+  );
+
+  const [bulkResultDeclaration, setBulkResultDeclaration] = useState("");
+  const [bulkResultDeclarationDate, setBulkResultDeclarationDate] = useState("");
+  const [studentSearch, setStudentSearch] = useState("");
   const [loading, setLoading] = useState(false);
+  const [sectionsLoading, setSectionsLoading] = useState(false);
 
   const textRefs = useRef({});
 
+  const clearStudentData = () => {
+    setStudents([]);
+    setRemarksMap({});
+    setResultDeclarationMap({});
+    setResultDeclarationDateMap({});
+    setBulkResultDeclaration("");
+    setBulkResultDeclarationDate("");
+    setStudentSearch("");
+  };
+
   useEffect(() => {
     init();
-    // eslint-disable-next-line
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const init = async () => {
@@ -67,24 +90,19 @@ const StudentRemarksEntry = () => {
       if (isGlobal) {
         await loadGlobalMeta();
       } else {
-        await loadAssignedClasses();
-        await loadSessions();
+        await Promise.all([loadAssignedClasses(), loadSessions()]);
       }
     } catch (e) {
-      // already handled
+      // loader functions show their own errors
     } finally {
       setLoading(false);
     }
   };
 
+  // Section is intentionally NOT required.
   useEffect(() => {
-    const { session_id, class_id, section_id, term_id } = filters;
-    if (
-      session_id !== "" &&
-      class_id !== "" &&
-      section_id !== "" &&
-      term_id !== ""
-    ) {
+    const { session_id, class_id, term_id } = filters;
+    if (session_id !== "" && class_id !== "" && term_id !== "") {
       fetchRemarks();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -102,11 +120,10 @@ const StudentRemarksEntry = () => {
       const active =
         normalized.find((s) => s.is_active === true || s.is_active === 1) || normalized[0];
 
-      if (active && filters.session_id === "") {
-        setFilters((prev) => ({
-          ...prev,
-          session_id: String(active.id),
-        }));
+      if (active) {
+        setFilters((prev) =>
+          prev.session_id === "" ? { ...prev, session_id: String(active.id) } : prev
+        );
       }
     } catch (err) {
       console.error("Failed to load sessions", err);
@@ -121,13 +138,25 @@ const StudentRemarksEntry = () => {
       const list = Array.isArray(res.data) ? res.data : [];
       setAssignedClasses(list);
 
-      if (list.length > 0 && filters.class_id === "" && filters.section_id === "") {
+      if (list.length > 0) {
         const first = list[0];
-        setFilters((prev) => ({
-          ...prev,
-          class_id: String(first.class_id),
-          section_id: String(first.section_id),
-        }));
+        setFilters((prev) =>
+          prev.class_id === ""
+            ? { ...prev, class_id: String(first.class_id), section_id: "" }
+            : prev
+        );
+
+        const firstClassSections = list
+          .filter((x) => String(x.class_id) === String(first.class_id))
+          .map((x) => ({
+            id: x.section_id,
+            section_id: x.section_id,
+            section_name: x.section_name,
+          }))
+          .filter((x) => x.id != null);
+        setSections(
+          Array.from(new Map(firstClassSections.map((x) => [String(x.id), x])).values())
+        );
       }
     } catch (err) {
       console.error("Failed to load assigned classes", err);
@@ -135,96 +164,40 @@ const StudentRemarksEntry = () => {
     }
   };
 
-  // ✅ Best path for admin/superadmin/examination
   const loadGlobalMeta = async () => {
     try {
-      const res = await api.get("/student-remarks", {
-        params: { meta: 1 },
-      });
+      const res = await api.get("/student-remarks", { params: { meta: 1 } });
 
-      const classSectionsList = Array.isArray(res.data?.classSections) ? res.data.classSections : [];
+      const classList = Array.isArray(res.data?.classes) ? res.data.classes : [];
       const sessionsList = Array.isArray(res.data?.sessions) ? res.data.sessions : [];
 
-      setClassSections(classSectionsList);
+      setClasses(classList);
       setSessions(sessionsList);
+      if (Array.isArray(res.data?.resultDeclarationOptions)) {
+        setResultDeclarationOptions(res.data.resultDeclarationOptions);
+      }
 
-      // derive unique classes
-      const uniqueClasses = Array.from(
-        new Map(
-          classSectionsList.map((x) => [
-            String(x.class_id),
-            {
-              id: x.class_id,
-              class_name: x.class_name,
-            },
-          ])
-        ).values()
-      );
-
-      setClasses(uniqueClasses);
-
-      // auto-select active session
       const activeSession =
         sessionsList.find((s) => s.is_active === true || s.is_active === 1) || sessionsList[0];
+      const firstClass = classList[0];
 
-      // auto-select first class
-      const firstClass = uniqueClasses[0];
-
-      setFilters((prev) => {
-        const next = { ...prev };
-
-        if (next.session_id === "" && activeSession) {
-          next.session_id = String(activeSession.id);
-        }
-
-        if (next.class_id === "" && firstClass) {
-          next.class_id = String(firstClass.id);
-        }
-
-        return next;
-      });
+      setFilters((prev) => ({
+        ...prev,
+        session_id:
+          prev.session_id === "" && activeSession ? String(activeSession.id) : prev.session_id,
+        class_id: prev.class_id === "" && firstClass ? String(firstClass.id) : prev.class_id,
+        section_id: "",
+      }));
 
       if (firstClass) {
-        const filteredSections = classSectionsList
-          .filter((x) => String(x.class_id) === String(firstClass.id))
-          .map((x) => ({
-            id: x.section_id,
-            section_name: x.section_name,
-            class_id: x.class_id,
-          }));
-
-        const uniqueSections = Array.from(
-          new Map(
-            filteredSections.map((s) => [
-              String(s.id),
-              {
-                id: s.id,
-                section_name: s.section_name,
-                class_id: s.class_id,
-              },
-            ])
-          ).values()
-        );
-
-        setSections(uniqueSections);
-
-        setFilters((prev) => ({
-          ...prev,
-          section_id:
-            prev.section_id === "" && uniqueSections[0]
-              ? String(uniqueSections[0].id)
-              : prev.section_id,
-        }));
+        await loadSectionsForClass(firstClass.id);
       }
     } catch (err) {
       console.error("Failed to load global meta", err);
-
-      // fallback older flow
       await Promise.all([loadSessions(), loadAllClasses()]);
     }
   };
 
-  // fallback for global roles if meta endpoint not usable
   const loadAllClasses = async () => {
     try {
       const res =
@@ -241,10 +214,11 @@ const StudentRemarksEntry = () => {
         : [];
 
       setClasses(normalized);
-
-      if (normalized.length > 0 && filters.class_id === "") {
+      if (normalized.length > 0) {
         const firstId = String(normalized[0].id);
-        setFilters((prev) => ({ ...prev, class_id: firstId, section_id: "" }));
+        setFilters((prev) =>
+          prev.class_id === "" ? { ...prev, class_id: firstId, section_id: "" } : prev
+        );
         await loadSectionsForClass(firstId);
       }
     } catch (err) {
@@ -254,69 +228,43 @@ const StudentRemarksEntry = () => {
     }
   };
 
-  const loadSectionsForClass = async (class_id) => {
-    if (class_id === "" || class_id === null || class_id === undefined) return;
+  const loadSectionsForClass = async (classId) => {
+    if (!classId) {
+      setSections([]);
+      return;
+    }
+
+    if (!isGlobal) {
+      const list = assignedClasses
+        .filter((c) => String(c.class_id) === String(classId))
+        .map((x) => ({
+          id: x.section_id,
+          section_id: x.section_id,
+          section_name: x.section_name,
+        }))
+        .filter((x) => x.id != null);
+
+      const unique = Array.from(
+        new Map(list.map((s) => [String(s.id), s])).values()
+      );
+      setSections(unique);
+      return;
+    }
 
     try {
-      // Prefer meta-derived sections for global roles
-      if (isGlobal && classSections.length > 0) {
-        const filteredSections = classSections
-          .filter((x) => String(x.class_id) === String(class_id))
-          .map((x) => ({
-            id: x.section_id,
-            section_name: x.section_name,
-            class_id: x.class_id,
-          }));
-
-        const uniqueSections = Array.from(
-          new Map(
-            filteredSections.map((s) => [
-              String(s.id),
-              {
-                id: s.id,
-                section_name: s.section_name,
-                class_id: s.class_id,
-              },
-            ])
-          ).values()
-        );
-
-        setSections(uniqueSections);
-
-        setFilters((prev) => ({
-          ...prev,
-          section_id:
-            prev.section_id === "" && uniqueSections[0]
-              ? String(uniqueSections[0].id)
-              : prev.section_id,
-        }));
-        return;
-      }
-
-      const res =
-        (await api.get("/sections", { params: { class_id } }).catch(() => null)) ||
-        (await api.get("/section", { params: { class_id } }).catch(() => null)) ||
-        null;
-
-      const list = res?.data?.sections || res?.data || [];
-      const normalized = Array.isArray(list)
-        ? list.map((s) => ({
-            id: s.id ?? s.section_id ?? s.sectionId,
-            section_name: s.section_name ?? s.name ?? s.title ?? `Section ${s.id}`,
-            class_id: s.class_id ?? s.classId ?? class_id,
-          }))
+      setSectionsLoading(true);
+      const res = await api.get("/student-remarks", {
+        params: { meta: 1, class_id: classId },
+      });
+      const used = Array.isArray(res.data?.studentSections)
+        ? res.data.studentSections
         : [];
-
-      const filtered = normalized.filter((x) => String(x.class_id) === String(class_id));
-      setSections(filtered);
-
-      if (filtered.length > 0 && filters.section_id === "") {
-        setFilters((prev) => ({ ...prev, section_id: String(filtered[0].id) }));
-      }
+      setSections(used);
     } catch (err) {
-      console.error("Failed to load sections", err);
-      Swal.fire("Error", "Failed to load sections", "error");
+      console.error("Failed to load student sections", err);
       setSections([]);
+    } finally {
+      setSectionsLoading(false);
     }
   };
 
@@ -327,11 +275,10 @@ const StudentRemarksEntry = () => {
       const normalized = Array.isArray(list) ? list : [];
       setTerms(normalized);
 
-      if (normalized.length > 0 && filters.term_id === "") {
-        setFilters((prev) => ({
-          ...prev,
-          term_id: String(normalized[0].id),
-        }));
+      if (normalized.length > 0) {
+        setFilters((prev) =>
+          prev.term_id === "" ? { ...prev, term_id: String(normalized[0].id) } : prev
+        );
       }
     } catch (err) {
       console.error("Failed to load terms", err);
@@ -343,54 +290,109 @@ const StudentRemarksEntry = () => {
 
   const fetchRemarks = async () => {
     const { session_id, class_id, section_id, term_id } = filters;
+    if (!session_id || !class_id || !term_id) return;
 
     try {
       setLoading(true);
 
-      const res = await api.get("/student-remarks", {
-        params: {
-          session_id,
-          class_id,
-          section_id,
-          term_id,
-        },
-      });
+      const params = { session_id, class_id, term_id };
+      if (section_id) params.section_id = section_id;
+
+      const res = await api.get("/student-remarks", { params });
 
       const map = {};
+      const declarationMap = {};
+      const declarationDateMap = {};
       (res.data?.existingRemarks || []).forEach((r) => {
-        map[String(r.student_id)] = r.remark || "";
+        const sid = String(r.student_id);
+        map[sid] = r.remark || "";
+        declarationMap[sid] = r.result_declaration || "";
+        declarationDateMap[sid] = r.result_declaration_date || "";
       });
 
       setStudents(res.data?.students || []);
       setRemarksMap(map);
+      setResultDeclarationMap(declarationMap);
+      setResultDeclarationDateMap(declarationDateMap);
+      if (Array.isArray(res.data?.resultDeclarationOptions)) {
+        setResultDeclarationOptions(res.data.resultDeclarationOptions);
+      }
+      if (Array.isArray(res.data?.studentSections)) {
+        setSections(res.data.studentSections);
+      }
     } catch (err) {
       console.error("Failed to fetch remarks", err);
       Swal.fire("Error", err?.response?.data?.message || "Failed to fetch remarks", "error");
       setStudents([]);
       setRemarksMap({});
+      setResultDeclarationMap({});
+      setResultDeclarationDateMap({});
     } finally {
       setLoading(false);
     }
   };
 
-  const handleChange = (student_id, value) => {
-    setRemarksMap((prev) => ({ ...prev, [String(student_id)]: value }));
+  const handleChange = (studentId, value) => {
+    setRemarksMap((prev) => ({ ...prev, [String(studentId)]: value }));
+  };
+
+  const handleResultDeclarationChange = (studentId, value) => {
+    setResultDeclarationMap((prev) => ({ ...prev, [String(studentId)]: value }));
+  };
+
+  const handleResultDeclarationDateChange = (studentId, value) => {
+    setResultDeclarationDateMap((prev) => ({ ...prev, [String(studentId)]: value }));
+  };
+
+  const applyResultFieldsToAll = () => {
+    if (!bulkResultDeclaration && !bulkResultDeclarationDate) {
+      Swal.fire(
+        "Nothing to apply",
+        "Select Result Declaration and/or Date of Result Declaration first.",
+        "info"
+      );
+      return;
+    }
+
+    if (bulkResultDeclaration) {
+      const next = {};
+      students.forEach((student) => {
+        next[String(student.id)] = bulkResultDeclaration;
+      });
+      setResultDeclarationMap((prev) => ({ ...prev, ...next }));
+    }
+
+    if (bulkResultDeclarationDate) {
+      const next = {};
+      students.forEach((student) => {
+        next[String(student.id)] = bulkResultDeclarationDate;
+      });
+      setResultDeclarationDateMap((prev) => ({ ...prev, ...next }));
+    }
+
+    Swal.fire({
+      icon: "success",
+      title: "Applied",
+      text: `Result fields applied to ${students.length} student${students.length === 1 ? "" : "s"}.`,
+      timer: 1200,
+      showConfirmButton: false,
+    });
   };
 
   const handleSave = async () => {
-    const { session_id, class_id, section_id, term_id } = filters;
+    const { session_id, class_id, term_id } = filters;
 
-    if (
-      session_id === "" ||
-      class_id === "" ||
-      section_id === "" ||
-      term_id === ""
-    ) {
+    if (!session_id || !class_id || !term_id) {
       Swal.fire(
         "Missing filters",
-        "Please select Session, Class, Section and Term first.",
+        "Please select Session, Class and Term. Section is optional.",
         "warning"
       );
+      return;
+    }
+
+    if (!students.length) {
+      Swal.fire("No students", "There are no students to save for the selected filters.", "info");
       return;
     }
 
@@ -398,15 +400,21 @@ const StudentRemarksEntry = () => {
       student_id: student.id,
       session_id,
       class_id,
-      section_id,
+      section_id: student.section_id ?? null,
       term_id,
       remark: remarksMap[String(student.id)] || "",
+      result_declaration: resultDeclarationMap[String(student.id)] || "",
+      result_declaration_date: resultDeclarationDateMap[String(student.id)] || "",
     }));
 
     try {
       setLoading(true);
       await api.post("/student-remarks", { remarks: payload });
-      Swal.fire("Success", "Remarks saved successfully", "success");
+      await Swal.fire(
+        "Saved",
+        "Remarks and result declaration saved successfully.",
+        "success"
+      );
       fetchRemarks();
     } catch (err) {
       console.error("Failed to save remarks", err);
@@ -416,7 +424,6 @@ const StudentRemarksEntry = () => {
     }
   };
 
-  // Ctrl/Cmd + S
   useEffect(() => {
     const onKey = (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
@@ -427,9 +434,8 @@ const StudentRemarksEntry = () => {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [students, remarksMap, filters]);
+  }, [students, remarksMap, resultDeclarationMap, resultDeclarationDateMap, filters]);
 
-  // Unique class list for teacher assigned
   const uniqueAssignedClasses = useMemo(() => {
     const map = new Map();
     for (const c of assignedClasses) {
@@ -438,15 +444,35 @@ const StudentRemarksEntry = () => {
     return Array.from(map.values());
   }, [assignedClasses]);
 
-  const sectionsForAssignedClass = useMemo(() => {
-    return assignedClasses
-      .filter((c) => String(c.class_id) === String(filters.class_id))
-      .map((x) => ({ section_id: x.section_id, section_name: x.section_name }))
-      .filter(
-        (x, idx, arr) =>
-          idx === arr.findIndex((y) => String(y.section_id) === String(x.section_id))
-      );
-  }, [assignedClasses, filters.class_id]);
+  const filteredStudents = useMemo(() => {
+    const q = studentSearch.trim().toLowerCase();
+    if (!q) return students;
+
+    return students.filter((s) => {
+      const values = [
+        s.name,
+        s.student_name,
+        s.admission_number,
+        s.roll_number,
+        s.Section?.section_name,
+      ];
+      return values.some((v) => String(v ?? "").toLowerCase().includes(q));
+    });
+  }, [students, studentSearch]);
+
+  const selectedClassName = useMemo(() => {
+    if (!filters.class_id) return "";
+    const source = isGlobal ? classes : uniqueAssignedClasses;
+    const item = source.find((c) =>
+      String(c.id ?? c.class_id) === String(filters.class_id)
+    );
+    return item?.class_name || "";
+  }, [filters.class_id, isGlobal, classes, uniqueAssignedClasses]);
+
+  const selectedTermName = useMemo(() => {
+    const item = terms.find((t) => String(t.id) === String(filters.term_id));
+    return item?.name || "";
+  }, [terms, filters.term_id]);
 
   const stickyColStyle = (leftPx) => ({
     position: "sticky",
@@ -457,81 +483,92 @@ const StudentRemarksEntry = () => {
 
   const headerStickyStyle = { position: "sticky", top: 0, zIndex: 3 };
 
+  const readyForStudents =
+    filters.session_id !== "" && filters.class_id !== "" && filters.term_id !== "";
+
   return (
     <div className="container-fluid px-3 py-3">
-      <div className="d-flex align-items-center mb-2">
-        <h4 className="mb-0">📝 Student Remarks Entry</h4>
-        <div className="ms-auto d-flex gap-2">
-          <button className="btn btn-success" onClick={handleSave} disabled={loading}>
+      <div className="d-flex flex-wrap align-items-start gap-2 mb-3">
+        <div>
+          <h4 className="mb-1">📝 Student Remarks & Result Declaration</h4>
+          <div className="text-muted small">
+            Enter teacher remarks, result declaration and declaration date. Section is optional.
+          </div>
+        </div>
+        <div className="ms-auto d-flex align-items-center gap-2">
+          {students.length > 0 && (
+            <span className="badge rounded-pill text-bg-light border px-3 py-2">
+              {students.length} student{students.length === 1 ? "" : "s"} loaded
+            </span>
+          )}
+          <button className="btn btn-success" onClick={handleSave} disabled={loading || !students.length}>
             {loading ? (
               <>
                 <span className="spinner-border spinner-border-sm me-2" role="status" />
                 Saving…
               </>
             ) : (
-              <>💾 Save (Ctrl/Cmd+S)</>
+              <>💾 Save All</>
             )}
           </button>
         </div>
       </div>
 
       <div
-        className="card mb-3"
-        style={{
-          position: "sticky",
-          top: 0,
-          zIndex: HEADER_Z,
-          boxShadow: "0 1px 6px rgba(0,0,0,0.06)",
-        }}
+        className="card mb-3 border-0 shadow-sm"
+        style={{ position: "sticky", top: 0, zIndex: HEADER_Z }}
       >
         <div className="card-body py-3">
+          <div className="d-flex align-items-center mb-3">
+            <div>
+              <div className="fw-semibold">Report Filters</div>
+              <div className="text-muted small">
+                Choose Session, Class and Term. Use Section only when you want to narrow the class.
+              </div>
+            </div>
+            <button
+              className="btn btn-outline-primary btn-sm ms-auto"
+              onClick={fetchRemarks}
+              disabled={loading || !readyForStudents}
+            >
+              ↻ Reload Students
+            </button>
+          </div>
+
           <div className="row g-3">
-            {/* Session */}
-            <div className="col-md-3">
-              <label className="form-label">Select Session</label>
+            <div className="col-xl-3 col-md-6">
+              <label className="form-label fw-medium">Session</label>
               <select
                 className="form-select"
                 value={filters.session_id}
                 onChange={(e) => {
-                  const session_id = e.target.value;
-                  setFilters((prev) => ({ ...prev, session_id }));
-                  setStudents([]);
-                  setRemarksMap({});
+                  clearStudentData();
+                  setFilters((prev) => ({ ...prev, session_id: e.target.value }));
                 }}
               >
                 <option value="">Select Session</option>
                 {sessions.map((s) => (
                   <option key={s.id} value={s.id}>
-                    {s.name}
-                    {s.is_active ? " (Active)" : ""}
+                    {s.name}{s.is_active ? " (Active)" : ""}
                   </option>
                 ))}
               </select>
             </div>
 
-            {/* Class */}
-            <div className="col-md-3">
-              <label className="form-label">Select Class</label>
+            <div className="col-xl-3 col-md-6">
+              <label className="form-label fw-medium">Class</label>
               <select
                 className="form-select"
                 value={filters.class_id}
                 onChange={async (e) => {
-                  const class_id = e.target.value;
-                  setFilters((prev) => ({
-                    ...prev,
-                    class_id,
-                    section_id: "",
-                  }));
-                  setStudents([]);
-                  setRemarksMap({});
-
-                  if (isGlobal) {
-                    await loadSectionsForClass(class_id);
-                  }
+                  const classId = e.target.value;
+                  clearStudentData();
+                  setSections([]);
+                  setFilters((prev) => ({ ...prev, class_id: classId, section_id: "" }));
+                  await loadSectionsForClass(classId);
                 }}
               >
                 <option value="">Select Class</option>
-
                 {!isGlobal
                   ? uniqueAssignedClasses.map((item) => (
                       <option key={item.class_id} value={item.class_id}>
@@ -544,54 +581,48 @@ const StudentRemarksEntry = () => {
                       </option>
                     ))}
               </select>
-
               {!isGlobal && uniqueAssignedClasses.length === 0 && (
                 <div className="form-text text-danger">No assigned classes found for this user.</div>
               )}
-              {isGlobal && classes.length === 0 && (
-                <div className="form-text text-danger">No classes loaded.</div>
-              )}
             </div>
 
-            {/* Section */}
-            <div className="col-md-3">
-              <label className="form-label">Select Section</label>
+            <div className="col-xl-3 col-md-6">
+              <label className="form-label fw-medium">
+                Section <span className="badge text-bg-light border fw-normal">Optional</span>
+              </label>
               <select
                 className="form-select"
                 value={filters.section_id}
                 onChange={(e) => {
+                  clearStudentData();
                   setFilters((prev) => ({ ...prev, section_id: e.target.value }));
-                  setStudents([]);
-                  setRemarksMap({});
                 }}
-                disabled={filters.class_id === ""}
+                disabled={!filters.class_id || sectionsLoading}
               >
-                <option value="">Select Section</option>
-
-                {!isGlobal
-                  ? sectionsForAssignedClass.map((item) => (
-                      <option key={item.section_id} value={item.section_id}>
-                        {item.section_name}
-                      </option>
-                    ))
-                  : sections.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.section_name}
-                      </option>
-                    ))}
+                <option value="">All Sections / No Section Restriction</option>
+                {sections.map((s) => (
+                  <option key={s.id ?? s.section_id} value={s.id ?? s.section_id}>
+                    {s.section_name || `Section ${s.id ?? s.section_id}`}
+                  </option>
+                ))}
               </select>
+              <div className="form-text">
+                {sectionsLoading
+                  ? "Checking sections used by students…"
+                  : sections.length === 0 && filters.class_id
+                  ? "No section is assigned to students in this class — this is okay."
+                  : "Only sections actually assigned to students are listed."}
+              </div>
             </div>
 
-            {/* Term */}
-            <div className="col-md-3">
-              <label className="form-label">Select Term</label>
+            <div className="col-xl-3 col-md-6">
+              <label className="form-label fw-medium">Term</label>
               <select
                 className="form-select"
                 value={filters.term_id}
                 onChange={(e) => {
+                  clearStudentData();
                   setFilters((prev) => ({ ...prev, term_id: e.target.value }));
-                  setStudents([]);
-                  setRemarksMap({});
                 }}
               >
                 <option value="">Select Term</option>
@@ -604,115 +635,229 @@ const StudentRemarksEntry = () => {
             </div>
           </div>
 
-          <div className="mt-2 d-flex gap-2 flex-wrap">
+          <div className="d-flex flex-wrap align-items-center gap-2 mt-3">
             <button
               className="btn btn-outline-secondary btn-sm"
               onClick={() => {
                 const activeSession =
                   sessions.find((s) => s.is_active === true || s.is_active === 1) || sessions[0];
-
                 setFilters({
                   session_id: activeSession ? String(activeSession.id) : "",
                   class_id: "",
                   section_id: "",
                   term_id: terms[0] ? String(terms[0].id) : "",
                 });
-                setStudents([]);
-                setRemarksMap({});
                 setSections([]);
+                clearStudentData();
               }}
               disabled={loading}
             >
               Reset Filters
             </button>
 
-            <button className="btn btn-outline-primary btn-sm" onClick={init} disabled={loading}>
-              Reload
-            </button>
+            {selectedClassName && selectedTermName && (
+              <div className="small text-muted ms-md-auto">
+                Working on <strong>{selectedClassName}</strong> · <strong>{selectedTermName}</strong>
+                {filters.section_id ? " · filtered by section" : " · all students in class"}
+              </div>
+            )}
           </div>
         </div>
       </div>
 
-      <div className="card">
-        <div className="card-body">
+      <div className="card mb-3 border-primary-subtle shadow-sm">
+        <div className="card-body py-3">
           <div className="d-flex align-items-center mb-3">
-            <h6 className="mb-0">📋 Remarks Table</h6>
-            <button className="btn btn-outline-success btn-sm ms-auto" onClick={handleSave} disabled={loading}>
-              {loading ? "Saving…" : "Save"}
-            </button>
+            <div>
+              <div className="fw-semibold">Quick Fill</div>
+              <div className="text-muted small">Apply declaration and/or date to all loaded students.</div>
+            </div>
+          </div>
+          <div className="row g-3 align-items-end">
+            <div className="col-lg-4 col-md-5">
+              <label className="form-label mb-1">Result Declaration</label>
+              <select
+                className="form-select"
+                value={bulkResultDeclaration}
+                onChange={(e) => setBulkResultDeclaration(e.target.value)}
+                disabled={students.length === 0}
+              >
+                <option value="">Select Result Declaration</option>
+                {resultDeclarationOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="col-lg-4 col-md-4">
+              <label className="form-label mb-1">Date of Result Declaration</label>
+              <input
+                type="date"
+                className="form-control"
+                value={bulkResultDeclarationDate}
+                onChange={(e) => setBulkResultDeclarationDate(e.target.value)}
+                disabled={students.length === 0}
+              />
+            </div>
+            <div className="col-lg-4 col-md-3 d-grid">
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={applyResultFieldsToAll}
+                disabled={students.length === 0 || loading}
+              >
+                Apply to All Loaded Students
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="card border-0 shadow-sm">
+        <div className="card-body">
+          <div className="d-flex flex-wrap align-items-center gap-2 mb-3">
+            <div>
+              <h6 className="mb-0">📋 Remarks Table</h6>
+              {students.length > 0 && (
+                <div className="text-muted small mt-1">
+                  Showing {filteredStudents.length} of {students.length} loaded students
+                </div>
+              )}
+            </div>
+
+            {students.length > 0 && (
+              <div className="ms-auto d-flex gap-2 align-items-center">
+                <input
+                  type="search"
+                  className="form-control form-control-sm"
+                  style={{ minWidth: 260 }}
+                  placeholder="Search name, admission no., roll no.…"
+                  value={studentSearch}
+                  onChange={(e) => setStudentSearch(e.target.value)}
+                />
+                <button
+                  className="btn btn-outline-success btn-sm"
+                  onClick={handleSave}
+                  disabled={loading}
+                >
+                  Save
+                </button>
+              </div>
+            )}
           </div>
 
-          {filters.session_id === "" ||
-          filters.class_id === "" ||
-          filters.section_id === "" ||
-          filters.term_id === "" ? (
+          {!readyForStudents ? (
             <div className="alert alert-info mb-0">
-              Please select <strong>Session</strong>, <strong>Class</strong>, <strong>Section</strong> and{" "}
-              <strong>Term</strong> to view students.
+              Select <strong>Session</strong>, <strong>Class</strong> and <strong>Term</strong> to view students.
+              <br />
+              <span className="small">Section is optional and can be left as “All Sections / No Section Restriction”.</span>
             </div>
           ) : loading ? (
-            <div className="d-flex align-items-center gap-2">
+            <div className="d-flex align-items-center gap-2 py-3">
               <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
-              <span>Loading data…</span>
+              <span>Loading students and saved remarks…</span>
             </div>
           ) : students.length === 0 ? (
-            <div className="alert alert-warning mb-0">No students found for the selected filters.</div>
+            <div className="alert alert-warning mb-0">
+              <div className="fw-semibold">No students found.</div>
+              <div className="small mt-1">
+                No enabled/visible students were found for this Class{filters.section_id ? " and Section" : ""}.
+                You can leave Section unselected to load the entire class.
+              </div>
+            </div>
+          ) : filteredStudents.length === 0 ? (
+            <div className="alert alert-light border mb-0">
+              No students match “{studentSearch}”. Clear the search to show all loaded students.
+            </div>
           ) : (
             <>
               <div
                 className="table-responsive"
                 style={{
-                  maxHeight: 520,
+                  maxHeight: 560,
                   overflow: "auto",
                   border: "1px solid var(--bs-border-color, #dee2e6)",
-                  borderRadius: 8,
+                  borderRadius: 10,
                 }}
               >
-                <table className="table table-bordered table-hover mb-0">
+                <table className="table table-bordered table-hover align-middle mb-0">
                   <thead className="table-light" style={headerStickyStyle}>
                     <tr>
                       <th style={{ minWidth: 90, ...stickyColStyle(0) }}>Roll No</th>
-                      <th style={{ minWidth: 220, ...stickyColStyle(90) }}>Name</th>
-                      <th style={{ minWidth: 480 }}>Remarks</th>
+                      <th style={{ minWidth: 250, ...stickyColStyle(90) }}>Student</th>
+                      <th style={{ minWidth: 95 }}>Section</th>
+                      <th style={{ minWidth: 360 }}>Remarks</th>
+                      <th style={{ minWidth: 190 }}>Result Declaration</th>
+                      <th style={{ minWidth: 190 }}>Declaration Date</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {students.map((s, idx) => (
-                      <tr key={s.id}>
-                        <td style={stickyColStyle(0)}>
-                          {s.roll_number == null || s.roll_number === "" ? "—" : s.roll_number}
-                        </td>
-                        <td style={stickyColStyle(90)}>
-                          {s.name || s.student_name || "—"}
-                        </td>
-                        <td>
-                          <textarea
-                            ref={(el) => {
-                              if (el) textRefs.current[s.id] = el;
-                            }}
-                            className="form-control"
-                            rows={2}
-                            value={remarksMap[String(s.id)] || ""}
-                            onChange={(e) => handleChange(s.id, e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter" && !e.shiftKey) {
-                                e.preventDefault();
-                                const next = students[idx + 1];
-                                if (next && textRefs.current[next.id]) textRefs.current[next.id].focus();
-                              }
-                            }}
-                            placeholder="Type remark… (Shift+Enter = newline)"
-                          />
-                        </td>
-                      </tr>
-                    ))}
+                    {filteredStudents.map((s) => {
+                      const originalIndex = students.findIndex((x) => String(x.id) === String(s.id));
+                      return (
+                        <tr key={s.id}>
+                          <td style={stickyColStyle(0)}>
+                            {s.roll_number == null || s.roll_number === "" ? "—" : s.roll_number}
+                          </td>
+                          <td style={stickyColStyle(90)}>
+                            <div className="fw-semibold">{s.name || s.student_name || "—"}</div>
+                            <div className="text-muted small">
+                              {s.admission_number ? `Adm. No. ${s.admission_number}` : "No admission number"}
+                            </div>
+                          </td>
+                          <td>{s.Section?.section_name || "—"}</td>
+                          <td>
+                            <textarea
+                              ref={(el) => {
+                                if (el) textRefs.current[s.id] = el;
+                              }}
+                              className="form-control"
+                              rows={2}
+                              value={remarksMap[String(s.id)] || ""}
+                              onChange={(e) => handleChange(s.id, e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" && !e.shiftKey) {
+                                  e.preventDefault();
+                                  const next = students[originalIndex + 1];
+                                  if (next && textRefs.current[next.id]) textRefs.current[next.id].focus();
+                                }
+                              }}
+                              placeholder="Type teacher remark… (Shift+Enter = newline)"
+                            />
+                          </td>
+                          <td>
+                            <select
+                              className="form-select"
+                              value={resultDeclarationMap[String(s.id)] || ""}
+                              onChange={(e) => handleResultDeclarationChange(s.id, e.target.value)}
+                            >
+                              <option value="">Select</option>
+                              {resultDeclarationOptions.map((option) => (
+                                <option key={option.value} value={option.value}>
+                                  {option.label}
+                                </option>
+                              ))}
+                            </select>
+                          </td>
+                          <td>
+                            <input
+                              type="date"
+                              className="form-control"
+                              value={resultDeclarationDateMap[String(s.id)] || ""}
+                              onChange={(e) => handleResultDeclarationDateChange(s.id, e.target.value)}
+                            />
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
 
-              <div className="mt-3 text-end">
+              <div className="mt-3 d-flex justify-content-end">
                 <button className="btn btn-success" onClick={handleSave} disabled={loading}>
-                  {loading ? "Saving…" : "💾 Save Remarks"}
+                  {loading ? "Saving…" : "💾 Save Remarks & Result"}
                 </button>
               </div>
             </>

@@ -24,6 +24,7 @@ const asArray = (d) => {
     "gradeOptions",
     "allowedGrades",
     "sessions",
+    "classes",
   ];
   for (const k of keys) {
     if (Array.isArray(d?.[k])) return d[k];
@@ -116,6 +117,7 @@ const MarksEntry = () => {
 
   const [sessions, setSessions] = useState([]);
   const [classExamSubjects, setClassExamSubjects] = useState([]);
+  const [configuredClasses, setConfiguredClasses] = useState([]);
   const [accessibleSchedules, setAccessibleSchedules] = useState([]);
   const [exams, setExams] = useState([]);
   const [subjects, setSubjects] = useState([]);
@@ -166,6 +168,12 @@ const MarksEntry = () => {
       (row) => !filters.session_id || Number(row.session_id) === Number(filters.session_id)
     );
     const classMap = new Map();
+    configuredClasses.forEach((row) => {
+      classMap.set(Number(row.id), {
+        class_id: row.id,
+        class_name: row.class_name || row.name,
+      });
+    });
     sessionRows.forEach((row) => {
       if (!classMap.has(Number(row.class_id))) {
         classMap.set(Number(row.class_id), {
@@ -221,7 +229,7 @@ const MarksEntry = () => {
         }
       });
     setSubjects([...subjectMap.values()]);
-  }, [accessibleSchedules, filters.session_id, filters.class_id, filters.section_id, filters.exam_id]);
+  }, [accessibleSchedules, configuredClasses, filters.session_id, filters.class_id, filters.section_id, filters.exam_id]);
 
   useEffect(() => {
     const { session_id, class_id, section_id, exam_id, subject_id } = filters;
@@ -270,6 +278,13 @@ const MarksEntry = () => {
       const res = await api.get("/marks-access/my-scope");
       const schedules = asArray(res?.data?.schedules);
       setAccessibleSchedules(schedules);
+      // Administrators must also see classes whose exam schedules have not
+      // been configured yet. Teachers remain limited to their marks scope.
+      if (res?.data?.global_access === true) {
+        const classResponse = await api.get("/classes");
+        setConfiguredClasses(asArray(classResponse.data));
+        return;
+      }
 
       // A teacher may have marks access only in a session other than the
       // school's default/current session. Keep the selected session when it
@@ -1177,7 +1192,12 @@ const MarksEntry = () => {
             <div className="text-center py-4">Loading...</div>
           ) : students.length === 0 ? (
             <div className="alert alert-light border text-center mb-0">
-              Select Session, Class, Section, Exam and Subject to load data.
+              {filters.session_id && filters.class_id && !accessibleSchedules.some(
+                (row) => Number(row.session_id) === Number(filters.session_id) &&
+                  Number(row.class_id) === Number(filters.class_id)
+              )
+                ? "No exam schedule is available for this class in the selected session. Configure it in Exam Schedule Management to enter marks or grades."
+                : "Select Session, Class, Section, Exam and Subject to load data."}
             </div>
           ) : evaluationMode === "GRADE" ? (
             <div className="table-responsive">

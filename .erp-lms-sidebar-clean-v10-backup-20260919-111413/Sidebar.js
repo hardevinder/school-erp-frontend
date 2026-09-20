@@ -2029,19 +2029,8 @@ export default function Sidebar({ headerHeight = 56 }) {
           </button>
         </div>
 
-        {/* SIDEBAR_WORKSPACE_CONTEXT_V1: desktop shows context only; mobile keeps the ERP/LMS switcher in More. */}
-        <div
-          className={`sidebar-workspace-context ${isExpanded ? "is-expanded" : "is-collapsed"}`}
-          aria-label={`${workspace} workspace navigation`}
-          title={`${workspace} Workspace`}
-        >
-          <span className="sidebar-workspace-context__icon" aria-hidden="true">
-            <i className={`bi ${workspace === "LMS" ? "bi-mortarboard" : "bi-buildings"}`} />
-          </span>
-          <span className="sidebar-workspace-context__copy">
-            <strong>{workspace} Workspace</strong>
-            <small>Navigation</small>
-          </span>
+        <div className="px-2">
+          <WorkspaceTabs value={workspace} onChange={handleWorkspaceChange} compact />
         </div>
         <div className="sidebar-search-wrap">
           <div className={`sidebar-search ${q ? "has-value" : ""}`}>

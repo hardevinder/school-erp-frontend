@@ -181,6 +181,7 @@ import CoScholasticEntry from "./pages/CoScholasticEntry";
 import ReportCardFormats from "./pages/ReportCardFormats";
 import AssignReportCardFormat from "./pages/AssignReportCardFormat";
 import ReportCardGenerator from "./pages/ReportCardGenerator";
+import ReportCardSubjectOrder from "./pages/ReportCardSubjectOrder";
 import ReportCardTemplateStudio from "./pages/ReportCardTemplateStudio";
 import ReportCardVisualDesigner from "./pages/ReportCardVisualDesigner";
 import StudentRemarksEntry from "./pages/StudentRemarksEntry";
@@ -1784,6 +1785,7 @@ function App() {
           <Route path="/assign-report-card-format" element={<AssignReportCardFormat />} />
           <Route path="/report-card-template-studio" element={<ReportCardTemplateStudio />} />
           <Route path="/report-card-designer" element={<ReportCardVisualDesigner />} />
+          <Route path="/report-card-subject-order" element={<ReportCardSubjectOrder />} />
           <Route path="/report-card-generator" element={<ReportCardGenerator />} />
           <Route path="/academic-years" element={<AcademicYearManagement />} />
 

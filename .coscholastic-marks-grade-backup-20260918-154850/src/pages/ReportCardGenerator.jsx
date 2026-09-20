@@ -1737,35 +1737,18 @@ const FinalResultSummary = () => {
     );
 
     const marksTotal = hasAnyMarks(items) ? sumMarksOnly(items) : null;
-    const marksMaximum = (items || []).reduce(
-      (sum, item) => sum + (isNumeric(item?.max_marks) ? Number(item.max_marks) : 0),
-      0
-    );
-
     const hasWeightedScore = items.some((item) => isNumeric(item?.weighted_marks));
     const wTotal = sumWeightedOnly(items);
     const wMax = sumMaxWeight(items);
-    const isCoScholasticSubject = items.some((item) => isCoScholasticComponent(item));
+    const percent = hasWeightedScore && wMax > 0 ? (wTotal / wMax) * 100 : null;
+    // Grade-only subjects have no weighted marks. In that case use the grade
+    // stored by Marks/Grade Entry instead of incorrectly treating them as 0%.
+    const incompleteCoSubject = items.some(isCoScholasticComponent) && items.some(
+      (item) => Number(item.weightage_percent) > 0 && !isNumeric(item.weighted_marks) && !item.grade
+    );
+    const grade = incompleteCoSubject ? "-" : percent != null ? gradeFromSchema(percent, gradeSchema) : pickGrade(items);
 
-    let percent = null;
-
-    // Co-Scholastic MARKS subjects: calculate grade from entered marks
-    // (e.g. 27/30 = 90%), not from a stored/manual grade.
-    if (isCoScholasticSubject && marksTotal != null && marksMaximum > 0) {
-      percent = (Number(marksTotal) / Number(marksMaximum)) * 100;
-    } else if (hasWeightedScore && wMax > 0) {
-      // Keep the existing weighted calculation for normal Scholastic subjects.
-      percent = (wTotal / wMax) * 100;
-    } else if (marksTotal != null && marksMaximum > 0) {
-      // Safe fallback when an older result payload has marks but no weighted_marks.
-      percent = (Number(marksTotal) / Number(marksMaximum)) * 100;
-    }
-
-    const calculatedGrade = percent != null ? gradeFromSchema(percent, gradeSchema) : "-";
-    const enteredGrade = pickGrade(items);
-    const grade = calculatedGrade !== "-" ? calculatedGrade : enteredGrade;
-
-    return { marksTotal, marksMaximum, percent, grade };
+    return { marksTotal, percent: incompleteCoSubject ? null : percent, grade };
   };
 
   const getStudentTermOverall = (student, termId) => {
@@ -1834,88 +1817,7 @@ const FinalResultSummary = () => {
   // The Template Studio maps visual fields to these paths once; every student reuses them.
   const buildSmartTemplateData = (student, infoOverride = {}) => {
     const info = infoOverride || {};
-    const rawComponents = Array.isArray(student?.components) ? student.components : [];
-
-    // SMCIS_PT_SPLIT_COLUMNS_V55
-    // Client format requires PT-1 and PT-2 to remain visible as separate columns,
-    // with 5 marks each (10 marks total). The backend now exposes the real
-    // source-component scores for grouped assessments; do not divide the group
-    // result in half because PT-1 and PT-2 can have different student scores.
-    const isSmcisCodedTemplate =
-      selectedReportTemplate?.template_key === "smcis_dynamic_term_report_card_v1";
-
-    const isTwoSourceSmcisPtGroup = (component = {}) => {
-      if (!isSmcisCodedTemplate || !component?.is_result_group) return false;
-      const groupKey = smartTemplateSlug(
-        component?.result_group_code ||
-          component?.abbreviation ||
-          component?.component_name ||
-          ""
-      );
-      const sourceIds = Array.isArray(component?.source_component_ids)
-        ? component.source_component_ids.filter((id) => id != null)
-        : [];
-      return (
-        sourceIds.length === 2 &&
-        (groupKey === "pt" ||
-          groupKey === "periodic_test" ||
-          groupKey.startsWith("pt_"))
-      );
-    };
-
-    // SMCIS_DYNAMIC_PA_WEIGHTAGE_V57
-    // Never force PA/PT weightage in the report card. If the old backend is still
-    // running and source_components are unavailable, keep the grouped component
-    // exactly as configured by the backend.
-    const normalizeSmcisPtParentFallback = (component = {}) => component;
-
-    const expandSmcisPtGroup = (component = {}) => {
-      if (!isTwoSourceSmcisPtGroup(component)) return [component];
-
-      const sourceComponents = Array.isArray(component?.source_components)
-        ? component.source_components
-            .filter((source) => source && source.component_id != null)
-            .slice()
-            .sort((a, b) => Number(a?.serial_order || 0) - Number(b?.serial_order || 0))
-        : [];
-
-      // Safe fallback while an old backend process is still running: keep PT(10).
-      // After backend restart, source_components is present and PT-1 / PT-2 appear.
-      if (sourceComponents.length !== 2) {
-        return [normalizeSmcisPtParentFallback(component)];
-      }
-
-      return sourceComponents.map((source, index) => {
-        // SMCIS_PA_DISPLAY_LABELS_V56
-        // Client terminology stays PA-1 / PA-2, but the marks weightage is NOT
-        // static. It comes from the backend assessment scheme. For example, if a
-        // teacher enters 20 out of 25 and backend weightage is 10, the backend
-        // already returns weighted_marks = 8 and weightage_percent = 10.
-        const label = `PA-${index + 1}`;
-        const configuredWeightage = isNumeric(source?.weightage_percent)
-          ? Number(source.weightage_percent)
-          : null;
-
-        return {
-          ...component,
-          ...source,
-          component_id: source?.component_id ?? `${component?.component_id}_pt_${index + 1}`,
-          source_component_ids: [source?.component_id].filter((id) => id != null),
-          name: label,
-          component_name: label,
-          abbreviation: label,
-          marks: source?.marks,
-          max_marks: source?.max_marks,
-          weighted_marks: source?.weighted_marks,
-          weightage_percent: configuredWeightage,
-          is_result_group: false,
-          result_group_code: component?.result_group_code || "PT",
-          __smcis_pt_source_column: true,
-        };
-      });
-    };
-
-    const allComponents = rawComponents.flatMap(expandSmcisPtGroup);
+    const allComponents = Array.isArray(student?.components) ? student.components : [];
     const scholasticComponents = allComponents.filter((component) => !isCoScholasticComponent(component));
     const session = (sessions || []).find((item) => String(item.id) === String(filters.session_id)) || {};
     const className = info?.Class?.class_name || info?.class_name || "";
@@ -2121,13 +2023,11 @@ const FinalResultSummary = () => {
         return Number(a.__original_order || 0) - Number(b.__original_order || 0);
       });
     const multipleTerms = new Set(smartComponentColumns.map((c) => Number(c.term_id || 0)).filter(Boolean)).size > 1;
-    // SMCIS_COMPACT_MARK_COLUMNS_V54
-    // Slightly narrower assessment columns match the client's compact reference
-    // and leave more room for the subject name without changing the table renderer.
-    const componentWidth = 8;
+    // SMCIS_EXACT_REFERENCE_WIDTHS_V5
+    const componentWidth = smartComponentColumns.length ? 10 : 10;
 
     const smartColumns = [
-      { id: "subject", label: "SUBJECT", source: "name", width: 22, align: "left" },
+      { id: "subject", label: "SUBJECT", source: "name", width: 19, align: "left" },
       ...smartComponentColumns.map((column) => {
         const weights = Array.from(column.weightages).filter((v) => v !== "");
         const weightText = weights.length === 1 ? ` (${weights[0]})` : weights.length > 1 ? ` (${weights.join("/")})` : "";
@@ -2155,8 +2055,8 @@ const FinalResultSummary = () => {
           align: "center",
         };
       }),
-      { id: "total", label: "TOTAL", source: "total_weighted", width: 9, align: "center" },
-      { id: "grade", label: "GRADE", source: "grade", width: 8, align: "center" },
+      { id: "total", label: "TOTAL", source: "total_weighted", width: 10, align: "center" },
+      { id: "grade", label: "GRADE", source: "grade", width: 10, align: "center" },
     ];
 
     const smartSubjectNames = [

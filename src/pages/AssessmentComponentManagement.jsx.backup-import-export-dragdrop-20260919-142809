@@ -85,7 +85,6 @@ const AssessmentComponentManagement = () => {
   const [statusFilter, setStatusFilter] = useState("ALL");
   const importInputRef = useRef(null);
   const [importing, setImporting] = useState(false);
-  const [isDragActive, setIsDragActive] = useState(false);
 
   const filteredComponents = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -354,19 +353,10 @@ const AssessmentComponentManagement = () => {
       .filter(Boolean);
   };
 
-  const processImportFile = async (file) => {
+  const handleImportFile = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
     if (!file) return;
-
-    const fileName = String(file.name || "").toLowerCase();
-    const allowedExtensions = [".xlsx", ".xls", ".csv"];
-    if (!allowedExtensions.some((extension) => fileName.endsWith(extension))) {
-      Swal.fire(
-        "Unsupported file",
-        "Please select an Excel (.xlsx/.xls) or CSV file.",
-        "warning"
-      );
-      return;
-    }
 
     try {
       setImporting(true);
@@ -430,36 +420,7 @@ const AssessmentComponentManagement = () => {
       );
     } finally {
       setImporting(false);
-      setIsDragActive(false);
     }
-  };
-
-  const handleImportFile = async (event) => {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    await processImportFile(file);
-  };
-
-  const handleDragOver = (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    if (!importing) setIsDragActive(true);
-  };
-
-  const handleDragLeave = (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    setIsDragActive(false);
-  };
-
-  const handleDrop = async (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    setIsDragActive(false);
-    if (importing) return;
-
-    const file = event.dataTransfer?.files?.[0];
-    await processImportFile(file);
   };
 
   const handleDelete = async (id) => {
@@ -532,44 +493,6 @@ const AssessmentComponentManagement = () => {
             onChange={handleImportFile}
           />
         </div>
-      </div>
-
-      <div
-        className="mt-3 rounded-3 text-center"
-        onDragOver={handleDragOver}
-        onDragEnter={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
-        onClick={() => !importing && importInputRef.current?.click()}
-        onKeyDown={(event) => {
-          if (!importing && (event.key === "Enter" || event.key === " ")) {
-            event.preventDefault();
-            importInputRef.current?.click();
-          }
-        }}
-        role="button"
-        tabIndex={0}
-        aria-label="Drag and drop assessment components import file or click to browse"
-        style={{
-          border: `2px dashed ${isDragActive ? "#0d6efd" : "#b8c2cc"}`,
-          backgroundColor: isDragActive ? "#eef6ff" : "#f8f9fa",
-          padding: "18px 16px",
-          cursor: importing ? "not-allowed" : "pointer",
-          transition: "all 0.18s ease",
-          opacity: importing ? 0.7 : 1,
-        }}
-      >
-        <div className="fw-semibold">
-          {importing
-            ? "Importing assessment components..."
-            : isDragActive
-              ? "Drop the file here to import"
-              : "📂 Drag & drop Excel / CSV here"}
-        </div>
-        <div className="text-muted small mt-1">
-          Or click this area to browse. Existing Name or Abbreviation will be skipped; only missing components are added.
-        </div>
-        <div className="text-muted small mt-1">Supported: .xlsx, .xls, .csv</div>
       </div>
 
       <div className="card mt-4 mb-4">

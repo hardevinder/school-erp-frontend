@@ -1863,11 +1863,24 @@ const FinalResultSummary = () => {
       );
     };
 
-    // SMCIS_DYNAMIC_PA_WEIGHTAGE_V57
-    // Never force PA/PT weightage in the report card. If the old backend is still
-    // running and source_components are unavailable, keep the grouped component
-    // exactly as configured by the backend.
-    const normalizeSmcisPtParentFallback = (component = {}) => component;
+    const normalizeSmcisPtParentFallback = (component = {}) => {
+      if (!isTwoSourceSmcisPtGroup(component)) return component;
+      const currentWeight = isNumeric(component?.weightage_percent)
+        ? Number(component.weightage_percent)
+        : 0;
+      if (currentWeight <= 0 || Math.abs(currentWeight - 10) < 0.001) return component;
+      const scale = 10 / currentWeight;
+      const scaleIfNumeric = (value) =>
+        isNumeric(value) ? Number((Number(value) * scale).toFixed(2)) : value;
+      return {
+        ...component,
+        marks: scaleIfNumeric(component?.marks),
+        max_marks: scaleIfNumeric(component?.max_marks),
+        weighted_marks: scaleIfNumeric(component?.weighted_marks),
+        weightage_percent: 10,
+        __smcis_pt_group_normalized: true,
+      };
+    };
 
     const expandSmcisPtGroup = (component = {}) => {
       if (!isTwoSourceSmcisPtGroup(component)) return [component];
@@ -1886,15 +1899,17 @@ const FinalResultSummary = () => {
       }
 
       return sourceComponents.map((source, index) => {
-        // SMCIS_PA_DISPLAY_LABELS_V56
-        // Client terminology stays PA-1 / PA-2, but the marks weightage is NOT
-        // static. It comes from the backend assessment scheme. For example, if a
-        // teacher enters 20 out of 25 and backend weightage is 10, the backend
-        // already returns weighted_marks = 8 and weightage_percent = 10.
-        const label = `PA-${index + 1}`;
-        const configuredWeightage = isNumeric(source?.weightage_percent)
+        const targetWeight = 5;
+        const sourceWeight = isNumeric(source?.weightage_percent)
           ? Number(source.weightage_percent)
-          : null;
+          : targetWeight;
+        const scale = sourceWeight > 0 ? targetWeight / sourceWeight : 1;
+        const scaleIfNumeric = (value) =>
+          isNumeric(value) ? Number((Number(value) * scale).toFixed(2)) : value;
+        // SMCIS_PA_DISPLAY_LABELS_V56
+        // Client terminology: display the two periodic assessment columns as
+        // PA-1 and PA-2 while keeping the existing grouped PT source logic intact.
+        const label = `PA-${index + 1}`;
 
         return {
           ...component,
@@ -1906,8 +1921,8 @@ const FinalResultSummary = () => {
           abbreviation: label,
           marks: source?.marks,
           max_marks: source?.max_marks,
-          weighted_marks: source?.weighted_marks,
-          weightage_percent: configuredWeightage,
+          weighted_marks: scaleIfNumeric(source?.weighted_marks),
+          weightage_percent: targetWeight,
           is_result_group: false,
           result_group_code: component?.result_group_code || "PT",
           __smcis_pt_source_column: true,

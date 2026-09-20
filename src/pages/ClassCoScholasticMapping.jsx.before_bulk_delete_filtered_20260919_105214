@@ -9,7 +9,6 @@ import * as XLSX from "xlsx";
 const LIST_ENDPOINT = "/class-co-scholastic-areas";
 const IMPORT_ENDPOINT = "/class-co-scholastic-areas/import";
 const BULK_COPY_ENDPOINT = "/class-co-scholastic-areas/bulk-copy";
-const BULK_DELETE_ENDPOINT = "/class-co-scholastic-areas/bulk-delete";
 
 /* =========================
  * Helpers
@@ -76,14 +75,6 @@ const ClassCoScholasticMapping = () => {
   const [areas, setAreas] = useState([]);
   const [terms, setTerms] = useState([]);
 
-  // ✅ Filters (Class / Area / Term / Search)
-  const [filters, setFilters] = useState({
-    class_id: "",
-    area_id: "",
-    term_id: "",
-    search: "",
-  });
-
   const [formData, setFormData] = useState({
     id: null,
     class_id: "",
@@ -119,161 +110,6 @@ const ClassCoScholasticMapping = () => {
     (terms || []).forEach((t) => map.set(String(t.id), t));
     return map;
   }, [terms]);
-
-  const filteredMappings = useMemo(() => {
-    const q = String(filters.search || "").trim().toLowerCase();
-
-    return (mappings || []).filter((m) => {
-      const classId = strId(
-        m?.class_id ??
-          pickId(m?.class, ["id", "class_id", "ClassId"]) ??
-          pickId(m?.Class, ["id", "class_id", "ClassId"])
-      );
-      const areaId = strId(
-        m?.area_id ??
-          pickId(m?.area, ["id", "area_id", "AreaId"]) ??
-          pickId(m?.Area, ["id", "area_id", "AreaId"])
-      );
-      const termId = strId(
-        m?.term_id ??
-          pickId(m?.term, ["id", "term_id", "TermId"]) ??
-          pickId(m?.Term, ["id", "term_id", "TermId"])
-      );
-
-      if (filters.class_id && classId !== strId(filters.class_id)) return false;
-      if (filters.area_id && areaId !== strId(filters.area_id)) return false;
-      if (filters.term_id && termId !== strId(filters.term_id)) return false;
-
-      if (q) {
-        const className =
-          m?.class?.class_name ||
-          m?.Class?.class_name ||
-          classById.get(classId)?.class_name ||
-          "";
-        const areaName =
-          m?.area?.name ||
-          m?.Area?.name ||
-          areas.find((a) => strId(a.id) === areaId)?.name ||
-          "";
-        const termName =
-          m?.term?.name ||
-          m?.Term?.name ||
-          termById.get(termId)?.name ||
-          "";
-
-        const haystack = `${className} ${areaName} ${termName}`.toLowerCase();
-        if (!haystack.includes(q)) return false;
-      }
-
-      return true;
-    });
-  }, [mappings, filters, classById, termById, areas]);
-
-  const activeFilterCount = useMemo(
-    () =>
-      [filters.class_id, filters.area_id, filters.term_id, filters.search].filter(
-        (v) => String(v || "").trim() !== ""
-      ).length,
-    [filters]
-  );
-
-  const clearFilters = () =>
-    setFilters({ class_id: "", area_id: "", term_id: "", search: "" });
-
-  // ✅ Delete All Filtered Mappings
-  const handleDeleteAllFiltered = async () => {
-    const ids = (filteredMappings || [])
-      .map((m) => Number(m?.id))
-      .filter((id) => Number.isInteger(id) && id > 0);
-
-    if (!ids.length) {
-      return Swal.fire("Nothing to delete", "No filtered mappings are visible.", "info");
-    }
-
-    const noFiltersActive = activeFilterCount === 0;
-    const className = filters.class_id
-      ? classById.get(String(filters.class_id))?.class_name || filters.class_id
-      : "All Classes";
-    const areaName = filters.area_id
-      ? areas.find((a) => strId(a.id) === strId(filters.area_id))?.name || filters.area_id
-      : "All Areas";
-    const termName = filters.term_id
-      ? termById.get(String(filters.term_id))?.name || filters.term_id
-      : "All Terms";
-
-    let result;
-
-    if (noFiltersActive) {
-      result = await Swal.fire({
-        title: `Delete ALL ${ids.length} mappings?`,
-        html:
-          `<div style="text-align:left">` +
-          `<div><b>Warning:</b> No filters are active.</div>` +
-          `<div>This will delete every mapping currently listed.</div>` +
-          `<div class="mt-2">Type <b>DELETE</b> to confirm.</div>` +
-          `</div>`,
-        icon: "warning",
-        input: "text",
-        inputPlaceholder: "Type DELETE",
-        showCancelButton: true,
-        confirmButtonText: `Delete ${ids.length} Mappings`,
-        confirmButtonColor: "#dc3545",
-        preConfirm: (value) => {
-          if (String(value || "").trim().toUpperCase() !== "DELETE") {
-            Swal.showValidationMessage('Please type "DELETE" to confirm.');
-            return false;
-          }
-          return true;
-        },
-      });
-    } else {
-      result = await Swal.fire({
-        title: `Delete ${ids.length} filtered mapping${ids.length === 1 ? "" : "s"}?`,
-        html:
-          `<div style="text-align:left">` +
-          `<div><b>Class:</b> ${className}</div>` +
-          `<div><b>Area:</b> ${areaName}</div>` +
-          `<div><b>Term:</b> ${termName}</div>` +
-          (filters.search
-            ? `<div><b>Search:</b> ${String(filters.search).replace(/[<>&"']/g, "")}</div>`
-            : "") +
-          `<hr/>` +
-          `<div>Only the <b>${ids.length}</b> mappings currently matching these filters will be deleted.</div>` +
-          `</div>`,
-        icon: "warning",
-        showCancelButton: true,
-        confirmButtonText: `Delete Filtered (${ids.length})`,
-        confirmButtonColor: "#dc3545",
-      });
-    }
-
-    if (!result.isConfirmed) return;
-
-    try {
-      Swal.fire({
-        title: "Deleting...",
-        text: `Removing ${ids.length} mapping${ids.length === 1 ? "" : "s"}.`,
-        allowOutsideClick: false,
-        didOpen: () => Swal.showLoading(),
-      });
-
-      const res = await api.post(BULK_DELETE_ENDPOINT, { ids });
-      const deleted = res?.data?.deleted ?? 0;
-
-      await Swal.fire(
-        "Deleted",
-        `${deleted} mapping${deleted === 1 ? "" : "s"} removed successfully.`,
-        "success"
-      );
-      await fetchMappings();
-    } catch (e) {
-      Swal.fire(
-        "Error",
-        e?.response?.data?.message || "Failed to delete filtered mappings.",
-        "error"
-      );
-    }
-  };
 
   useEffect(() => {
     loadDropdowns();
@@ -724,111 +560,6 @@ const ClassCoScholasticMapping = () => {
         </div>
       </div>
 
-      <div className="card mt-3 shadow-sm border-0">
-        <div className="card-body py-3">
-          <div className="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
-            <div className="fw-semibold">🔎 Filter Mappings</div>
-            <div className="d-flex align-items-center gap-2 flex-wrap">
-              <div className="small text-muted">
-                Showing <b>{filteredMappings.length}</b> of <b>{mappings.length}</b> mappings
-              </div>
-              <Button
-                variant="outline-danger"
-                size="sm"
-                onClick={handleDeleteAllFiltered}
-                disabled={filteredMappings.length === 0}
-                title={
-                  activeFilterCount === 0
-                    ? "No filters active: this would delete all mappings"
-                    : "Delete all mappings matching the current filters"
-                }
-              >
-                🗑 Delete All Filtered ({filteredMappings.length})
-              </Button>
-            </div>
-          </div>
-
-          <div className="row g-2 align-items-end">
-            <div className="col-12 col-md-3">
-              <label className="form-label mb-1">Class</label>
-              <select
-                className="form-select"
-                value={filters.class_id}
-                onChange={(e) =>
-                  setFilters((prev) => ({ ...prev, class_id: e.target.value }))
-                }
-              >
-                <option value="">All Classes</option>
-                {classes.map((c) => (
-                  <option key={strId(c.id)} value={strId(c.id)}>
-                    {c.class_name || "-"}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="col-12 col-md-3">
-              <label className="form-label mb-1">Co-Scholastic Area</label>
-              <select
-                className="form-select"
-                value={filters.area_id}
-                onChange={(e) =>
-                  setFilters((prev) => ({ ...prev, area_id: e.target.value }))
-                }
-              >
-                <option value="">All Areas</option>
-                {areas.map((a) => (
-                  <option key={strId(a.id)} value={strId(a.id)}>
-                    {a.name || "-"}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="col-12 col-md-3">
-              <label className="form-label mb-1">Term</label>
-              <select
-                className="form-select"
-                value={filters.term_id}
-                onChange={(e) =>
-                  setFilters((prev) => ({ ...prev, term_id: e.target.value }))
-                }
-              >
-                <option value="">All Terms</option>
-                {terms.map((t) => (
-                  <option key={strId(t.id)} value={strId(t.id)}>
-                    {t.name || "-"}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="col-12 col-md-3">
-              <label className="form-label mb-1">Search</label>
-              <div className="input-group">
-                <input
-                  type="text"
-                  className="form-control"
-                  placeholder="Class, area or term..."
-                  value={filters.search}
-                  onChange={(e) =>
-                    setFilters((prev) => ({ ...prev, search: e.target.value }))
-                  }
-                />
-                <Button
-                  variant="outline-secondary"
-                  onClick={clearFilters}
-                  disabled={activeFilterCount === 0}
-                  title="Clear all filters"
-                >
-                  Clear
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
       <div className="card mt-3">
         <div className="card-body p-0">
           <div className="table-responsive">
@@ -844,16 +575,14 @@ const ClassCoScholasticMapping = () => {
               </thead>
 
               <tbody>
-                {filteredMappings.length === 0 ? (
+                {mappings.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="text-center py-4 text-muted">
-                      {mappings.length === 0
-                        ? "No mappings found."
-                        : "No mappings match the selected filters."}
+                      No mappings found.
                     </td>
                   </tr>
                 ) : (
-                  filteredMappings.map((m, idx) => (
+                  mappings.map((m, idx) => (
                     <tr key={m.id}>
                       <td style={{ textAlign: "center" }}>{idx + 1}</td>
                       <td>{m.class?.class_name || m.Class?.class_name || "-"}</td>

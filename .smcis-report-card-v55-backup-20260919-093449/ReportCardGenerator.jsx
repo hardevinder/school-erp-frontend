@@ -1836,86 +1836,48 @@ const FinalResultSummary = () => {
     const info = infoOverride || {};
     const rawComponents = Array.isArray(student?.components) ? student.components : [];
 
-    // SMCIS_PT_SPLIT_COLUMNS_V55
-    // Client format requires PT-1 and PT-2 to remain visible as separate columns,
-    // with 5 marks each (10 marks total). The backend now exposes the real
-    // source-component scores for grouped assessments; do not divide the group
-    // result in half because PT-1 and PT-2 can have different student scores.
+    // SMCIS_PT_GROUP_10_V54
+    // The SMCIS client format expects the combined PT group to contribute 10 marks
+    // in total. Legacy scheme data can still return the hidden PT-1 + PT-2 group
+    // as 20 (10 + 10). For this coded SMCIS template only, normalize a two-source
+    // PT result group to 10 so the two tests contribute 5 + 5 without changing
+    // any other school's report-card calculation.
     const isSmcisCodedTemplate =
       selectedReportTemplate?.template_key === "smcis_dynamic_term_report_card_v1";
-
-    const isTwoSourceSmcisPtGroup = (component = {}) => {
-      if (!isSmcisCodedTemplate || !component?.is_result_group) return false;
+    const normalizeSmcisPtGroup = (component = {}) => {
+      if (!isSmcisCodedTemplate || !component?.is_result_group) return component;
       const groupKey = smartTemplateSlug(
-        component?.result_group_code ||
-          component?.abbreviation ||
-          component?.component_name ||
-          ""
+        component?.result_group_code || component?.abbreviation || component?.component_name || ""
       );
       const sourceIds = Array.isArray(component?.source_component_ids)
         ? component.source_component_ids.filter((id) => id != null)
         : [];
-      return (
+      const currentWeight = isNumeric(component?.weightage_percent)
+        ? Number(component.weightage_percent)
+        : 0;
+      const isTwoPtGroup =
         sourceIds.length === 2 &&
-        (groupKey === "pt" ||
-          groupKey === "periodic_test" ||
-          groupKey.startsWith("pt_"))
-      );
-    };
+        (groupKey === "pt" || groupKey === "periodic_test" || groupKey.startsWith("pt_"));
 
-    // SMCIS_DYNAMIC_PA_WEIGHTAGE_V57
-    // Never force PA/PT weightage in the report card. If the old backend is still
-    // running and source_components are unavailable, keep the grouped component
-    // exactly as configured by the backend.
-    const normalizeSmcisPtParentFallback = (component = {}) => component;
-
-    const expandSmcisPtGroup = (component = {}) => {
-      if (!isTwoSourceSmcisPtGroup(component)) return [component];
-
-      const sourceComponents = Array.isArray(component?.source_components)
-        ? component.source_components
-            .filter((source) => source && source.component_id != null)
-            .slice()
-            .sort((a, b) => Number(a?.serial_order || 0) - Number(b?.serial_order || 0))
-        : [];
-
-      // Safe fallback while an old backend process is still running: keep PT(10).
-      // After backend restart, source_components is present and PT-1 / PT-2 appear.
-      if (sourceComponents.length !== 2) {
-        return [normalizeSmcisPtParentFallback(component)];
+      if (!isTwoPtGroup || currentWeight <= 0 || Math.abs(currentWeight - 10) < 0.001) {
+        return component;
       }
 
-      return sourceComponents.map((source, index) => {
-        // SMCIS_PA_DISPLAY_LABELS_V56
-        // Client terminology stays PA-1 / PA-2, but the marks weightage is NOT
-        // static. It comes from the backend assessment scheme. For example, if a
-        // teacher enters 20 out of 25 and backend weightage is 10, the backend
-        // already returns weighted_marks = 8 and weightage_percent = 10.
-        const label = `PA-${index + 1}`;
-        const configuredWeightage = isNumeric(source?.weightage_percent)
-          ? Number(source.weightage_percent)
-          : null;
+      const scale = 10 / currentWeight;
+      const scaleIfNumeric = (value) =>
+        isNumeric(value) ? Number((Number(value) * scale).toFixed(2)) : value;
 
-        return {
-          ...component,
-          ...source,
-          component_id: source?.component_id ?? `${component?.component_id}_pt_${index + 1}`,
-          source_component_ids: [source?.component_id].filter((id) => id != null),
-          name: label,
-          component_name: label,
-          abbreviation: label,
-          marks: source?.marks,
-          max_marks: source?.max_marks,
-          weighted_marks: source?.weighted_marks,
-          weightage_percent: configuredWeightage,
-          is_result_group: false,
-          result_group_code: component?.result_group_code || "PT",
-          __smcis_pt_source_column: true,
-        };
-      });
+      return {
+        ...component,
+        marks: scaleIfNumeric(component?.marks),
+        max_marks: scaleIfNumeric(component?.max_marks),
+        weighted_marks: scaleIfNumeric(component?.weighted_marks),
+        weightage_percent: 10,
+        __smcis_pt_group_normalized: true,
+      };
     };
 
-    const allComponents = rawComponents.flatMap(expandSmcisPtGroup);
+    const allComponents = rawComponents.map(normalizeSmcisPtGroup);
     const scholasticComponents = allComponents.filter((component) => !isCoScholasticComponent(component));
     const session = (sessions || []).find((item) => String(item.id) === String(filters.session_id)) || {};
     const className = info?.Class?.class_name || info?.class_name || "";

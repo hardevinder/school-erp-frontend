@@ -660,6 +660,7 @@ const FinalResultSummary = () => {
   const [studentInfoMap, setStudentInfoMap] = useState({});
   const [coScholasticByTerm, setCoScholasticByTerm] = useState({});
   const [remarksByTerm, setRemarksByTerm] = useState({});
+  const [resultDeclarationByTerm, setResultDeclarationByTerm] = useState({});
   const [attendanceByTerm, setAttendanceByTerm] = useState({});
   const [promotionDecisionByTerm, setPromotionDecisionByTerm] = useState({});
   const [gradeSchema, setGradeSchema] = useState([]);
@@ -1329,6 +1330,7 @@ const FinalResultSummary = () => {
     setStudentInfoMap({});
     setCoScholasticByTerm({});
     setRemarksByTerm({});
+    setResultDeclarationByTerm({});
     setAttendanceByTerm({});
     setPromotionDecisionByTerm({});
     setReportFormat(null);
@@ -1359,6 +1361,7 @@ const FinalResultSummary = () => {
     setStudentInfoMap({});
     setCoScholasticByTerm({});
     setRemarksByTerm({});
+    setResultDeclarationByTerm({});
     setAttendanceByTerm({});
     setPromotionDecisionByTerm({});
     setReportFormat(null);
@@ -1737,15 +1740,35 @@ const FinalResultSummary = () => {
     );
 
     const marksTotal = hasAnyMarks(items) ? sumMarksOnly(items) : null;
+    const marksMaximum = (items || []).reduce(
+      (sum, item) => sum + (isNumeric(item?.max_marks) ? Number(item.max_marks) : 0),
+      0
+    );
+
     const hasWeightedScore = items.some((item) => isNumeric(item?.weighted_marks));
     const wTotal = sumWeightedOnly(items);
     const wMax = sumMaxWeight(items);
-    const percent = hasWeightedScore && wMax > 0 ? (wTotal / wMax) * 100 : null;
-    // Grade-only subjects have no weighted marks. In that case use the grade
-    // stored by Marks/Grade Entry instead of incorrectly treating them as 0%.
-    const grade = percent != null ? gradeFromSchema(percent, gradeSchema) : pickGrade(items);
+    const isCoScholasticSubject = items.some((item) => isCoScholasticComponent(item));
 
-    return { marksTotal, percent, grade };
+    let percent = null;
+
+    // Co-Scholastic MARKS subjects: calculate grade from entered marks
+    // (e.g. 27/30 = 90%), not from a stored/manual grade.
+    if (isCoScholasticSubject && marksTotal != null && marksMaximum > 0) {
+      percent = (Number(marksTotal) / Number(marksMaximum)) * 100;
+    } else if (hasWeightedScore && wMax > 0) {
+      // Keep the existing weighted calculation for normal Scholastic subjects.
+      percent = (wTotal / wMax) * 100;
+    } else if (marksTotal != null && marksMaximum > 0) {
+      // Safe fallback when an older result payload has marks but no weighted_marks.
+      percent = (Number(marksTotal) / Number(marksMaximum)) * 100;
+    }
+
+    const calculatedGrade = percent != null ? gradeFromSchema(percent, gradeSchema) : "-";
+    const enteredGrade = pickGrade(items);
+    const grade = calculatedGrade !== "-" ? calculatedGrade : enteredGrade;
+
+    return { marksTotal, marksMaximum, percent, grade };
   };
 
   const getStudentTermOverall = (student, termId) => {
@@ -1761,11 +1784,6 @@ const FinalResultSummary = () => {
 
   const mergeCoScholasticSubjectRows = (areasMap, student) => {
     const normalizeName = (value) => String(value || "").trim().toLowerCase();
-    const hasGrade = (row) => {
-      const grade = String(row?.grade || "").trim();
-      return grade && grade !== "-";
-    };
-
     const existingByName = new Map();
     for (const [key, value] of areasMap.entries()) {
       const normalized = normalizeName(value?.area_name);
@@ -1788,8 +1806,10 @@ const FinalResultSummary = () => {
         areasMap.set(existingKey, {
           ...current,
           area_name: current.area_name || subjectName,
-          t1: hasGrade(current.t1) ? current.t1 : { grade: t1Grade },
-          t2: hasGrade(current.t2) ? current.t2 : { grade: t2Grade },
+          t1: { grade: t1Grade },
+          t2: { grade: t2Grade },
+          serial_order: -10000 + index,
+          source: "subject",
         });
         return;
       }
@@ -1799,12 +1819,17 @@ const FinalResultSummary = () => {
         area_name: subjectName,
         t1: { grade: t1Grade },
         t2: { grade: t2Grade },
-        serial_order: 10000 + index,
+        serial_order: -10000 + index,
         source: "subject",
       });
       existingByName.set(normalized, key);
     });
 
+    const ordered = Array.from(areasMap.entries()).sort(
+      ([, a], [, b]) => Number(a.serial_order || 0) - Number(b.serial_order || 0)
+    );
+    areasMap.clear();
+    ordered.forEach(([key, row]) => areasMap.set(key, row));
     return areasMap;
   };
 
@@ -1812,7 +1837,88 @@ const FinalResultSummary = () => {
   // The Template Studio maps visual fields to these paths once; every student reuses them.
   const buildSmartTemplateData = (student, infoOverride = {}) => {
     const info = infoOverride || {};
-    const allComponents = Array.isArray(student?.components) ? student.components : [];
+    const rawComponents = Array.isArray(student?.components) ? student.components : [];
+
+    // SMCIS_PT_SPLIT_COLUMNS_V55
+    // Client format requires PT-1 and PT-2 to remain visible as separate columns,
+    // with 5 marks each (10 marks total). The backend now exposes the real
+    // source-component scores for grouped assessments; do not divide the group
+    // result in half because PT-1 and PT-2 can have different student scores.
+    const isSmcisCodedTemplate =
+      selectedReportTemplate?.template_key === "smcis_dynamic_term_report_card_v1";
+
+    const isTwoSourceSmcisPtGroup = (component = {}) => {
+      if (!isSmcisCodedTemplate || !component?.is_result_group) return false;
+      const groupKey = smartTemplateSlug(
+        component?.result_group_code ||
+          component?.abbreviation ||
+          component?.component_name ||
+          ""
+      );
+      const sourceIds = Array.isArray(component?.source_component_ids)
+        ? component.source_component_ids.filter((id) => id != null)
+        : [];
+      return (
+        sourceIds.length === 2 &&
+        (groupKey === "pt" ||
+          groupKey === "periodic_test" ||
+          groupKey.startsWith("pt_"))
+      );
+    };
+
+    // SMCIS_DYNAMIC_PA_WEIGHTAGE_V57
+    // Never force PA/PT weightage in the report card. If the old backend is still
+    // running and source_components are unavailable, keep the grouped component
+    // exactly as configured by the backend.
+    const normalizeSmcisPtParentFallback = (component = {}) => component;
+
+    const expandSmcisPtGroup = (component = {}) => {
+      if (!isTwoSourceSmcisPtGroup(component)) return [component];
+
+      const sourceComponents = Array.isArray(component?.source_components)
+        ? component.source_components
+            .filter((source) => source && source.component_id != null)
+            .slice()
+            .sort((a, b) => Number(a?.serial_order || 0) - Number(b?.serial_order || 0))
+        : [];
+
+      // Safe fallback while an old backend process is still running: keep PT(10).
+      // After backend restart, source_components is present and PT-1 / PT-2 appear.
+      if (sourceComponents.length !== 2) {
+        return [normalizeSmcisPtParentFallback(component)];
+      }
+
+      return sourceComponents.map((source, index) => {
+        // SMCIS_PA_DISPLAY_LABELS_V56
+        // Client terminology stays PA-1 / PA-2, but the marks weightage is NOT
+        // static. It comes from the backend assessment scheme. For example, if a
+        // teacher enters 20 out of 25 and backend weightage is 10, the backend
+        // already returns weighted_marks = 8 and weightage_percent = 10.
+        const label = `PA-${index + 1}`;
+        const configuredWeightage = isNumeric(source?.weightage_percent)
+          ? Number(source.weightage_percent)
+          : null;
+
+        return {
+          ...component,
+          ...source,
+          component_id: source?.component_id ?? `${component?.component_id}_pt_${index + 1}`,
+          source_component_ids: [source?.component_id].filter((id) => id != null),
+          name: label,
+          component_name: label,
+          abbreviation: label,
+          marks: source?.marks,
+          max_marks: source?.max_marks,
+          weighted_marks: source?.weighted_marks,
+          weightage_percent: configuredWeightage,
+          is_result_group: false,
+          result_group_code: component?.result_group_code || "PT",
+          __smcis_pt_source_column: true,
+        };
+      });
+    };
+
+    const allComponents = rawComponents.flatMap(expandSmcisPtGroup);
     const scholasticComponents = allComponents.filter((component) => !isCoScholasticComponent(component));
     const session = (sessions || []).find((item) => String(item.id) === String(filters.session_id)) || {};
     const className = info?.Class?.class_name || info?.class_name || "";
@@ -2018,11 +2124,35 @@ const FinalResultSummary = () => {
         return Number(a.__original_order || 0) - Number(b.__original_order || 0);
       });
     const multipleTerms = new Set(smartComponentColumns.map((c) => Number(c.term_id || 0)).filter(Boolean)).size > 1;
-    // SMCIS_EXACT_REFERENCE_WIDTHS_V5
-    const componentWidth = smartComponentColumns.length ? 10 : 10;
+
+    // SMCIS_TOTAL_MAX_HEADING_V62
+    // Show the configured maximum below TOTAL just like PA/SA/NSM/etc.
+    // Only show a single TOTAL maximum when every visible assessment column has
+    // one unambiguous numeric weightage. This keeps the heading truthful even if
+    // a school configures different weightages for the same column across subjects.
+    const smartColumnMaxes = smartComponentColumns.map((column) => {
+      const values = Array.from(column?.weightages || [])
+        .map((value) => Number(value))
+        .filter((value) => Number.isFinite(value));
+      const uniqueValues = [...new Set(values.map((value) => Number(value.toFixed(6))))];
+      return uniqueValues.length === 1 ? uniqueValues[0] : null;
+    });
+    const smartTotalMax =
+      smartColumnMaxes.length > 0 && smartColumnMaxes.every((value) => Number.isFinite(value))
+        ? smartColumnMaxes.reduce((sum, value) => sum + value, 0)
+        : null;
+    const smartTotalLabel =
+      Number.isFinite(smartTotalMax) && smartTotalMax > 0
+        ? `TOTAL\n(${formatSmartNumber(smartTotalMax)})`
+        : "TOTAL";
+
+    // SMCIS_COMPACT_MARK_COLUMNS_V54
+    // Slightly narrower assessment columns match the client's compact reference
+    // and leave more room for the subject name without changing the table renderer.
+    const componentWidth = 8;
 
     const smartColumns = [
-      { id: "subject", label: "SUBJECT", source: "name", width: 19, align: "left" },
+      { id: "subject", label: "SUBJECT", source: "name", width: 22, align: "left" },
       ...smartComponentColumns.map((column) => {
         const weights = Array.from(column.weightages).filter((v) => v !== "");
         const weightText = weights.length === 1 ? ` (${weights[0]})` : weights.length > 1 ? ` (${weights.join("/")})` : "";
@@ -2050,8 +2180,8 @@ const FinalResultSummary = () => {
           align: "center",
         };
       }),
-      { id: "total", label: "TOTAL", source: "total_weighted", width: 10, align: "center" },
-      { id: "grade", label: "GRADE", source: "grade", width: 10, align: "center" },
+      { id: "total", label: smartTotalLabel, source: "total_weighted", width: 9, align: "center" },
+      { id: "grade", label: "GRADE", source: "grade", width: 8, align: "center" },
     ];
 
     const smartSubjectNames = [
@@ -2219,432 +2349,6 @@ const FinalResultSummary = () => {
     }
 
 
-    // SMART_TEMPLATE_CO_SCHOLASTIC_ROWS_V2
-    // Inline/smart report-card templates use `co_scholastic.rows` for the
-    // Co-Scholastic table. Keep the older `coscholastic.<slug>.term*` object as
-    // well, but also expose real rows so Subject.Type = Co-Scholastic subjects
-    // appear in Part-2 instead of only disappearing from Part-1.
-    const coScholasticRowsByName = new Map();
-    const normalizeCoRowName = (value) => String(value || "").trim().toLowerCase();
-    const hasDisplayGrade = (value) => {
-      const grade = String(value ?? "").trim();
-      return Boolean(grade && grade !== "-");
-    };
-
-    const ensureCoRow = (name, serialOrder = 0, source = "area") => {
-      const cleanName = String(name || "").trim();
-      if (!cleanName) return null;
-      const key = normalizeCoRowName(cleanName);
-      if (!coScholasticRowsByName.has(key)) {
-        coScholasticRowsByName.set(key, {
-          name: cleanName,
-          term1: "-",
-          term2: "-",
-          serial_order: Number(serialOrder || 0),
-          source,
-        });
-      }
-      return coScholasticRowsByName.get(key);
-    };
-
-    const collectMappedCoRows = (termId, termKey) => {
-      if (!termId) return;
-      const bucket = coScholasticByTerm[String(termId)] || {};
-      const studentRows = Object.values(bucket[String(student.id)] || {});
-      studentRows.forEach((row, index) => {
-        const areaName = row?.area_name || row?.name || `Area ${index + 1}`;
-        const target = ensureCoRow(
-          areaName,
-          row?.serial_order ?? row?.area_order ?? index,
-          "area"
-        );
-        if (!target) return;
-        const grade = row?.grade || row?.value || "-";
-        if (hasDisplayGrade(grade) || !hasDisplayGrade(target[termKey])) {
-          target[termKey] = grade;
-        }
-      });
-    };
-
-    collectMappedCoRows(term1Id, "term1");
-    collectMappedCoRows(term2Id, "term2");
-
-    coSubjectNames.forEach((subjectName, index) => {
-      const target = ensureCoRow(subjectName, 10000 + index, "subject");
-      if (!target) return;
-      const t1Grade = term1Id
-        ? getSubjectTermStats(student, subjectName, term1Id)?.grade || "-"
-        : "-";
-      const t2Grade = term2Id
-        ? getSubjectTermStats(student, subjectName, term2Id)?.grade || "-"
-        : "-";
-      if (hasDisplayGrade(t1Grade) || !hasDisplayGrade(target.term1)) target.term1 = t1Grade;
-      if (hasDisplayGrade(t2Grade) || !hasDisplayGrade(target.term2)) target.term2 = t2Grade;
-    });
-
-    if (!drawingAlreadyHandled && (drawingT1 !== "-" || drawingT2 !== "-")) {
-      const target = ensureCoRow("Drawing", 9999, "drawing");
-      if (target) {
-        if (hasDisplayGrade(drawingT1)) target.term1 = drawingT1;
-        if (hasDisplayGrade(drawingT2)) target.term2 = drawingT2;
-      }
-    }
-
-    const smartCoScholasticRows = Array.from(coScholasticRowsByName.values())
-      .sort((a, b) => Number(a.serial_order || 0) - Number(b.serial_order || 0))
-      .map((row) => {
-        // A one-term report card (for example Half-Yearly) has one Grade column.
-        // If two terms are selected, prefer the later selected term while still
-        // exposing both values for future/custom templates.
-        const preferred = term2Id
-          ? [row.term2, row.term1]
-          : [row.term1, row.term2];
-        const grade = preferred.find(hasDisplayGrade) || "-";
-        return {
-          name: row.name,
-          grade,
-          term1_grade: row.term1 || "-",
-          term2_grade: row.term2 || "-",
-          source: row.source,
-        };
-      });
-
-    // SMCIS_DYNAMIC_CO_SCHOLASTIC_ROWS_V4
-    // SMCIS Dynamic Part-2 reads `co_scholastic.rows`.
-    // Build it from the Subject master FIRST (so a subject marked Co-Scholastic
-    // still appears even if the detailed-summary component list is incomplete),
-    // then merge the normal Co-Scholastic Area module rows and available grades.
-    const dynamicCoRowsV4Map = new Map();
-    const dynamicCoKeyV4 = (value) => String(value || "").trim().toLowerCase();
-    const dynamicHasGradeV4 = (value) => {
-      const grade = String(value ?? "").trim();
-      return Boolean(grade && grade !== "-");
-    };
-
-    const dynamicPutCoRowV4 = (name, grade = "-", serialOrder = 0, source = "area") => {
-      const cleanName = String(name || "").trim();
-      if (!cleanName) return;
-      const key = dynamicCoKeyV4(cleanName);
-      const nextGrade = dynamicHasGradeV4(grade) ? String(grade).trim() : "-";
-      const existing = dynamicCoRowsV4Map.get(key);
-
-      if (!existing) {
-        dynamicCoRowsV4Map.set(key, {
-          name: cleanName,
-          grade: nextGrade,
-          serial_order: Number(serialOrder || 0),
-          source,
-        });
-        return;
-      }
-
-      if (!dynamicHasGradeV4(existing.grade) && dynamicHasGradeV4(nextGrade)) {
-        existing.grade = nextGrade;
-      }
-      if (Number(serialOrder || 0) < Number(existing.serial_order || 0)) {
-        existing.serial_order = Number(serialOrder || 0);
-      }
-    };
-
-    // 1) Existing Co-Scholastic Area evaluations (Drawing, Work Education, etc.).
-    // For this SMCIS one-column Part-2 table, prefer the later selected term.
-    const dynamicPreferredTermV4 = term2Id || term1Id || null;
-    if (dynamicPreferredTermV4) {
-      const bucket = coScholasticByTerm[String(dynamicPreferredTermV4)] || {};
-      const areaRows = Object.values(bucket[String(student.id)] || {});
-      areaRows.forEach((row, index) => {
-        dynamicPutCoRowV4(
-          row?.area_name || row?.name || `Activity ${index + 1}`,
-          row?.grade || row?.value || "-",
-          row?.serial_order ?? row?.area_order ?? index,
-          "area"
-        );
-      });
-    }
-
-    // 2) Subject master is authoritative for Scholastic vs Co-Scholastic.
-    // Also merge any component-derived names as a fallback for older responses.
-    const dynamicCoSubjectCatalogV4 = new Map();
-    (subjects || []).forEach((subject, index) => {
-      if (normalizeSubjectType(subject?.type) !== "Co-Scholastic") return;
-      const name = String(subject?.name || "").trim();
-      if (!name) return;
-      dynamicCoSubjectCatalogV4.set(dynamicCoKeyV4(name), {
-        id: subject?.id ?? null,
-        name,
-        order: index,
-      });
-    });
-
-    (coSubjectNames || []).forEach((name, index) => {
-      const cleanName = String(name || "").trim();
-      if (!cleanName) return;
-      const key = dynamicCoKeyV4(cleanName);
-      if (dynamicCoSubjectCatalogV4.has(key)) return;
-      const matching = (student?.components || []).find(
-        (component) => dynamicCoKeyV4(component?.subject_name || component?.subject) === key
-      );
-      dynamicCoSubjectCatalogV4.set(key, {
-        id: matching?.subject_id ?? matching?.subjectId ?? null,
-        name: cleanName,
-        order: 1000 + index,
-      });
-    });
-
-    Array.from(dynamicCoSubjectCatalogV4.values()).forEach((subjectMeta, index) => {
-      const subjectName = subjectMeta.name;
-      const subjectId = subjectMeta.id;
-      const subjectKey = dynamicCoKeyV4(subjectName);
-      const subjectRows = (student?.components || []).filter((component) => {
-        const sameId =
-          subjectId != null &&
-          String(component?.subject_id ?? component?.subjectId ?? "") === String(subjectId);
-        const sameName =
-          dynamicCoKeyV4(component?.subject_name || component?.subject) === subjectKey;
-        return sameId || sameName;
-      });
-
-      const t1Grade = term1Id
-        ? getSubjectTermStats(student, subjectName, term1Id)?.grade || "-"
-        : "-";
-      const t2Grade = term2Id
-        ? getSubjectTermStats(student, subjectName, term2Id)?.grade || "-"
-        : "-";
-      const directGrade = subjectRows
-        .map(
-          (row) =>
-            row?.grade ??
-            row?.weighted_grade ??
-            row?.grade_obtained ??
-            row?.grade_value
-        )
-        .find(dynamicHasGradeV4);
-      const subjectGrade =
-        subjectId != null
-          ? student?.subject_grades?.[subjectId] ?? student?.subject_grades?.[String(subjectId)]
-          : null;
-
-      const preferredGrade = term2Id
-        ? [t2Grade, t1Grade, directGrade, subjectGrade].find(dynamicHasGradeV4)
-        : [t1Grade, t2Grade, directGrade, subjectGrade].find(dynamicHasGradeV4);
-
-      // Always add a Subject-master Co-Scholastic row. If grade entry has not
-      // been done yet it intentionally displays '-' instead of disappearing.
-      dynamicPutCoRowV4(
-        subjectName,
-        preferredGrade || "-",
-        10000 + Number(subjectMeta.order ?? index),
-        "subject"
-      );
-    });
-
-    // 3) Legacy Drawing fallback for old SMCIS records.
-    if (!(coSubjectNames || []).some(isDrawingSubject)) {
-      const drawingGrade = term2Id
-        ? [drawingT2, drawingT1].find(dynamicHasGradeV4)
-        : [drawingT1, drawingT2].find(dynamicHasGradeV4);
-      if (dynamicHasGradeV4(drawingGrade)) {
-        dynamicPutCoRowV4("Drawing", drawingGrade, 9999, "drawing");
-      }
-    }
-
-    const dynamicCoScholasticRowsV4 = Array.from(dynamicCoRowsV4Map.values())
-      .sort((a, b) => Number(a.serial_order || 0) - Number(b.serial_order || 0))
-      .map(({ name, grade, source }) => ({ name, grade: grade || "-", source }));
-
-    // SMCIS_CODED_CO_SCHOLASTIC_V6
-    // This is ONLY the coded SMCIS inline-HTML report card. It does not change
-    // Visual Designer layouts or other report-card templates.
-    // Part-2 must contain BOTH:
-    //   1) every Co-Scholastic Area mapped to the class (even if grade is pending),
-    //   2) grade-only subjects whose Subject.type is Co-Scholastic.
-    const smcisCodedCoScholasticRowsV6 = (() => {
-      if (selectedReportTemplate?.template_key !== "smcis_dynamic_term_report_card_v1") return [];
-
-      const rowsByName = new Map();
-      const norm = (value) => String(value || "").trim().toLowerCase();
-      const isRealGrade = (value) => {
-        const v = String(value ?? "").trim();
-        return Boolean(v && v !== "-");
-      };
-      const isCoType = (value) => {
-        const v = norm(value).replace(/[_\s]+/g, "-");
-        return v === "co-scholastic" || v === "coscholastic";
-      };
-
-      const ensureRow = (name, serialOrder = 0, source = "area") => {
-        const cleanName = String(name || "").trim();
-        if (!cleanName) return null;
-        const key = norm(cleanName);
-        let row = rowsByName.get(key);
-        if (!row) {
-          row = {
-            name: cleanName,
-            term1: "-",
-            term2: "-",
-            serial_order: Number(serialOrder || 0),
-            source,
-          };
-          rowsByName.set(key, row);
-        } else {
-          const nextOrder = Number(serialOrder || 0);
-          if (nextOrder && (!row.serial_order || nextOrder < Number(row.serial_order))) {
-            row.serial_order = nextOrder;
-          }
-        }
-        return row;
-      };
-
-      const mergeAreaTerm = (termId, termKey) => {
-        if (!termId) return;
-        const bucket = coScholasticByTerm[String(termId)] || {};
-
-        // Seed ALL areas mapped for this class/term. This is the missing part in
-        // the previous patches: `_areas` exists even when a student grade has not
-        // yet been entered.
-        const mappedAreas = Array.isArray(bucket?._areas)
-          ? bucket._areas
-          : Object.values(bucket?._areas || {});
-
-        mappedAreas.forEach((area, index) => {
-          ensureRow(
-            area?.area_name || area?.name || `Activity ${index + 1}`,
-            area?.serial_order ?? index,
-            "mapped-area"
-          );
-        });
-
-        // Overlay this student's saved values on top of the mapped rows.
-        const studentRows = Object.values(bucket?.[String(student.id)] || {});
-        studentRows.forEach((item, index) => {
-          const target = ensureRow(
-            item?.area_name || item?.name || `Activity ${index + 1}`,
-            item?.serial_order ?? item?.area_order ?? index,
-            "area-value"
-          );
-          if (!target) return;
-          const grade = item?.grade || item?.value || "-";
-          if (isRealGrade(grade) || !isRealGrade(target[termKey])) {
-            target[termKey] = grade;
-          }
-        });
-      };
-
-      mergeAreaTerm(term1Id, "term1");
-      mergeAreaTerm(term2Id, "term2");
-
-      // Build a class-relevant Co-Scholastic subject catalogue. /subjects is a
-      // global list, so only keep subjects that have assessment components for
-      // this selected class OR are actually present in this student's result.
-      const componentSubjectIds = new Set(
-        (student?.components || [])
-          .map((c) => c?.subject_id ?? c?.subjectId)
-          .filter((id) => id != null && String(id).trim() !== "")
-          .map((id) => String(id))
-      );
-      const componentSubjectNames = new Set(
-        (student?.components || [])
-          .map((c) => norm(c?.subject_name || c?.subject || c?.Subject?.name))
-          .filter(Boolean)
-      );
-      const configuredSubjectIds = new Set(
-        (filters?.subjectComponents || [])
-          .filter((sc) => Array.isArray(sc?.availableComponents) && sc.availableComponents.length > 0)
-          .map((sc) => String(sc?.subject_id || ""))
-          .filter(Boolean)
-      );
-
-      const subjectCatalog = new Map();
-      (subjects || []).forEach((subject, index) => {
-        if (!isCoType(subject?.type)) return;
-        const id = subject?.id != null ? String(subject.id) : "";
-        const name = String(subject?.name || "").trim();
-        if (!name) return;
-        const relevant =
-          (id && (componentSubjectIds.has(id) || configuredSubjectIds.has(id))) ||
-          componentSubjectNames.has(norm(name));
-        if (!relevant) return;
-        subjectCatalog.set(norm(name), { id: subject?.id ?? null, name, order: index });
-      });
-
-      // Fallback to the detailed-summary metadata. This catches older data where
-      // the Subject master list was not loaded yet but subject_type is present.
-      (student?.components || []).forEach((component, index) => {
-        if (!isCoType(component?.subject_type ?? component?.subjectType)) return;
-        const name = String(component?.subject_name || component?.subject || component?.Subject?.name || "").trim();
-        if (!name) return;
-        const key = norm(name);
-        if (!subjectCatalog.has(key)) {
-          subjectCatalog.set(key, {
-            id: component?.subject_id ?? component?.subjectId ?? null,
-            name,
-            order: 1000 + index,
-          });
-        }
-      });
-
-      Array.from(subjectCatalog.values()).forEach((meta, index) => {
-        const target = ensureRow(meta.name, 10000 + Number(meta.order ?? index), "co-scholastic-subject");
-        if (!target) return;
-
-        const subjectRows = (student?.components || []).filter((component) => {
-          const sameId =
-            meta.id != null &&
-            String(component?.subject_id ?? component?.subjectId ?? "") === String(meta.id);
-          const sameName =
-            norm(component?.subject_name || component?.subject || component?.Subject?.name) === norm(meta.name);
-          return sameId || sameName;
-        });
-
-        const t1Grade = term1Id
-          ? getSubjectTermStats(student, meta.name, term1Id)?.grade || "-"
-          : "-";
-        const t2Grade = term2Id
-          ? getSubjectTermStats(student, meta.name, term2Id)?.grade || "-"
-          : "-";
-        const directGrade = subjectRows
-          .map((row) => row?.grade ?? row?.weighted_grade ?? row?.grade_obtained ?? row?.grade_value)
-          .find(isRealGrade);
-        const storedSubjectGrade = meta.id != null
-          ? student?.subject_grades?.[meta.id] ?? student?.subject_grades?.[String(meta.id)]
-          : null;
-
-        if (isRealGrade(t1Grade)) target.term1 = t1Grade;
-        if (isRealGrade(t2Grade)) target.term2 = t2Grade;
-
-        // If only one direct grade is available, use it for the report's selected
-        // term rather than hiding the subject.
-        const fallbackGrade = [directGrade, storedSubjectGrade].find(isRealGrade);
-        if (isRealGrade(fallbackGrade)) {
-          if (term2Id && !isRealGrade(target.term2)) target.term2 = fallbackGrade;
-          else if (!isRealGrade(target.term1)) target.term1 = fallbackGrade;
-        }
-      });
-
-      // Legacy SMCIS Drawing calculation: add only when no mapped/subject row
-      // with the same name already exists.
-      const drawingT1V6 = getDrawingGradeForTerm(student, term1Id, exams, gradeSchema);
-      const drawingT2V6 = getDrawingGradeForTerm(student, term2Id, exams, gradeSchema);
-      if (isRealGrade(drawingT1V6) || isRealGrade(drawingT2V6)) {
-        const drawing = ensureRow("Drawing", 9000, "legacy-drawing");
-        if (drawing) {
-          if (isRealGrade(drawingT1V6) && !isRealGrade(drawing.term1)) drawing.term1 = drawingT1V6;
-          if (isRealGrade(drawingT2V6) && !isRealGrade(drawing.term2)) drawing.term2 = drawingT2V6;
-        }
-      }
-
-      return Array.from(rowsByName.values())
-        .sort((a, b) => Number(a.serial_order || 0) - Number(b.serial_order || 0))
-        .map((row) => {
-          const preferred = term2Id ? [row.term2, row.term1] : [row.term1, row.term2];
-          return {
-            name: row.name,
-            grade: preferred.find(isRealGrade) || "-",
-            source: row.source,
-          };
-        });
-    })();
-
     const weightedTotal = sumWeightedOnly(scholasticComponents);
     const maxWeightTotal = sumMaxWeight(scholasticComponents);
     const overallPct = maxWeightTotal > 0 ? (weightedTotal / maxWeightTotal) * 100 : null;
@@ -2654,6 +2358,12 @@ const FinalResultSummary = () => {
     const term2Overall = term2Id ? getStudentTermOverall(student, term2Id) : null;
     const r1 = term1Id ? remarksByTerm[String(term1Id)]?.[student.id] : null;
     const r2 = term2Id ? remarksByTerm[String(term2Id)]?.[student.id] : null;
+    const resultMeta1 = term1Id
+      ? resultDeclarationByTerm[String(term1Id)]?.[student.id]
+      : null;
+    const resultMeta2 = term2Id
+      ? resultDeclarationByTerm[String(term2Id)]?.[student.id]
+      : null;
     const promotion = term2Id ? promotionDecisionByTerm[String(term2Id)]?.[student.id] : null;
 
     const selectedTermIdsForReport = [...new Set(
@@ -2662,6 +2372,9 @@ const FinalResultSummary = () => {
         .filter(Boolean)
     )];
     const reportTermId = selectedTermIdsForReport.length === 1 ? selectedTermIdsForReport[0] : (term1Id || term2Id || null);
+    const reportResultMeta = selectedTermIdsForReport.length === 1
+      ? resultDeclarationByTerm[String(selectedTermIdsForReport[0])]?.[student.id] || null
+      : resultMeta2 || resultMeta1 || null;
     const reportExams = (filters?.exam_ids || [])
       .map((examId) => exams.find((e) => Number(e.id) === Number(examId)))
       .filter(Boolean);
@@ -2673,36 +2386,39 @@ const FinalResultSummary = () => {
       (selectedTermIdsForReport.length === 1 ? firstReportExam?.name : null) ||
       (selectedTermIdsForReport.length > 1 ? "FINAL REPORT" : "REPORT CARD");
 
-    const coScholasticRowsMap = new Map();
-    const collectCoRows = (termId, termKey) => {
+    // Use the same subject-first rows for every smart/inline template and PDF.
+    const templateCoAreas = new Map();
+    [[term1Id, "t1"], [term2Id, "t2"]].forEach(([termId, termKey]) => {
       if (!termId) return;
       const bucket = coScholasticByTerm[String(termId)] || {};
-      const rows = Object.values(bucket[String(student.id)] || {});
-      rows.forEach((row) => {
-        const name = row?.area_name || row?.name || `Activity ${row?.area_id || ""}`;
-        const key = String(row?.area_id || smartTemplateSlug(name));
-        if (!coScholasticRowsMap.has(key)) coScholasticRowsMap.set(key, { name, term1: "", term2: "", grade: "" });
-        const target = coScholasticRowsMap.get(key);
-        const grade = row?.grade || row?.value || "";
-        target[termKey] = grade;
-        if (Number(termId) === Number(reportTermId)) target.grade = grade;
+      Object.values(bucket._areas || {}).forEach((area) => {
+        if (!templateCoAreas.has(String(area.area_id))) {
+          templateCoAreas.set(String(area.area_id), { ...area });
+        }
       });
-    };
-    collectCoRows(term1Id, "term1");
-    collectCoRows(term2Id, "term2");
-    if (drawingT1 !== "-" || drawingT2 !== "-") {
-      coScholasticRowsMap.set("drawing", {
-        name: "Drawing",
-        term1: drawingT1 === "-" ? "" : drawingT1,
-        term2: drawingT2 === "-" ? "" : drawingT2,
-        grade: Number(reportTermId) === Number(term2Id) ? drawingT2 : drawingT1,
+      Object.values(bucket[String(student.id)] || {}).forEach((row) => {
+        const key = String(row.area_id);
+        templateCoAreas.set(key, {
+          ...(templateCoAreas.get(key) || {}),
+          area_name: row.area_name,
+          [termKey]: row,
+        });
       });
+    });
+    mergeCoScholasticSubjectRows(templateCoAreas, student);
+    if (!Array.from(templateCoAreas.values()).some((row) => isDrawingSubject(row.area_name)) &&
+        (drawingT1 !== "-" || drawingT2 !== "-")) {
+      templateCoAreas.set("drawing", { area_name: "Drawing", t1: { grade: drawingT1 }, t2: { grade: drawingT2 } });
     }
-
-    const coScholasticRows = Array.from(coScholasticRowsMap.values()).map((row) => ({
-      ...row,
-      grade: row.grade && row.grade !== "-" ? row.grade : (Number(reportTermId) === Number(term2Id) ? row.term2 : row.term1) || row.term2 || row.term1 || "-",
-    }));
+    const coScholasticRows = Array.from(templateCoAreas.values()).map((row) => {
+      const term1 = row.t1?.grade || "-";
+      const term2 = row.t2?.grade || "-";
+      return {
+        name: row.area_name, term1, term2, term1_grade: term1, term2_grade: term2,
+        grade: Number(reportTermId) === Number(term2Id) ? term2 : term1,
+        source: row.source || "mapped-area",
+      };
+    });
 
     const dynamicReportAttendance = termBucket(reportTermId || term1Id || term2Id);
 
@@ -2792,10 +2508,17 @@ const FinalResultSummary = () => {
         grade: overallPct == null ? "-" : gradeFromSchema(overallPct, gradeSchema),
         rank: hasDisplayRank(student?.rank) ? student.rank : "-",
         declaration:
+          reportResultMeta?.result_declaration ||
           promotion?.promotion_status ||
           promotion?.result_status ||
           promotion?.status ||
           "-",
+        declaration_date:
+          reportResultMeta?.result_declaration_date
+            ? formatDisplayDate(reportResultMeta.result_declaration_date)
+            : promotion?.promotion_date
+            ? formatDisplayDate(promotion.promotion_date)
+            : "-",
         term1: term1Overall || {},
         term2: term2Overall || {},
       },
@@ -2815,9 +2538,6 @@ const FinalResultSummary = () => {
       smart_table: smartTable,
       subjects: subjectData,
       coscholastic: coScholastic,
-      co_scholastic: selectedReportTemplate?.template_key === "smcis_dynamic_term_report_card_v1"
-        ? { rows: smcisCodedCoScholasticRowsV6 }
-        : { rows: dynamicCoScholasticRowsV4 },
       co_scholastic: { rows: coScholasticRows },
     };
   };
@@ -2876,6 +2596,7 @@ const FinalResultSummary = () => {
         setStudentInfoMap({});
         setCoScholasticByTerm({});
         setRemarksByTerm({});
+        setResultDeclarationByTerm({});
         setAttendanceByTerm({});
         setPromotionDecisionByTerm({});
         setLoading(false);
@@ -2997,6 +2718,7 @@ const FinalResultSummary = () => {
       setCoScholasticByTerm(coByTerm);
 
       const remarksTermMap = {};
+      const resultDeclarationTermMap = {};
       for (const tid of termIdsLocal.slice(0, 2)) {
         try {
           const remarksRes = await api.get("/report-card/remarks-summary", {
@@ -3004,18 +2726,29 @@ const FinalResultSummary = () => {
           });
 
           const rm = {};
+          const resultMeta = {};
           for (const r of remarksRes.data.remarks || []) {
             const sid = r.student_id ?? r.studentId ?? r?.student?.id;
             const val = r.remark ?? r.remarks ?? r.text ?? r.comment ?? "";
-            if (sid) rm[Number(sid)] = (val || "").trim() || "-";
+            if (sid) {
+              const numericSid = Number(sid);
+              rm[numericSid] = (val || "").trim() || "-";
+              resultMeta[numericSid] = {
+                result_declaration: String(r.result_declaration || "").trim(),
+                result_declaration_date: r.result_declaration_date || null,
+              };
+            }
           }
           remarksTermMap[String(tid)] = rm;
+          resultDeclarationTermMap[String(tid)] = resultMeta;
         } catch (e) {
           console.warn("Remarks failed for term", tid, e);
           remarksTermMap[String(tid)] = {};
+          resultDeclarationTermMap[String(tid)] = {};
         }
       }
       setRemarksByTerm(remarksTermMap);
+      setResultDeclarationByTerm(resultDeclarationTermMap);
             const promotionTermMap = {};
       for (const tid of termIdsLocal.slice(0, 2)) {
         try {
