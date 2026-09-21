@@ -399,19 +399,6 @@ const normalizeHealthRowsPayload = (payload) => {
   return Array.isArray(candidate) ? candidate : [];
 };
 
-// Ignore empty health snapshots so the student profile remains a usable fallback.
-const resolveReportBloodGroup = (...sources) => {
-  for (const source of sources) {
-    for (const key of ["blood_group_snapshot", "blood_group", "profile_blood_group", "b_group", "B_group", "B_GROUP", "Blood_Group"]) {
-      const value = String(source?.[key] ?? "").trim();
-      if (value && !["-", "—", "n/a", "na", "null", "undefined"].includes(value.toLowerCase())) {
-        return value;
-      }
-    }
-  }
-  return "";
-};
-
 const mergeHealthRowIntoStudentInfo = (info = {}, health = {}) => {
   if (!health || typeof health !== "object") return info;
 
@@ -423,8 +410,19 @@ const mergeHealthRowIntoStudentInfo = (info = {}, health = {}) => {
     dental_checkup: health.dental_checkup ?? health.dental ?? info.dental_checkup ?? info.dental ?? "",
     dental: health.dental_checkup ?? health.dental ?? info.dental ?? "",
     vision: health.vision ?? info.vision ?? "",
-    blood_group_snapshot: resolveReportBloodGroup(health, info),
-    blood_group: resolveReportBloodGroup(health, info),
+    blood_group_snapshot:
+      health.blood_group_snapshot ??
+      health.blood_group ??
+      health.profile_blood_group ??
+      info.blood_group_snapshot ??
+      info.blood_group ??
+      "",
+    blood_group:
+      health.blood_group_snapshot ??
+      health.blood_group ??
+      health.profile_blood_group ??
+      info.blood_group ??
+      "",
     assessment_date: health.assessment_date ?? info.assessment_date ?? "",
     health_present_days: health.present_days ?? info.health_present_days ?? null,
     health_working_days: health.working_days ?? info.health_working_days ?? null,
@@ -440,7 +438,7 @@ const getPrimaryHealthInfo = (info = {}) => {
     weight: info?.weight || "-",
     dental: info?.dental_checkup || info?.dental || "-",
     vision: info?.vision || "-",
-    blood_group: resolveReportBloodGroup(info) || "-",
+    blood_group: info?.blood_group_snapshot || info?.blood_group || info?.b_group || "-",
     assessment_date: info?.assessment_date || "",
     present_days: present !== null && present !== undefined && present !== "" ? present : "-",
     working_days: working !== null && working !== undefined && working !== "" ? working : "-",
@@ -654,7 +652,6 @@ const buildGradeRangeFooterText = (gradeSchema = []) => {
 const FinalResultSummary = () => {
   const [sessions, setSessions] = useState([]);
   const [classList, setClassList] = useState([]);
-  const [reportScope, setReportScope] = useState({ global_access: false, assignments: [] });
   const [sections, setSections] = useState([]);
   const [subjects, setSubjects] = useState([]);
   const [exams, setExams] = useState([]);
@@ -1022,7 +1019,6 @@ const FinalResultSummary = () => {
     return {
       ...fallback,
       ...reportInfo,
-      b_group: resolveReportBloodGroup(reportInfo, fallback, student),
       photo: reportInfo?.photo || reportInfo?.Photo || fallback?.photo || fallback?.Photo || null,
       photo_url:
         reportInfo?.photo_url ||
@@ -1100,7 +1096,8 @@ const FinalResultSummary = () => {
 
   useEffect(() => {
     loadSessions();
-    loadReportCardScope();
+    loadClasses();
+    loadSections();
     loadGradeSchema();
     loadInstitutionProfile();
   }, []);
@@ -1132,17 +1129,21 @@ const FinalResultSummary = () => {
     }
   };
 
-  const loadReportCardScope = async () => {
+  const loadClasses = async () => {
     try {
-      const { data } = await api.get("/report-card/scope");
-      setClassList(data.classes || []);
-      setSections(data.sections || []);
-      setReportScope({ global_access: data.global_access === true, assignments: data.assignments || [] });
+      const res = await api.get("/classes");
+      setClassList(res.data || []);
     } catch {
-      setClassList([]);
-      setSections([]);
-      setReportScope({ global_access: false, assignments: [] });
-      Swal.fire("Error", "Failed to load authorized report-card classes", "error");
+      Swal.fire("Error", "Failed to load classes", "error");
+    }
+  };
+
+  const loadSections = async () => {
+    try {
+      const res = await api.get("/sections");
+      setSections(res.data || []);
+    } catch {
+      Swal.fire("Error", "Failed to load sections", "error");
     }
   };
 
@@ -2483,7 +2484,7 @@ const FinalResultSummary = () => {
         dob: formatDOB(dobRaw),
         age_at_assessment: ageAtAssessment,
         assessment_date: formatDisplayDate(effectiveAssessmentDate),
-        blood_group: resolveReportBloodGroup(info) || "-",
+        blood_group: info?.blood_group_snapshot || info?.blood_group || info?.b_group || "-",
         photo_data_url: info?.__pdfPhotoSrc || getStudentPhotoURL(info) || "",
       },
       session: {
@@ -4568,129 +4569,24 @@ const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
         /* Keep footer content above the taller decorative garden. */
         .signature-row,
         .closing-note { position:relative; z-index:3; }
-
-        /* PREPRIMARY_REFERENCE_LAYOUT_V6_DYNAMIC_SCHOOL_INFO */
-        .dynamic-school-brand-html {
-          min-width:0 !important;
-          max-width:100% !important;
-          line-height:1.12 !important;
-        }
-        .dynamic-school-name {
-          font-family: Georgia, "Times New Roman", serif !important;
-          font-size:18px !important;
-          line-height:1.02 !important;
-          font-weight:950 !important;
-          letter-spacing:.02px !important;
-          color:#103a70 !important;
-          margin:0 0 2.2px !important;
-          text-wrap:balance;
-        }
-        .dynamic-school-meta {
-          display:flex !important;
-          align-items:center !important;
-          flex-wrap:wrap !important;
-          column-gap:3px !important;
-          row-gap:1px !important;
-          max-width:100% !important;
-          font-family:Arial,Helvetica,sans-serif !important;
-          font-size:6.25px !important;
-          line-height:1.18 !important;
-          font-weight:800 !important;
-          color:#315b86 !important;
-        }
-        .school-meta-item { white-space:normal !important; }
-        .school-meta-sep {
-          color:#f05a9c !important;
-          font-size:6.6px !important;
-          font-weight:950 !important;
-          line-height:1 !important;
-        }
-
-        /* PREPRIMARY_REFERENCE_LAYOUT_V7_DYNAMIC_HEALTH_SCHOOLNAME */
-        /* Make the dynamic school identity more prominent while preserving
-           wrapping for long institution names in the left header column. */
-        .dynamic-school-name {
-          font-size:21px !important;
-          line-height:.98 !important;
-          font-weight:950 !important;
-          letter-spacing:.01px !important;
-          margin-bottom:2.5px !important;
-        }
-        .dynamic-school-meta {
-          font-size:6.35px !important;
-          line-height:1.16 !important;
-        }
-        .health-value {
-          font-size:8.35px !important;
-          font-weight:900 !important;
-        }
-      
-
-        /* PREPRIMARY_REFERENCE_LAYOUT_V8_UNIFORM_HEADINGS
-           Keep every main report-card panel heading equally prominent.
-           This also overrides the older .academic-card th span rule that
-           unintentionally reduced ACADEMIC (PEN PAPER) to 6.4px. */
-        .academic-title-wrap > span,
-        .development-title-wrap > span,
-        .attendance-title > span {
-          font-size:9.2px !important;
-          line-height:1.04 !important;
-          font-weight:950 !important;
-          letter-spacing:.04px !important;
-          color:inherit !important;
-        }
-        .academic-title,
-        .development-title,
-        .attendance-title {
-          font-size:9.2px !important;
-          font-weight:950 !important;
-        }
-        .academic-title-wrap,
-        .development-title-wrap,
-        .attendance-title {
-          min-height:9.5mm !important;
-        }
-        /* Long development headings may wrap naturally, but stay aligned and
-           use the same visual size as the short Academic title. */
-        .academic-title-wrap > span,
-        .development-title-wrap > span {
-          flex:1 1 auto !important;
-          min-width:0 !important;
-          white-space:normal !important;
-        }
-</style>
+      </style>
     `;
 
     const cards = (studentsForPdf || []).map((student) => {
       const info = infoMapOverride[student.id] || studentInfoMap[student.id] || {};
       const mergedInfoForPhoto = { ...student, ...info };
       const studentPhotoSrc = info?.__pdfPhotoSrc || getStudentPhotoURL(mergedInfoForPhoto);
+      const effectiveHeaderHtml = getReportCardHeaderHtml();
       const effectiveSchoolLogoUrl = getReportCardSchoolLogoUrl(formatAssets);
+      const cleanHeaderHtml = sanitizeHeaderHtml(effectiveHeaderHtml);
       const sessionName = sessions.find((x) => String(x.id) === String(filters.session_id))?.name || "-";
       const selectedTermText = getPrimarySelectedTermLabel();
-
-      // PREPRIMARY_REFERENCE_LAYOUT_V6_DYNAMIC_SCHOOL_INFO
-      // Use the authenticated institution profile for the school identity so
-      // the same report-card renderer works correctly for every tenant/school.
-      const schoolInfo = institutionProfile || {};
-      const primarySchoolName =
-        schoolInfo?.name ||
-        getReportCardFormatValue("school_name") ||
-        getReportCardFormatValue("institution_name") ||
-        selectedReportTemplate?.school_name ||
-        "School Name";
-      const primarySchoolAddress = String(schoolInfo?.address_line || schoolInfo?.address || "").trim();
-      const primarySchoolWebsite = String(schoolInfo?.website || "")
-        .trim()
-        .replace(/^https?:\/\//i, "")
-        .replace(/\/+$/, "");
-      const primarySchoolPhone = String(schoolInfo?.phone || "").trim();
-      const primarySchoolMeta = [
-        primarySchoolAddress,
-        `Session: ${sessionName}`,
-        primarySchoolWebsite ? `Website: ${primarySchoolWebsite}` : "",
-        primarySchoolPhone ? `Contact: ${primarySchoolPhone}` : "",
-      ].filter(Boolean);
+      // PREPRIMARY_REFERENCE_LAYOUT_V5_TERM_ATTENDANCE_ICON
+      // The shared school header may contain a generic "Final Examination" line.
+      // For Pre-Primary, show the actually selected term instead (Term-I/Term-II).
+      const primaryHeaderHtml = cleanHeaderHtml
+        ? cleanHeaderHtml.replace(/Final\s*Examination/gi, escapePrimaryHtml(selectedTermText))
+        : cleanHeaderHtml;
 
       const dobValRaw = info?.Date_Of_Birth || info?.date_of_birth || info?.dob || "";
       const dobVal = formatDOB(dobValRaw);
@@ -4713,13 +4609,12 @@ const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
                     ? `<img src="${escapePrimaryHtml(effectiveSchoolLogoUrl)}" class="school-logo" alt="School Logo" onerror="this.style.display='none';" />`
                     : ""
                 }
-                <div class="school-brand-html dynamic-school-brand-html">
-                  <div class="dynamic-school-name">${escapePrimaryHtml(primarySchoolName)}</div>
-                  <div class="dynamic-school-meta">
-                    ${primarySchoolMeta
-                      .map((item, index) => `<span class="school-meta-item">${escapePrimaryHtml(item)}</span>${index < primarySchoolMeta.length - 1 ? '<span class="school-meta-sep">•</span>' : ''}`)
-                      .join("")}
-                  </div>
+                <div class="school-brand-html">
+                  ${
+                    primaryHeaderHtml
+                      ? primaryHeaderHtml
+                      : `<div class="fallback-school-name">School Name</div><div class="fallback-tagline">LEARN • GROW • BELONG</div>`
+                  }
                 </div>
               </div>
 
@@ -5972,10 +5867,7 @@ const renderTeacherRemarksTermWise = (studentId) => {
               onChange={handleFilterChange}
             >
               <option value="">Select Section</option>
-              {sections.filter((section) => reportScope.global_access || reportScope.assignments.some(
-                (assignment) => String(assignment.classId) === String(filters.class_id) &&
-                  String(assignment.sectionId) === String(section.id)
-              )).map((s) => (
+              {sections.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.section_name}
                 </option>

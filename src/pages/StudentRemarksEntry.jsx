@@ -4,6 +4,7 @@ import Swal from "sweetalert2";
 import "bootstrap/dist/css/bootstrap.min.css";
 
 const HEADER_Z = 1030;
+const isMissingClassId = (value) => value == null || String(value).trim() === "";
 
 const DEFAULT_RESULT_DECLARATIONS = [
   { value: "PASS", label: "Pass" },
@@ -229,7 +230,7 @@ const StudentRemarksEntry = () => {
   };
 
   const loadSectionsForClass = async (classId) => {
-    if (!classId) {
+    if (isMissingClassId(classId)) {
       setSections([]);
       return;
     }
@@ -290,7 +291,7 @@ const StudentRemarksEntry = () => {
 
   const fetchRemarks = async () => {
     const { session_id, class_id, section_id, term_id } = filters;
-    if (!session_id || !class_id || !term_id) return;
+    if (!session_id || isMissingClassId(class_id) || !term_id) return;
 
     try {
       setLoading(true);
@@ -382,7 +383,7 @@ const StudentRemarksEntry = () => {
   const handleSave = async () => {
     const { session_id, class_id, term_id } = filters;
 
-    if (!session_id || !class_id || !term_id) {
+    if (!session_id || isMissingClassId(class_id) || !term_id) {
       Swal.fire(
         "Missing filters",
         "Please select Session, Class and Term. Section is optional.",
@@ -461,7 +462,7 @@ const StudentRemarksEntry = () => {
   }, [students, studentSearch]);
 
   const selectedClassName = useMemo(() => {
-    if (!filters.class_id) return "";
+    if (isMissingClassId(filters.class_id)) return "";
     const source = isGlobal ? classes : uniqueAssignedClasses;
     const item = source.find((c) =>
       String(c.id ?? c.class_id) === String(filters.class_id)
@@ -597,7 +598,7 @@ const StudentRemarksEntry = () => {
                   clearStudentData();
                   setFilters((prev) => ({ ...prev, section_id: e.target.value }));
                 }}
-                disabled={!filters.class_id || sectionsLoading}
+                disabled={isMissingClassId(filters.class_id) || sectionsLoading}
               >
                 <option value="">All Sections / No Section Restriction</option>
                 {sections.map((s) => (
@@ -609,7 +610,7 @@ const StudentRemarksEntry = () => {
               <div className="form-text">
                 {sectionsLoading
                   ? "Checking sections used by students…"
-                  : sections.length === 0 && filters.class_id
+                  : sections.length === 0 && !isMissingClassId(filters.class_id)
                   ? "No section is assigned to students in this class — this is okay."
                   : "Only sections actually assigned to students are listed."}
               </div>

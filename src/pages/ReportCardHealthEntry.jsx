@@ -178,6 +178,8 @@ const normalizeRowsForSave = (rows) =>
     assessment_date: row.assessment_date || getTodayDate(),
   }));
 
+const isMissingClassId = (value) => value == null || String(value).trim() === "";
+
 const ReportCardHealthEntry = () => {
   const [filters, setFilters] = useState({
     session_id: "",
@@ -208,7 +210,7 @@ const ReportCardHealthEntry = () => {
   useEffect(() => {
     const { session_id, class_id, section_id, exam_id } = filters;
 
-    if (session_id && class_id && section_id && exam_id) {
+    if (session_id && !isMissingClassId(class_id) && section_id && exam_id) {
       fetchHealthRows();
     } else {
       resetGrid();
@@ -396,7 +398,7 @@ const ReportCardHealthEntry = () => {
   const saveHealthDetails = async () => {
     const { session_id, class_id, section_id, exam_id } = filters;
 
-    if (!session_id || !class_id || !section_id || !exam_id) {
+    if (!session_id || isMissingClassId(class_id) || !section_id || !exam_id) {
       Swal.fire("Validation", "Please select all filters first.", "warning");
       return;
     }
@@ -538,7 +540,7 @@ const ReportCardHealthEntry = () => {
                 name="section_id"
                 value={filters.section_id}
                 onChange={handleFilterChange}
-                disabled={!filters.class_id}
+                disabled={isMissingClassId(filters.class_id)}
               >
                 <option value="">Select Section</option>
                 {sections.map((s, idx) => (
@@ -556,7 +558,7 @@ const ReportCardHealthEntry = () => {
                 name="exam_id"
                 value={filters.exam_id}
                 onChange={handleFilterChange}
-                disabled={!filters.class_id}
+                disabled={isMissingClassId(filters.class_id)}
               >
                 <option value="">Select Exam</option>
                 {exams.map((ex, idx) => (
@@ -582,7 +584,7 @@ const ReportCardHealthEntry = () => {
               onClick={fetchHealthRows}
               disabled={
                 !filters.session_id ||
-                !filters.class_id ||
+                isMissingClassId(filters.class_id) ||
                 !filters.section_id ||
                 !filters.exam_id ||
                 loading

@@ -399,19 +399,6 @@ const normalizeHealthRowsPayload = (payload) => {
   return Array.isArray(candidate) ? candidate : [];
 };
 
-// Ignore empty health snapshots so the student profile remains a usable fallback.
-const resolveReportBloodGroup = (...sources) => {
-  for (const source of sources) {
-    for (const key of ["blood_group_snapshot", "blood_group", "profile_blood_group", "b_group", "B_group", "B_GROUP", "Blood_Group"]) {
-      const value = String(source?.[key] ?? "").trim();
-      if (value && !["-", "—", "n/a", "na", "null", "undefined"].includes(value.toLowerCase())) {
-        return value;
-      }
-    }
-  }
-  return "";
-};
-
 const mergeHealthRowIntoStudentInfo = (info = {}, health = {}) => {
   if (!health || typeof health !== "object") return info;
 
@@ -423,8 +410,19 @@ const mergeHealthRowIntoStudentInfo = (info = {}, health = {}) => {
     dental_checkup: health.dental_checkup ?? health.dental ?? info.dental_checkup ?? info.dental ?? "",
     dental: health.dental_checkup ?? health.dental ?? info.dental ?? "",
     vision: health.vision ?? info.vision ?? "",
-    blood_group_snapshot: resolveReportBloodGroup(health, info),
-    blood_group: resolveReportBloodGroup(health, info),
+    blood_group_snapshot:
+      health.blood_group_snapshot ??
+      health.blood_group ??
+      health.profile_blood_group ??
+      info.blood_group_snapshot ??
+      info.blood_group ??
+      "",
+    blood_group:
+      health.blood_group_snapshot ??
+      health.blood_group ??
+      health.profile_blood_group ??
+      info.blood_group ??
+      "",
     assessment_date: health.assessment_date ?? info.assessment_date ?? "",
     health_present_days: health.present_days ?? info.health_present_days ?? null,
     health_working_days: health.working_days ?? info.health_working_days ?? null,
@@ -440,7 +438,7 @@ const getPrimaryHealthInfo = (info = {}) => {
     weight: info?.weight || "-",
     dental: info?.dental_checkup || info?.dental || "-",
     vision: info?.vision || "-",
-    blood_group: resolveReportBloodGroup(info) || "-",
+    blood_group: info?.blood_group_snapshot || info?.blood_group || info?.b_group || "-",
     assessment_date: info?.assessment_date || "",
     present_days: present !== null && present !== undefined && present !== "" ? present : "-",
     working_days: working !== null && working !== undefined && working !== "" ? working : "-",
@@ -654,7 +652,6 @@ const buildGradeRangeFooterText = (gradeSchema = []) => {
 const FinalResultSummary = () => {
   const [sessions, setSessions] = useState([]);
   const [classList, setClassList] = useState([]);
-  const [reportScope, setReportScope] = useState({ global_access: false, assignments: [] });
   const [sections, setSections] = useState([]);
   const [subjects, setSubjects] = useState([]);
   const [exams, setExams] = useState([]);
@@ -1022,7 +1019,6 @@ const FinalResultSummary = () => {
     return {
       ...fallback,
       ...reportInfo,
-      b_group: resolveReportBloodGroup(reportInfo, fallback, student),
       photo: reportInfo?.photo || reportInfo?.Photo || fallback?.photo || fallback?.Photo || null,
       photo_url:
         reportInfo?.photo_url ||
@@ -1100,7 +1096,8 @@ const FinalResultSummary = () => {
 
   useEffect(() => {
     loadSessions();
-    loadReportCardScope();
+    loadClasses();
+    loadSections();
     loadGradeSchema();
     loadInstitutionProfile();
   }, []);
@@ -1132,17 +1129,21 @@ const FinalResultSummary = () => {
     }
   };
 
-  const loadReportCardScope = async () => {
+  const loadClasses = async () => {
     try {
-      const { data } = await api.get("/report-card/scope");
-      setClassList(data.classes || []);
-      setSections(data.sections || []);
-      setReportScope({ global_access: data.global_access === true, assignments: data.assignments || [] });
+      const res = await api.get("/classes");
+      setClassList(res.data || []);
     } catch {
-      setClassList([]);
-      setSections([]);
-      setReportScope({ global_access: false, assignments: [] });
-      Swal.fire("Error", "Failed to load authorized report-card classes", "error");
+      Swal.fire("Error", "Failed to load classes", "error");
+    }
+  };
+
+  const loadSections = async () => {
+    try {
+      const res = await api.get("/sections");
+      setSections(res.data || []);
+    } catch {
+      Swal.fire("Error", "Failed to load sections", "error");
     }
   };
 
@@ -2483,7 +2484,7 @@ const FinalResultSummary = () => {
         dob: formatDOB(dobRaw),
         age_at_assessment: ageAtAssessment,
         assessment_date: formatDisplayDate(effectiveAssessmentDate),
-        blood_group: resolveReportBloodGroup(info) || "-",
+        blood_group: info?.blood_group_snapshot || info?.blood_group || info?.b_group || "-",
         photo_data_url: info?.__pdfPhotoSrc || getStudentPhotoURL(info) || "",
       },
       session: {
@@ -3792,30 +3793,6 @@ const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
     return Array.from(map.values());
   };
 
-  // PREPRIMARY_REFERENCE_LAYOUT_V2_ICONS
-  // Inline SVGs keep the visual language stable in browser/PDF printing without
-  // depending on emoji fonts or external image assets.
-  const primaryReferenceIconSvg = (kind = "book") => {
-    const svg = {
-      book: `<svg class="section-icon" viewBox="0 0 64 48" aria-hidden="true"><path d="M5 9c10-3 18-2 27 4v29C23 36 15 35 5 38V9Z" fill="#fff" stroke="#234d86" stroke-width="2"/><path d="M59 9c-10-3-18-2-27 4v29c9-6 17-7 27-4V9Z" fill="#fff" stroke="#234d86" stroke-width="2"/><path d="M32 13v29" stroke="#234d86" stroke-width="2"/><path d="M10 15c7-1 12 0 17 3M10 21c7-1 12 0 17 3M54 15c-7-1-12 0-17 3M54 21c-7-1-12 0-17 3" stroke="#ef6aa7" stroke-width="1.8" fill="none"/></svg>`,
-      blocks: `<svg class="section-icon" viewBox="0 0 64 52" aria-hidden="true"><rect x="8" y="20" width="18" height="18" rx="2" fill="#40b8e8" stroke="#1b6698"/><rect x="25" y="8" width="18" height="18" rx="2" fill="#8bcf46" stroke="#4d8b22"/><rect x="40" y="24" width="16" height="16" rx="2" fill="#f8d742" stroke="#aa8a10"/><path d="M13 29h8M17 25v8M30 17h8M34 13v8" stroke="#fff" stroke-width="2"/></svg>`,
-      kids: `<svg class="section-icon" viewBox="0 0 68 52" aria-hidden="true"><circle cx="23" cy="15" r="8" fill="#f1b37c"/><circle cx="45" cy="15" r="8" fill="#e5a36c"/><path d="M14 44c0-12 4-20 9-20s9 8 9 20" fill="#fb8ba8" stroke="#91506a"/><path d="M36 44c0-12 4-20 9-20s9 8 9 20" fill="#ffd05a" stroke="#9c7a19"/><path d="M16 10c4-8 11-9 16-2M38 8c5-6 12-5 15 1" fill="none" stroke="#6f3f2f" stroke-width="3" stroke-linecap="round"/><circle cx="21" cy="15" r="1"/><circle cx="25" cy="15" r="1"/><circle cx="43" cy="15" r="1"/><circle cx="47" cy="15" r="1"/><path d="M20 19c2 2 4 2 6 0M42 19c2 2 4 2 6 0" fill="none" stroke="#8b4c45" stroke-linecap="round"/></svg>`,
-      globe: `<svg class="section-icon" viewBox="0 0 56 56" aria-hidden="true"><circle cx="28" cy="25" r="18" fill="#4eb9e8" stroke="#276da0" stroke-width="2"/><path d="M13 18c7-3 10-7 14-8 2 4 6 5 10 6-4 4-2 8-7 9-4 1-6 4-7 8-4-3-8-7-10-15Zm21 12c6-2 9 1 10 5-5 5-10 7-15 7 1-5 2-9 5-12Z" fill="#77c95b"/><path d="M28 43v7M19 50h18" stroke="#80542c" stroke-width="3" stroke-linecap="round"/></svg>`,
-      runner: `<svg class="section-icon" viewBox="0 0 64 56" aria-hidden="true"><circle cx="42" cy="9" r="6" fill="#e3a06e"/><path d="M37 17l-10 8 8 7 7-9 10 8" fill="none" stroke="#f45f7e" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/><path d="M30 24 19 17M34 34 21 48M42 31l9 15" stroke="#256eaa" stroke-width="5" stroke-linecap="round"/><path d="M43 4c4 0 7 2 8 5" stroke="#5b3427" stroke-width="3" fill="none" stroke-linecap="round"/></svg>`,
-      palette: `<svg class="section-icon" viewBox="0 0 60 52" aria-hidden="true"><path d="M29 6c15 0 25 9 25 20 0 7-4 10-10 10h-6c-4 0-5 3-4 6 1 4-2 7-7 6C15 46 6 37 6 27 6 15 16 6 29 6Z" fill="#f2c95b" stroke="#b98a25" stroke-width="2"/><circle cx="20" cy="19" r="4" fill="#f15b5b"/><circle cx="31" cy="14" r="4" fill="#56a8e8"/><circle cx="42" cy="20" r="4" fill="#75c657"/><circle cx="18" cy="31" r="4" fill="#a46ad8"/><circle cx="31" cy="28" r="4" fill="#f28ab4"/></svg>`,
-      puzzle: `<svg class="section-icon" viewBox="0 0 58 50" aria-hidden="true"><path d="M10 11h14c-1 6 7 8 10 3 1-2 1-3 0-5h13v13c-5-1-7 3-6 7 1 4 5 5 9 3v13H35c2-5-2-8-6-7-4 1-5 5-3 9H11V34c6 2 9-2 8-6-1-4-5-5-9-3V11Z" fill="#63b9e7" stroke="#2e6e9b" stroke-width="2"/><path d="M35 11h12v11c-5-1-7 3-6 7" fill="#80c95b" opacity=".9"/></svg>`,
-      attendance: `<svg class="section-icon attendance-icon-svg" viewBox="0 0 62 54" aria-hidden="true"><rect x="8" y="9" width="46" height="39" rx="6" fill="#fff5fa" stroke="#a83f76" stroke-width="2.4"/><path d="M8 20h46" stroke="#a83f76" stroke-width="2.4"/><path d="M19 5v10M43 5v10" stroke="#6d2852" stroke-width="4" stroke-linecap="round"/><rect x="15" y="25" width="8" height="7" rx="2" fill="#f59ac7"/><rect x="27" y="25" width="8" height="7" rx="2" fill="#f8c2db"/><rect x="39" y="25" width="8" height="7" rx="2" fill="#f59ac7"/><path d="M20 40l5 5 13-14" fill="none" stroke="#35a85b" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
-    };
-    return svg[kind] || svg.book;
-  };
-
-  const primaryReferenceCardIcon = (index = 0) =>
-    primaryReferenceIconSvg(["blocks", "puzzle", "kids", "globe", "runner", "palette"][index % 6]);
-
-  const primaryHeroRainbowSvg = () => `<svg class="hero-rainbow-svg" viewBox="0 0 120 66" aria-hidden="true"><path d="M15 58a45 45 0 0 1 90 0" fill="none" stroke="#f4549f" stroke-width="12"/><path d="M26 58a34 34 0 0 1 68 0" fill="none" stroke="#f8a13d" stroke-width="10"/><path d="M36 58a24 24 0 0 1 48 0" fill="none" stroke="#f2d84d" stroke-width="9"/><path d="M45 58a15 15 0 0 1 30 0" fill="none" stroke="#68c46f" stroke-width="8"/><path d="M52 58a8 8 0 0 1 16 0" fill="none" stroke="#50a8df" stroke-width="7"/><circle cx="107" cy="10" r="7" fill="#ffd747"/><path d="M107 0v-8M107 20v8M97 10h-8M117 10h8M100 3l-6-6M114 17l6 6M114 3l6-6M100 17l-6 6" stroke="#e5b918" stroke-width="2"/></svg>`;
-
-  const primaryFlowerSvg = () => `<svg class="quote-flower-svg" viewBox="0 0 58 42" aria-hidden="true"><path d="M29 23v16M29 32c-8-9-13-7-17-2M29 34c7-9 13-8 18-3" stroke="#3d9c4f" stroke-width="2.5" fill="none" stroke-linecap="round"/><g transform="translate(29 17)"><circle r="5" fill="#ffd64d"/><ellipse rx="4" ry="8" transform="translate(0 -8)" fill="#f46aa0"/><ellipse rx="4" ry="8" transform="rotate(72) translate(0 -8)" fill="#f46aa0"/><ellipse rx="4" ry="8" transform="rotate(144) translate(0 -8)" fill="#f46aa0"/><ellipse rx="4" ry="8" transform="rotate(216) translate(0 -8)" fill="#f46aa0"/><ellipse rx="4" ry="8" transform="rotate(288) translate(0 -8)" fill="#f46aa0"/></g></svg>`;
-
   const buildPrimaryDevelopmentCardHtml = (student, subjectName, cardIndex = 0) => {
     const components = getPrimaryDevelopmentComponents(student, subjectName);
     if (!components.length) return "";
@@ -3838,7 +3815,7 @@ const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
     return `
       <table class="development-card tone-${tone}">
         <thead>
-          <tr><th colspan="${colCount}" class="development-title"><div class="development-title-wrap"><span>${escapePrimaryHtml(subjectName)}</span>${primaryReferenceCardIcon(cardIndex)}</div></th></tr>
+          <tr><th colspan="${colCount}" class="development-title">${escapePrimaryHtml(subjectName)}</th></tr>
           <tr>
             <th class="development-component-head">Assessment Component</th>
             ${showT1 ? `<th>${showT2 ? escapePrimaryHtml(primaryPrettyTermLabel(term1Id)) : "Grade"}</th>` : ""}
@@ -3898,7 +3875,7 @@ const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
     return `
       <table class="academic-card">
         <thead>
-          <tr><th colspan="${singleTerm ? 2 : 1 + activeTerms.length}" class="academic-title"><div class="academic-title-wrap"><span>ACADEMIC (PEN PAPER)</span>${primaryReferenceIconSvg("book")}</div></th></tr>
+          <tr><th colspan="${singleTerm ? 2 : 1 + activeTerms.length}" class="academic-title">ACADEMIC (PEN PAPER)</th></tr>
           <tr>
             <th class="academic-subject-head">Subject</th>
             ${
@@ -3955,7 +3932,7 @@ const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
 
     return `
       <div class="attendance-card">
-        <div class="attendance-title"><span>ATTENDANCE</span>${primaryReferenceIconSvg("attendance")}</div>
+        <div class="attendance-title">ATTENDANCE</div>
         <div class="attendance-row"><span>Total Working Days</span><b>${total || "-"}</b></div>
         <div class="attendance-row"><span>Days Present</span><b>${total ? present : "-"}</b></div>
         <div class="attendance-row"><span>Days Absent</span><b>${total ? absent : "-"}</b></div>
@@ -4197,500 +4174,19 @@ const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
         }
         .signature-line { border-top:1px solid #6b87a7; padding-top:2px; }
         .closing-note { text-align:center; font-size:7px; letter-spacing:.4px; color:#315d8b; margin-top:4px; font-weight:700; }
-        .keep-shining { position:absolute; right:8mm; bottom:5mm; font-family:"Comic Sans MS", "Segoe Print", cursive; font-size:11px; font-style:italic; color:#1763a2; transform:rotate(-3deg); z-index:3; }
-        .keep-shining b { color:#ef5aa2; font-size:15px; vertical-align:-1px; }
-
-        /* V2: closer visual match to the supplied reference */
-        .section-icon { width:13mm; height:10mm; display:block; flex:0 0 auto; overflow:visible; }
-        .academic-title-wrap, .development-title-wrap { display:flex; align-items:center; justify-content:space-between; gap:4px; min-height:9mm; }
-        .academic-title-wrap .section-icon { width:12mm; height:9mm; }
-        .development-title-wrap .section-icon { width:11.5mm; height:9mm; margin:-2px -1px -2px 3px; }
-        .academic-title { padding:2px 6px 2px 7px !important; font-size:8.5px; }
-        .development-title { padding:1px 5px 1px 6px !important; font-size:6.7px !important; }
-
-        .hero-row { grid-template-columns:1.28fr 1.12fr .94fr; min-height:27mm; gap:5px; padding-top:0; }
-        .school-logo { width:25mm; height:22mm; }
-        .report-title { padding:3.5px 17px; border-radius:6px; font-size:15.5px; background:linear-gradient(90deg,#f7a9d2,#fbc6df 52%,#f7a9d2); }
-        .report-subtitle { margin-top:3px; font-size:9px; }
-        .hero-motto { display:flex; align-items:center; justify-content:center; gap:3px; min-width:0; }
-        .hero-motto-top { display:flex; align-items:flex-start; gap:4px; flex:0 0 auto; }
-        .motto-main { font-family:"Comic Sans MS", "Segoe Print", cursive; font-size:11.3px; line-height:1.05; color:#1763a2; transform:rotate(-4deg); white-space:nowrap; }
-        .motto-heart { color:#f34f9d; font-size:18px; line-height:1; margin-top:-3px; }
-        .motto-visual { display:flex; align-items:center; gap:2px; min-width:0; }
-        .hero-rainbow-svg { width:28mm; height:17mm; overflow:visible; display:block; }
-        .motto-values { display:flex; flex-direction:column; align-items:flex-start; gap:.4px; font-size:5px; line-height:1.05; white-space:nowrap; color:#17315b; }
-
-        .profile-band { grid-template-columns:28mm 1.03fr 1fr .87fr; min-height:29mm; padding:4px 6px; border-color:#9dcce6; background:linear-gradient(90deg,#eef9ff,#fff 60%,#fff0f8); }
-        .student-photo { width:27mm; height:26mm; }
-        .quote-box { border-left:1px solid rgba(219,164,195,.25); }
-        .quote-text { font-size:7px; line-height:1.32; }
-        .quote-flower { height:11mm; margin-top:-1px; }
-        .quote-flower-svg { width:18mm; height:12mm; display:block; }
-
-        .report-main-grid { gap:3.5px 5px; }
-        .academic-card, .development-card, .attendance-card { min-height:35mm; border-radius:5px; }
-        .development-card th, .development-card td { height:3.45mm; padding:1px 4px; }
-        .academic-card th, .academic-card td { height:6.6mm; }
-        .attendance-row { min-height:6.7mm; }
-        .attendance-percent { min-height:7.2mm; }
-
-        .footer-grid { grid-template-columns:1.13fr .96fr 1.02fr; gap:4px; margin-top:4px; }
-        .footer-box-title { font-size:7.5px; padding:3.5px 6px; }
-        .health-grid, .grading-body { min-height:19mm; }
-        .health-icon { height:8mm; margin:0 auto 1px; display:flex; align-items:center; justify-content:center; }
-        .health-icon svg { width:7mm; height:7mm; display:block; }
-        .health-label { font-size:5.4px; }
-        .health-value { font-size:7.8px; }
-        .grade-letter { width:12.5mm; height:8.5mm; font-size:10px; border-radius:5px; box-shadow:inset 0 0 0 1px rgba(40,70,100,.04); }
-        .grade-g { background:linear-gradient(135deg,#dff7c9,#c7efb4); }
-        .grade-b { background:linear-gradient(135deg,#dceeff,#c7e2f9); }
-        .grade-y { background:linear-gradient(135deg,#fff0b9,#ffe59a); }
-        .grade-r { background:linear-gradient(135deg,#fbd9e8,#f7c5db); }
-        .remarks-star { color:#ffd83f; text-shadow:0 1px 0 #d7ab23; font-size:18px; }
-        .remarks-body { padding:5px 8px; min-height:19mm; }
-
-        .signature-row { margin-top:4px; }
-        .closing-note { margin-top:3px; }
-        .footer-garden { position:absolute; bottom:0; width:22mm; height:18mm; z-index:2; pointer-events:none; }
-        .footer-garden-left { left:0; }
-        .footer-garden-right { right:0; transform:scaleX(-1); }
-        .footer-garden span { position:absolute; bottom:1mm; width:4mm; height:15mm; border-left:2px solid #3f9d46; border-radius:50%; transform-origin:bottom center; }
-        .footer-garden span:nth-child(1){ left:4mm; transform:rotate(-24deg); }
-        .footer-garden span:nth-child(2){ left:9mm; height:18mm; transform:rotate(3deg); }
-        .footer-garden span:nth-child(3){ left:14mm; height:13mm; transform:rotate(24deg); }
-        .footer-garden i { position:absolute; bottom:3mm; width:7mm; height:3.5mm; border-radius:100% 0 100% 0; background:#68bd51; transform:rotate(-28deg); }
-        .footer-garden i:nth-of-type(1){ left:2mm; bottom:7mm; }
-        .footer-garden i:nth-of-type(2){ left:11mm; bottom:5mm; transform:rotate(24deg) scaleX(-1); background:#8bcf52; }
-
-        /* PREPRIMARY_REFERENCE_LAYOUT_V3_PREMIUM
-           Richer colours + stronger typography while preserving A4 single-page fit. */
-        .preprimary-report {
-          border-color:#b8d4e8;
-          box-shadow: inset 0 0 0 1px rgba(31,78,121,.04);
-        }
-
-        /* Main title: larger, heavier and more premium */
-        .report-title {
-          padding:4px 20px;
-          font-size:18px;
-          line-height:1.05;
-          font-weight:950;
-          letter-spacing:.15px;
-          color:#102b5c;
-          background:linear-gradient(90deg,#f58fc2 0%,#f9b8d6 48%,#f58fc2 100%);
-          border:1px solid rgba(190,53,116,.18);
-          box-shadow:0 2px 5px rgba(123,58,97,.13), inset 0 1px 0 rgba(255,255,255,.65);
-          text-shadow:0 1px 0 rgba(255,255,255,.35);
-        }
-        .report-subtitle {
-          font-size:9.6px;
-          font-weight:900;
-          color:#153866;
-          letter-spacing:.08px;
-        }
-
-        /* Student info made crisper */
-        .profile-band {
-          border-color:#77bce1;
-          background:linear-gradient(90deg,#e8f7ff 0%,#ffffff 57%,#ffeaf5 100%);
-          box-shadow:0 1px 3px rgba(44,96,135,.08);
-        }
-        .info-label { color:#153e70; font-weight:750; }
-        .info-col strong { color:#173f71; font-weight:700; }
-
-        /* Pen-paper: richer pink and stronger subject/marks typography */
-        .academic-card {
-          border-color:#e986b8;
-          box-shadow:0 1.5px 4px rgba(177,65,119,.10);
-        }
-        .academic-title {
-          background:linear-gradient(90deg,#f59ac7,#f8b5d4);
-          color:#35104f;
-          font-size:9.4px !important;
-          font-weight:950;
-          letter-spacing:.08px;
-        }
-        .academic-card thead tr:nth-child(2) th {
-          background:#f9d5e8;
-          color:#142e5b;
-          font-size:7.8px;
-          font-weight:900;
-        }
-        .academic-card th, .academic-card td {
-          border-color:#eeb1cf;
-        }
-        .academic-card td:first-child {
-          color:#173f71;
-          font-size:8.5px;
-          font-weight:800;
-          letter-spacing:.02px;
-        }
-        .academic-mark {
-          color:#0f3a78;
-          font-size:9.7px !important;
-          font-weight:950;
-        }
-
-        /* Development cards: darker pastel families, bold headings and names */
-        .development-card {
-          box-shadow:0 1.5px 4px rgba(31,78,121,.08);
-        }
-        .development-title {
-          color:#102f5a;
-          font-size:7.35px !important;
-          font-weight:950;
-          letter-spacing:.03px;
-          text-shadow:0 1px 0 rgba(255,255,255,.32);
-        }
-        .development-card thead tr:nth-child(2) th {
-          color:#173b67;
-          font-size:6.25px;
-          font-weight:900;
-        }
-        .development-name {
-          color:#173f6c;
-          font-size:6.25px;
-          font-weight:700;
-        }
-        .development-grade {
-          color:#0e3974;
-          font-size:6.7px;
-          font-weight:950;
-        }
-        .development-overall td {
-          color:#123966;
-          font-weight:950;
-        }
-        .tone-1 { --head:#bfe978; --soft:#e9f8dc; --line:#83bd55; --line-soft:#c3dfad; --overall:#d8efbd; }
-        .tone-2 { --head:#8fd3f4; --soft:#e5f5fc; --line:#55aeda; --line-soft:#b5ddec; --overall:#cceafa; }
-        .tone-3 { --head:#f4d05e; --soft:#fff2c8; --line:#d7ad37; --line-soft:#ead79b; --overall:#f8e6a1; }
-        .tone-4 { --head:#c2b4f4; --soft:#eeeafe; --line:#9280d7; --line-soft:#cec5ed; --overall:#ddd5f7; }
-        .tone-5 { --head:#91e3ae; --soft:#e6f8ec; --line:#5dbb7d; --line-soft:#b6dfc4; --overall:#cbefd6; }
-        .tone-6 { --head:#f6bd7c; --soft:#fff0df; --line:#d99043; --line-soft:#edc9a2; --overall:#f7d7b4; }
-
-        /* Attendance now visually balances the academic card */
-        .attendance-card {
-          border-color:#e986b8;
-          box-shadow:0 1.5px 4px rgba(177,65,119,.10);
-        }
-        .attendance-title {
-          background:linear-gradient(90deg,#f59ac7,#f8b5d4);
-          color:#35104f;
-          font-size:9px;
-          font-weight:950;
-        }
-        .attendance-row { border-color:#eeb1cf; color:#183f6c; }
-        .attendance-row span { font-weight:700; }
-        .attendance-row b { border-color:#eeb1cf; color:#0f3a78; font-weight:950; }
-        .attendance-percent {
-          background:#f9d5e8;
-          color:#18355f;
-          font-weight:900;
-        }
-        .attendance-percent strong { border-color:#eeb1cf; color:#0d3976; font-weight:950; }
-
-        /* Footer panels slightly richer and more polished */
-        .footer-box {
-          border-color:#82bfdf;
-          box-shadow:0 1px 3px rgba(31,78,121,.07);
-        }
-        .footer-box-title {
-          background:linear-gradient(90deg,#ccecf9,#daf3fb);
-          color:#103d70;
-          font-size:8px;
-          font-weight:950;
-        }
-        .health-label { color:#173f6d; font-weight:700; }
-        .health-value { color:#123c70; font-weight:800; }
-        .grade-letter { color:#12365f; font-weight:950; box-shadow:0 1px 2px rgba(30,64,100,.08), inset 0 0 0 1px rgba(30,64,100,.05); }
-        .grade-g { background:linear-gradient(135deg,#c9efad,#aede8f); }
-        .grade-b { background:linear-gradient(135deg,#c6e5fb,#a9d4f3); }
-        .grade-y { background:linear-gradient(135deg,#ffe7a0,#f6cf68); }
-        .grade-r { background:linear-gradient(135deg,#f7c5dc,#eea9ca); }
-        .remarks-body { color:#173f6d; font-weight:600; }
-        .signature-line { border-color:#4f749b; color:#173f6d; font-weight:700; }
-        .closing-note { color:#205485; font-weight:850; }
-        .keep-shining { color:#145b9b; font-weight:800; }
-
-        /* PREPRIMARY_REFERENCE_LAYOUT_V5_TERM_ATTENDANCE_ICON */
-        .attendance-title {
-          display:flex !important;
-          align-items:center !important;
-          justify-content:space-between !important;
-          gap:4px !important;
-          min-height:9mm !important;
-          padding:2px 5px 2px 7px !important;
-        }
-        .attendance-title > span {
-          font-size:9.2px !important;
-          font-weight:950 !important;
-          letter-spacing:.08px !important;
-        }
-        .attendance-title .section-icon {
-          width:11.5mm !important;
-          height:9mm !important;
-          flex:0 0 auto !important;
-          margin:-1px 0 !important;
-        }
-
-        /* PREPRIMARY_REFERENCE_LAYOUT_V4_LAYOUT_POLISH
-           Requested refinements from the generated PDF:
-           - larger school branding
-           - equal visible card height within each grid row
-           - stronger component typography
-           - taller garden touching the bottom edge */
-
-        /* 1) School branding: make the school name much more prominent without
-              disturbing the centre report title or the right rainbow block. */
-        .school-brand { gap:8px; }
-        .school-brand-html {
-          font-size:9px !important;
-          line-height:1.02 !important;
-          color:#0f3564 !important;
-          font-weight:750;
-        }
-        .school-brand-html h1,
-        .school-brand-html h2,
-        .school-brand-html h3,
-        .school-brand-html > div:first-child,
-        .school-brand-html > p:first-child {
-          font-size:12.4px !important;
-          line-height:1.02 !important;
-          font-weight:950 !important;
-          letter-spacing:.05px !important;
-          color:#103a70 !important;
-          margin-bottom:1px !important;
-        }
-        .fallback-school-name {
-          font-size:18px !important;
-          line-height:1.00 !important;
-          font-weight:950 !important;
-          color:#103a70 !important;
-        }
-        .fallback-tagline { font-size:7px !important; font-weight:800; }
-
-        /* 2) Cards/tables: grid columns are already equal width. Stretch each
-              card to the tallest card in its own row so the visible table boxes
-              line up neatly even when component counts differ. */
-        .report-main-grid {
-          align-items:stretch !important;
-        }
-        .report-main-grid > .academic-card,
-        .report-main-grid > .development-card,
-        .report-main-grid > .attendance-card {
-          height:100% !important;
-          align-self:stretch !important;
-        }
-        .academic-card,
-        .development-card {
-          table-layout:fixed;
-        }
-        .development-component-head { width:76% !important; }
-
-        /* 3) Development/component typography: make the middle content easier
-              to read and give it the same visual confidence as pen-paper marks. */
-        .development-title {
-          font-size:7.9px !important;
-          line-height:1.08 !important;
-          font-weight:950 !important;
-          letter-spacing:.04px !important;
-        }
-        .development-card thead tr:nth-child(2) th {
-          font-size:6.7px !important;
-          line-height:1.05 !important;
-          font-weight:950 !important;
-        }
-        .development-name {
-          font-size:6.8px !important;
-          line-height:1.05 !important;
-          font-weight:820 !important;
-          color:#123d6d !important;
-        }
-        .development-grade {
-          font-size:7.05px !important;
-          font-weight:950 !important;
-        }
-        .development-overall td {
-          font-size:6.9px !important;
-          font-weight:950 !important;
-        }
-        .academic-card td:first-child {
-          font-size:8.8px !important;
-          font-weight:900 !important;
-        }
-        .academic-mark {
-          font-size:10.2px !important;
-          font-weight:950 !important;
-        }
-
-        /* 4) Bottom garden: taller, fuller, and anchored exactly to the bottom
-              of the report-card frame.  It stays decorative/absolute, so it
-              does not push the report onto a second page. */
-        .preprimary-report::after {
-          bottom:-0.25mm !important;
-          height:13.5mm !important;
-          background:
-            radial-gradient(15px 11px at 1% 100%, #79dc83 0 66%, transparent 69%),
-            radial-gradient(17px 12px at 5% 100%, #4fc86f 0 66%, transparent 69%),
-            radial-gradient(15px 12px at 10% 100%, #9bdc3f 0 66%, transparent 69%),
-            radial-gradient(14px 11px at 15% 100%, #6ed26f 0 66%, transparent 69%),
-            radial-gradient(14px 11px at 85% 100%, #6ed26f 0 66%, transparent 69%),
-            radial-gradient(15px 12px at 90% 100%, #9bdc3f 0 66%, transparent 69%),
-            radial-gradient(17px 12px at 95% 100%, #4fc86f 0 66%, transparent 69%),
-            radial-gradient(15px 11px at 99% 100%, #79dc83 0 66%, transparent 69%),
-            linear-gradient(0deg, #d8f58c 0 29%, #e9f9b8 30% 38%, transparent 39%);
-          opacity:.96 !important;
-        }
-        .footer-garden {
-          bottom:-0.3mm !important;
-          width:30mm !important;
-          height:27mm !important;
-        }
-        .footer-garden span {
-          bottom:0 !important;
-          height:21mm !important;
-          border-left-width:2.4px !important;
-          border-left-color:#369a48 !important;
-        }
-        .footer-garden span:nth-child(1){ left:5mm !important; height:18mm !important; transform:rotate(-28deg) !important; }
-        .footer-garden span:nth-child(2){ left:12mm !important; height:25mm !important; transform:rotate(3deg) !important; }
-        .footer-garden span:nth-child(3){ left:20mm !important; height:20mm !important; transform:rotate(27deg) !important; }
-        .footer-garden i {
-          width:9mm !important;
-          height:4.4mm !important;
-          bottom:4mm !important;
-          background:#5dbd50 !important;
-        }
-        .footer-garden i:nth-of-type(1){ left:2mm !important; bottom:8mm !important; }
-        .footer-garden i:nth-of-type(2){ left:15mm !important; bottom:6mm !important; background:#83cf55 !important; }
-        .keep-shining { bottom:3.1mm !important; right:8mm !important; z-index:4 !important; }
-
-        /* Keep footer content above the taller decorative garden. */
-        .signature-row,
-        .closing-note { position:relative; z-index:3; }
-
-        /* PREPRIMARY_REFERENCE_LAYOUT_V6_DYNAMIC_SCHOOL_INFO */
-        .dynamic-school-brand-html {
-          min-width:0 !important;
-          max-width:100% !important;
-          line-height:1.12 !important;
-        }
-        .dynamic-school-name {
-          font-family: Georgia, "Times New Roman", serif !important;
-          font-size:18px !important;
-          line-height:1.02 !important;
-          font-weight:950 !important;
-          letter-spacing:.02px !important;
-          color:#103a70 !important;
-          margin:0 0 2.2px !important;
-          text-wrap:balance;
-        }
-        .dynamic-school-meta {
-          display:flex !important;
-          align-items:center !important;
-          flex-wrap:wrap !important;
-          column-gap:3px !important;
-          row-gap:1px !important;
-          max-width:100% !important;
-          font-family:Arial,Helvetica,sans-serif !important;
-          font-size:6.25px !important;
-          line-height:1.18 !important;
-          font-weight:800 !important;
-          color:#315b86 !important;
-        }
-        .school-meta-item { white-space:normal !important; }
-        .school-meta-sep {
-          color:#f05a9c !important;
-          font-size:6.6px !important;
-          font-weight:950 !important;
-          line-height:1 !important;
-        }
-
-        /* PREPRIMARY_REFERENCE_LAYOUT_V7_DYNAMIC_HEALTH_SCHOOLNAME */
-        /* Make the dynamic school identity more prominent while preserving
-           wrapping for long institution names in the left header column. */
-        .dynamic-school-name {
-          font-size:21px !important;
-          line-height:.98 !important;
-          font-weight:950 !important;
-          letter-spacing:.01px !important;
-          margin-bottom:2.5px !important;
-        }
-        .dynamic-school-meta {
-          font-size:6.35px !important;
-          line-height:1.16 !important;
-        }
-        .health-value {
-          font-size:8.35px !important;
-          font-weight:900 !important;
-        }
-      
-
-        /* PREPRIMARY_REFERENCE_LAYOUT_V8_UNIFORM_HEADINGS
-           Keep every main report-card panel heading equally prominent.
-           This also overrides the older .academic-card th span rule that
-           unintentionally reduced ACADEMIC (PEN PAPER) to 6.4px. */
-        .academic-title-wrap > span,
-        .development-title-wrap > span,
-        .attendance-title > span {
-          font-size:9.2px !important;
-          line-height:1.04 !important;
-          font-weight:950 !important;
-          letter-spacing:.04px !important;
-          color:inherit !important;
-        }
-        .academic-title,
-        .development-title,
-        .attendance-title {
-          font-size:9.2px !important;
-          font-weight:950 !important;
-        }
-        .academic-title-wrap,
-        .development-title-wrap,
-        .attendance-title {
-          min-height:9.5mm !important;
-        }
-        /* Long development headings may wrap naturally, but stay aligned and
-           use the same visual size as the short Academic title. */
-        .academic-title-wrap > span,
-        .development-title-wrap > span {
-          flex:1 1 auto !important;
-          min-width:0 !important;
-          white-space:normal !important;
-        }
-</style>
+        .keep-shining { position:absolute; right:8mm; bottom:5mm; font-family:Georgia,serif; font-size:11px; font-style:italic; color:#1763a2; transform:rotate(-3deg); z-index:2; }
+      </style>
     `;
 
     const cards = (studentsForPdf || []).map((student) => {
       const info = infoMapOverride[student.id] || studentInfoMap[student.id] || {};
       const mergedInfoForPhoto = { ...student, ...info };
       const studentPhotoSrc = info?.__pdfPhotoSrc || getStudentPhotoURL(mergedInfoForPhoto);
+      const effectiveHeaderHtml = getReportCardHeaderHtml();
       const effectiveSchoolLogoUrl = getReportCardSchoolLogoUrl(formatAssets);
+      const cleanHeaderHtml = sanitizeHeaderHtml(effectiveHeaderHtml);
       const sessionName = sessions.find((x) => String(x.id) === String(filters.session_id))?.name || "-";
       const selectedTermText = getPrimarySelectedTermLabel();
-
-      // PREPRIMARY_REFERENCE_LAYOUT_V6_DYNAMIC_SCHOOL_INFO
-      // Use the authenticated institution profile for the school identity so
-      // the same report-card renderer works correctly for every tenant/school.
-      const schoolInfo = institutionProfile || {};
-      const primarySchoolName =
-        schoolInfo?.name ||
-        getReportCardFormatValue("school_name") ||
-        getReportCardFormatValue("institution_name") ||
-        selectedReportTemplate?.school_name ||
-        "School Name";
-      const primarySchoolAddress = String(schoolInfo?.address_line || schoolInfo?.address || "").trim();
-      const primarySchoolWebsite = String(schoolInfo?.website || "")
-        .trim()
-        .replace(/^https?:\/\//i, "")
-        .replace(/\/+$/, "");
-      const primarySchoolPhone = String(schoolInfo?.phone || "").trim();
-      const primarySchoolMeta = [
-        primarySchoolAddress,
-        `Session: ${sessionName}`,
-        primarySchoolWebsite ? `Website: ${primarySchoolWebsite}` : "",
-        primarySchoolPhone ? `Contact: ${primarySchoolPhone}` : "",
-      ].filter(Boolean);
 
       const dobValRaw = info?.Date_Of_Birth || info?.date_of_birth || info?.dob || "";
       const dobVal = formatDOB(dobValRaw);
@@ -4713,13 +4209,12 @@ const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
                     ? `<img src="${escapePrimaryHtml(effectiveSchoolLogoUrl)}" class="school-logo" alt="School Logo" onerror="this.style.display='none';" />`
                     : ""
                 }
-                <div class="school-brand-html dynamic-school-brand-html">
-                  <div class="dynamic-school-name">${escapePrimaryHtml(primarySchoolName)}</div>
-                  <div class="dynamic-school-meta">
-                    ${primarySchoolMeta
-                      .map((item, index) => `<span class="school-meta-item">${escapePrimaryHtml(item)}</span>${index < primarySchoolMeta.length - 1 ? '<span class="school-meta-sep">•</span>' : ''}`)
-                      .join("")}
-                  </div>
+                <div class="school-brand-html">
+                  ${
+                    cleanHeaderHtml
+                      ? cleanHeaderHtml
+                      : `<div class="fallback-school-name">School Name</div><div class="fallback-tagline">LEARN • GROW • BELONG</div>`
+                  }
                 </div>
               </div>
 
@@ -4729,8 +4224,9 @@ const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
               </div>
 
               <div class="hero-motto">
-                <div class="hero-motto-top"><div class="motto-main">Small Steps<br/>Big Futures</div><div class="motto-heart">♥</div></div>
-                <div class="motto-visual">${primaryHeroRainbowSvg()}<div class="motto-values"><span>Kindness</span><span>Curiosity</span><span>Confidence</span><span>A Brighter Tomorrow</span></div></div>
+                <div class="motto-main">Small Steps<br/>Big Futures</div>
+                <div class="motto-rainbow">🌈</div>
+                <div class="motto-values">Kindness &nbsp; Curiosity &nbsp; Confidence</div>
               </div>
             </div>
 
@@ -4751,8 +4247,8 @@ const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
                 <div class="info-line"><span class="info-label">Class Teacher</span><span>:</span><strong>${escapePrimaryHtml(info?.class_teacher_name || "-")}</strong></div>
               </div>
               <div class="quote-box">
-                <div class="quote-text">“Every child is a unique flower,<br/>and together we make this world<br/>a more beautiful garden.”</div>
-                <div class="quote-flower">${primaryFlowerSvg()}</div>
+                <div class="quote-text">“Every small step today builds a brighter tomorrow.”</div>
+                <div class="quote-flower">🌼</div>
               </div>
             </div>
 
@@ -4768,11 +4264,11 @@ const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
               <div class="footer-box">
                 <div class="footer-box-title">Health Details</div>
                 <div class="health-grid">
-                  <div class="health-item"><div class="health-label">Height (cm)</div><div class="health-icon"><svg viewBox="0 0 24 28"><circle cx="12" cy="4" r="2.4" fill="#4d789c"/><path d="M12 7v9M8 10h8M9 26l3-10 3 10" stroke="#4d789c" stroke-width="1.8" fill="none" stroke-linecap="round"/><path d="M4 3v22M2 6h4M2 10h4M2 14h4M2 18h4M2 22h4" stroke="#68a8cf" stroke-width="1"/></svg></div><div class="health-value">${escapePrimaryHtml(health.height)}</div></div>
-                  <div class="health-item"><div class="health-label">Weight (kg)</div><div class="health-icon"><svg viewBox="0 0 28 28"><path d="M5 9h18l2 16H3L5 9Z" fill="#8fd3ed" stroke="#3d7899" stroke-width="1.5"/><path d="M9 9a5 5 0 0 1 10 0" fill="none" stroke="#3d7899" stroke-width="1.5"/><path d="M14 12v5l4-3" stroke="#3d7899" stroke-width="1.5" stroke-linecap="round"/></svg></div><div class="health-value">${escapePrimaryHtml(health.weight)}</div></div>
-                  <div class="health-item"><div class="health-label">Dental Check-up</div><div class="health-icon"><svg viewBox="0 0 28 28"><path d="M8 4c-4 4-3 10 0 15 2 4 3 5 5 2 1-2 1-5 2-5s1 3 2 5c2 3 3 2 5-2 3-5 4-11 0-15-4-3-6 0-7 0s-3-3-7 0Z" fill="#fff" stroke="#3d7899" stroke-width="1.5"/></svg></div><div class="health-value">${escapePrimaryHtml(health.dental)}</div></div>
-                  <div class="health-item"><div class="health-label">Vision</div><div class="health-icon"><svg viewBox="0 0 32 24"><path d="M2 12s5-8 14-8 14 8 14 8-5 8-14 8S2 12 2 12Z" fill="#dff4ff" stroke="#3d7899" stroke-width="1.5"/><circle cx="16" cy="12" r="5" fill="#4ca9dc"/><circle cx="16" cy="12" r="2" fill="#173c63"/></svg></div><div class="health-value">${escapePrimaryHtml(health.vision)}</div></div>
-                  <div class="health-item"><div class="health-label">Blood Group</div><div class="health-icon"><svg viewBox="0 0 24 30"><path d="M12 3C8 9 5 13 5 18a7 7 0 0 0 14 0c0-5-3-9-7-15Z" fill="#ef5b4d" stroke="#b53831" stroke-width="1.2"/></svg></div><div class="health-value">${escapePrimaryHtml(health.blood_group)}</div></div>
+                  <div class="health-item"><div class="health-label">Height (cm)</div><div class="health-icon">↕</div><div class="health-value">${escapePrimaryHtml(health.height)}</div></div>
+                  <div class="health-item"><div class="health-label">Weight (kg)</div><div class="health-icon">⚖</div><div class="health-value">${escapePrimaryHtml(health.weight)}</div></div>
+                  <div class="health-item"><div class="health-label">Dental Check-up</div><div class="health-icon">◇</div><div class="health-value">${escapePrimaryHtml(health.dental)}</div></div>
+                  <div class="health-item"><div class="health-label">Vision</div><div class="health-icon">◉</div><div class="health-value">${escapePrimaryHtml(health.vision)}</div></div>
+                  <div class="health-item"><div class="health-label">Blood Group</div><div class="health-icon">♥</div><div class="health-value">${escapePrimaryHtml(health.blood_group)}</div></div>
                 </div>
               </div>
 
@@ -4798,9 +4294,7 @@ const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
               <div class="signature-line">Parents' Sign</div>
             </div>
             <div class="closing-note">Happy Learners &nbsp; • &nbsp; Brighter Tomorrows</div>
-            <div class="footer-garden footer-garden-left"><span></span><span></span><span></span><i></i><i></i></div>
-            <div class="footer-garden footer-garden-right"><span></span><span></span><span></span><i></i><i></i></div>
-            <div class="keep-shining">Keep Shining! <b>♡</b></div>
+            <div class="keep-shining">Keep Shining!</div>
           </div>
         </section>
       `;
@@ -5972,10 +5466,7 @@ const renderTeacherRemarksTermWise = (studentId) => {
               onChange={handleFilterChange}
             >
               <option value="">Select Section</option>
-              {sections.filter((section) => reportScope.global_access || reportScope.assignments.some(
-                (assignment) => String(assignment.classId) === String(filters.class_id) &&
-                  String(assignment.sectionId) === String(section.id)
-              )).map((s) => (
+              {sections.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.section_name}
                 </option>
