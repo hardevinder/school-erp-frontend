@@ -4,16 +4,16 @@
   width: 100%;
   padding: 10px;
   margin: 5px 0;
-  border: 1px solid #ced4da;
+  border: 1px solid var(--edb-border);
   border-radius: 4px;
   box-sizing: border-box;
 }
 
 .form-container .form-field:focus,
 .swal2-html-container .form-field:focus {
-  border-color: #80bdff;
+  border-color: var(--edb-primary);
   outline: none;
-  box-shadow: 0 0 5px rgba(0, 123, 255, 0.25);
+  box-shadow: 0 0 5px color-mix(in srgb, var(--edb-primary-dark) 25%, transparent);
 }
 
 /* ---------- 2-column grid ---------- */
@@ -62,7 +62,7 @@
   max-height: 60vh;
 }
 .vtabs-nav {
-  border-right: 1px solid #eee;
+  border-right: 1px solid var(--edb-border);
   overflow: auto;
   padding-right: 6px;
 }
@@ -70,8 +70,8 @@
   display: block;
   width: 100%;
   text-align: left;
-  border: 1px solid #eee;
-  background: #fafafa;
+  border: 1px solid var(--edb-border);
+  background: var(--edb-surface);
   padding: 10px 12px;
   margin-bottom: 8px;
   border-radius: 8px;
@@ -79,8 +79,8 @@
   font-weight: 600;
 }
 .vtabs-link.active {
-  background: #e9f5ff;
-  border-color: #b5ddff;
+  background: var(--edb-primary-soft);
+  border-color: var(--edb-border);
 }
 .vtabs-content {
   overflow: hidden;
@@ -119,9 +119,9 @@
   flex: 1 1 180px;
   border-radius: 12px;
   padding: 8px 10px;
-  border: 1px solid rgba(0,0,0,0.06);
-  box-shadow: 0 1px 6px rgba(0,0,0,0.04);
-  background: #fff;
+  border: 1px solid color-mix(in srgb, var(--edb-border) 6%, transparent);
+  box-shadow: 0 1px 6px color-mix(in srgb, var(--edb-primary-dark) 4%, transparent);
+  background: var(--edb-surface);
   display: flex;
   align-items: baseline;
   justify-content: space-between;
@@ -141,7 +141,7 @@
 
 .students-stat.green { background: linear-gradient(135deg,#dcfce7 0%,#bbf7d0 100%); }
 .students-stat.red   { background: linear-gradient(135deg,#fee2e2 0%,#fecaca 100%); }
-.students-stat.blue  { background: linear-gradient(135deg,#e0f2fe 0%,#bae6fd 100%); }
+.students-stat.blue  { background: linear-gradient(135deg,var(--edb-primary-soft) 0%,#bae6fd 100%); }
 
 .students-table thead th {
   font-size: 0.82rem;
@@ -159,7 +159,7 @@
 .students-table .students-sticky-admission,
 .students-table .students-sticky-name {
   position: sticky;
-  background-color: #fff;
+  background-color: var(--edb-surface);
   background-clip: padding-box;
 }
 
@@ -177,7 +177,7 @@
   width: 240px;
   min-width: 240px;
   max-width: 240px;
-  box-shadow: 7px 0 9px -9px rgba(15, 23, 42, 0.65);
+  box-shadow: 7px 0 9px -9px color-mix(in srgb, var(--edb-primary-dark) 65%, transparent);
 }
 
 .students-table .students-sticky-info {
@@ -189,17 +189,17 @@
 .students-table thead .students-sticky-admission,
 .students-table thead .students-sticky-name {
   z-index: 12;
-  background: #eef2ff;
+  background: var(--edb-surface);
 }
 
 .students-table.table-striped > tbody > tr:nth-of-type(odd) > .students-sticky-admission,
 .students-table.table-striped > tbody > tr:nth-of-type(odd) > .students-sticky-name {
-  background-color: #f8f9fa;
+  background-color: var(--edb-surface);
 }
 
 .students-table.table-hover > tbody > tr:hover > .students-sticky-admission,
 .students-table.table-hover > tbody > tr:hover > .students-sticky-name {
-  background-color: #f2f6ff;
+  background-color: var(--edb-surface);
 }
 
 @media (max-width: 767.98px) {
@@ -316,10 +316,10 @@
   z-index: 50;
   min-width: 190px;
   padding: 6px;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--edb-border);
   border-radius: 8px;
-  background: #fff;
-  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.14);
+  background: var(--edb-surface);
+  box-shadow: 0 14px 34px color-mix(in srgb, var(--edb-primary-dark) 14.000000000000002%, transparent);
 }
 
 .students-more-item {
@@ -332,13 +332,13 @@
   padding: 8px 10px;
   border-radius: 6px;
   font-size: 0.86rem;
-  color: #111827;
+  color: var(--edb-text);
   text-align: left;
   white-space: nowrap;
 }
 
 .students-more-item:hover {
-  background: #f3f4f6;
+  background: var(--edb-dashboard-bg);
 }
 
 .students-more-item.danger {
@@ -351,16 +351,16 @@
 
 .student-import-panel {
   padding: 16px;
-  border: 1px solid #dbe3ee;
+  border: 1px solid var(--edb-border);
   border-radius: 12px;
-  background: #fff;
+  background: var(--edb-surface);
 }
 
 .student-import-dropzone {
   padding: 20px;
-  border: 2px dashed #a5b4fc;
+  border: 2px dashed var(--edb-border);
   border-radius: 10px;
-  background: #f8faff;
+  background: var(--edb-surface);
   text-align: center;
 }
 

@@ -697,13 +697,13 @@ export default function ExaminationDashboard() {
       {/* Styles (TeacherDashboard-style tiles) */}
       <style>{`
         .exam-dash{
-          --shadow-soft: 0 12px 30px rgba(0,0,0,.08);
+          --shadow-soft: 0 12px 30px color-mix(in srgb, var(--edb-primary-dark) 8%, transparent);
         }
 
         .dash-hero{
-          background: radial-gradient(1000px 420px at 10% 10%, rgba(255,255,255,.22), transparent 60%),
-                      linear-gradient(135deg, #0f172a, #2563eb);
-          border: 1px solid rgba(255,255,255,.14);
+          background: radial-gradient(1000px 420px at 10% 10%, color-mix(in srgb, var(--edb-surface) 22%, transparent), transparent 60%),
+                      linear-gradient(135deg, var(--edb-primary-dark), var(--edb-primary));
+          border: 1px solid color-mix(in srgb, var(--edb-border) 14%, transparent);
         }
         .dash-hero-inner{
           backdrop-filter: blur(8px);
@@ -711,11 +711,11 @@ export default function ExaminationDashboard() {
 
         .avatar-soft{
           width:52px;height:52px;border-radius:16px;
-          background: rgba(255,255,255,.16);
-          border: 1px solid rgba(255,255,255,.22);
+          background: color-mix(in srgb, var(--edb-surface) 16%, transparent);
+          border: 1px solid color-mix(in srgb, var(--edb-border) 22%, transparent);
           display:flex;align-items:center;justify-content:center;
-          color:#fff;font-weight:800;
-          box-shadow: 0 10px 26px rgba(0,0,0,.18);
+          color:var(--edb-on-primary);font-weight:800;
+          box-shadow: 0 10px 26px color-mix(in srgb, var(--edb-primary-dark) 18%, transparent);
           flex: 0 0 auto;
         }
 
@@ -727,10 +727,10 @@ export default function ExaminationDashboard() {
         }
 
         .metric-card{
-          background:#fff;
-          border:1px solid rgba(148,163,184,.18);
+          background:var(--edb-surface);
+          border:1px solid color-mix(in srgb, var(--edb-border) 18%, transparent);
           border-radius:18px;
-          box-shadow: 0 10px 28px rgba(15,23,42,.07);
+          box-shadow: 0 10px 28px color-mix(in srgb, var(--edb-primary-dark) 7.000000000000001%, transparent);
           padding:16px;
           min-height:104px;
           display:flex;
@@ -749,12 +749,12 @@ export default function ExaminationDashboard() {
           height:92px;
           border-radius:30px;
           opacity:.10;
-          background:#0d6efd;
+          background:var(--edb-primary);
           transform:rotate(18deg);
         }
         .metric-label{
           font-size:12px;
-          color:#64748b;
+          color:var(--edb-muted-text);
           font-weight:700;
           text-transform:uppercase;
           letter-spacing:.04em;
@@ -763,11 +763,11 @@ export default function ExaminationDashboard() {
           font-size:28px;
           font-weight:900;
           line-height:1;
-          color:#0f172a;
+          color:var(--edb-text);
           margin-top:8px;
         }
         .metric-helper{
-          color:#64748b;
+          color:var(--edb-muted-text);
           font-size:12px;
           margin-top:8px;
         }
@@ -778,14 +778,14 @@ export default function ExaminationDashboard() {
           display:flex;
           align-items:center;
           justify-content:center;
-          color:#fff;
+          color:var(--edb-on-primary);
           font-size:20px;
           z-index:1;
-          box-shadow:0 10px 22px rgba(15,23,42,.18);
+          box-shadow:0 10px 22px color-mix(in srgb, var(--edb-primary-dark) 18%, transparent);
         }
-        .metric-blue .metric-icon{background:linear-gradient(135deg,#60a5fa,#2563eb);}
-        .metric-dark .metric-icon{background:linear-gradient(135deg,#64748b,#0f172a);}
-        .metric-purple .metric-icon{background:linear-gradient(135deg,#a78bfa,#7c3aed);}
+        .metric-blue .metric-icon{background:linear-gradient(135deg,var(--edb-primary),var(--edb-primary));}
+        .metric-dark .metric-icon{background:linear-gradient(135deg,var(--edb-muted-text),var(--edb-primary-dark));}
+        .metric-purple .metric-icon{background:linear-gradient(135deg,var(--edb-primary-soft),var(--edb-primary));}
         .metric-green .metric-icon{background:linear-gradient(135deg,#34d399,#059669);}
 
         .featured-report{
@@ -794,20 +794,20 @@ export default function ExaminationDashboard() {
           gap:14px;
           padding:16px;
           border-radius:18px;
-          border:1px solid rgba(37,99,235,.16);
-          background:linear-gradient(135deg,#eff6ff,#ffffff);
+          border:1px solid color-mix(in srgb, var(--edb-primary) 16%, transparent);
+          background:linear-gradient(135deg,var(--edb-surface),var(--edb-surface));
         }
         .featured-report-icon{
           width:52px;
           height:52px;
           border-radius:18px;
-          background:linear-gradient(135deg,#0891b2,#2563eb);
-          color:#fff;
+          background:linear-gradient(135deg,#0891b2,var(--edb-primary));
+          color:var(--edb-on-primary);
           display:flex;
           align-items:center;
           justify-content:center;
           font-size:22px;
-          box-shadow:0 12px 28px rgba(37,99,235,.22);
+          box-shadow:0 12px 28px color-mix(in srgb, var(--edb-primary-dark) 22%, transparent);
           flex:0 0 auto;
         }
         @media(max-width:576px){
@@ -816,14 +816,14 @@ export default function ExaminationDashboard() {
         }
 
         :root{
-          --qa-blue: linear-gradient(135deg,#6ea8fe,#1f6feb);
-          --qa-purple: linear-gradient(135deg,#c0b6f2,#845ef7);
+          --qa-blue: linear-gradient(135deg,var(--edb-primary-soft),var(--edb-primary));
+          --qa-purple: linear-gradient(135deg,var(--edb-primary-soft),var(--edb-primary));
           --qa-teal: linear-gradient(135deg,#63e6be,#12b886);
           --qa-green: linear-gradient(135deg,#8ce99a,#2f9e44);
-          --qa-amber: linear-gradient(135deg,#ffe066,#fab005);
-          --qa-indigo: linear-gradient(135deg,#91a7ff,#5c7cfa);
+          --qa-amber: linear-gradient(135deg,var(--edb-accent),var(--edb-accent));
+          --qa-indigo: linear-gradient(135deg,var(--edb-primary-soft),var(--edb-primary));
           --qa-lime: linear-gradient(135deg,#a9e34b,#74b816);
-          --qa-slate: linear-gradient(135deg,#ced4da,#495057);
+          --qa-slate: linear-gradient(135deg,var(--edb-border),var(--edb-muted-text));
           --qa-cyan: linear-gradient(135deg,#67e8f9,#0891b2);
           --qa-rose: linear-gradient(135deg,#fda4af,#e11d48);
         }
@@ -837,7 +837,7 @@ export default function ExaminationDashboard() {
           left:10px;
           top:50%;
           transform: translateY(-50%);
-          color: rgba(255,255,255,.65);
+          color: var(--edb-on-primary);
           font-size: 14px;
           pointer-events:none;
           z-index: 2;
@@ -845,16 +845,16 @@ export default function ExaminationDashboard() {
         .dash-search input{
           padding-left: 28px;
           border-radius: 12px;
-          background: rgba(255,255,255,.10);
-          border: 1px solid rgba(255,255,255,.22);
-          color: #fff;
+          background: color-mix(in srgb, var(--edb-surface) 10%, transparent);
+          border: 1px solid color-mix(in srgb, var(--edb-border) 22%, transparent);
+          color: var(--edb-on-primary);
         }
-        .dash-search input::placeholder{ color: rgba(255,255,255,.70); }
+        .dash-search input::placeholder{ color: var(--edb-on-primary); }
         .dash-search input:focus{
-          background: rgba(255,255,255,.14);
-          border-color: rgba(255,255,255,.32);
-          box-shadow: 0 0 0 .2rem rgba(13,110,253,.25);
-          color: #fff;
+          background: color-mix(in srgb, var(--edb-surface) 14%, transparent);
+          border-color: color-mix(in srgb, var(--edb-primary) 32%, transparent);
+          box-shadow: 0 0 0 .2rem color-mix(in srgb, var(--edb-primary-dark) 25%, transparent);
+          color: var(--edb-on-primary);
         }
 
         .qa-grid{
@@ -870,7 +870,7 @@ export default function ExaminationDashboard() {
           position:relative;
           border:0;
           border-radius:16px;
-          color:#fff;
+          color:var(--edb-on-primary);
           padding:16px 12px;
           text-align:left;
           min-height:112px;
@@ -889,16 +889,16 @@ export default function ExaminationDashboard() {
           position:absolute;
           inset:-40px -40px auto auto;
           width:140px;height:140px;
-          background: rgba(255,255,255,.18);
+          background: color-mix(in srgb, var(--edb-surface) 18%, transparent);
           border-radius: 44px;
           transform: rotate(25deg);
         }
-        .qa-tile:hover{ box-shadow: 0 16px 40px rgba(0,0,0,.18); transform: translateY(-1px); }
+        .qa-tile:hover{ box-shadow: 0 16px 40px color-mix(in srgb, var(--edb-primary-dark) 18%, transparent); transform: translateY(-1px); }
         .qa-tile:active{ transform:scale(.98); filter:brightness(.95); }
 
         .qa-icon{
           position:absolute; top:10px; right:10px;
-          background: rgba(255,255,255,.18);
+          background: color-mix(in srgb, var(--edb-surface) 18%, transparent);
           width:40px; height:40px; border-radius:12px;
           display:flex; align-items:center; justify-content:center;
           font-size:18px;
@@ -923,9 +923,9 @@ export default function ExaminationDashboard() {
         .qa-badge{
           position:absolute;
           top:10px; left:10px;
-          background: rgba(0,0,0,.28);
-          border: 1px solid rgba(255,255,255,.22);
-          color:#fff;
+          background: color-mix(in srgb, var(--edb-primary-dark) 28%, transparent);
+          border: 1px solid color-mix(in srgb, var(--edb-border) 22%, transparent);
+          color:var(--edb-on-primary);
           font-size: 11px;
           padding: 3px 8px;
           border-radius: 999px;

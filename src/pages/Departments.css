@@ -4,25 +4,25 @@
   min-width: 0;
   max-width: 100%;
   padding: 8px 12px;
-  border: 2px dashed #adb5bd;
+  border: 2px dashed var(--edb-border);
   border-radius: 6px;
-  background: #f8f9fa;
+  background: var(--edb-surface);
   cursor: pointer;
 }
 
 .department-import-dropzone:hover,
 .department-import-dropzone:focus-within,
 .department-import-dropzone.is-dragging {
-  border-color: #0d6efd;
-  background: #eaf2ff;
+  border-color: var(--edb-primary);
+  background: var(--edb-primary-soft);
 }
 
 .department-import-dropzone:focus-within {
-  outline: 2px solid #0d6efd;
+  outline: 2px solid var(--edb-primary);
   outline-offset: 2px;
 }
 
-.department-import-dropzone small { color: #495057; }
+.department-import-dropzone small { color: var(--edb-text); }
 .department-import-filename {
   max-width: 300px;
   overflow: hidden;

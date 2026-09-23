@@ -210,7 +210,7 @@ const FeeHeadings = () => {
       {showModal && (
         <div
           className="modal show d-block"
-          style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
+          style={{ backgroundColor: "color-mix(in srgb, var(--edb-primary-dark) 50%, transparent)" }}
         >
           <div className="modal-dialog">
             <div className="modal-content">

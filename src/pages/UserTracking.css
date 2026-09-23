@@ -1,18 +1,18 @@
 /* src/pages/UserTracking.css */
 
 .user-tracking-page {
-  --ut-primary: #2563eb;
-  --ut-primary-dark: #1d4ed8;
+  --ut-primary: var(--edb-primary);
+  --ut-primary-dark: var(--edb-primary);
   --ut-success: #16a34a;
-  --ut-warning: #d97706;
+  --ut-warning: var(--edb-accent);
   --ut-danger: #dc2626;
   --ut-info: #0891b2;
-  --ut-dark: #111827;
-  --ut-muted: #6b7280;
-  --ut-bg: #f3f6fb;
-  --ut-card: #ffffff;
-  --ut-border: rgba(15, 23, 42, 0.08);
-  --ut-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+  --ut-dark: var(--edb-primary-dark);
+  --ut-muted: var(--edb-muted-text);
+  --ut-bg: var(--edb-surface);
+  --ut-card: var(--edb-surface);
+  --ut-border: color-mix(in srgb, var(--edb-border) 8%, transparent);
+  --ut-shadow: 0 10px 30px color-mix(in srgb, var(--edb-primary-dark) 8%, transparent);
 }
 
 .user-tracking-page .ut-shell {
@@ -22,9 +22,9 @@
 
 .user-tracking-page .ut-header {
   background:
-    radial-gradient(circle at top right, rgba(255, 255, 255, 0.18), transparent 28%),
-    linear-gradient(135deg, #1e3a8a 0%, #2563eb 45%, #0891b2 100%);
-  color: #fff;
+    radial-gradient(circle at top right, color-mix(in srgb, var(--edb-surface) 18%, transparent), transparent 28%),
+    linear-gradient(135deg, var(--edb-primary) 0%, var(--edb-primary) 45%, #0891b2 100%);
+  color: var(--edb-on-primary);
   padding: 1.35rem 1.5rem;
 }
 
@@ -50,14 +50,14 @@
 .user-tracking-page .ut-refresh-bar {
   width: 100%;
   height: 5px;
-  background: rgba(255, 255, 255, 0.18);
+  background: color-mix(in srgb, var(--edb-surface) 18%, transparent);
   border-radius: 999px;
   overflow: hidden;
 }
 
 .user-tracking-page .ut-refresh-progress {
   height: 100%;
-  background: #fff;
+  background: var(--edb-surface);
   border-radius: inherit;
   transition: width 0.9s linear;
 }
@@ -69,12 +69,12 @@
 }
 
 .user-tracking-page .ut-tabs .nav-link {
-  border: 1px solid rgba(37, 99, 235, 0.12);
+  border: 1px solid color-mix(in srgb, var(--edb-primary) 12%, transparent);
   border-radius: 14px;
   padding: 0.7rem 1rem;
-  color: #334155;
+  color: var(--edb-text);
   font-weight: 600;
-  background: #fff;
+  background: var(--edb-surface);
   transition: all 0.2s ease;
 }
 
@@ -84,25 +84,25 @@
 }
 
 .user-tracking-page .ut-tabs .nav-link.active {
-  background: linear-gradient(135deg, #2563eb, #0891b2);
+  background: linear-gradient(135deg, var(--edb-primary), #0891b2);
   border-color: transparent;
-  color: #fff;
-  box-shadow: 0 8px 24px rgba(37, 99, 235, 0.24);
+  color: var(--edb-on-primary);
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--edb-primary-dark) 24%, transparent);
 }
 
 .user-tracking-page .ut-toolbar {
   border-radius: 22px;
-  background: linear-gradient(180deg, #ffffff, #f8fbff);
+  background: linear-gradient(180deg, var(--edb-surface), var(--edb-surface));
 }
 
 .user-tracking-page .ut-input-group {
   border-radius: 14px;
   overflow: hidden;
-  box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.08);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--edb-primary-dark) 8%, transparent);
 }
 
 .user-tracking-page .ut-input-group .input-group-text {
-  background: #fff;
+  background: var(--edb-surface);
   border: none;
   color: var(--ut-muted);
 }
@@ -129,12 +129,12 @@
   gap: 0.9rem;
   height: 100%;
   box-shadow: var(--ut-shadow);
-  border: 1px solid rgba(15, 23, 42, 0.06);
-  background: #fff;
+  border: 1px solid color-mix(in srgb, var(--edb-border) 6%, transparent);
+  background: var(--edb-surface);
 }
 
 .user-tracking-page .ut-stat-card-primary {
-  background: linear-gradient(135deg, rgba(37, 99, 235, 0.12), rgba(255, 255, 255, 0.96));
+  background: linear-gradient(135deg, color-mix(in srgb, var(--edb-primary) 12%, transparent), color-mix(in srgb, var(--edb-surface) 96%, transparent));
 }
 
 .user-tracking-page .ut-stat-card-success {
@@ -154,11 +154,11 @@
 }
 
 .user-tracking-page .ut-stat-card-info {
-  background: linear-gradient(135deg, rgba(8, 145, 178, 0.12), rgba(255, 255, 255, 0.96));
+  background: linear-gradient(135deg, rgba(8, 145, 178, 0.12), color-mix(in srgb, var(--edb-surface) 96%, transparent));
 }
 
 .user-tracking-page .ut-stat-card-dark {
-  background: linear-gradient(135deg, rgba(17, 24, 39, 0.12), rgba(255, 255, 255, 0.96));
+  background: linear-gradient(135deg, color-mix(in srgb, var(--edb-primary-dark) 12%, transparent), color-mix(in srgb, var(--edb-surface) 96%, transparent));
 }
 
 .user-tracking-page .ut-stat-icon {
@@ -168,8 +168,8 @@
   display: grid;
   place-items: center;
   font-size: 1.25rem;
-  color: #fff;
-  background: linear-gradient(135deg, #1e3a8a, #2563eb);
+  color: var(--edb-on-primary);
+  background: linear-gradient(135deg, var(--edb-primary), var(--edb-primary));
   flex-shrink: 0;
 }
 
@@ -187,13 +187,13 @@
 .user-tracking-page .ut-stat-value {
   font-size: 1.6rem;
   font-weight: 800;
-  color: #0f172a;
+  color: var(--edb-text);
   line-height: 1;
 }
 
 .user-tracking-page .ut-table-wrap {
   border-radius: 22px !important;
-  background: #fff;
+  background: var(--edb-surface);
   box-shadow: var(--ut-shadow);
 }
 
@@ -206,7 +206,7 @@
 
 .user-tracking-page .ut-skeleton {
   height: 52px;
-  background: linear-gradient(90deg, #eef2f7 25%, #f7f9fc 37%, #eef2f7 63%);
+  background: linear-gradient(90deg, var(--edb-dashboard-bg) 25%, var(--edb-surface) 37%, var(--edb-dashboard-bg) 63%);
   background-size: 400% 100%;
 }
 
@@ -231,9 +231,9 @@
   place-items: center;
   font-size: 0.9rem;
   font-weight: 800;
-  color: #fff;
-  background: linear-gradient(135deg, #2563eb, #0891b2);
-  box-shadow: 0 8px 18px rgba(37, 99, 235, 0.22);
+  color: var(--edb-on-primary);
+  background: linear-gradient(135deg, var(--edb-primary), #0891b2);
+  box-shadow: 0 8px 18px color-mix(in srgb, var(--edb-primary-dark) 22%, transparent);
   flex-shrink: 0;
 }
 
@@ -244,26 +244,26 @@
 }
 
 .user-tracking-page .ut-expander {
-  color: #64748b !important;
+  color: var(--edb-muted-text) !important;
 }
 
 .user-tracking-page .ut-row-highlight {
-  background: linear-gradient(90deg, rgba(37, 99, 235, 0.035), transparent);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--edb-primary) 3.5%, transparent), transparent);
 }
 
 .user-tracking-page .ut-expanded {
-  background: linear-gradient(180deg, #f8fbff, #ffffff);
+  background: linear-gradient(180deg, var(--edb-surface), var(--edb-surface));
   border-left: 4px solid var(--ut-primary);
   padding: 1.25rem;
 }
 
 .user-tracking-page .ut-detail-card {
   height: 100%;
-  background: #fff;
+  background: var(--edb-surface);
   border: 1px solid var(--ut-border);
   border-radius: 16px;
   padding: 0.9rem 1rem;
-  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.04);
+  box-shadow: 0 6px 20px color-mix(in srgb, var(--edb-primary-dark) 4%, transparent);
 }
 
 .user-tracking-page .ut-detail-label {
@@ -277,7 +277,7 @@
 
 .user-tracking-page .ut-detail-value {
   font-weight: 600;
-  color: #0f172a;
+  color: var(--edb-text);
   word-break: break-word;
 }
 
@@ -320,27 +320,27 @@
 }
 
 .user-tracking-page .ut-pill-dark {
-  color: #111827;
-  background: rgba(17, 24, 39, 0.12);
-  border-color: rgba(17, 24, 39, 0.16);
+  color: var(--edb-text);
+  background: color-mix(in srgb, var(--edb-primary-dark) 12%, transparent);
+  border-color: color-mix(in srgb, var(--edb-border) 16%, transparent);
 }
 
 .user-tracking-page .ut-pill-neutral {
-  color: #334155;
-  background: rgba(148, 163, 184, 0.16);
-  border-color: rgba(148, 163, 184, 0.2);
+  color: var(--edb-text);
+  background: color-mix(in srgb, var(--edb-border) 16%, transparent);
+  border-color: color-mix(in srgb, var(--edb-border) 20%, transparent);
 }
 
 .user-tracking-page .ut-pagination .page-link {
   border-radius: 12px !important;
   margin: 0 3px;
-  border: 1px solid rgba(15, 23, 42, 0.08);
-  color: #1e293b;
+  border: 1px solid color-mix(in srgb, var(--edb-border) 8%, transparent);
+  color: var(--edb-text);
   font-weight: 600;
 }
 
 .user-tracking-page .ut-pagination .page-item.active .page-link {
-  background: linear-gradient(135deg, #2563eb, #0891b2);
+  background: linear-gradient(135deg, var(--edb-primary), #0891b2);
   border-color: transparent;
 }
 
@@ -350,8 +350,8 @@
 }
 
 .user-tracking-page code {
-  background: rgba(15, 23, 42, 0.06);
-  color: #0f172a;
+  background: color-mix(in srgb, var(--edb-primary-dark) 6%, transparent);
+  color: var(--edb-text);
   padding: 0.18rem 0.38rem;
   border-radius: 8px;
 }
@@ -376,7 +376,7 @@
 
 .user-tracking-page .ut-footer-bar {
   padding: 1rem 1.25rem;
-  border-top: 1px solid rgba(15, 23, 42, 0.08) !important;
+  border-top: 1px solid color-mix(in srgb, var(--edb-border) 8%, transparent) !important;
 }
 
 .user-tracking-page .ut-column-picker {
@@ -386,16 +386,16 @@
   width: 320px;
   max-height: 420px;
   overflow: hidden;
-  background: #fff;
-  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: var(--edb-surface);
+  border: 1px solid color-mix(in srgb, var(--edb-border) 8%, transparent);
   border-radius: 16px;
   z-index: 40;
 }
 
 .user-tracking-page .ut-column-picker-head {
   padding: 0.9rem 1rem;
-  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
-  background: #f8fbff;
+  border-bottom: 1px solid color-mix(in srgb, var(--edb-border) 8%, transparent);
+  background: var(--edb-surface);
 }
 
 .user-tracking-page .ut-column-picker-body {
@@ -406,8 +406,8 @@
 
 .user-tracking-page .ut-column-picker-foot {
   padding: 0.75rem 1rem;
-  border-top: 1px solid rgba(15, 23, 42, 0.08);
-  background: #fff;
+  border-top: 1px solid color-mix(in srgb, var(--edb-border) 8%, transparent);
+  background: var(--edb-surface);
 }
 
 .user-tracking-page .ut-column-option {

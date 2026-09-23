@@ -3,32 +3,7 @@
    Loaded after PortalThemeOverrides.css so it can defeat older Burgundy/Gold/Blue hard-coded layers.
 */
 
-:root {
-  --edb-saved-primary: #66131b;
-  --edb-saved-primary-dark: #470a11;
-  --edb-saved-accent: #c49a45;
-  --edb-saved-sidebar-bg: #fcf8f2;
-  --edb-saved-navbar-bg: #fffdf9;
-  --edb-saved-navbar-title: #66131b;
-  --edb-saved-navbar-subtitle: #c49a45;
-  --edb-saved-dashboard-bg: #f6f3ee;
-  --edb-saved-surface: #fffdfa;
-  --edb-saved-text: #261f1d;
-
-  --edb-primary: var(--portal-primary, var(--theme-primary, var(--edb-saved-primary)));
-  --edb-primary-dark: var(--portal-primary-dark, var(--theme-primary-dark, var(--edb-saved-primary-dark)));
-  --edb-accent: var(--portal-accent, var(--theme-accent, var(--edb-saved-accent)));
-  --edb-dashboard-bg: var(--portal-dashboard-bg, var(--theme-dashboard-bg, var(--edb-saved-dashboard-bg)));
-  --edb-surface: var(--portal-surface, var(--theme-surface, var(--edb-saved-surface)));
-  --edb-text: var(--portal-text, var(--portal-text-color, var(--theme-text, var(--edb-saved-text))));
-  --edb-border: color-mix(in srgb, var(--edb-text) 14%, transparent);
-  --edb-muted: color-mix(in srgb, var(--edb-text) 60%, white);
-  --edb-faint: color-mix(in srgb, var(--edb-text) 42%, white);
-  --edb-primary-soft: color-mix(in srgb, var(--edb-primary) 10%, white);
-  --edb-primary-soft-2: color-mix(in srgb, var(--edb-primary) 5%, white);
-  --edb-accent-soft: color-mix(in srgb, var(--edb-accent) 16%, white);
-  --edb-shadow: color-mix(in srgb, var(--edb-primary-dark) 12%, transparent);
-}
+:root { --edb-shadow: var(--edb-shell-shadow); }
 
 /* =========================================================
    LMS / ACADEMIC WORKSPACE — dynamic institution palette
@@ -73,7 +48,7 @@ html body .lms-workspace [class*="intelligence"] :is([class*="eyebrow"], [class*
 html body .lms-workspace :is(.lms-hero h1, .lms-live-head h2, .lms-tools-head h2, .lms-live-stat strong, .lms-detail-copy strong, .lms-action-content strong),
 html body .lms-workspace [class*="leadership"] :is(h1, h2, h3, h4, strong),
 html body .lms-workspace [class*="intelligence"] :is(h1, h2, h3, h4, strong) {
-  color: var(--edb-primary-dark) !important;
+  color: var(--edb-primary-dark-text) !important;
 }
 
 html body .lms-workspace :is(.lms-hero p, .lms-live-head p, .lms-tools-head p, .lms-live-stat span:last-child, .lms-detail-copy > span, .lms-action-content small),
@@ -87,7 +62,7 @@ html body .lms-workspace [class*="leadership"] [class*="icon"],
 html body .lms-workspace [class*="intelligence"] [class*="icon"] {
   background: linear-gradient(145deg, var(--edb-primary), var(--edb-primary-dark)) !important;
   border-color: color-mix(in srgb, var(--edb-accent) 45%, transparent) !important;
-  color: #fff !important;
+  color: var(--edb-on-primary-dark) !important;
   box-shadow: 0 5px 14px var(--edb-shadow) !important;
 }
 
@@ -100,7 +75,7 @@ html body .lms-workspace [class*="intelligence"] [class*="badge"],
 html body .lms-workspace [class*="intelligence"] [class*="pill"] {
   background: var(--edb-primary-soft-2) !important;
   border-color: var(--edb-border) !important;
-  color: var(--edb-primary-dark) !important;
+  color: var(--edb-primary-dark-text) !important;
 }
 
 html body .lms-workspace .lms-meta-row span i,
@@ -112,16 +87,16 @@ html body .lms-workspace .lms-action-arrow {
 html body .lms-workspace :is(.lms-refresh-btn, button[class*="refresh"], a[class*="refresh"]) {
   background: var(--edb-surface) !important;
   border-color: color-mix(in srgb, var(--edb-primary) 28%, var(--edb-border)) !important;
-  color: var(--edb-primary) !important;
+  color: var(--edb-primary-text) !important;
 }
 html body .lms-workspace :is(.lms-refresh-btn, button[class*="refresh"], a[class*="refresh"]):hover {
   background: var(--edb-primary-soft-2) !important;
   border-color: var(--edb-primary) !important;
-  color: var(--edb-primary-dark) !important;
+  color: var(--edb-primary-dark-text) !important;
 }
 
 html body .lms-workspace :is(.lms-live-detail-card, .lms-action-card):hover {
-  color: var(--edb-primary-dark) !important;
+  color: var(--edb-primary-dark-text) !important;
   border-color: color-mix(in srgb, var(--edb-primary) 34%, var(--edb-border)) !important;
   box-shadow: 0 10px 24px var(--edb-shadow) !important;
 }
@@ -178,11 +153,11 @@ html body .demo-login__panel {
 }
 
 html body .demo-login :is(.demo-login__mini-brand span, .demo-login__brand-row span, .demo-login__visual-copy h1, .demo-login__heading h2) {
-  color: var(--edb-primary-dark) !important;
+  color: var(--edb-primary-dark-text) !important;
 }
 
 html body .demo-login :is(.demo-login__eyebrow, .demo-login__brand-row small, .demo-login__forgot) {
-  color: var(--edb-primary) !important;
+  color: var(--edb-primary-text) !important;
 }
 
 html body .demo-login :is(.demo-login__visual-copy p, .demo-login__visual-footer, .demo-login__heading p, .demo-login__remember) {
@@ -190,7 +165,7 @@ html body .demo-login :is(.demo-login__visual-copy p, .demo-login__visual-footer
 }
 
 html body .demo-login__field label {
-  color: color-mix(in srgb, var(--edb-text) 86%, var(--edb-primary) 14%) !important;
+  color: color-mix(in srgb, var(--edb-text) 86%, var(--edb-primary-text) 14%) !important;
 }
 
 html body .demo-login__input-wrap {
@@ -212,7 +187,7 @@ html body .demo-login__divider {
   color: var(--edb-faint) !important;
 }
 html body .demo-login__eye:hover {
-  color: var(--edb-primary) !important;
+  color: var(--edb-primary-text) !important;
   background: var(--edb-primary-soft) !important;
 }
 html body .demo-login__remember input {
@@ -221,7 +196,7 @@ html body .demo-login__remember input {
 
 html body .demo-login__submit {
   background: linear-gradient(135deg, var(--edb-primary-dark) 0%, var(--edb-primary) 70%, color-mix(in srgb, var(--edb-primary) 75%, var(--edb-accent) 25%) 100%) !important;
-  color: #fff !important;
+  color: var(--edb-on-accent) !important;
   box-shadow: 0 13px 27px color-mix(in srgb, var(--edb-primary-dark) 24%, transparent) !important;
 }
 html body .demo-login__submit:hover:not(:disabled) {

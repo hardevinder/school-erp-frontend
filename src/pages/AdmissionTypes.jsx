@@ -105,14 +105,14 @@ const AdmissionTypes = () => {
         display: block;
         font-weight: 700;
         font-size: 13px;
-        color: #111827;
+        color: var(--edb-text);
         margin-bottom: 6px;
       }
 
       .at-field {
         width: 100%;
         padding: 10px 12px;
-        border: 1px solid #d1d5db;
+        border: 1px solid var(--edb-border);
         border-radius: 10px;
         font-size: 14px;
         outline: none;
@@ -120,8 +120,8 @@ const AdmissionTypes = () => {
       }
 
       .at-field:focus {
-        border-color: #2563eb;
-        box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+        border-color: var(--edb-primary);
+        box-shadow: 0 0 0 3px var(--edb-shell-shadow);
       }
 
       .at-textarea {
@@ -132,7 +132,7 @@ const AdmissionTypes = () => {
       .at-hint {
         margin-top: 5px;
         font-size: 12px;
-        color: #6b7280;
+        color: var(--edb-muted-text);
       }
 
       .at-check-row {
@@ -141,9 +141,9 @@ const AdmissionTypes = () => {
         flex-wrap: wrap;
         align-items: center;
         padding: 12px;
-        border: 1px solid #e5e7eb;
+        border: 1px solid var(--edb-border);
         border-radius: 12px;
-        background: #f9fafb;
+        background: var(--edb-surface);
       }
 
       .at-check {
@@ -151,7 +151,7 @@ const AdmissionTypes = () => {
         align-items: center;
         gap: 8px;
         font-weight: 600;
-        color: #374151;
+        color: var(--edb-text);
       }
 
       .at-check input {

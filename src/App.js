@@ -251,6 +251,7 @@ import AIChatBox from "./components/AIChatBox";
 
 import SyllabusTeacherAssignment from "./pages/SyllabusTeacherAssignment";
 import SyllabusBreakdownCRUD from "./pages/SyllabusBreakdownCRUD";
+import SyllabusTracker from "./pages/SyllabusTracker";
 import AdmissionSyllabusAssignee from "./pages/AdmissionSyllabusAssignee";
 import AdmissionSyllabusCRUD from "./pages/AdmissionSyllabusCRUD";
 
@@ -2006,6 +2007,15 @@ function App() {
                 roles={["teacher", "academic_coordinator", "admin", "superadmin", "principal", "coordinator"]}
               >
                 <SyllabusBreakdownCRUD />
+              </RequireRole>
+            }
+          />
+
+          <Route
+            path="/syllabus-tracker"
+            element={
+              <RequireRole roles={["academic_coordinator", "coordinator", "admin", "superadmin", "principal"]}>
+                <SyllabusTracker />
               </RequireRole>
             }
           />

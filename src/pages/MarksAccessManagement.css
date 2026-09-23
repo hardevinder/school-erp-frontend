@@ -66,25 +66,25 @@
 
 .marks-access-page .marks-table-vertical::-webkit-scrollbar-track,
 .marks-access-page .marks-table-horizontal::-webkit-scrollbar-track {
-  background: #e9ecef;
+  background: var(--edb-dashboard-bg);
   border-radius: 8px;
 }
 
 .marks-access-page .marks-table-vertical::-webkit-scrollbar-thumb,
 .marks-access-page .marks-table-horizontal::-webkit-scrollbar-thumb {
-  background: #8b98a5;
-  border: 3px solid #e9ecef;
+  background: var(--edb-muted-text);
+  border: 3px solid var(--edb-border);
   border-radius: 8px;
 }
 
 .marks-access-page .marks-table-vertical::-webkit-scrollbar-thumb:hover,
 .marks-access-page .marks-table-horizontal::-webkit-scrollbar-thumb:hover {
-  background: #66727e;
+  background: var(--edb-muted-text);
 }
 
 .marks-access-page .marks-table-vertical,
 .marks-access-page .marks-table-horizontal {
-  scrollbar-color: #8b98a5 #e9ecef;
+  scrollbar-color: var(--edb-muted-text) var(--edb-dashboard-bg);
   scrollbar-width: auto;
 }
 
@@ -94,8 +94,8 @@
   justify-content: space-between;
   gap: 1rem;
   padding: 0.85rem 1rem;
-  border-bottom: 1px solid #dee2e6;
-  background: #f8f9fa;
+  border-bottom: 1px solid var(--edb-border);
+  background: var(--edb-surface);
 }
 
 .marks-table-toolbar > div {
@@ -123,5 +123,5 @@
   position: sticky;
   top: 0;
   z-index: 2;
-  background: #fff;
+  background: var(--edb-surface);
 }

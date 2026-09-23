@@ -479,31 +479,31 @@ export const LocationPickerModal = ({
         .sta-map-overlay{
           position:fixed; inset:0; z-index:1080;
           display:flex; align-items:center; justify-content:center;
-          padding:18px; background:rgba(15,28,45,0.66);
+          padding:18px; background:color-mix(in srgb, var(--edb-primary-dark) 66%, transparent);
           backdrop-filter:blur(5px);
         }
         .sta-map-modal{
           width:min(980px, 100%); max-height:94vh; overflow:auto;
-          background:#fff; border-radius:18px;
-          box-shadow:0 24px 70px rgba(0,0,0,0.28);
-          border:1px solid rgba(255,255,255,0.35);
+          background:var(--edb-surface); border-radius:18px;
+          box-shadow:0 24px 70px color-mix(in srgb, var(--edb-primary-dark) 28.000000000000004%, transparent);
+          border:1px solid color-mix(in srgb, var(--edb-border) 35%, transparent);
         }
         .sta-map-header{
-          position:sticky; top:0; z-index:2; background:#fff;
+          position:sticky; top:0; z-index:2; background:var(--edb-surface);
           display:flex; align-items:flex-start; justify-content:space-between;
           gap:16px; padding:16px 18px;
-          border-bottom:1px solid rgba(0,0,0,0.08);
+          border-bottom:1px solid color-mix(in srgb, var(--edb-border) 8%, transparent);
         }
-        .sta-map-title{font-weight:900; color:#183153; font-size:18px;}
-        .sta-map-sub{font-size:12px; color:#697789; margin-top:4px;}
+        .sta-map-title{font-weight:900; color:var(--edb-primary-dark-text); font-size:18px;}
+        .sta-map-sub{font-size:12px; color:var(--edb-muted-text); margin-top:4px;}
         .sta-map-body{padding:16px 18px;}
         .sta-map-search gmp-place-autocomplete{
           width:100%; min-height:44px; border-radius:12px;
         }
         .sta-map-canvas{
           height:430px; width:100%; border-radius:14px;
-          border:1px solid rgba(0,0,0,0.12); overflow:hidden;
-          background:#edf1f5;
+          border:1px solid color-mix(in srgb, var(--edb-border) 12%, transparent); overflow:hidden;
+          background:var(--edb-dashboard-bg);
         }
         .sta-map-grid{
           display:grid; grid-template-columns:1.6fr 1fr 1fr;
@@ -511,11 +511,11 @@ export const LocationPickerModal = ({
         }
         .sta-map-field label{
           display:block; font-size:12px; font-weight:800;
-          color:#344255; margin-bottom:5px;
+          color:var(--edb-text); margin-bottom:5px;
         }
         .sta-map-field input{
           width:100%; height:42px; border-radius:10px;
-          border:1px solid rgba(0,0,0,0.14); padding:8px 10px;
+          border:1px solid color-mix(in srgb, var(--edb-border) 14%, transparent); padding:8px 10px;
         }
         .sta-map-error{
           margin:10px 0; padding:10px 12px; border-radius:10px;
@@ -524,12 +524,12 @@ export const LocationPickerModal = ({
         }
         .sta-map-help{
           margin-top:10px; padding:9px 11px; border-radius:10px;
-          background:#eef7ff; color:#285a8d; font-size:12px;
+          background:var(--edb-surface); color:var(--edb-primary-text); font-size:12px;
         }
         .sta-map-footer{
-          position:sticky; bottom:0; z-index:2; background:#fff;
+          position:sticky; bottom:0; z-index:2; background:var(--edb-surface);
           display:flex; justify-content:flex-end; gap:10px;
-          padding:14px 18px; border-top:1px solid rgba(0,0,0,0.08);
+          padding:14px 18px; border-top:1px solid color-mix(in srgb, var(--edb-border) 8%, transparent);
         }
         @media(max-width:700px){
           .sta-map-overlay{padding:0; align-items:stretch;}
@@ -566,7 +566,7 @@ export const LocationPickerModal = ({
             {mapLoading && (
               <div
                 className="position-absolute top-50 start-50 translate-middle bg-white px-3 py-2 rounded shadow-sm"
-                style={{ fontWeight: 800, color: "#28486d" }}
+                style={{ fontWeight: 800, color: "var(--edb-primary-dark-text)" }}
               >
                 Loading map…
               </div>
@@ -961,65 +961,65 @@ const AssignmentModal = ({
           .sta-assignment-overlay{
             position:fixed; inset:0; z-index:1060;
             display:flex; align-items:center; justify-content:center;
-            padding:18px; background:rgba(16,30,48,0.58);
+            padding:18px; background:color-mix(in srgb, var(--edb-primary-dark) 58%, transparent);
             backdrop-filter:blur(4px);
           }
           .sta-assignment-modal{
             width:min(980px,100%); max-height:94vh; overflow:auto;
-            background:#fff; border-radius:18px;
-            box-shadow:0 24px 70px rgba(0,0,0,0.28);
+            background:var(--edb-surface); border-radius:18px;
+            box-shadow:0 24px 70px color-mix(in srgb, var(--edb-primary-dark) 28.000000000000004%, transparent);
           }
           .sta-assignment-header{
-            position:sticky; top:0; z-index:2; background:#fff;
-            padding:16px 18px; border-bottom:1px solid rgba(0,0,0,0.08);
+            position:sticky; top:0; z-index:2; background:var(--edb-surface);
+            padding:16px 18px; border-bottom:1px solid color-mix(in srgb, var(--edb-border) 8%, transparent);
             display:flex; justify-content:space-between; gap:14px;
           }
-          .sta-assignment-title{font-size:20px; font-weight:900; color:#173250;}
-          .sta-assignment-student{font-size:13px; color:#58697d; margin-top:3px;}
+          .sta-assignment-title{font-size:20px; font-weight:900; color:var(--edb-primary-dark-text);}
+          .sta-assignment-student{font-size:13px; color:var(--edb-muted-text); margin-top:3px;}
           .sta-assignment-body{padding:16px 18px;}
           .sta-assignment-current{
             padding:11px 13px; border-radius:12px; margin-bottom:14px;
-            background:linear-gradient(180deg,#f3f8ff,#fbfdff);
-            border:1px solid rgba(13,110,253,0.14); font-size:12px;
+            background:linear-gradient(180deg,var(--edb-surface),var(--edb-surface));
+            border:1px solid color-mix(in srgb, var(--edb-primary) 14%, transparent); font-size:12px;
           }
           .sta-assignment-grid{
             display:grid; grid-template-columns:1fr 1fr; gap:14px;
           }
           .sta-assignment-section{
-            border:1px solid rgba(0,0,0,0.09); border-radius:14px;
-            padding:14px; background:#fff;
+            border:1px solid color-mix(in srgb, var(--edb-border) 9%, transparent); border-radius:14px;
+            padding:14px; background:var(--edb-surface);
           }
           .sta-assignment-section-title{
             display:flex; justify-content:space-between; align-items:center;
-            gap:8px; font-size:14px; font-weight:900; color:#233a55;
+            gap:8px; font-size:14px; font-weight:900; color:var(--edb-primary-dark-text);
             margin-bottom:12px;
           }
           .sta-assignment-field{margin-bottom:11px;}
           .sta-assignment-field:last-child{margin-bottom:0;}
           .sta-assignment-field label{
             display:block; font-size:12px; font-weight:800;
-            color:#3e4c5e; margin-bottom:5px;
+            color:var(--edb-text); margin-bottom:5px;
           }
           .sta-assignment-field input,
           .sta-assignment-field select{
             width:100%; height:42px; border-radius:10px;
-            border:1px solid rgba(0,0,0,0.14); padding:8px 10px;
-            background:#fff;
+            border:1px solid color-mix(in srgb, var(--edb-border) 14%, transparent); padding:8px 10px;
+            background:var(--edb-surface);
           }
           .sta-coordinate-grid{
             display:grid; grid-template-columns:1fr 1fr; gap:8px;
           }
           .sta-location-summary{
             padding:10px; border-radius:10px; margin-top:8px;
-            border:1px dashed rgba(13,110,253,0.28);
-            background:#f7fbff; font-size:12px; color:#3f5369;
+            border:1px dashed color-mix(in srgb, var(--edb-primary) 28%, transparent);
+            background:var(--edb-surface); font-size:12px; color:var(--edb-primary-text);
             min-height:58px;
           }
-          .sta-location-address{font-weight:800; color:#273e58; margin-bottom:3px;}
+          .sta-location-address{font-weight:800; color:var(--edb-primary-dark-text); margin-bottom:3px;}
           .sta-assignment-footer{
-            position:sticky; bottom:0; z-index:2; background:#fff;
+            position:sticky; bottom:0; z-index:2; background:var(--edb-surface);
             display:flex; justify-content:flex-end; gap:10px;
-            padding:14px 18px; border-top:1px solid rgba(0,0,0,0.08);
+            padding:14px 18px; border-top:1px solid color-mix(in srgb, var(--edb-border) 8%, transparent);
           }
           .sta-map-config-warning{
             padding:9px 11px; border-radius:10px; margin-bottom:12px;
@@ -2168,61 +2168,61 @@ const StudentTransportAssignments = () => {
       <style>{`
         .sta-shell{ padding-bottom: 16px; }
         .sta-hero{
-          border: 1px solid rgba(0,0,0,0.08);
+          border: 1px solid color-mix(in srgb, var(--edb-border) 8%, transparent);
           border-radius: 18px;
           padding: 16px;
-          background: linear-gradient(180deg, #ffffff, #f8fbff);
-          box-shadow: 0 8px 24px rgba(0,0,0,0.05);
+          background: linear-gradient(180deg, var(--edb-surface), var(--edb-surface));
+          box-shadow: 0 8px 24px color-mix(in srgb, var(--edb-primary-dark) 5%, transparent);
           margin-bottom: 14px;
         }
         .sta-toolbar{ position: sticky; top: 0; z-index: 5; }
-        .sta-title{ font-weight: 800; letter-spacing: 0.2px; color: #13233a; }
-        .sta-subtitle{ font-size: 13px; color: #5c6b7a; margin-top: 4px; }
+        .sta-title{ font-weight: 800; letter-spacing: 0.2px; color: var(--edb-text); }
+        .sta-subtitle{ font-size: 13px; color: var(--edb-muted-text); margin-top: 4px; }
         .sta-top-actions{ display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
         .sta-card{
-          border: 1px solid rgba(0,0,0,0.08);
+          border: 1px solid color-mix(in srgb, var(--edb-border) 8%, transparent);
           border-radius: 16px;
-          box-shadow: 0 8px 24px rgba(0,0,0,0.04);
-          background: #fff;
+          box-shadow: 0 8px 24px color-mix(in srgb, var(--edb-primary-dark) 4%, transparent);
+          background: var(--edb-surface);
         }
         .sta-stat{
-          border: 1px solid rgba(0,0,0,0.08);
+          border: 1px solid color-mix(in srgb, var(--edb-border) 8%, transparent);
           border-radius: 14px;
-          background: #fff;
+          background: var(--edb-surface);
           padding: 12px 14px;
           min-height: 86px;
         }
-        .sta-stat-label{ font-size: 12px; font-weight: 700; color: #6b7785; margin-bottom: 4px; }
-        .sta-stat-value{ font-size: 24px; font-weight: 800; color: #0f2744; line-height: 1.1; }
+        .sta-stat-label{ font-size: 12px; font-weight: 700; color: var(--edb-muted-text); margin-bottom: 4px; }
+        .sta-stat-value{ font-size: 24px; font-weight: 800; color: var(--edb-primary-dark-text); line-height: 1.1; }
 
         .sta-stat-enabled{
-          background: linear-gradient(180deg, #f3fff7, #ffffff);
+          background: linear-gradient(180deg, var(--edb-surface), var(--edb-surface));
           border: 1px solid rgba(25,135,84,0.18);
         }
         .sta-stat-enabled .sta-stat-value{ color: #198754; }
 
         .sta-stat-disabled{
-          background: linear-gradient(180deg, #fff5f5, #ffffff);
+          background: linear-gradient(180deg, var(--edb-surface), var(--edb-surface));
           border: 1px solid rgba(220,53,69,0.18);
         }
         .sta-stat-disabled .sta-stat-value{ color: #dc3545; }
 
-        .sta-filter label{ font-size: 12px; font-weight: 800; margin-bottom: 6px; color: #364253; }
+        .sta-filter label{ font-size: 12px; font-weight: 800; margin-bottom: 6px; color: var(--edb-text); }
         .sta-filter .form-select,
         .sta-filter .form-control{
           height: 42px;
           border-radius: 12px;
-          border: 1px solid rgba(0,0,0,0.12);
+          border: 1px solid color-mix(in srgb, var(--edb-border) 12%, transparent);
         }
         .sta-filter .form-select:focus,
         .sta-filter .form-control:focus{
-          border-color: rgba(13,110,253,0.45);
-          box-shadow: 0 0 0 0.14rem rgba(13,110,253,0.1);
+          border-color: color-mix(in srgb, var(--edb-primary) 45%, transparent);
+          box-shadow: 0 0 0 0.14rem color-mix(in srgb, var(--edb-primary-dark) 10%, transparent);
         }
         .sta-table-wrap{
           border-radius: 14px;
           overflow: auto;
-          border: 1px solid rgba(0,0,0,0.06);
+          border: 1px solid color-mix(in srgb, var(--edb-border) 6%, transparent);
         }
         .sta-table{
           margin: 0;
@@ -2232,11 +2232,11 @@ const StudentTransportAssignments = () => {
         }
         .sta-sticky-col{
           position: sticky;
-          background: #fff;
+          background: var(--edb-surface);
           z-index: 2;
         }
         .sta-table thead .sta-sticky-col{
-          background: #f4f7fb;
+          background: var(--edb-surface);
           z-index: 4;
         }
         .sta-col-name{ left: 0; width: 220px; min-width: 220px; }
@@ -2244,10 +2244,10 @@ const StudentTransportAssignments = () => {
           left: 220px;
           width: 150px;
           min-width: 150px;
-          box-shadow: 8px 0 12px -12px rgba(0,0,0,0.55);
+          box-shadow: 8px 0 12px -12px color-mix(in srgb, var(--edb-primary-dark) 55.00000000000001%, transparent);
         }
         .sta-row:hover .sta-sticky-col{
-          background: #f7faff;
+          background: var(--edb-surface);
         }
         .sta-bus-cell{ min-width: 175px; }
         .sta-bus-label{
@@ -2256,30 +2256,30 @@ const StudentTransportAssignments = () => {
           min-height: 28px;
           padding: 5px 9px;
           border-radius: 9px;
-          background: #eef6ff;
-          border: 1px solid rgba(13,110,253,0.16);
-          color: #164f8f;
+          background: var(--edb-surface);
+          border: 1px solid color-mix(in srgb, var(--edb-primary) 16%, transparent);
+          color: var(--edb-primary-text);
           font-size: 12px;
           font-weight: 800;
           white-space: nowrap;
         }
         .sta-bus-label-empty{
-          background: #f7f7f8;
-          border-color: rgba(108,117,125,0.16);
-          color: #6c757d;
+          background: var(--edb-surface);
+          border-color: color-mix(in srgb, var(--edb-border) 16%, transparent);
+          color: var(--edb-muted-text);
         }
         .sta-table thead th{
           font-size: 12px;
           font-weight: 800;
           white-space: nowrap;
-          background: #f4f7fb;
-          color: #253344;
-          border-bottom: 1px solid rgba(0,0,0,0.08);
+          background: var(--edb-surface);
+          color: var(--edb-text);
+          border-bottom: 1px solid color-mix(in srgb, var(--edb-border) 8%, transparent);
           padding-top: 12px;
           padding-bottom: 12px;
         }
         .sta-table tbody td{ font-size: 13px; padding-top: 10px; padding-bottom: 10px; vertical-align: middle; }
-        .sta-row:hover{ background: rgba(13,110,253,0.035); }
+        .sta-row:hover{ background: color-mix(in srgb, var(--edb-primary) 3.5%, transparent); }
 
         .sta-pill{
           display:inline-flex;
@@ -2287,11 +2287,11 @@ const StudentTransportAssignments = () => {
           gap:6px;
           padding: 4px 10px;
           border-radius: 999px;
-          border: 1px solid rgba(13,110,253,0.15);
-          background: rgba(13,110,253,0.06);
+          border: 1px solid color-mix(in srgb, var(--edb-primary) 15%, transparent);
+          background: color-mix(in srgb, var(--edb-primary) 6%, transparent);
           font-size: 12px;
           white-space: nowrap;
-          color: #1f4f91;
+          color: var(--edb-primary-text);
           font-weight: 700;
         }
 
@@ -2338,7 +2338,7 @@ const StudentTransportAssignments = () => {
         .sta-loading{
           position: fixed;
           inset: 0;
-          background: rgba(255,255,255,0.55);
+          background: color-mix(in srgb, var(--edb-surface) 55%, transparent);
           backdrop-filter: blur(3px);
           display: flex;
           align-items: center;
@@ -2346,16 +2346,16 @@ const StudentTransportAssignments = () => {
           z-index: 2000;
         }
         .sta-loading .box{
-          border: 1px solid rgba(0,0,0,0.12);
-          background: #fff;
+          border: 1px solid color-mix(in srgb, var(--edb-border) 12%, transparent);
+          background: var(--edb-surface);
           border-radius: 14px;
           padding: 14px 16px;
-          box-shadow: 0 10px 30px rgba(0,0,0,0.10);
+          box-shadow: 0 10px 30px color-mix(in srgb, var(--edb-primary-dark) 10%, transparent);
           font-weight: 800;
-          color: #183153;
+          color: var(--edb-primary-dark-text);
         }
-        .sta-empty{ padding: 28px 16px; text-align: center; color: #6c7785; }
-        .sta-empty-title{ font-size: 15px; font-weight: 800; color: #3a4758; margin-bottom: 4px; }
+        .sta-empty{ padding: 28px 16px; text-align: center; color: var(--edb-muted-text); }
+        .sta-empty-title{ font-size: 15px; font-weight: 800; color: var(--edb-text); margin-bottom: 4px; }
         .sta-empty-sub{ font-size: 13px; }
 
         @media (max-width: 768px){
@@ -2581,7 +2581,7 @@ const StudentTransportAssignments = () => {
           <div className="border rounded-3 bg-light p-3 mb-3">
             <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
               <div>
-                <div style={{ fontWeight: 800, color: "#213247" }}>
+                <div style={{ fontWeight: 800, color: "var(--edb-text)" }}>
                   Bulk Actual Route Assignment
                 </div>
                 <div className="text-muted" style={{ fontSize: 12 }}>
@@ -2653,7 +2653,7 @@ const StudentTransportAssignments = () => {
             <div className="d-flex align-items-center gap-2 flex-wrap">
               <div
                 className="h6 m-0"
-                style={{ fontWeight: 800, color: "#213247" }}
+                style={{ fontWeight: 800, color: "var(--edb-text)" }}
               >
                 Student List
               </div>
@@ -2723,7 +2723,7 @@ const StudentTransportAssignments = () => {
                       </td>
                       <td>{idx + 1}</td>
                       <td className="sta-sticky-col sta-col-name">
-                        <div style={{ fontWeight: 800, color: "#1f2f45" }}>
+                        <div style={{ fontWeight: 800, color: "var(--edb-text)" }}>
                           {safeStr(s?.name) || "—"}
                         </div>
                       </td>

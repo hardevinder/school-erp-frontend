@@ -13,15 +13,15 @@
 
 .modal-dialog.collection-modal .modal-content {
   border-radius: 10px;
-  border: 1px solid #dcdcdc;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  border: 1px solid var(--edb-border);
+  box-shadow: 0 4px 20px color-mix(in srgb, var(--edb-primary-dark) 10%, transparent);
   overflow: hidden;
   max-height: calc(100dvh - 0.7rem);
 }
 
 /* Make Modal.Body the scroll container */
 .modal-dialog.collection-modal .modal-body {
-  background: #f8fbff;
+  background: var(--edb-surface);
   max-height: none;
   overflow-y: auto;
   overflow-x: hidden;
@@ -33,14 +33,14 @@
   position: sticky;
   top: 0;
   z-index: 1045;
-  background: #fff;
+  background: var(--edb-surface);
   padding-top: 6px;
 }
 
 /* Ensure the nav strip has a solid background */
 .collection-modal .sticky-subnav .nav-tabs {
-  background: #fff;
-  border-bottom: 1px solid #dee2e6;
+  background: var(--edb-surface);
+  border-bottom: 1px solid var(--edb-border);
 }
 
 /* Tighten header & footer padding */
@@ -60,9 +60,9 @@
   overflow: auto;
   max-height: calc(100dvh - 330px);
   min-height: 260px;
-  border: 1px solid #dee2e6;
+  border: 1px solid var(--edb-border);
   border-radius: 12px;
-  background: #fff;
+  background: var(--edb-surface);
 }
 
 .collection-table-wrap table {
@@ -80,12 +80,12 @@
   justify-content: flex-start !important;
   flex-wrap: nowrap !important;
   gap: 10px;
-  background: #f8f9fa;
-  border: 1px solid #ddd;
+  background: var(--edb-surface);
+  border: 1px solid var(--edb-border);
   border-radius: 6px;
   padding: 6px 10px;
   font-size: 0.9rem;
-  color: #222;
+  color: var(--edb-text);
   font-weight: 500;
   white-space: nowrap !important;
   overflow-x: auto;
@@ -99,7 +99,7 @@
 }
 
 .student-brief-inline strong {
-  color: #000;
+  color: var(--edb-text);
 }
 
 .student-brief-inline::-webkit-scrollbar {
@@ -107,7 +107,7 @@
 }
 
 .student-brief-inline::-webkit-scrollbar-thumb {
-  background: #ccc;
+  background: var(--edb-border);
   border-radius: 10px;
 }
 

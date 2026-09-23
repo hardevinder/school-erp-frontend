@@ -147,7 +147,7 @@ const GiveAssignmentToStudents = () => {
 
       {/* Modal for Assignment Distribution */}
       {showModal && (
-        <div className="modal show d-block" style={{ backgroundColor: "rgba(0,0,0,0.5)" }}>
+        <div className="modal show d-block" style={{ backgroundColor: "color-mix(in srgb, var(--edb-primary-dark) 50%, transparent)" }}>
           <div className="modal-dialog modal-lg">
             <div className="modal-content">
               <div className="modal-header">

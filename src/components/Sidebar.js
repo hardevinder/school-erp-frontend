@@ -358,10 +358,12 @@ export default function Sidebar({ headerHeight = 56 }) {
         heading: "Academic",
         items: [
           { key: "principal-assessments", label: "Assessments & Tests", icon: "bi-clipboard2-check", path: "/assessments" },
+          { key: "principal-worksheets", label: "Worksheets", icon: "bi-file-earmark-text", path: "/assessments?assessment_type=worksheet" },
           { key: "principal-online-classes", label: "Online Classes", icon: "bi-camera-video", path: "/online-classes" },
           { key: "principal-diary-monitor", label: "Digital Diary Monitor", icon: "bi-journal-richtext", path: "/coordinator-digital-diaries" },
           { key: "principal-ptm", label: "PTM Management", icon: "bi-people-fill", path: "/ptm-management" },
           { key: "principal-syllabus", label: "Syllabus Progress", icon: "bi-list-check", path: "/syllabus-breakdown" },
+          { key: "principal-syllabus-tracker", label: "Syllabus Tracker", icon: "bi-bar-chart-steps", path: "/syllabus-tracker" },
           { key: "principal-syllabus-approval", label: "Syllabus Approval", icon: "bi-check2-square", path: "/syllabus-approval" },
         ],
       });
@@ -1111,6 +1113,7 @@ export default function Sidebar({ headerHeight = 56 }) {
           { key: "ptm-management-admin", label: "PTM Management", icon: "bi-people-fill", path: "/ptm-management", roles: ["admin", "superadmin"] },
           { key: "online-classes-admin", label: "Online Classes", icon: "bi-camera-video", path: "/online-classes" },
           { key: "assessments-admin", label: "Assessments & Tests", icon: "bi-clipboard2-check", path: "/assessments" },
+          { key: "worksheets-admin", label: "Worksheets", icon: "bi-file-earmark-text", path: "/assessments?assessment_type=worksheet" },
           { key: "lms-assignments-admin", label: "LMS Assignments", icon: "bi-journal-check", path: "/assessments?assessment_type=assignment" },
           { key: "bulk-promotion", label: "Bulk Promotion", icon: "bi-arrow-up-square", path: "/students/bulk-promotion", roles: ["admin", "superadmin", "accounts"] },
           { key: "promotion-history", label: "Promotion History", icon: "bi-clock-history", path: "/students/promotion-history", roles: ["admin", "superadmin", "accounts"] },
@@ -1278,6 +1281,8 @@ export default function Sidebar({ headerHeight = 56 }) {
           { key: "ptm-management-coordinator", label: "PTM Management", icon: "bi-people-fill", path: "/ptm-management" },
           { key: "online-classes-coordinator", label: "Online Classes", icon: "bi-camera-video", path: "/online-classes" },
           { key: "assessments-coordinator", label: "Assessments & Tests", icon: "bi-clipboard2-check", path: "/assessments" },
+          { key: "worksheets-coordinator", label: "Worksheets", icon: "bi-file-earmark-text", path: "/assessments?assessment_type=worksheet" },
+          { key: "syllabus-tracker-coordinator", label: "Syllabus Tracker", icon: "bi-bar-chart-steps", path: "/syllabus-tracker" },
           { key: "lms-assignments-coordinator", label: "LMS Assignments", icon: "bi-journal-check", path: "/assessments?assessment_type=assignment" },
           { key: "holidayMarking", label: "Holiday Marking", icon: "bi-calendar3", path: "/holiday-marking" },
           { key: "periods", label: "Periods", icon: "bi-clock", path: "/periods" },
@@ -1402,6 +1407,7 @@ export default function Sidebar({ headerHeight = 56 }) {
           { key: "my-house-duty-teacher", label: "My House Duties & Assembly", icon: "bi-flag", path: "/house-duty", roles: ["teacher", "department_hod"] }, // HOUSE_DUTY_V15
           { key: "online-classes", label: "Online Classes", icon: "bi-camera-video", path: "/online-classes" },
           { key: "assessments", label: "Assessments & Tests", icon: "bi-clipboard2-check", path: "/assessments" },
+          { key: "worksheets", label: "Worksheets", icon: "bi-file-earmark-text", path: "/assessments?assessment_type=worksheet" },
           { key: "lms-assignments", label: "LMS Assignments", icon: "bi-journal-check", path: "/assessments?assessment_type=assignment" },
           { key: "my-visitors", label: "My Visitors", icon: "bi-person-badge", path: "/my-visitors" },
         ],

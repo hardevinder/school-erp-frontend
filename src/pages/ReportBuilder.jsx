@@ -142,7 +142,7 @@ const ReportBuilder = () => {
     <div className="container-fluid mt-3">
       <h3 className="text-center mb-3">📋 PT Result Report Builder</h3>
       <div className="row">
-        <div id="blocks" className="col-md-2 border-end" style={{ background: '#f8f9fa' }}></div>
+        <div id="blocks" className="col-md-2 border-end" style={{ background: "var(--edb-surface)" }}></div>
         <div className="col-md-10" id="gjs" ref={editorRef}></div>
       </div>
       <div className="container my-5">

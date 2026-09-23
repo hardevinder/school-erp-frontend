@@ -1589,7 +1589,7 @@ const Transactions = () => {
           </Form.Group>
           <div
             className="form-text ms-2"
-            style={{ fontSize: 12, color: "#6c757d" }}
+            style={{ fontSize: 12, color: "var(--edb-muted-text)" }}
           >
             Pick session once — applies to collections.
           </div>
@@ -1858,15 +1858,15 @@ const Transactions = () => {
                     .sb-menu {
                       position: absolute; top: 100%; left: 0; right: 0;
                       max-height: 280px; overflow: auto; z-index: 1056;
-                      background: #fff; border: 1px solid rgba(0,0,0,.125);
+                      background: var(--edb-surface); border: 1px solid color-mix(in srgb, var(--edb-border) 12.5%, transparent);
                       border-radius: .375rem; margin-top: 4px;
-                      box-shadow: 0 4px 16px rgba(0,0,0,.12);
+                      box-shadow: 0 4px 16px color-mix(in srgb, var(--edb-primary-dark) 12%, transparent);
                     }
                     .sb-item { padding: .5rem .75rem; cursor: pointer; display: flex; flex-direction: column; gap: 2px; }
-                    .sb-item:hover, .sb-item.active { background: #f6f7f9; }
+                    .sb-item:hover, .sb-item.active { background: var(--edb-surface); }
                     .primary-line { font-weight: 600; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-                    .secondary-line { font-size: 12px; color: #6c757d; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-                    .pill { font-weight: 500; font-size: 12px; color: #495057; background: #eef1f5; border-radius: 999px; padding: 1px 8px; margin-left: 6px; }
+                    .secondary-line { font-size: 12px; color: var(--edb-muted-text); line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+                    .pill { font-weight: 500; font-size: 12px; color: var(--edb-text); background: var(--edb-dashboard-bg); border-radius: 999px; padding: 1px 8px; margin-left: 6px; }
                   `}</style>
                   <Form.Group className="mb-3">
                     <Form.Label>Search (name / admission no.)</Form.Label>
@@ -2788,8 +2788,8 @@ const Transactions = () => {
         <Modal.Footer
           className="py-2 px-3"
           style={{
-            background: "#f8f9fa",
-            borderTop: "1px solid #dee2e6",
+            background: "var(--edb-surface)",
+            borderTop: "1px solid var(--edb-border)",
             overflow: "hidden",
           }}
         >
@@ -2879,9 +2879,9 @@ const Transactions = () => {
             <div
               className="d-flex flex-wrap align-items-center justify-content-center text-center gap-2 px-2"
               style={{
-                background: "#fff",
+                background: "var(--edb-surface)",
                 borderRadius: "6px",
-                border: "1px solid #dee2e6",
+                border: "1px solid var(--edb-border)",
                 padding: "4px 8px",
                 minWidth: 320,
                 flexShrink: 0,

@@ -906,7 +906,7 @@ const Students = () => {
           padding: 0 !important;
           border-radius: 18px !important;
           overflow: hidden;
-          box-shadow: 0 24px 80px rgba(15, 23, 42, 0.20) !important;
+          box-shadow: 0 24px 80px var(--edb-shell-shadow) !important;
         }
         .student-topbar {
           position: sticky;
@@ -917,24 +917,24 @@ const Students = () => {
           justify-content: space-between;
           gap: 12px;
           padding: 12px 16px;
-          background: linear-gradient(135deg, #eef2ff 0%, #ffffff 58%, #ecfeff 100%);
-          border-bottom: 1px solid #e5e7eb;
+          background: linear-gradient(135deg, var(--edb-surface) 0%, var(--edb-surface) 58%, var(--edb-surface) 100%);
+          border-bottom: 1px solid var(--edb-border);
         }
         .student-topbar .title {
           font-weight: 800;
           font-size: 15px;
-          color: #111827;
+          color: var(--edb-text);
           margin: 0;
         }
         .student-topbar .xbtn {
-          border: 1px solid #e5e7eb;
-          background: #fff;
+          border: 1px solid var(--edb-border);
+          background: var(--edb-surface);
           border-radius: 10px;
           padding: 6px 10px;
           font-size: 12px;
           cursor: pointer;
         }
-        .student-topbar .xbtn:hover { background: #f9fafb; }
+        .student-topbar .xbtn:hover { background: var(--edb-surface); }
 
         .student-form-wrapper {
           max-height: 64vh;
@@ -945,27 +945,27 @@ const Students = () => {
           display: flex;
           gap: 6px;
           margin: 0 0 10px;
-          border-bottom: 1px solid #e5e7eb;
+          border-bottom: 1px solid var(--edb-border);
           padding: 0 2px 8px;
           overflow-x: auto;
         }
         .tabbtn {
           padding: 6px 10px;
-          border: 1px solid #e5e7eb;
-          background: #fff;
+          border: 1px solid var(--edb-border);
+          background: var(--edb-surface);
           cursor: pointer;
           font-weight: 600;
-          color: #6b7280;
+          color: var(--edb-muted-text);
           border-radius: 10px;
           transition: all 0.15s ease;
           white-space: nowrap;
           font-size: 12px;
         }
-        .tabbtn:hover { color: #111827; background-color: #f9fafb; }
+        .tabbtn:hover { color: var(--edb-text); background-color: var(--edb-surface); }
         .tabbtn.active {
-          color: #111827;
-          border-color: #6366f1;
-          background: #eef2ff;
+          color: var(--edb-text);
+          border-color: var(--edb-primary);
+          background: var(--edb-surface);
         }
         .tabpane { display: none; }
         .tabpane.active { display: block; }
@@ -974,36 +974,36 @@ const Students = () => {
           display: grid;
           grid-template-columns: repeat(2, minmax(0, 1fr));
           gap: 10px 12px;
-          background: #ffffff;
+          background: var(--edb-surface);
           padding: 12px;
           border-radius: 12px;
-          border: 1px solid #eef2f7;
+          border: 1px solid var(--edb-border);
         }
         .full-row { grid-column: 1 / -1; }
 
         .form-field {
           width: 100%;
           padding: 7px 10px;
-          border: 1px solid #d1d5db;
+          border: 1px solid var(--edb-border);
           border-radius: 12px;
           font-size: 13px;
-          background: #fff;
+          background: var(--edb-surface);
         }
         .form-field:focus {
-          border-color: #6366f1;
+          border-color: var(--edb-primary);
           outline: 0;
-          box-shadow: 0 0 0 0.12rem rgba(99,102,241,.20);
+          box-shadow: 0 0 0 0.12rem var(--edb-shell-shadow);
         }
         .form-label {
           font-weight: 700;
-          color: #374151;
+          color: var(--edb-text);
           margin-bottom: 4px;
           display: block;
           font-size: 12px;
         }
         .required { color: #dc2626; }
         .hint {
-          color: #6b7280;
+          color: var(--edb-muted-text);
           font-size: 11px;
           margin-top: 4px;
           font-style: italic;
@@ -1012,19 +1012,19 @@ const Students = () => {
           font-size: 10.5px;
         }
         .sibling-block {
-          border: 1px dashed #e5e7eb;
+          border: 1px dashed var(--edb-border);
           padding: 10px;
           border-radius: 12px;
           margin-bottom: 8px;
-          background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+          background: linear-gradient(180deg, var(--edb-surface) 0%, var(--edb-surface) 100%);
         }
         .override-note {
           grid-column: 1 / -1;
           padding: 9px 11px;
-          border: 1px solid #bfdbfe;
+          border: 1px solid var(--edb-border);
           border-radius: 10px;
-          background: #eff6ff;
-          color: #1e3a8a;
+          background: var(--edb-surface);
+          color: var(--edb-primary-text);
           font-size: 11.5px;
           line-height: 1.45;
         }
@@ -1032,17 +1032,17 @@ const Students = () => {
           grid-column: 1 / -1;
           max-height: 310px;
           overflow: auto;
-          border: 1px solid #e5e7eb;
+          border: 1px solid var(--edb-border);
           border-radius: 10px;
         }
         .override-table { width: 100%; border-collapse: collapse; font-size: 12px; }
         .override-table th, .override-table td {
           padding: 7px 8px;
-          border-bottom: 1px solid #eef2f7;
+          border-bottom: 1px solid var(--edb-border);
           text-align: left;
           vertical-align: middle;
         }
-        .override-table th { position: sticky; top: 0; background: #f8fafc; z-index: 1; }
+        .override-table th { position: sticky; top: 0; background: var(--edb-surface); z-index: 1; }
         .override-table .amount-input { min-width: 120px; }
         .sibling-row {
           display: flex;
@@ -2613,7 +2613,7 @@ const Students = () => {
               width: 42,
               height: 42,
               objectFit: "cover",
-              border: "2px solid #dee2e6",
+              border: "2px solid var(--edb-border)",
             }}
             onError={(e) => {
               e.currentTarget.src = NO_PHOTO_SVG;
@@ -2803,17 +2803,17 @@ const Students = () => {
           align-items: flex-start;
           gap: 12px;
           padding: 10px 0;
-          border-bottom: 1px solid #f1f5f9;
+          border-bottom: 1px solid var(--edb-border);
         }
         .detail-item:last-child { border-bottom: none; }
         .detail-label {
           font-weight: 700;
-          color: #6c757d;
+          color: var(--edb-muted-text);
           flex: 0 0 140px;
           font-size: 0.85rem;
         }
         .detail-value {
-          color: #212529;
+          color: var(--edb-text);
           flex: 1;
           word-break: break-word;
           font-size: 0.9rem;
@@ -2878,7 +2878,7 @@ const Students = () => {
       className="container-fluid py-3 students-page"
       style={{
         background:
-          "radial-gradient(circle at top left, rgba(99,102,241,.14), transparent 32%), linear-gradient(180deg, #f8fafc 0%, #ffffff 260px, #ffffff 100%)",
+          "radial-gradient(circle at top left, color-mix(in srgb, var(--edb-primary) 14%, transparent), transparent 32%), linear-gradient(180deg, var(--edb-surface) 0%, var(--edb-surface) 260px, var(--edb-surface) 100%)",
         minHeight: "100vh",
       }}
     >
@@ -2886,10 +2886,10 @@ const Students = () => {
       <div
         className="students-topbar d-flex justify-content-between align-items-center flex-wrap gap-3 mb-3 p-3"
         style={{
-          background: "rgba(255,255,255,.92)",
-          border: "1px solid rgba(226,232,240,.95)",
+          background: "color-mix(in srgb, var(--edb-surface) 92%, transparent)",
+          border: "1px solid color-mix(in srgb, var(--edb-border) 95%, transparent)",
           borderRadius: 18,
-          boxShadow: "0 14px 32px rgba(15,23,42,.07)",
+          boxShadow: "0 14px 32px color-mix(in srgb, var(--edb-primary-dark) 7%, transparent)",
           backdropFilter: "blur(10px)",
         }}
       >
@@ -2901,8 +2901,8 @@ const Students = () => {
                 width: 34,
                 height: 34,
                 borderRadius: 12,
-                background: "linear-gradient(135deg,#4f46e5,#06b6d4)",
-                color: "#fff",
+                background: "linear-gradient(135deg,var(--edb-primary),#06b6d4)",
+                color: "var(--edb-on-primary)",
               }}
             >
               <i className="bi bi-mortarboard-fill"></i>
@@ -3144,7 +3144,7 @@ const Students = () => {
             <table className="table table-hover mb-0 align-middle students-table">
               <thead
                 className="sticky-top"
-                style={{ background: "linear-gradient(90deg,#eef2ff 0%,#ffffff 100%)" }}
+                style={{ background: "linear-gradient(90deg,var(--edb-surface) 0%,var(--edb-surface) 100%)" }}
               >
                 <tr>
                   <th className="border-0 py-2 d-none d-md-table-cell">#</th>
@@ -3224,7 +3224,7 @@ const Students = () => {
                               className="badge students-badge"
                               style={{
                                 backgroundColor: stu.house_color || "#6c757d",
-                                color: "#fff",
+                                color: "var(--edb-on-primary)",
                               }}
                             >
                               {stu.house_name}
@@ -3349,7 +3349,7 @@ const Students = () => {
                                 {stu.house_name ? (
                                   <span
                                     className="badge students-badge"
-                                    style={{ backgroundColor: stu.house_color || "#6c757d", color: "#fff" }}
+                                    style={{ backgroundColor: stu.house_color || "#6c757d", color: "var(--edb-on-primary)" }}
                                   >
                                     {stu.house_name}
                                   </span>

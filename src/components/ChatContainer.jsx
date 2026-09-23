@@ -49,17 +49,17 @@ const styles = {
   }),
   sidebar: {
     width: "30%",
-    borderRight: "1px solid #ddd",
+    borderRight: "1px solid var(--edb-border)",
     padding: "20px",
     overflowY: "auto",
-    backgroundColor: "#f8f9fa",
+    backgroundColor: "var(--edb-surface)",
     maxHeight: "100vh",
   },
   sidebarItem: (active, hasUnread) => ({
     padding: "12px",
     cursor: "pointer",
-    backgroundColor: active ? "#e9ecef" : hasUnread ? "#ffcccc" : "transparent",
-    borderBottom: "1px solid #eee",
+    backgroundColor: active ? "var(--edb-dashboard-bg)" : hasUnread ? "#ffcccc" : "transparent",
+    borderBottom: "1px solid var(--edb-border)",
     borderRadius: "6px",
     marginBottom: "8px",
     fontWeight: hasUnread ? "bold" : "normal",
@@ -69,22 +69,22 @@ const styles = {
     flexGrow: 1,
     display: "flex",
     flexDirection: "column",
-    backgroundColor: "#ffffff",
+    backgroundColor: "var(--edb-surface)",
     maxHeight: "100vh",
   },
   header: {
     position: "sticky",
     top: 0,
     padding: "16px",
-    background: "#2575fc",
-    color: "#fff",
+    background: "var(--edb-primary)",
+    color: "var(--edb-on-primary)",
     zIndex: 2,
   },
   backButton: {
     background: "none",
     border: "none",
     cursor: "pointer",
-    color: "#fff",
+    color: "var(--edb-on-primary)",
     fontSize: "1rem",
     marginRight: "0.5rem",
   },
@@ -92,8 +92,8 @@ const styles = {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
-    background: "#2575fc",
-    color: "#fff",
+    background: "var(--edb-primary)",
+    color: "var(--edb-on-primary)",
     padding: "8px 12px",
     borderRadius: "4px",
     marginTop: "16px",
@@ -105,15 +105,15 @@ const styles = {
     fontSize: "0.8rem",
     border: "none",
     borderRadius: "4px",
-    backgroundColor: "#fff",
-    color: "#2575fc",
+    backgroundColor: "var(--edb-surface)",
+    color: "var(--edb-primary-text)",
     cursor: "pointer",
   },
   searchInput: {
     width: "100%",
     padding: "12px",
     borderRadius: "30px",
-    border: "1px solid #ccc",
+    border: "1px solid var(--edb-border)",
     outline: "none",
     marginBottom: "20px",
   },
@@ -121,13 +121,13 @@ const styles = {
   messagesContainer: {
     flexGrow: 1,
     overflowY: "auto",
-    backgroundColor: "#f1f3f5",
+    backgroundColor: "var(--edb-dashboard-bg)",
     padding: "20px",
     paddingBottom: "150px",
     maxHeight: "100vh",
   },
   messageBubble: (isCurrentUser, extraStyle = {}) => ({
-    backgroundColor: isCurrentUser ? "#DCF8C6" : "#FFFFFF",
+    backgroundColor: isCurrentUser ? "#DCF8C6" : "var(--edb-surface)",
     alignSelf: isCurrentUser ? "flex-end" : "flex-start",
     padding: "10px",
     borderRadius: "10px",
@@ -136,7 +136,7 @@ const styles = {
     marginLeft: isCurrentUser ? "20px" : "0",
     marginRight: isCurrentUser ? "0" : "20px",
     position: "relative",
-    boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
+    boxShadow: "0 1px 3px color-mix(in srgb, var(--edb-primary-dark) 10%, transparent)",
     ...extraStyle,
   }),
   iconContainer: {
@@ -149,7 +149,7 @@ const styles = {
   editInput: {
     padding: "6px",
     borderRadius: "4px",
-    border: "1px solid #ccc",
+    border: "1px solid var(--edb-border)",
     marginRight: "5px",
     width: "60%",
   },
@@ -157,8 +157,8 @@ const styles = {
     padding: "6px 12px",
     border: "none",
     borderRadius: "4px",
-    backgroundColor: "#3085d6",
-    color: "#fff",
+    backgroundColor: "var(--edb-primary)",
+    color: "var(--edb-on-primary)",
     cursor: "pointer",
     marginRight: "5px",
   },
@@ -167,15 +167,15 @@ const styles = {
     border: "none",
     borderRadius: "4px",
     backgroundColor: "#d33",
-    color: "#fff",
+    color: "var(--edb-on-primary)",
     cursor: "pointer",
   },
   inputContainer: {
     display: "flex",
     alignItems: "center",
     padding: "10px 20px",
-    backgroundColor: "#f8f9fa",
-    borderTop: "1px solid #ddd",
+    backgroundColor: "var(--edb-surface)",
+    borderTop: "1px solid var(--edb-border)",
     position: "sticky",
     bottom: 0,
     zIndex: 1,
@@ -184,7 +184,7 @@ const styles = {
     flexGrow: 1,
     padding: "8px",
     borderRadius: "20px",
-    border: "1px solid #ccc",
+    border: "1px solid var(--edb-border)",
     outline: "none",
     marginRight: "8px",
     maxWidth: "calc(100% - 100px)",
@@ -194,8 +194,8 @@ const styles = {
     padding: "8px 12px",
     border: "none",
     borderRadius: "20px",
-    backgroundColor: "#6a11cb",
-    color: "#fff",
+    backgroundColor: "var(--edb-primary)",
+    color: "var(--edb-on-primary)",
     cursor: "pointer",
     flexShrink: 0,
   },
@@ -204,19 +204,19 @@ const styles = {
     padding: "8px 12px",
     border: "none",
     borderRadius: "20px",
-    backgroundColor: "#6a11cb",
-    color: "#fff",
+    backgroundColor: "var(--edb-primary)",
+    color: "var(--edb-on-primary)",
     cursor: "pointer",
     flexShrink: 0,
   },
   lastMessage: {
     fontSize: "0.8rem",
-    color: "#999",
+    color: "var(--edb-muted-text)",
     marginTop: "4px",
   },
   timestamp: {
     fontSize: "0.7rem",
-    color: "#999",
+    color: "var(--edb-muted-text)",
     marginTop: "4px",
   },
   reactionOptions: {
@@ -226,9 +226,9 @@ const styles = {
     bottom: "120%",
     left: "50%",
     transform: "translateX(-50%)",
-    background: "#fff",
+    background: "var(--edb-surface)",
     padding: "5px",
-    border: "1px solid #ccc",
+    border: "1px solid var(--edb-border)",
     borderRadius: "5px",
     zIndex: 10,
   },
@@ -237,7 +237,7 @@ const styles = {
     gap: "5px",
     marginTop: "4px",
     fontSize: "0.8rem",
-    color: "#666",
+    color: "var(--edb-muted-text)",
   },
 };
 
@@ -935,7 +935,7 @@ const ChatContainer = ({ currentUserId, hideHeader = false, onSelectContactName 
                         <div style={{ fontWeight: "bold", fontSize: "1rem" }}>
                           {contact.name}
                         </div>
-                        <div style={{ fontSize: "0.8rem", color: "#666" }}>
+                        <div style={{ fontSize: "0.8rem", color: "var(--edb-muted-text)" }}>
                           Class: {contact.Class?.class_name}
                         </div>
                         {contact.lastMessage && (
@@ -946,7 +946,7 @@ const ChatContainer = ({ currentUserId, hideHeader = false, onSelectContactName 
                         <span
                           style={{
                             backgroundColor: "red",
-                            color: "#fff",
+                            color: "var(--edb-on-primary)",
                             borderRadius: "50%",
                             padding: "4px 10px",
                             fontSize: "12px",
@@ -998,7 +998,7 @@ const ChatContainer = ({ currentUserId, hideHeader = false, onSelectContactName 
                     <span
                       style={{
                         backgroundColor: "red",
-                        color: "#fff",
+                        color: "var(--edb-on-primary)",
                         borderRadius: "50%",
                         padding: "4px 10px",
                         fontSize: "12px",
@@ -1047,7 +1047,7 @@ const ChatContainer = ({ currentUserId, hideHeader = false, onSelectContactName 
       {activeChatUnreadCount > 0 && (
         <div
           style={{
-            backgroundColor: "#ffeb3b",
+            backgroundColor: "var(--edb-accent)",
             padding: "8px",
             textAlign: "center",
             fontWeight: "bold",
@@ -1093,7 +1093,7 @@ const ChatContainer = ({ currentUserId, hideHeader = false, onSelectContactName 
                             paddingLeft: "5px",
                             marginBottom: "5px",
                             fontStyle: "italic",
-                            color: "#555",
+                            color: "var(--edb-text)",
                           }}
                         >
                           Replying to {msg.replyTo.senderName}: {msg.replyTo.text}
@@ -1147,7 +1147,7 @@ const ChatContainer = ({ currentUserId, hideHeader = false, onSelectContactName 
                             <div style={{ position: "relative", marginTop: "4px", display: "flex", gap: "5px" }}>
                               <button
                                 onClick={() => setReplyingTo(msg)}
-                                style={{ background: "none", border: "none", cursor: "pointer", fontSize: "1.2rem", color: "#2575fc" }}
+                                style={{ background: "none", border: "none", cursor: "pointer", fontSize: "1.2rem", color: "var(--edb-primary-text)" }}
                               >
                                 <FaReply />
                               </button>
@@ -1158,7 +1158,7 @@ const ChatContainer = ({ currentUserId, hideHeader = false, onSelectContactName 
                                     [msg.id]: !prev[msg.id],
                                   }))
                                 }
-                                style={{ background: "none", border: "none", cursor: "pointer", fontSize: "1.2rem", color: "#2575fc" }}
+                                style={{ background: "none", border: "none", cursor: "pointer", fontSize: "1.2rem", color: "var(--edb-primary-text)" }}
                               >
                                 <FaRegSmile />
                               </button>
@@ -1180,7 +1180,7 @@ const ChatContainer = ({ currentUserId, hideHeader = false, onSelectContactName 
                             <div style={styles.iconContainer}>
                               <button
                                 onClick={() => setReplyingTo(msg)}
-                                style={{ background: "none", border: "none", cursor: "pointer", color: "#2575fc" }}
+                                style={{ background: "none", border: "none", cursor: "pointer", color: "var(--edb-primary-text)" }}
                               >
                                 <FaReply size={16} />
                               </button>
@@ -1189,7 +1189,7 @@ const ChatContainer = ({ currentUserId, hideHeader = false, onSelectContactName 
                                   setEditingMessageId(msg.id);
                                   setEditingMessageText(msg.text);
                                 }}
-                                style={{ background: "none", border: "none", cursor: "pointer", color: "#2575fc" }}
+                                style={{ background: "none", border: "none", cursor: "pointer", color: "var(--edb-primary-text)" }}
                               >
                                 <FaEdit size={16} />
                               </button>
@@ -1227,7 +1227,7 @@ const ChatContainer = ({ currentUserId, hideHeader = false, onSelectContactName 
               <div
                 style={{
                   padding: "10px",
-                  backgroundColor: "#e9ecef",
+                  backgroundColor: "var(--edb-dashboard-bg)",
                   borderRadius: "8px",
                   margin: "0 20px 10px",
                   position: "relative",
@@ -1245,7 +1245,7 @@ const ChatContainer = ({ currentUserId, hideHeader = false, onSelectContactName 
                     border: "none",
                     cursor: "pointer",
                     fontSize: "1rem",
-                    color: "#999",
+                    color: "var(--edb-muted-text)",
                   }}
                 >
                   ×
@@ -1253,7 +1253,7 @@ const ChatContainer = ({ currentUserId, hideHeader = false, onSelectContactName 
               </div>
             )}
             {currentUserRole === "student" && activeChatId.startsWith("group-") ? (
-              <div style={{ padding: "10px", textAlign: "center", color: "#666" }}>
+              <div style={{ padding: "10px", textAlign: "center", color: "var(--edb-muted-text)" }}>
                 Broadcast is read-only for students.
               </div>
             ) : (

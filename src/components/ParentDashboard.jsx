@@ -390,7 +390,7 @@ export default function ParentDashboard() {
 
       <style>{`
         .xsmall{ font-size: .75rem; }
-        .bg-gradient-primary{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+        .bg-gradient-primary{ background: linear-gradient(135deg, var(--edb-primary) 0%, var(--edb-primary) 100%); }
       `}</style>
     </div>
   );

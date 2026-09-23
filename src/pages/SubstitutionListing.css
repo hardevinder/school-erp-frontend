@@ -7,12 +7,12 @@
 
 /* Card polish */
 .filter-card {
-  border: 1px solid rgba(0,0,0,.06);
+  border: 1px solid color-mix(in srgb, var(--edb-border) 6%, transparent);
   border-radius: 14px;
 }
 
 .table-wrapper {
-  border: 1px solid rgba(0,0,0,.06);
+  border: 1px solid color-mix(in srgb, var(--edb-border) 6%, transparent);
   border-radius: 14px;
   overflow: hidden;
 }
@@ -33,22 +33,22 @@
   vertical-align: middle;
 }
 .table-hover tbody tr:hover {
-  background: #f8fbff;
+  background: var(--edb-surface);
 }
 .table-bordered > :not(caption) > * > * {
-  border-color: rgba(0,0,0,.08);
+  border-color: color-mix(in srgb, var(--edb-border) 8%, transparent);
 }
 
 /* Zebra rows */
 .table tbody tr:nth-child(odd) {
-  background-color: #fcfcfd;
+  background-color: var(--edb-surface);
 }
 
 /* Subtle index column */
 .row-index {
   text-align: center;
   font-weight: 600;
-  color: #51607a;
+  color: var(--edb-muted-text);
 }
 
 /* Skeleton state */
@@ -56,7 +56,7 @@
   height: 12px;
   width: 100%;
   border-radius: 6px;
-  background: linear-gradient(90deg, #eceff3, #f5f7fa, #eceff3);
+  background: linear-gradient(90deg, var(--edb-dashboard-bg), var(--edb-surface), var(--edb-dashboard-bg));
   background-size: 200% 100%;
   animation: skel 1.2s ease-in-out infinite;
 }
@@ -68,11 +68,11 @@
 /* React-Select compact look to match Bootstrap inputs */
 .react-select__control {
   min-height: 38px !important;
-  border-color: #ced4da !important;
+  border-color: var(--edb-border) !important;
   box-shadow: none !important;
 }
 .react-select__control:hover {
-  border-color: #b6bec6 !important;
+  border-color: var(--edb-border) !important;
 }
 .react-select__value-container {
   padding-block: 2px !important;
@@ -83,11 +83,11 @@
 
 /* Highlight today's rows */
 .highlight-today {
-  background-color: #fff3cd !important; /* Bootstrap warning bg */
+  background-color: var(--edb-primary-soft) !important; /* Bootstrap warning bg */
   font-weight: 600;
 }
 .highlight-today td {
-  border-color: rgba(0,0,0,.08) !important;
+  border-color: color-mix(in srgb, var(--edb-border) 8%, transparent) !important;
 }
 .today-badge {
   display: inline-block;
@@ -95,9 +95,9 @@
   font-size: 11px;
   line-height: 1;
   border-radius: 999px;
-  border: 1px solid #f0c36d;
-  background: #ffe8a1;
-  color: #7a4d00;
+  border: 1px solid var(--edb-primary);
+  background: var(--edb-accent-soft);
+  color: var(--edb-accent-text);
   vertical-align: middle;
 }
 .date-text {
@@ -138,16 +138,16 @@
   .table tbody tr {
     display: block;
     margin: 0 0 12px 0;
-    border: 1px solid rgba(0,0,0,.08);
+    border: 1px solid color-mix(in srgb, var(--edb-border) 8%, transparent);
     border-radius: 12px;
     padding: 10px 12px;
-    background: #fff;
-    box-shadow: 0 1px 2px rgba(16,24,40,.04);
+    background: var(--edb-surface);
+    box-shadow: 0 1px 2px color-mix(in srgb, var(--edb-primary-dark) 4%, transparent);
   }
 
   .table tbody tr.highlight-today {
-    background: #fff7d6 !important;
-    box-shadow: 0 1px 0 rgba(122,77,0,.08), 0 0 0 1px #f0c36d inset;
+    background: var(--edb-primary-soft) !important;
+    box-shadow: 0 1px 0 color-mix(in srgb, var(--edb-primary-dark) 8%, transparent), 0 0 0 1px color-mix(in srgb, var(--edb-primary-dark) 100%, transparent) inset;
   }
 
   .table tbody tr td {
@@ -164,24 +164,24 @@
   .table tbody tr td::before {
     content: attr(data-label);
     font-weight: 600;
-    color: #475569;
+    color: var(--edb-text);
   }
 
   .row-index::before {
     content: "#";
     margin-right: 6px;
-    color: #64748b;
+    color: var(--edb-muted-text);
     font-weight: 700;
   }
 
-  .table-hover tbody tr:hover { background: #fff; }
+  .table-hover tbody tr:hover { background: var(--edb-surface); }
 }
 
 /* Fix for dark header if theme overrides .table-dark */
 .table-dark th {
-  background-color: #0f172a !important;
-  color: #fff !important;
-  border-color: rgba(255,255,255,.12) !important;
+  background-color: var(--edb-primary-dark) !important;
+  color: var(--edb-on-primary) !important;
+  border-color: color-mix(in srgb, var(--edb-border) 12%, transparent) !important;
 }
 
 /* ---------- PRINT STYLES ---------- */

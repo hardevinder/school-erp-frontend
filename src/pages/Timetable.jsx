@@ -797,31 +797,31 @@ const TimetableAssignment = () => {
           position: sticky;
           top: 0;
           z-index: 3;
-          background: #f8fafc;
+          background: var(--edb-surface);
         }
 
         .class-timetable-page .day-sticky {
           position: sticky;
           left: 0;
           z-index: 2;
-          background: #fff;
+          background: var(--edb-surface);
         }
 
         .class-timetable-page .day-sticky.header-sticky {
           z-index: 4;
-          background: #f8fafc;
+          background: var(--edb-surface);
         }
 
         .class-timetable-page .workload-sticky {
           position: sticky;
           right: 0;
           z-index: 2;
-          background: #fff;
+          background: var(--edb-surface);
         }
 
         .class-timetable-page .workload-sticky.header-sticky {
           z-index: 4;
-          background: #f8fafc;
+          background: var(--edb-surface);
         }
 
         .class-timetable-page .period-header {
@@ -838,10 +838,10 @@ const TimetableAssignment = () => {
 
         .class-timetable-page .assignment-box {
           position: relative;
-          border: 1px solid #dbe3ee;
+          border: 1px solid var(--edb-border);
           border-radius: 10px;
           padding: 6px;
-          background: rgba(255,255,255,0.7);
+          background: color-mix(in srgb, var(--edb-surface) 70%, transparent);
         }
 
         .class-timetable-page .compact-select {
@@ -866,22 +866,22 @@ const TimetableAssignment = () => {
         .class-timetable-page .remove-btn {
           top: 5px;
           right: 5px;
-          background: #fee2e2;
+          background: var(--edb-primary-soft);
           color: #b91c1c;
         }
 
         .class-timetable-page .clear-btn {
           top: 6px;
           right: 6px;
-          background: #fee2e2;
+          background: var(--edb-primary-soft);
           color: #b91c1c;
         }
 
         .class-timetable-page .add-btn {
           bottom: 6px;
           right: 6px;
-          background: #dbeafe;
-          color: #1d4ed8;
+          background: var(--edb-primary-soft);
+          color: var(--edb-primary-text);
         }
 
         @media (max-width: 1400px) {
@@ -918,7 +918,7 @@ const TimetableAssignment = () => {
       <div className="card border-0 shadow-sm mb-3 top-card">
         <div
           className="card-body py-3"
-          style={{ background: 'linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%)' }}
+          style={{ background: "linear-gradient(135deg, var(--edb-surface) 0%, var(--edb-surface) 100%)" }}
         >
           <div className="d-flex flex-column flex-xl-row justify-content-between align-items-xl-center gap-3">
             <div>
@@ -1030,7 +1030,7 @@ const TimetableAssignment = () => {
                       width: 12,
                       height: 12,
                       borderRadius: 99,
-                      background: '#ecfdf3',
+                      background: "var(--edb-primary-soft)",
                       border: '1px solid #86efac',
                       display: 'inline-block',
                     }}
@@ -1043,8 +1043,8 @@ const TimetableAssignment = () => {
                       width: 12,
                       height: 12,
                       borderRadius: 99,
-                      background: '#fffbeb',
-                      border: '1px solid #fcd34d',
+                      background: "var(--edb-surface)",
+                      border: "1px solid var(--edb-primary)",
                       display: 'inline-block',
                     }}
                   />
@@ -1242,7 +1242,7 @@ const TimetableAssignment = () => {
                   <td
                     colSpan={periods.length + 2}
                     className="text-center fw-bold py-2"
-                    style={{ background: '#f8fafc', fontSize: '0.95rem' }}
+                    style={{ background: "var(--edb-surface)", fontSize: '0.95rem' }}
                   >
                     Weekly Workload: {weeklyWorkload}
                   </td>

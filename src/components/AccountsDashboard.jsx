@@ -8,35 +8,35 @@ const primaryTiles = [
     sub: "Create receipts",
     icon: "bi-cash-stack",
     href: "/transactions",
-    gradient: "linear-gradient(135deg, #22c55e, #16a34a)",
+    gradient: "linear-gradient(135deg, var(--edb-primary), var(--edb-primary-dark))",
   },
   {
     label: "Day Summary",
     sub: "Today collection",
     icon: "bi-clipboard-data",
     href: "/reports/day-wise",
-    gradient: "linear-gradient(135deg, #3b82f6, #2563eb)",
+    gradient: "linear-gradient(135deg, var(--edb-primary), var(--edb-primary-dark))",
   },
   {
     label: "Fee Due Report",
     sub: "Pending dues",
     icon: "bi-receipt",
     href: "/student-due",
-    gradient: "linear-gradient(135deg, #f59e0b, #d97706)",
+    gradient: "linear-gradient(135deg, var(--edb-primary), var(--edb-primary-dark))",
   },
   {
     label: "Session Summary",
     sub: "School fee summary",
     icon: "bi-graph-up",
     href: "/reports/school-fee-summary",
-    gradient: "linear-gradient(135deg, #06b6d4, #0891b2)",
+    gradient: "linear-gradient(135deg, var(--edb-primary), var(--edb-primary-dark))",
   },
   {
     label: "Bulk Concessions",
     sub: "Apply to many students",
     icon: "bi-percent",
     href: "/students/bulk-concession",
-    gradient: "linear-gradient(135deg, #8b5cf6, #7c3aed)",
+    gradient: "linear-gradient(135deg, var(--edb-primary), var(--edb-primary-dark))",
     tag: "NEW",
   },
   {
@@ -44,7 +44,7 @@ const primaryTiles = [
     sub: "Fee reminders & replies",
     icon: "bi-chat-dots",
     href: "/messages",
-    gradient: "linear-gradient(135deg, #2563eb, #7c3aed)",
+    gradient: "linear-gradient(135deg, var(--edb-primary), var(--edb-primary-dark))",
     tag: "NEW",
   },
 ];
@@ -55,21 +55,21 @@ const reportsTiles = [
     sub: "Reversed transactions",
     icon: "bi-trash3",
     href: "/cancelled-transactions",
-    gradient: "linear-gradient(135deg, #ef4444, #dc2626)",
+    gradient: "linear-gradient(135deg, var(--edb-primary), var(--edb-primary-dark))",
   },
   {
     label: "Concession Report",
     sub: "Student concession summary",
     icon: "bi-file-earmark-bar-graph",
     href: "/reports/concession",
-    gradient: "linear-gradient(135deg, #a855f7, #7c3aed)",
+    gradient: "linear-gradient(135deg, var(--edb-primary), var(--edb-primary-dark))",
   },
   {
     label: "Fee Head Collection",
     sub: "Student collection matrix",
     icon: "bi-table",
     href: "/student-fee-head-collection",
-    gradient: "linear-gradient(135deg, #14b8a6, #0f766e)",
+    gradient: "linear-gradient(135deg, var(--edb-primary), var(--edb-primary-dark))",
     tag: "NEW",
   },
   {
@@ -77,14 +77,14 @@ const reportsTiles = [
     sub: "Van fee report",
     icon: "bi-truck-front",
     href: "/reports/van-fee",
-    gradient: "linear-gradient(135deg, #0ea5e9, #0284c7)",
+    gradient: "linear-gradient(135deg, var(--edb-primary), var(--edb-primary-dark))",
   },
   {
     label: "Opening Balances",
     sub: "Session opening dues",
     icon: "bi-clipboard-check",
     href: "/opening-balances",
-    gradient: "linear-gradient(135deg, #64748b, #475569)",
+    gradient: "linear-gradient(135deg, var(--edb-primary), var(--edb-primary-dark))",
   },
 ];
 
@@ -94,28 +94,28 @@ const setupTiles = [
     sub: "Configure class fee",
     icon: "bi-cash-coin",
     href: "/fee-structure",
-    gradient: "linear-gradient(135deg, #16a34a, #15803d)",
+    gradient: "linear-gradient(135deg, var(--edb-primary), var(--edb-primary-dark))",
   },
   {
     label: "Fee Headings",
     sub: "Manage heads",
     icon: "bi-bookmark",
     href: "/fee-headings",
-    gradient: "linear-gradient(135deg, #3b82f6, #1d4ed8)",
+    gradient: "linear-gradient(135deg, var(--edb-primary), var(--edb-primary-dark))",
   },
   {
     label: "Fee Category",
     sub: "Category setup",
     icon: "bi-tags",
     href: "/fee-category",
-    gradient: "linear-gradient(135deg, #f59e0b, #b45309)",
+    gradient: "linear-gradient(135deg, var(--edb-primary), var(--edb-primary-dark))",
   },
   {
     label: "Concessions",
     sub: "Concession masters",
     icon: "bi-badge-ad",
     href: "/concessions",
-    gradient: "linear-gradient(135deg, #ec4899, #db2777)",
+    gradient: "linear-gradient(135deg, var(--edb-primary), var(--edb-primary-dark))",
   },
 ];
 
@@ -174,7 +174,7 @@ export default function AccountsDashboard() {
       className="accounts-tiles-bg dashboard-surface"
       style={{
         background:
-          "radial-gradient(circle at top left, rgba(99,102,241,.10), transparent 28%), radial-gradient(circle at top right, rgba(34,197,94,.10), transparent 25%), linear-gradient(135deg, #f8fafc, #eef2ff)",
+          "radial-gradient(circle at top left, color-mix(in srgb, var(--edb-primary) 10%, transparent), transparent 28%), radial-gradient(circle at top right, rgba(34,197,94,.10), transparent 25%), linear-gradient(135deg, var(--edb-surface), var(--edb-surface))",
         minHeight: "100vh",
       }}
     >
@@ -292,8 +292,8 @@ export default function AccountsDashboard() {
             inset: 0;
             background: linear-gradient(
               135deg,
-              rgba(255,255,255,0.82),
-              rgba(255,255,255,0.68)
+              color-mix(in srgb, var(--edb-surface) 82%, transparent),
+              color-mix(in srgb, var(--edb-surface) 68%, transparent)
             );
             z-index: 1;
             pointer-events: none;
@@ -308,10 +308,10 @@ export default function AccountsDashboard() {
           .hero-card {
             padding: 1rem 1rem 0.9rem;
             border-radius: 1.35rem;
-            background: rgba(255,255,255,0.82);
-            border: 1px solid rgba(255,255,255,0.65);
+            background: color-mix(in srgb, var(--edb-surface) 82%, transparent);
+            border: 1px solid color-mix(in srgb, var(--edb-border) 65%, transparent);
             backdrop-filter: blur(16px) saturate(1.2);
-            box-shadow: 0 10px 35px rgba(15, 23, 42, 0.10);
+            box-shadow: 0 10px 35px color-mix(in srgb, var(--edb-primary-dark) 10%, transparent);
           }
 
           .hero-badge {
@@ -320,9 +320,9 @@ export default function AccountsDashboard() {
             padding: 0.42rem 0.72rem;
             margin-bottom: 0.7rem;
             border-radius: 999px;
-            background: rgba(59,130,246,0.10);
-            color: #1d4ed8;
-            border: 1px solid rgba(59,130,246,0.15);
+            background: color-mix(in srgb, var(--edb-primary) 10%, transparent);
+            color: var(--edb-primary-text);
+            border: 1px solid color-mix(in srgb, var(--edb-primary) 15%, transparent);
             font-size: 0.82rem;
             font-weight: 700;
             letter-spacing: .2px;
@@ -331,12 +331,12 @@ export default function AccountsDashboard() {
           .hero-title {
             font-size: clamp(1.35rem, 2vw, 2rem);
             font-weight: 800;
-            color: #0f172a;
+            color: var(--edb-text);
             letter-spacing: .1px;
           }
 
           .hero-sub {
-            color: #64748b;
+            color: var(--edb-muted-text);
             font-size: 0.95rem;
             max-width: 760px;
             line-height: 1.5;
@@ -357,34 +357,34 @@ export default function AccountsDashboard() {
             padding: 0.78rem 1rem;
             font-weight: 700;
             font-size: 0.92rem;
-            box-shadow: 0 8px 22px rgba(15, 23, 42, 0.10);
+            box-shadow: 0 8px 22px color-mix(in srgb, var(--edb-primary-dark) 10%, transparent);
             transition: transform .22s ease, box-shadow .22s ease;
             white-space: nowrap;
           }
 
           .hero-btn:hover {
             transform: translateY(-2px);
-            box-shadow: 0 14px 28px rgba(15, 23, 42, 0.14);
+            box-shadow: 0 14px 28px color-mix(in srgb, var(--edb-primary-dark) 14.000000000000002%, transparent);
           }
 
           .hero-btn-primary {
-            color: #fff;
+            color: var(--edb-on-primary);
             background: linear-gradient(135deg, #22c55e, #16a34a);
           }
 
           .hero-btn-secondary {
-            color: #fff;
-            background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+            color: var(--edb-on-primary);
+            background: linear-gradient(135deg, var(--edb-primary), var(--edb-primary));
           }
 
           .hero-btn-tertiary {
-            color: #fff;
+            color: var(--edb-on-primary);
             background: linear-gradient(135deg, #14b8a6, #0f766e);
           }
 
           .hero-btn-messages {
-            color: #fff;
-            background: linear-gradient(135deg, #2563eb, #7c3aed);
+            color: var(--edb-on-primary);
+            background: linear-gradient(135deg, var(--edb-primary), var(--edb-primary));
           }
 
           .hero-stats {
@@ -400,9 +400,9 @@ export default function AccountsDashboard() {
             gap: 0.42rem;
             padding: 0.4rem 0.7rem;
             border-radius: 999px;
-            background: rgba(248,250,252,0.9);
-            border: 1px solid rgba(226,232,240,0.95);
-            color: #475569;
+            background: color-mix(in srgb, var(--edb-surface) 90%, transparent);
+            border: 1px solid color-mix(in srgb, var(--edb-border) 95%, transparent);
+            color: var(--edb-text);
             font-size: 0.8rem;
             font-weight: 600;
           }
@@ -414,10 +414,10 @@ export default function AccountsDashboard() {
             display: inline-block;
           }
           .dot-green { background: #22c55e; }
-          .dot-blue { background: #3b82f6; }
-          .dot-purple { background: #8b5cf6; }
-          .dot-orange { background: #f59e0b; }
-          .dot-indigo { background: #6366f1; }
+          .dot-blue { background: var(--edb-primary); }
+          .dot-purple { background: var(--edb-primary); }
+          .dot-orange { background: var(--edb-accent); }
+          .dot-indigo { background: var(--edb-primary); }
 
           .section-head {
             display: flex;
@@ -431,23 +431,23 @@ export default function AccountsDashboard() {
             font-weight: 800;
             letter-spacing: .2px;
             margin-bottom: .2rem;
-            background: linear-gradient(90deg, #111827, #475569);
+            background: linear-gradient(90deg, var(--edb-primary-dark), var(--edb-muted-text));
             -webkit-background-clip: text;
             background-clip: text;
             color: transparent;
           }
 
           .tile-section-sub {
-            color: #64748b;
+            color: var(--edb-muted-text);
             font-size: .88rem;
           }
 
           .section-count {
             padding: .4rem .65rem;
             border-radius: 999px;
-            background: rgba(255,255,255,0.8);
-            border: 1px solid rgba(226,232,240,0.9);
-            color: #475569;
+            background: color-mix(in srgb, var(--edb-surface) 80%, transparent);
+            border: 1px solid color-mix(in srgb, var(--edb-border) 90%, transparent);
+            color: var(--edb-text);
             font-size: .78rem;
             font-weight: 700;
             white-space: nowrap;
@@ -467,12 +467,12 @@ export default function AccountsDashboard() {
             min-height: 92px;
             padding: 1rem 1rem;
             border-radius: 1.15rem;
-            color: #fff;
+            color: var(--edb-on-primary);
             text-decoration: none;
             background-size: 200% 100%;
             background-position: 0% 50%;
-            border: 1px solid rgba(255,255,255,0.18);
-            box-shadow: 0 10px 26px rgba(0,0,0,.10);
+            border: 1px solid color-mix(in srgb, var(--edb-border) 18%, transparent);
+            box-shadow: 0 10px 26px color-mix(in srgb, var(--edb-primary-dark) 10%, transparent);
             transition: transform .25s ease, box-shadow .25s ease, background-position .25s ease;
             overflow: hidden;
             isolation: isolate;
@@ -480,9 +480,9 @@ export default function AccountsDashboard() {
 
           .link-tile:hover {
             transform: translateY(-4px);
-            box-shadow: 0 18px 34px rgba(0,0,0,.18);
+            box-shadow: 0 18px 34px color-mix(in srgb, var(--edb-primary-dark) 18%, transparent);
             background-position: 100% 50%;
-            color: #fff;
+            color: var(--edb-on-primary);
           }
 
           .link-tile:active {
@@ -493,8 +493,8 @@ export default function AccountsDashboard() {
             position: absolute;
             inset: -35%;
             background:
-              radial-gradient(circle at 20% 20%, rgba(255,255,255,.28), transparent 28%),
-              radial-gradient(circle at 80% 80%, rgba(255,255,255,.20), transparent 32%);
+              radial-gradient(circle at 20% 20%, color-mix(in srgb, var(--edb-surface) 28%, transparent), transparent 28%),
+              radial-gradient(circle at 80% 80%, color-mix(in srgb, var(--edb-surface) 20%, transparent), transparent 32%);
             pointer-events: none;
             z-index: 0;
           }
@@ -507,8 +507,8 @@ export default function AccountsDashboard() {
             width: 3rem;
             height: 3rem;
             border-radius: .95rem;
-            background: rgba(255,255,255,.18);
-            box-shadow: inset 0 0 0 2px rgba(255,255,255,.22);
+            background: color-mix(in srgb, var(--edb-surface) 18%, transparent);
+            box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--edb-primary-dark) 22%, transparent);
             backdrop-filter: blur(2px);
             flex: 0 0 auto;
           }
@@ -558,8 +558,8 @@ export default function AccountsDashboard() {
             font-weight: 800;
             padding: .18rem .42rem;
             border-radius: 999px;
-            background: rgba(255,255,255,.22);
-            border: 1px solid rgba(255,255,255,.25);
+            background: color-mix(in srgb, var(--edb-surface) 22%, transparent);
+            border: 1px solid color-mix(in srgb, var(--edb-border) 25%, transparent);
             white-space: nowrap;
           }
 
@@ -571,8 +571,8 @@ export default function AccountsDashboard() {
             display: inline-grid;
             place-items: center;
             border-radius: .85rem;
-            background: rgba(255,255,255,.16);
-            border: 1px solid rgba(255,255,255,.20);
+            background: color-mix(in srgb, var(--edb-surface) 16%, transparent);
+            border: 1px solid color-mix(in srgb, var(--edb-border) 20%, transparent);
             flex: 0 0 auto;
             transition: transform .25s ease;
           }

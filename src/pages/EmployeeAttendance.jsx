@@ -1327,7 +1327,7 @@ function CalendarModal({
                     className="badge rounded-pill"
                     style={{
                       background: colorFor(k),
-                      color: "#fff",
+                      color: "var(--edb-on-primary)",
                     }}
                   >
                     {toPrettyStatus(k)}:

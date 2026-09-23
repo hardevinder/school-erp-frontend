@@ -34,12 +34,12 @@
 }
 
 .syllabus-breakdown-row-scroller::-webkit-scrollbar-thumb {
-  background: #adb5bd;
+  background: var(--edb-border);
   border-radius: 999px;
 }
 
 .syllabus-breakdown-row-scroller::-webkit-scrollbar-track {
-  background: #f1f3f5;
+  background: var(--edb-dashboard-bg);
 }
 
 .sb-sticky-actions {
@@ -65,9 +65,9 @@
 
 .sb-ai-import-banner {
   padding: 14px 16px;
-  border: 1px solid #bfdbfe;
+  border: 1px solid var(--edb-border);
   border-radius: 12px;
-  background: linear-gradient(110deg, #eff6ff, #f5f3ff);
+  background: linear-gradient(110deg, var(--edb-surface), var(--edb-surface));
 }
 
 .sb-ai-import-banner-icon {
@@ -77,9 +77,9 @@
   border-radius: 12px;
   display: grid;
   place-items: center;
-  color: #fff;
+  color: var(--edb-on-primary);
   font-size: 20px;
-  background: linear-gradient(135deg, #2563eb, #7c3aed);
+  background: linear-gradient(135deg, var(--edb-primary), var(--edb-primary));
 }
 
 @media (max-width: 767.98px) {

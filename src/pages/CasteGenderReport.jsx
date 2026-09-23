@@ -149,7 +149,7 @@ const ValueLabel = (props) => {
       y={y - 6}
       textAnchor="middle"
       fontSize={11}
-      fill="#111"
+      fill="var(--edb-text)"
     >
       {value}
     </text>
