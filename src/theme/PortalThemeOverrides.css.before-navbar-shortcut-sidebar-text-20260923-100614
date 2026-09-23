@@ -950,19 +950,3 @@ html body .app-sidebar .sidebar-dashboard-link .sidebar-category-icon i {
   color: var(--edb-on-primary) !important;
 }
 /* END SIDEBAR_DASHBOARD_DIRECT_CONTRAST_FIX_V1 */
-
-/* NAVBAR_SHORTCUTS_USE_SIDEBAR_TEXT_V1
-   The top navbar quick-link labels (Students, Collect, Fee Due, Timetable,
-   Exams, Staff, etc.) follow the Portal Theme's Sidebar Text Color.
-   Icon tiles keep their existing surface/active contrast rules.
-*/
-html body .college-navbar .college-quick-link,
-html body .college-navbar .college-quick-link small,
-html body .college-navbar .college-quick-link:hover,
-html body .college-navbar .college-quick-link:hover small,
-html body .college-navbar .college-quick-link.active,
-html body .college-navbar .college-quick-link.active small {
-  color: var(--edb-sidebar-text, var(--theme-sidebar-text, #FFFFFF)) !important;
-  opacity: 1 !important;
-}
-/* END NAVBAR_SHORTCUTS_USE_SIDEBAR_TEXT_V1 */
