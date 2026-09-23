@@ -17,16 +17,16 @@ ChartJS.register(ArcElement, Tooltip, Legend);
 const Styles = () => (
   <style>{`
     :root {
-      --grad-1: linear-gradient(135deg, #7b2ff7 0%, #f107a3 100%);
-      --grad-2: linear-gradient(135deg, #00c6ff 0%, #0072ff 100%);
-      --grad-3: linear-gradient(135deg, #f7971e 0%, #ffd200 100%);
+      --grad-1: linear-gradient(135deg, var(--edb-primary) 0%, #f107a3 100%);
+      --grad-2: linear-gradient(135deg, #00c6ff 0%, var(--edb-primary) 100%);
+      --grad-3: linear-gradient(135deg, var(--edb-accent) 0%, var(--edb-accent) 100%);
       --grad-4: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
-      --card-shadow: 0 10px 20px rgba(0,0,0,0.08);
+      --card-shadow: 0 10px 20px color-mix(in srgb, var(--edb-primary-dark) 8%, transparent);
       --soft: 16px;
     }
     .hero {
       background: var(--grad-1);
-      color: #fff;
+      color: var(--edb-on-primary);
       border-radius: 24px;
       padding: 24px;
       box-shadow: var(--card-shadow);
@@ -43,7 +43,7 @@ const Styles = () => (
     .summary-present { background: var(--grad-4); }
     .summary-absent { background: linear-gradient(135deg,#ff416c 0%,#ff4b2b 100%); }
     .summary-leave { background: var(--grad-3); }
-    .summary-percent { background: linear-gradient(135deg,#8e2de2 0%,#4a00e0 100%); }
+    .summary-percent { background: linear-gradient(135deg,var(--edb-primary) 0%,var(--edb-primary) 100%); }
 
     .calendar-grid {
       display: grid;
@@ -54,13 +54,13 @@ const Styles = () => (
       min-height: 92px;
       border-radius: 12px;
       box-shadow: var(--card-shadow);
-      background: #ffffff;
-      border: 1px solid rgba(0,0,0,0.06);
+      background: var(--edb-surface);
+      border: 1px solid color-mix(in srgb, var(--edb-border) 6%, transparent);
       transition: transform .1s ease, box-shadow .2s ease;
       position: relative;
       overflow: hidden;
     }
-    .calendar-cell:hover { transform: translateY(-2px); box-shadow: 0 12px 24px rgba(0,0,0,0.08); }
+    .calendar-cell:hover { transform: translateY(-2px); box-shadow: 0 12px 24px color-mix(in srgb, var(--edb-primary-dark) 8%, transparent); }
     .cell-date { font-weight: 700; font-size: 14px; }
     .cell-sub { font-size: 11px; opacity: .95; }
     .legend-dot { width: 10px; height: 10px; display: inline-block; border-radius: 50%; margin-right: 6px; }
@@ -69,9 +69,9 @@ const Styles = () => (
     .cell-present { background: #e8fff1; border-color: #b6f0cd; }
     .cell-absent  { background: #fff0f3; border-color: #ffc2cd; }
     .cell-leave   { background: #fff9e6; border-color: #ffe8a3; }
-    .cell-sunday  { background: #eef5ff; border-color: #cfe0ff; }
+    .cell-sunday  { background: var(--edb-surface); border-color: var(--edb-border); }
     .cell-holiday { background: #fff6db; border-color: #ffe29a; }
-    .cell-not-marked { background: #fff0f0; border-color: #ffd0d0; }
+    .cell-not-marked { background: var(--edb-surface); border-color: #ffd0d0; }
 
     .badge-holiday {
       position: absolute;
@@ -96,17 +96,17 @@ const Styles = () => (
     }
 
     .chip {
-      background: rgba(255,255,255,0.18);
-      border: 1px solid rgba(255,255,255,0.35);
+      background: color-mix(in srgb, var(--edb-surface) 18%, transparent);
+      border: 1px solid color-mix(in srgb, var(--edb-border) 35%, transparent);
       backdrop-filter: blur(6px);
-      color: #fff;
+      color: var(--edb-on-primary);
       padding: 6px 12px;
       border-radius: 999px;
       font-size: 12px;
       display: inline-flex; gap: 8px; align-items: center;
     }
     .btn-round { border-radius: 999px; padding: 8px 14px; }
-    .btn-ghost { background: rgba(255,255,255,0.15); color: #fff; border: none; }
+    .btn-ghost { background: color-mix(in srgb, var(--edb-surface) 15%, transparent); color: var(--edb-on-primary); border: none; }
 
     .tab-btn { border-radius: 999px; }
   `}</style>
@@ -552,9 +552,9 @@ const StudentCalendar = () => {
     <div className="d-flex flex-wrap gap-3 small mt-3">
       <span><i className="legend-dot" style={{background:'#28a745'}}></i> Present</span>
       <span><i className="legend-dot" style={{background:'#dc3545'}}></i> Absent</span>
-      <span><i className="legend-dot" style={{background:'#ffc107'}}></i> Leave</span>
-      <span><i className="legend-dot" style={{background:'#d6e6ff'}}></i> Sunday</span>
-      <span><i className="legend-dot" style={{background:'#ffe29a'}}></i> Holiday</span>
+      <span><i className="legend-dot" style={{background:"var(--edb-accent)"}}></i> Leave</span>
+      <span><i className="legend-dot" style={{background:"var(--edb-primary-soft)"}}></i> Sunday</span>
+      <span><i className="legend-dot" style={{background:"var(--edb-accent-soft)"}}></i> Holiday</span>
       <span><i className="legend-dot" style={{background:'#ffd0d0'}}></i> Not Marked</span>
     </div>
   );

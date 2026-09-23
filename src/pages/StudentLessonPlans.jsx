@@ -1028,7 +1028,7 @@ function QuestionCard({ item, index, showAnswers }) {
 const pageCss = `
 .student-lesson-page {
   padding: 18px;
-  background: #f6f8ff;
+  background: var(--edb-surface);
   min-height: 100vh;
 }
 
@@ -1036,9 +1036,9 @@ const pageCss = `
   border-radius: 22px;
   padding: 20px;
   margin-bottom: 16px;
-  color: white;
-  background: linear-gradient(135deg, #4f46e5, #06b6d4);
-  box-shadow: 0 18px 36px rgba(79, 70, 229, 0.22);
+  color: var(--edb-on-primary);
+  background: linear-gradient(135deg, var(--edb-primary), #06b6d4);
+  box-shadow: 0 18px 36px color-mix(in srgb, var(--edb-primary-dark) 22%, transparent);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1047,7 +1047,7 @@ const pageCss = `
 }
 
 .slp-hero h3 { font-weight: 900; }
-.slp-hero-sub { color: rgba(255, 255, 255, 0.88); font-weight: 650; }
+.slp-hero-sub { color: var(--edb-on-primary); font-weight: 650; }
 .slp-card { border-radius: 20px; }
 
 .slp-plan-list {
@@ -1059,9 +1059,9 @@ const pageCss = `
 }
 
 .slp-plan-item {
-  border: 1px solid #e8ecf5;
-  background: #fff;
-  color: #111827;
+  border: 1px solid var(--edb-border);
+  background: var(--edb-surface);
+  color: var(--edb-text);
   border-radius: 16px;
   padding: 13px;
   width: 100%;
@@ -1069,15 +1069,15 @@ const pageCss = `
 }
 
 .slp-plan-item:hover {
-  border-color: rgba(79, 70, 229, 0.35);
-  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.07);
+  border-color: color-mix(in srgb, var(--edb-primary) 35%, transparent);
+  box-shadow: 0 10px 22px color-mix(in srgb, var(--edb-primary-dark) 7.000000000000001%, transparent);
 }
 
 .slp-plan-item.active {
-  color: #fff;
+  color: var(--edb-on-primary);
   border-color: transparent;
-  background: linear-gradient(135deg, #4f46e5, #06b6d4);
-  box-shadow: 0 14px 24px rgba(79, 70, 229, 0.22);
+  background: linear-gradient(135deg, var(--edb-primary), #06b6d4);
+  box-shadow: 0 14px 24px color-mix(in srgb, var(--edb-primary-dark) 22%, transparent);
 }
 
 .slp-lesson-head {
@@ -1087,13 +1087,13 @@ const pageCss = `
   gap: 14px;
   flex-wrap: wrap;
   padding-bottom: 14px;
-  border-bottom: 1px solid #e8ecf5;
+  border-bottom: 1px solid var(--edb-border);
 }
 
 .slp-date-pill {
-  background: #eef2ff;
-  color: #3730a3;
-  border: 1px solid #c7d2fe;
+  background: var(--edb-surface);
+  color: var(--edb-primary-text);
+  border: 1px solid var(--edb-border);
   border-radius: 999px;
   padding: 8px 12px;
   font-size: 0.85rem;
@@ -1102,14 +1102,14 @@ const pageCss = `
 }
 
 .slp-info-box {
-  background: #ffffff;
-  border: 1px solid #e8ecf5;
+  background: var(--edb-surface);
+  border: 1px solid var(--edb-border);
   border-radius: 18px;
   padding: 14px;
   height: 100%;
 }
 
-.slp-info-box.highlight { background: #fffbeb; border-color: #fde68a; }
+.slp-info-box.highlight { background: var(--edb-surface); border-color: var(--edb-border); }
 
 .slp-info-icon {
   width: 32px;
@@ -1118,26 +1118,26 @@ const pageCss = `
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: #4f46e5;
-  background: rgba(79, 70, 229, 0.1);
+  color: var(--edb-primary-text);
+  background: color-mix(in srgb, var(--edb-primary) 10%, transparent);
 }
 
 .slp-preline {
   white-space: pre-line;
-  color: #374151;
+  color: var(--edb-text);
   line-height: 1.5;
   font-weight: 500;
 }
 
 .slp-eval-card {
-  border: 1px solid #e8ecf5;
+  border: 1px solid var(--edb-border);
   border-radius: 18px;
-  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.04);
+  box-shadow: 0 10px 24px color-mix(in srgb, var(--edb-primary-dark) 4%, transparent);
 }
 
 .slp-result-remark {
   color: #166534;
-  background: #f0fdf4;
+  background: var(--edb-surface);
   border: 1px solid #bbf7d0;
   border-radius: 12px;
   padding: 8px 10px;
@@ -1145,8 +1145,8 @@ const pageCss = `
 }
 
 .slp-syllabus {
-  border: 1px solid #e8ecf5;
-  background: #ffffff;
+  border: 1px solid var(--edb-border);
+  background: var(--edb-surface);
   border-radius: 18px;
   padding: 14px;
 }
@@ -1157,15 +1157,15 @@ const pageCss = `
 }
 
 .slp-syllabus-item {
-  border: 1px solid #e5e7eb;
-  background: #f8faff;
+  border: 1px solid var(--edb-border);
+  background: var(--edb-surface);
   border-radius: 14px;
   padding: 12px;
 }
 
 .slp-syllabus-item.active {
   border-color: #86efac;
-  background: #f0fdf4;
+  background: var(--edb-surface);
   box-shadow: 0 10px 22px rgba(22, 163, 74, 0.08);
 }
 
@@ -1178,15 +1178,15 @@ const pageCss = `
 }
 
 .slp-syllabus-title {
-  color: #111827;
+  color: var(--edb-text);
   font-weight: 900;
   line-height: 1.35;
 }
 
 .slp-syllabus-date {
-  color: #3730a3;
-  background: #eef2ff;
-  border: 1px solid #c7d2fe;
+  color: var(--edb-primary-text);
+  background: var(--edb-surface);
+  border: 1px solid var(--edb-border);
   border-radius: 999px;
   padding: 6px 10px;
   font-size: 0.78rem;
@@ -1196,7 +1196,7 @@ const pageCss = `
 
 .slp-syllabus-text {
   margin-top: 8px;
-  color: #374151;
+  color: var(--edb-text);
   line-height: 1.45;
   white-space: pre-line;
 }
@@ -1207,20 +1207,20 @@ const pageCss = `
   display: flex;
   align-items: center;
   gap: 10px;
-  border: 1px solid #e5e7eb;
-  background: #f8faff;
+  border: 1px solid var(--edb-border);
+  background: var(--edb-surface);
   border-radius: 13px;
   padding: 10px;
 }
 
-.slp-option.correct { border-color: #86efac; background: #f0fdf4; }
+.slp-option.correct { border-color: #86efac; background: var(--edb-surface); }
 
 .slp-option-letter {
   width: 28px;
   height: 28px;
   border-radius: 999px;
-  background: #e0e7ff;
-  color: #4f46e5;
+  background: var(--edb-primary-soft);
+  color: var(--edb-primary-text);
   display: inline-flex;
   align-items: center;
   justify-content: center;

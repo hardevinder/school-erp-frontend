@@ -574,49 +574,49 @@ const StudentTransportFeeHeadAmounts = () => {
       <style>{`
         .stfha-shell { padding-bottom: 18px; }
         .stfha-hero {
-          border: 1px solid rgba(0,0,0,0.08);
+          border: 1px solid color-mix(in srgb, var(--edb-border) 8%, transparent);
           border-radius: 18px;
           padding: 16px;
-          background: linear-gradient(180deg, #ffffff, #f7fbff);
-          box-shadow: 0 8px 24px rgba(0,0,0,0.05);
+          background: linear-gradient(180deg, var(--edb-surface), var(--edb-surface));
+          box-shadow: 0 8px 24px color-mix(in srgb, var(--edb-primary-dark) 5%, transparent);
           margin-bottom: 14px;
         }
-        .stfha-title { font-weight: 800; color: #12263f; }
-        .stfha-subtitle { font-size: 13px; color: #5d6c7b; margin-top: 4px; }
+        .stfha-title { font-weight: 800; color: var(--edb-primary-dark-text); }
+        .stfha-subtitle { font-size: 13px; color: var(--edb-muted-text); margin-top: 4px; }
         .stfha-card {
-          border: 1px solid rgba(0,0,0,0.08);
+          border: 1px solid color-mix(in srgb, var(--edb-border) 8%, transparent);
           border-radius: 16px;
-          background: #fff;
-          box-shadow: 0 8px 24px rgba(0,0,0,0.04);
+          background: var(--edb-surface);
+          box-shadow: 0 8px 24px color-mix(in srgb, var(--edb-primary-dark) 4%, transparent);
         }
         .stfha-stat {
-          border: 1px solid rgba(0,0,0,0.08);
+          border: 1px solid color-mix(in srgb, var(--edb-border) 8%, transparent);
           border-radius: 14px;
-          background: #fff;
+          background: var(--edb-surface);
           padding: 12px 14px;
           min-height: 84px;
         }
-        .stfha-stat-label { font-size: 12px; font-weight: 700; color: #6c7885; }
-        .stfha-stat-value { font-size: 24px; font-weight: 800; color: #132c49; margin-top: 4px; }
-        .stfha-label { font-size: 12px; font-weight: 800; color: #394655; margin-bottom: 6px; }
+        .stfha-stat-label { font-size: 12px; font-weight: 700; color: var(--edb-muted-text); }
+        .stfha-stat-value { font-size: 24px; font-weight: 800; color: var(--edb-primary-dark-text); margin-top: 4px; }
+        .stfha-label { font-size: 12px; font-weight: 800; color: var(--edb-text); margin-bottom: 6px; }
         .stfha-input, .stfha-select, .stfha-textarea {
           border-radius: 12px !important;
-          border: 1px solid rgba(0,0,0,0.12) !important;
+          border: 1px solid color-mix(in srgb, var(--edb-border) 12%, transparent) !important;
         }
         .stfha-input, .stfha-select { height: 42px; }
         .stfha-textarea { min-height: 92px; resize: vertical; }
         .stfha-input:focus, .stfha-select:focus, .stfha-textarea:focus {
-          border-color: rgba(13,110,253,0.45) !important;
-          box-shadow: 0 0 0 0.14rem rgba(13,110,253,0.10) !important;
+          border-color: color-mix(in srgb, var(--edb-primary) 45%, transparent) !important;
+          box-shadow: 0 0 0 0.14rem color-mix(in srgb, var(--edb-primary-dark) 10%, transparent) !important;
         }
         .stfha-pill {
           display: inline-flex;
           align-items: center;
           padding: 4px 10px;
           border-radius: 999px;
-          background: rgba(13,110,253,0.07);
-          color: #20508f;
-          border: 1px solid rgba(13,110,253,0.12);
+          background: color-mix(in srgb, var(--edb-primary) 7%, transparent);
+          color: var(--edb-primary-text);
+          border: 1px solid color-mix(in srgb, var(--edb-primary) 12%, transparent);
           font-size: 12px;
           font-weight: 700;
         }
@@ -634,8 +634,8 @@ const StudentTransportFeeHeadAmounts = () => {
         .stfha-toolbar { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
         .stfha-btn { border-radius: 10px; padding: 8px 12px; font-weight: 700; font-size: 12px; }
         .stfha-table thead th {
-          background: #f4f7fb;
-          color: #283646;
+          background: var(--edb-surface);
+          color: var(--edb-text);
           font-size: 12px;
           font-weight: 800;
           white-space: nowrap;
@@ -643,11 +643,11 @@ const StudentTransportFeeHeadAmounts = () => {
           padding-bottom: 12px;
         }
         .stfha-table tbody td { font-size: 13px; vertical-align: middle; padding-top: 10px; padding-bottom: 10px; }
-        .stfha-row:hover { background: rgba(13,110,253,0.035); }
+        .stfha-row:hover { background: color-mix(in srgb, var(--edb-primary) 3.5%, transparent); }
         .stfha-loading {
           position: fixed;
           inset: 0;
-          background: rgba(255,255,255,0.56);
+          background: color-mix(in srgb, var(--edb-surface) 56%, transparent);
           backdrop-filter: blur(3px);
           display: flex;
           align-items: center;
@@ -655,21 +655,21 @@ const StudentTransportFeeHeadAmounts = () => {
           z-index: 2000;
         }
         .stfha-loading-box {
-          border: 1px solid rgba(0,0,0,0.12);
-          background: #fff;
+          border: 1px solid color-mix(in srgb, var(--edb-border) 12%, transparent);
+          background: var(--edb-surface);
           border-radius: 14px;
           padding: 14px 16px;
-          box-shadow: 0 10px 30px rgba(0,0,0,0.10);
+          box-shadow: 0 10px 30px color-mix(in srgb, var(--edb-primary-dark) 10%, transparent);
           font-weight: 800;
-          color: #183153;
+          color: var(--edb-primary-dark-text);
         }
         .stfha-form-meta {
-          border: 1px dashed rgba(0,0,0,0.12);
+          border: 1px dashed color-mix(in srgb, var(--edb-border) 12%, transparent);
           border-radius: 14px;
-          background: #fafcff;
+          background: var(--edb-surface);
           padding: 10px 12px;
           font-size: 12px;
-          color: #4f5c6b;
+          color: var(--edb-muted-text);
         }
         .sb-autocomplete { position: relative; }
         .sb-menu {
@@ -680,11 +680,11 @@ const StudentTransportFeeHeadAmounts = () => {
           max-height: 280px;
           overflow: auto;
           z-index: 1200;
-          background: #fff;
-          border: 1px solid rgba(0,0,0,0.12);
+          background: var(--edb-surface);
+          border: 1px solid color-mix(in srgb, var(--edb-border) 12%, transparent);
           border-radius: .75rem;
           margin-top: 4px;
-          box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+          box-shadow: 0 4px 16px color-mix(in srgb, var(--edb-primary-dark) 12%, transparent);
         }
         .sb-item {
           padding: .6rem .8rem;
@@ -693,18 +693,18 @@ const StudentTransportFeeHeadAmounts = () => {
           flex-direction: column;
           gap: 2px;
         }
-        .sb-item:hover, .sb-item.active { background: #f6f7f9; }
+        .sb-item:hover, .sb-item.active { background: var(--edb-surface); }
         .sb-primary-line {
           font-weight: 700;
           line-height: 1.2;
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
-          color: #1f2f45;
+          color: var(--edb-text);
         }
         .sb-secondary-line {
           font-size: 12px;
-          color: #6c757d;
+          color: var(--edb-muted-text);
           line-height: 1.2;
           white-space: nowrap;
           overflow: hidden;
@@ -713,19 +713,19 @@ const StudentTransportFeeHeadAmounts = () => {
         .sb-pill {
           font-weight: 600;
           font-size: 12px;
-          color: #495057;
-          background: #eef1f5;
+          color: var(--edb-text);
+          background: var(--edb-dashboard-bg);
           border-radius: 999px;
           padding: 1px 8px;
           margin-left: 6px;
         }
         .student-brief-inline {
-          border: 1px solid rgba(13,110,253,0.12);
-          background: #f8fbff;
+          border: 1px solid color-mix(in srgb, var(--edb-primary) 12%, transparent);
+          background: var(--edb-surface);
           border-radius: 12px;
           padding: 10px 12px;
           font-size: 12px;
-          color: #334155;
+          color: var(--edb-text);
         }
       `}</style>
 
@@ -791,7 +791,7 @@ const StudentTransportFeeHeadAmounts = () => {
         <div className="stfha-card p-3 mb-3">
           <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
             <div>
-              <div className="h6 m-0" style={{ fontWeight: 800, color: "#203247" }}>
+              <div className="h6 m-0" style={{ fontWeight: 800, color: "var(--edb-text)" }}>
                 Bulk Transport Fee Revision
               </div>
               <div className="text-muted" style={{ fontSize: 13 }}>
@@ -891,7 +891,7 @@ const StudentTransportFeeHeadAmounts = () => {
           <div className="col-lg-4">
             <div className="stfha-card p-3">
               <div className="d-flex justify-content-between align-items-center mb-3">
-                <div className="h6 m-0" style={{ fontWeight: 800, color: "#203247" }}>
+                <div className="h6 m-0" style={{ fontWeight: 800, color: "var(--edb-text)" }}>
                   {form.id ? "Edit Override" : "Create Override"}
                 </div>
                 {form.id ? <span className="stfha-pill">Editing ID: {form.id}</span> : null}
@@ -1085,7 +1085,7 @@ const StudentTransportFeeHeadAmounts = () => {
           <div className="col-lg-8">
             <div className="stfha-card p-3 mb-3">
               <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
-                <div className="h6 m-0" style={{ fontWeight: 800, color: "#203247" }}>
+                <div className="h6 m-0" style={{ fontWeight: 800, color: "var(--edb-text)" }}>
                   Search / Filter Overrides
                 </div>
                 <span className="stfha-pill">Live override records</span>
@@ -1150,7 +1150,7 @@ const StudentTransportFeeHeadAmounts = () => {
 
             <div className="stfha-card p-3">
               <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
-                <div className="h6 m-0" style={{ fontWeight: 800, color: "#203247" }}>
+                <div className="h6 m-0" style={{ fontWeight: 800, color: "var(--edb-text)" }}>
                   Override List
                 </div>
                 <span className="stfha-chip-green">Rows: {rows.length}</span>
@@ -1175,7 +1175,7 @@ const StudentTransportFeeHeadAmounts = () => {
                       <tr key={row.id} className="stfha-row">
                         <td>{idx + 1}</td>
                         <td>
-                          <div style={{ fontWeight: 800, color: "#1f2f45" }}>
+                          <div style={{ fontWeight: 800, color: "var(--edb-text)" }}>
                             {safeStr(row?.Student?.name) || `Student ID: ${row.student_id}`}
                           </div>
                           <div className="text-muted" style={{ fontSize: 12 }}>

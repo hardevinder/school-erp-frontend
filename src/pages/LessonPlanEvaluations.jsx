@@ -2861,7 +2861,7 @@
                             height: 64,
                             borderRadius: 14,
                             overflow: "hidden",
-                            background: "rgba(0,0,0,0.08)",
+                            background: "color-mix(in srgb, var(--edb-primary-dark) 8%, transparent)",
                             display: "flex",
                             alignItems: "center",
                             justifyContent: "center",
@@ -3316,23 +3316,23 @@
             position: relative;
             z-index: 1;
             overflow: visible;
-            border: 1px solid #e5e7eb !important;
+            border: 1px solid var(--edb-border) !important;
             border-radius: 14px !important;
             margin-bottom: 10px;
-            background: #fff;
+            background: var(--edb-surface);
           }
 
           .lesson-eval-page .accordion-button {
             font-weight: 800;
             box-shadow: none !important;
             border-radius: 14px !important;
-            background: #fff;
+            background: var(--edb-surface);
           }
 
           .lesson-eval-page .accordion-button:not(.collapsed) {
-            color: #1f2937;
-            background: #f8faff;
-            border-bottom: 1px solid #e5e7eb;
+            color: var(--edb-text);
+            background: var(--edb-surface);
+            border-bottom: 1px solid var(--edb-border);
           }
 
           .lesson-eval-page .accordion-collapse,
@@ -3345,17 +3345,17 @@
           .lesson-eval-questions-scroll {
             max-height: 430px;
             overflow: auto !important;
-            border: 1px solid #edf0f7;
+            border: 1px solid var(--edb-border);
             border-radius: 12px;
-            background: #fff;
+            background: var(--edb-surface);
           }
 
           .lesson-eval-marks-scroll {
             max-height: 72vh;
             overflow: auto !important;
-            border: 1px solid #edf0f7;
+            border: 1px solid var(--edb-border);
             border-radius: 14px;
-            background: #fff;
+            background: var(--edb-surface);
           }
 
           .lesson-eval-marks-scroll table {
@@ -3367,13 +3367,13 @@
             position: sticky;
             top: 0;
             z-index: 3;
-            background: #f8f9fa !important;
+            background: var(--edb-surface) !important;
           }
 
           .lesson-eval-help-card {
-            background: #eff6ff !important;
-            border: 1px solid #bfdbfe !important;
-            color: #1e3a8a;
+            background: var(--edb-surface) !important;
+            border: 1px solid var(--edb-border) !important;
+            color: var(--edb-primary-text);
           }
 
           .lesson-eval-remark-input {

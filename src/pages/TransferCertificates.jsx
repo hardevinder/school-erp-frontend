@@ -311,26 +311,26 @@ const modalHtmlTabbed = (tc = {}) => {
       gap:10px; padding:10px 10px 0 10px;
     }
     .tc-topbar .meta{
-      font-size:12px; color:#6b7280; text-align:left;
+      font-size:12px; color:var(--edb-muted-text); text-align:left;
       line-height:1.2;
     }
     .tc-topbar .btn-mini{
-      border:1px solid #d1d5db; background:#fff; border-radius:8px;
+      border:1px solid var(--edb-border); background:var(--edb-surface); border-radius:8px;
       padding:6px 10px; font-size:12px; cursor:pointer;
     }
-    .tc-topbar .btn-mini:hover{ background:#f9fafb; }
+    .tc-topbar .btn-mini:hover{ background:var(--edb-surface); }
 
     .tc-tabs{
       display:flex; gap:8px; flex-wrap:wrap;
       padding:10px; padding-bottom:0;
     }
     .tc-tab{
-      border:1px solid #e5e7eb; background:#fff; border-radius:999px;
+      border:1px solid var(--edb-border); background:var(--edb-surface); border-radius:999px;
       padding:6px 10px; font-size:12px; cursor:pointer;
       user-select:none;
     }
     .tc-tab.active{
-      background:#111827; color:#fff; border-color:#111827;
+      background:var(--edb-primary-dark); color:var(--edb-on-primary-dark); border-color:var(--edb-border);
     }
 
     .tc-panel{
@@ -353,21 +353,21 @@ const modalHtmlTabbed = (tc = {}) => {
     .tc-field{
       width:100%;
       padding:8px 10px;
-      border:1px solid #d1d5db;
+      border:1px solid var(--edb-border);
       border-radius:10px;
       font-size:13px;
       outline:none;
-      background:#fff;
+      background:var(--edb-surface);
     }
     select.tc-field{ padding:7px 10px; }
     textarea.tc-field{ resize: vertical; }
     .tc-divider{
-      height:1px; background:#eef2f7; margin:8px 0;
+      height:1px; background:var(--edb-dashboard-bg); margin:8px 0;
       grid-column: 1 / -1;
     }
     .tc-note{
       font-size:11px;
-      color:#6b7280;
+      color:var(--edb-muted-text);
       margin-top:4px;
     }
   </style>
@@ -736,43 +736,43 @@ export default function TransferCertificates() {
           .tc-inp{
             width:100%;
             padding:10px 12px;
-            border:1px solid #d1d5db;
+            border:1px solid var(--edb-border);
             border-radius:12px;
             font-size:13px;
             outline:none;
           }
-          .tc-h{ font-size:11px; color:#6b7280; margin-top:5px; }
+          .tc-h{ font-size:11px; color:var(--edb-muted-text); margin-top:5px; }
           .tc-dd{ position:relative; }
           .tc-dd-list{
             position:absolute;
             z-index:9999;
             top: calc(100% + 6px);
             left:0; right:0;
-            border:1px solid #e5e7eb;
-            background:#fff;
+            border:1px solid var(--edb-border);
+            background:var(--edb-surface);
             border-radius:12px;
-            box-shadow: 0 12px 30px rgba(0,0,0,.10);
+            box-shadow: 0 12px 30px var(--edb-shell-shadow);
             max-height: 240px;
             overflow:auto;
             display:none;
           }
           .tc-dd-item{
             padding:10px 12px;
-            border-bottom:1px solid #f1f5f9;
+            border-bottom:1px solid var(--edb-border);
             cursor:pointer;
             font-size:13px;
             line-height:1.25;
           }
-          .tc-dd-item:hover{ background:#f9fafb; }
+          .tc-dd-item:hover{ background:var(--edb-surface); }
           .tc-dd-item:last-child{ border-bottom:none; }
           .tc-pill{
             display:inline-block; font-size:11px; padding:2px 8px;
-            border:1px solid #e5e7eb; border-radius:999px;
-            color:#374151; margin-left:6px;
+            border:1px solid var(--edb-border); border-radius:999px;
+            color:var(--edb-text); margin-left:6px;
           }
           .tc-selected{
-            margin-top:8px; padding:10px 12px; border:1px dashed #d1d5db; border-radius:12px;
-            font-size:12px; color:#111827;
+            margin-top:8px; padding:10px 12px; border:1px dashed var(--edb-border); border-radius:12px;
+            font-size:12px; color:var(--edb-input-text);
           }
         </style>
 

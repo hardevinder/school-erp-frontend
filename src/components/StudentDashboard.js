@@ -819,22 +819,22 @@ export default function StudentDashboard() {
       <ToastContainer />
       <style>{`
         :root{
-          --grad-primary: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-          --grad-info: linear-gradient(135deg, #36d1dc 0%, #5b86e5 100%);
+          --grad-primary: linear-gradient(135deg, var(--edb-primary) 0%, var(--edb-primary) 100%);
+          --grad-info: linear-gradient(135deg, #36d1dc 0%, var(--edb-primary) 100%);
           --grad-secondary: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
         }
         .hero{
           background: var(--grad-primary);
-          color: #eaf2ff;
-          border: 1px solid rgba(255,255,255,.25);
-          box-shadow: 0 20px 40px rgba(102, 126, 234, .3);
+          color: var(--edb-on-primary);
+          border: 1px solid color-mix(in srgb, var(--edb-border) 25%, transparent);
+          box-shadow: 0 20px 40px var(--edb-shell-shadow);
           overflow: hidden;
         }
         .hero::before {
           content: '';
           position: absolute;
           top: -50%; left: -50%; width: 200%; height: 200%;
-          background: radial-gradient(circle, rgba(255,255,255,.1) 0%, transparent 70%);
+          background: radial-gradient(circle, color-mix(in srgb, var(--edb-surface) 10%, transparent) 0%, transparent 70%);
           animation: float 6s ease-in-out infinite;
         }
         @keyframes float {
@@ -848,29 +848,29 @@ export default function StudentDashboard() {
         }
         .avatar-circle{
           width: 48px; height: 48px; border-radius: 50%;
-          background: rgba(255,255,255,.25);
+          background: color-mix(in srgb, var(--edb-surface) 25%, transparent);
           display:flex; align-items:center; justify-content:center;
-          font-weight: 900; color: #fff; font-size: 1.2rem;
-          border:2px solid rgba(255,255,255,.5);
-          box-shadow: 0 4px 12px rgba(0,0,0,.2);
+          font-weight: 900; color: var(--edb-text); font-size: 1.2rem;
+          border:2px solid color-mix(in srgb, var(--edb-border) 50%, transparent);
+          box-shadow: 0 4px 12px var(--edb-shell-shadow);
         }
         .chip{
-          background: rgba(255,255,255,.2);
-          border:1px solid rgba(255,255,255,.4);
+          background: color-mix(in srgb, var(--edb-surface) 20%, transparent);
+          border:1px solid color-mix(in srgb, var(--edb-border) 40%, transparent);
           backdrop-filter: blur(10px);
           border-radius: 20px;
-          color:#fff;
+          color:var(--edb-text);
           padding: 8px 12px;
           font-size: .875rem;
           transition: all .2s ease;
         }
-        .chip:hover { background: rgba(255,255,255,.3); }
+        .chip:hover { background: color-mix(in srgb, var(--edb-surface) 30%, transparent); }
         .icon-badge{
           width: 44px; height: 44px; border-radius: 12px;
           display:flex; align-items:center; justify-content:center;
-          background: linear-gradient(135deg, #f0f9ff, #e0f2fe);
-          border:1px solid rgba(59, 130, 246, .2);
-          color: #2563eb;
+          background: linear-gradient(135deg, var(--edb-surface), var(--edb-primary-soft));
+          border:1px solid color-mix(in srgb, var(--edb-primary) 20%, transparent);
+          color: var(--edb-primary-text);
           transition: all .2s ease;
         }
         /* ✅ Stable quick cards
@@ -884,7 +884,7 @@ export default function StudentDashboard() {
           outline: none;
         }
         .student-quick-link:focus-visible .card {
-          box-shadow: 0 0 0 .2rem rgba(13,110,253,.25), 0 12px 24px rgba(0,0,0,.10) !important;
+          box-shadow: 0 0 0 .2rem var(--edb-shell-shadow), 0 12px 24px var(--edb-shell-shadow) !important;
         }
         .student-quick-link .card {
           position: relative;
@@ -898,8 +898,8 @@ export default function StudentDashboard() {
           }
           .hover-rise:hover{
             transform: none !important;
-            border: 1px solid rgba(13,110,253,.22) !important;
-            box-shadow: 0 14px 28px rgba(0,0,0,.12) !important;
+            border: 1px solid color-mix(in srgb, var(--edb-primary) 22%, transparent) !important;
+            box-shadow: 0 14px 28px var(--edb-shell-shadow) !important;
           }
         }
         .glow-on-hover{ position:relative; overflow:hidden; }
@@ -907,7 +907,7 @@ export default function StudentDashboard() {
           content:'';
           position:absolute; top:0; left:-100%; width:100%; height:100%;
           pointer-events: none;
-          background: linear-gradient(90deg, transparent, rgba(255,255,255,.35), transparent);
+          background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--edb-surface) 35%, transparent), transparent);
           transition: left .45s ease;
         }
         .glow-on-hover:hover::before{ left:100%; }
@@ -927,14 +927,14 @@ export default function StudentDashboard() {
 
         .overlay{
           position: fixed; inset: 0; z-index: 1200;
-          background: rgba(0,0,0,.5);
+          background: color-mix(in srgb, var(--edb-primary-dark) 50%, transparent);
           display:flex; align-items:flex-start; justify-content:center;
           padding:16px; backdrop-filter: blur(4px);
         }
         .sheet{
-          background:#fff; width:100%; max-width:600px; max-height:85vh;
+          background:var(--edb-surface); width:100%; max-width:600px; max-height:85vh;
           overflow:auto; border-radius:20px; padding:24px; position:relative;
-          box-shadow:0 20px 60px rgba(0,0,0,.3);
+          box-shadow:0 20px 60px var(--edb-shell-shadow);
           margin-top:64px;
         }
 
@@ -942,8 +942,8 @@ export default function StudentDashboard() {
         .bg-gradient-info { background: var(--grad-info); }
         .bg-gradient-secondary { background: var(--grad-secondary); }
 
-        .hover-light:hover { background-color: rgba(0,0,0,.02) !important; }
-        .hover-row:hover { background-color: rgba(0,0,0,.03); }
+        .hover-light:hover { background-color: color-mix(in srgb, var(--edb-primary-dark) 2%, transparent) !important; }
+        .hover-row:hover { background-color: color-mix(in srgb, var(--edb-primary-dark) 3%, transparent); }
 
         @media (max-width: 575.98px){
           .icon-badge{ width: 40px; height: 40px; font-size: 1rem; }

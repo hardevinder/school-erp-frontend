@@ -105,8 +105,8 @@ const ReceiptPDF = (props) => {
         style={{
           textDecoration: "none",
           padding: "10px 20px",
-          color: "#fff",
-          backgroundColor: "#007bff",
+          color: "var(--edb-on-primary)",
+          backgroundColor: "var(--edb-primary)",
           borderRadius: "4px",
           display: "inline-block",
           marginTop: "20px",

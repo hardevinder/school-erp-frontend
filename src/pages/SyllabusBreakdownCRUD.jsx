@@ -564,8 +564,8 @@ const SyllabusBreakdownCRUD = () => {
       <style>{`
         .sb-wrap { max-width: 100%; overflow-x: hidden; }
         .sb-title { word-break: break-word; }
-        .sb-card-row .form-label { font-size: .8rem; color: #6c757d; margin-bottom: .25rem; }
-        .sb-sticky-actions { position: sticky; bottom: 0; background: #fff; padding-top: .75rem; }
+        .sb-card-row .form-label { font-size: .8rem; color: var(--edb-muted-text); margin-bottom: .25rem; }
+        .sb-sticky-actions { position: sticky; bottom: 0; background: var(--edb-surface); padding-top: .75rem; }
         @media (max-width: 576px) {
           .modal-fullscreen-sm-down .modal-dialog { margin: 0; }
         }

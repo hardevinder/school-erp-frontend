@@ -347,8 +347,8 @@ export default function ChatContainer() {
               globalUnreadCount > 0
                 ? "linear-gradient(135deg,#6a11cb,#2575fc)"
                 : "#0d6efd",
-            color: "#fff",
-            boxShadow: "0 10px 25px rgba(13,110,253,.35)",
+            color: "var(--edb-on-primary)",
+            boxShadow: "0 10px 25px color-mix(in srgb, var(--edb-primary) 35%, transparent)",
             transition: "transform 0.2s",
           }}
         >
@@ -373,12 +373,12 @@ export default function ChatContainer() {
                 padding: "0 6px",
                 borderRadius: 11,
                 background: "#dc3545",
-                color: "#fff",
+                color: "var(--edb-on-primary)",
                 fontSize: 12,
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                boxShadow: "0 0 0 2px #fff",
+                boxShadow: "0 0 0 2px var(--edb-surface)",
               }}
             >
               {globalUnreadCount > 99 ? "99+" : globalUnreadCount}
@@ -394,9 +394,9 @@ export default function ChatContainer() {
             bottom: 20,
             right: 20,
             ...chatStyle,
-            background: "#fff",
+            background: "var(--edb-surface)",
             borderRadius: 10,
-            boxShadow: "0 4px 12px rgba(0,0,0,0.35)",
+            boxShadow: "0 4px 12px color-mix(in srgb, var(--edb-primary-dark) 35%, transparent)",
             zIndex: 1320,
             display: "flex",
             flexDirection: "column",

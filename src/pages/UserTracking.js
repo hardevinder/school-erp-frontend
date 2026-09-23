@@ -947,12 +947,12 @@ const UserTracking = () => {
     <div className="container-fluid px-3 px-lg-4 py-4 ut-page">
       <style>{`
         .ut-page {
-          background: linear-gradient(180deg, #f8fafc 0%, #eef6ff 100%);
+          background: linear-gradient(180deg, var(--edb-surface) 0%, var(--edb-surface) 100%);
           min-height: calc(100vh - 80px);
         }
         .ut-main-card {
-          border: 1px solid rgba(15, 23, 42, 0.06);
-          box-shadow: 0 24px 70px rgba(15, 23, 42, 0.10);
+          border: 1px solid color-mix(in srgb, var(--edb-border) 6%, transparent);
+          box-shadow: 0 24px 70px color-mix(in srgb, var(--edb-primary-dark) 10%, transparent);
         }
         .ut-hero {
           position: relative;
@@ -962,24 +962,24 @@ const UserTracking = () => {
           content: "";
           position: absolute;
           inset: 0;
-          background: radial-gradient(circle at top right, rgba(255,255,255,.30), transparent 34%);
+          background: radial-gradient(circle at top right, color-mix(in srgb, var(--edb-surface) 30%, transparent), transparent 34%);
           pointer-events: none;
           z-index: -1;
         }
         .ut-filter-card, .ut-stat-card {
-          border: 1px solid rgba(148, 163, 184, 0.22) !important;
-          box-shadow: 0 12px 30px rgba(15, 23, 42, 0.06) !important;
+          border: 1px solid color-mix(in srgb, var(--edb-border) 22%, transparent) !important;
+          box-shadow: 0 12px 30px color-mix(in srgb, var(--edb-primary-dark) 6%, transparent) !important;
         }
         .ut-stat-card {
           transition: transform .18s ease, box-shadow .18s ease;
         }
         .ut-stat-card:hover {
           transform: translateY(-2px);
-          box-shadow: 0 16px 36px rgba(15, 23, 42, 0.10) !important;
+          box-shadow: 0 16px 36px color-mix(in srgb, var(--edb-primary-dark) 10%, transparent) !important;
         }
         .ut-table-wrap {
-          background: #ffffff;
-          box-shadow: 0 10px 28px rgba(15, 23, 42, 0.06);
+          background: var(--edb-surface);
+          box-shadow: 0 10px 28px color-mix(in srgb, var(--edb-primary-dark) 6%, transparent);
           overflow: visible;
         }
         .ut-table thead th {
@@ -998,27 +998,27 @@ const UserTracking = () => {
           transition: background-color .15s ease;
         }
         .ut-avatar {
-          box-shadow: inset 0 0 0 1px rgba(255,255,255,.35), 0 8px 18px rgba(37,99,235,.18);
+          box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--edb-primary-dark) 35%, transparent), 0 8px 18px color-mix(in srgb, var(--edb-primary-dark) 18%, transparent);
         }
         .ut-pagination .page-link {
           border-radius: 999px !important;
           margin: 0 2px;
-          border: 1px solid #dbeafe;
+          border: 1px solid var(--edb-border);
           min-width: 34px;
           text-align: center;
           font-weight: 600;
         }
         .ut-pagination .page-item.active .page-link {
-          box-shadow: 0 8px 18px rgba(37,99,235,.25);
+          box-shadow: 0 8px 18px color-mix(in srgb, var(--edb-primary-dark) 25%, transparent);
         }
         .ut-pager-strip {
           position: relative;
           z-index: 3;
-          background: #ffffff;
-          border: 1px solid rgba(148, 163, 184, 0.20);
+          background: var(--edb-surface);
+          border: 1px solid color-mix(in srgb, var(--edb-border) 20%, transparent);
           border-radius: 18px;
           padding: .85rem 1rem;
-          box-shadow: 0 10px 24px rgba(15, 23, 42, 0.04);
+          box-shadow: 0 10px 24px color-mix(in srgb, var(--edb-primary-dark) 4%, transparent);
         }
         .ut-pager-strip-top {
           margin-bottom: 1rem;
@@ -1034,8 +1034,8 @@ const UserTracking = () => {
           align-items: center;
           justify-content: center;
           border-radius: 999px;
-          background: #eff6ff;
-          color: #2563eb;
+          background: var(--edb-surface);
+          color: var(--edb-primary-text);
           font-size: 1.35rem;
           margin-bottom: .7rem;
         }
@@ -1050,7 +1050,7 @@ const UserTracking = () => {
           className="card-header border-0 text-white p-4 ut-hero"
           style={{
             background:
-              "linear-gradient(135deg, #1e3a8a 0%, #2563eb 45%, #0891b2 100%)",
+              "linear-gradient(135deg, var(--edb-primary) 0%, var(--edb-primary) 45%, #0891b2 100%)",
           }}
         >
           <div className="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
@@ -1135,7 +1135,7 @@ const UserTracking = () => {
 
                         <div
                           className="border rounded-3 p-2"
-                          style={{ maxHeight: 320, overflowY: "auto", background: "#f8fafc" }}
+                          style={{ maxHeight: 320, overflowY: "auto", background: "var(--edb-surface)" }}
                         >
                           {AVAILABLE_REPORT_COLUMNS.map((col) => {
                             const checked = selectedColumns.includes(col.key);
@@ -1148,7 +1148,7 @@ const UserTracking = () => {
                                   cursor: "pointer",
                                   background: checked ? "#eff6ff" : "#ffffff",
                                   border: checked ? "1px solid #bfdbfe" : "1px solid #e5e7eb",
-                                  color: "#111827",
+                                  color: "var(--edb-text)",
                                 }}
                               >
                                 <input
@@ -1158,7 +1158,7 @@ const UserTracking = () => {
                                   checked={checked}
                                   onChange={() => toggleColumn(col.key)}
                                 />
-                                <span className="fw-medium" style={{ color: "#111827" }}>{col.label}</span>
+                                <span className="fw-medium" style={{ color: "var(--edb-text)" }}>{col.label}</span>
                               </label>
                             );
                           })}
@@ -1431,7 +1431,7 @@ const UserTracking = () => {
                                     style={{
                                       width: 38,
                                       height: 38,
-                                      background: "linear-gradient(135deg, #2563eb, #0891b2)",
+                                      background: "linear-gradient(135deg, var(--edb-primary), #0891b2)",
                                       flexShrink: 0,
                                     }}
                                   >
@@ -1923,7 +1923,7 @@ const UserTracking = () => {
                                 style={{
                                   width: 36,
                                   height: 36,
-                                  background: "linear-gradient(135deg, #2563eb, #0891b2)",
+                                  background: "linear-gradient(135deg, var(--edb-primary), #0891b2)",
                                   flexShrink: 0,
                                 }}
                               >

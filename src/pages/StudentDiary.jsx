@@ -377,7 +377,7 @@ const StudentDiary = () => {
         className="rounded-3 p-4 mb-3 text-white"
         style={{
           background:
-            "linear-gradient(135deg, rgba(6,95,212,1) 0%, rgba(12,119,214,1) 50%, rgba(22,82,240,1) 100%)",
+            "linear-gradient(135deg, var(--edb-primary) 0%, var(--edb-primary) 50%, var(--edb-primary) 100%)",
         }}
       >
         <div className="d-flex flex-column flex-md-row align-items-start align-items-md-center justify-content-between gap-3">
@@ -661,10 +661,10 @@ const StudentDiary = () => {
 
       {/* Local style helpers to match the rest of your app */}
       <style>{`
-        .placeholder-glow .placeholder { display: inline-block; background-color: rgba(0,0,0,.08); }
+        .placeholder-glow .placeholder { display: inline-block; background-color: color-mix(in srgb, var(--edb-primary-dark) 8%, transparent); }
         .fancy-chip-row { scrollbar-width: thin; }
         .fancy-chip-row::-webkit-scrollbar { height: 8px; }
-        .fancy-chip-row::-webkit-scrollbar-thumb { background: rgba(0,0,0,.15); border-radius: 8px; }
+        .fancy-chip-row::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--edb-primary-dark) 15%, transparent); border-radius: 8px; }
       `}</style>
     </div>
   );

@@ -1,3 +1,4 @@
+import { DEFAULT_PORTAL_THEME } from "../theme/portalThemeRuntime";
 // File: src/components/Dashboard.jsx
 // Improved organized dashboard: grouped actions + classId enrollment ordering
 import React, {
@@ -121,14 +122,7 @@ const intIN = (n) => Number(n || 0).toLocaleString("en-IN");
 
 // DASHBOARD_DYNAMIC_THEME_V3
 // Read the institution's saved portal palette and derive dashboard/chart shades from it.
-const DASHBOARD_THEME_FALLBACK = Object.freeze({
-  primary: "#66131b",
-  primaryDark: "#470a11",
-  accent: "#c49a45",
-  surface: "#fffdfa",
-  dashboardBg: "#f6f3ee",
-  text: "#261f1d",
-});
+const DASHBOARD_THEME_FALLBACK = DEFAULT_PORTAL_THEME;
 
 const isHex6 = (value) => /^#[0-9a-f]{6}$/i.test(String(value || "").trim());
 
@@ -164,7 +158,7 @@ const readDashboardTheme = () => {
 };
 
 const sameDashboardTheme = (a, b) =>
-  Object.keys(DASHBOARD_THEME_FALLBACK).every((key) => a?.[key] === b?.[key]);
+  ["primary", "primaryDark", "accent", "surface", "dashboardBg", "text"].every((key) => a?.[key] === b?.[key]);
 
 const buildDashboardPalette = ({ primary, primaryDark, accent, surface }) => [
   primary,
@@ -1047,35 +1041,35 @@ const Dashboard = () => {
       sub: "Student fee collection",
       icon: "bi-cash-stack",
       href: "/transactions",
-      gradient: "linear-gradient(135deg, #22c55e, #16a34a)",
+      gradient: "linear-gradient(135deg, var(--edb-primary), var(--edb-primary-dark))",
     },
     {
       label: "Direct Payment",
       sub: "Payment link page",
       icon: "bi-credit-card",
       href: "/direct-pay",
-      gradient: "linear-gradient(135deg, #0ea5e9, #0369a1)",
+      gradient: "linear-gradient(135deg, var(--edb-primary), var(--edb-primary-dark))",
     },
     {
       label: "Fee Due Report",
       sub: "Student due list",
       icon: "bi-receipt",
       href: "/student-due",
-      gradient: "linear-gradient(135deg, #22c55e, #15803d)",
+      gradient: "linear-gradient(135deg, var(--edb-primary), var(--edb-primary-dark))",
     },
     {
       label: "Pending Due",
       sub: "School fee summary",
       icon: "bi-list-check",
       href: "/reports/school-fee-summary",
-      gradient: "linear-gradient(135deg, #3b82f6, #2563eb)",
+      gradient: "linear-gradient(135deg, var(--edb-primary), var(--edb-primary-dark))",
     },
     {
       label: "Fee Head Collection",
       sub: "Collection matrix",
       icon: "bi-table",
       href: "/student-fee-head-collection",
-      gradient: "linear-gradient(135deg, #7c3aed, #4f46e5)",
+      gradient: "linear-gradient(135deg, var(--edb-primary), var(--edb-primary-dark))",
       tag: "NEW",
     },
     {
@@ -1083,14 +1077,14 @@ const Dashboard = () => {
       sub: "Day-wise fee report",
       icon: "bi-calendar2-check",
       href: "/reports/day-wise",
-      gradient: "linear-gradient(135deg, #f59e0b, #d97706)",
+      gradient: "linear-gradient(135deg, var(--edb-primary), var(--edb-primary-dark))",
     },
     {
       label: "Transport / Van Fee",
       sub: "Van fee report",
       icon: "bi-truck",
       href: "/reports/van-fee",
-      gradient: "linear-gradient(135deg, #06b6d4, #0891b2)",
+      gradient: "linear-gradient(135deg, var(--edb-primary), var(--edb-primary-dark))",
     },
   ];
 
@@ -1100,14 +1094,14 @@ const Dashboard = () => {
       sub: "Search and manage students",
       icon: "bi-people",
       href: "/students",
-      gradient: "linear-gradient(135deg, #a855f7, #7c3aed)",
+      gradient: "linear-gradient(135deg, var(--edb-primary), var(--edb-primary-dark))",
     },
     {
       label: "Student I-Cards",
       sub: "Generate ID cards",
       icon: "bi-person-vcard",
       href: "/student-id-cards",
-      gradient: "linear-gradient(135deg, #14b8a6, #0f766e)",
+      gradient: "linear-gradient(135deg, var(--edb-primary), var(--edb-primary-dark))",
       tag: "NEW",
     },
     {
@@ -1115,7 +1109,7 @@ const Dashboard = () => {
       sub: "Apply concession",
       icon: "bi-tags",
       href: "/students/bulk-concession",
-      gradient: "linear-gradient(135deg, #8b5cf6, #6d28d9)",
+      gradient: "linear-gradient(135deg, var(--edb-primary), var(--edb-primary-dark))",
       tag: "NEW",
     },
     {
@@ -1123,7 +1117,7 @@ const Dashboard = () => {
       sub: "House-wise stats",
       icon: "bi-bar-chart-line",
       href: "/reports/student-summary",
-      gradient: "linear-gradient(135deg, #0ea5e9, #0369a1)",
+      gradient: "linear-gradient(135deg, var(--edb-primary), var(--edb-primary-dark))",
       tag: "NEW",
     },
   ];
@@ -1134,14 +1128,14 @@ const Dashboard = () => {
       sub: "Demographics",
       icon: "bi-people-fill",
       href: "/reports/caste-gender",
-      gradient: "linear-gradient(135deg, #ef4444, #dc2626)",
+      gradient: "linear-gradient(135deg, var(--edb-primary), var(--edb-primary-dark))",
     },
     {
       label: "Religion & Gender",
       sub: "Demographics",
       icon: "bi-diagram-3",
       href: "/reports/religion-gender",
-      gradient: "linear-gradient(135deg, #0ea5e9, #0369a1)",
+      gradient: "linear-gradient(135deg, var(--edb-primary), var(--edb-primary-dark))",
     },
   ];
 
@@ -1151,14 +1145,14 @@ const Dashboard = () => {
       sub: "Admission enquiries",
       icon: "bi-person-lines-fill",
       href: "/enquiries",
-      gradient: "linear-gradient(135deg, #f97316, #ea580c)",
+      gradient: "linear-gradient(135deg, var(--edb-primary), var(--edb-primary-dark))",
     },
     {
       label: "Messages",
       sub: "Fee reminders & chat",
       icon: "bi-chat-dots",
       href: "/messages",
-      gradient: "linear-gradient(135deg, #2563eb, #7c3aed)",
+      gradient: "linear-gradient(135deg, var(--edb-primary), var(--edb-primary-dark))",
       tag: "NEW",
     },
     ...(canManagePermissions
@@ -1168,7 +1162,7 @@ const Dashboard = () => {
             sub: "Assign role access",
             icon: "bi-shield-lock",
             href: "/role-permissions",
-            gradient: "linear-gradient(135deg, #111827, #374151)",
+            gradient: "linear-gradient(135deg, var(--edb-primary), var(--edb-primary-dark))",
             tag: "ADMIN",
           },
         ]
@@ -1275,7 +1269,7 @@ const Dashboard = () => {
       className="dashboard-bg dashboard-surface classic-dashboard-theme"
       style={{
         backgroundImage:
-          "linear-gradient(180deg, #f8f4ed 0%, #f5efe7 100%)",
+          "linear-gradient(180deg, var(--edb-dashboard-bg) 0%, var(--edb-dashboard-bg) 100%)",
         minHeight: "100vh",
       }}
     >
@@ -1577,7 +1571,7 @@ const Dashboard = () => {
         <section className="mb-4">
           <div className="d-flex align-items-end justify-content-between flex-wrap gap-2 mb-3">
             <div>
-              <span className="badge rounded-pill mb-2" style={{ background: mixHex(dashboardTheme.accent, dashboardTheme.surface, 0.82), color: mixHex(dashboardTheme.accent, "#000000", 0.32), border: `1px solid ${mixHex(dashboardTheme.accent, dashboardTheme.surface, 0.58)}` }}>Revenue Intelligence</span>
+              <span className="badge rounded-pill mb-2" style={{ background: mixHex(dashboardTheme.accent, dashboardTheme.surface, 0.82), color: mixHex(dashboardTheme.accent, "var(--edb-text)", 0.32), border: `1px solid ${mixHex(dashboardTheme.accent, dashboardTheme.surface, 0.58)}` }}>Revenue Intelligence</span>
               <h4 className="fw-bold mb-1">Session Collection Outlook</h4>
               <div className="text-muted small">Collected, currently overdue and upcoming session receivables in one reconciled view.</div>
             </div>
@@ -1631,7 +1625,7 @@ const Dashboard = () => {
                 <div className="card border-0 shadow-sm h-100" style={{ borderRadius: 18, background: item.gradient, borderLeft: `5px solid ${item.color}` }}>
                   <div className="card-body p-4">
                     <div className="d-flex align-items-center justify-content-between mb-3">
-                      <div className="d-flex align-items-center gap-3"><div className="rounded-4 d-grid" style={{ width: 48, height: 48, placeItems: "center", color: item.color, background: "rgba(255,255,255,.8)", boxShadow: "0 5px 18px rgba(15,23,42,.08)" }}><i className={`bi ${item.icon} fs-4`} /></div><div><div className="fw-bold fs-5">{item.title}</div><div className="small text-muted">Net receivable after concessions and receipts</div></div></div>
+                      <div className="d-flex align-items-center gap-3"><div className="rounded-4 d-grid" style={{ width: 48, height: 48, placeItems: "center", color: item.color, background: "color-mix(in srgb, var(--edb-surface) 80%, transparent)", boxShadow: "0 5px 18px color-mix(in srgb, var(--edb-primary-dark) 8%, transparent)" }}><i className={`bi ${item.icon} fs-4`} /></div><div><div className="fw-bold fs-5">{item.title}</div><div className="small text-muted">Net receivable after concessions and receipts</div></div></div>
                       <span className="badge rounded-pill bg-white text-dark border">{selectedSessionName || "Session"}</span>
                     </div>
                     <div className="bg-white bg-opacity-75 rounded-4 border p-3 mb-3">
@@ -1670,15 +1664,15 @@ const Dashboard = () => {
                 className="col-12 col-lg-5 p-4 p-xl-5"
                 style={{
                   background: `linear-gradient(145deg,${dashboardTheme.primaryDark} 0%,${dashboardTheme.primary} 58%,${mixHex(dashboardTheme.primary, dashboardTheme.surface, 0.18)} 100%)`,
-                  color: "white",
+                  color: "var(--edb-on-primary)",
                 }}
               >
-                <div className="text-uppercase small mb-2 fw-semibold" style={{ letterSpacing: ".11em", color: mixHex(dashboardTheme.accent, "#ffffff", 0.28) }}>Financial health</div>
+                <div className="text-uppercase small mb-2 fw-semibold" style={{ letterSpacing: ".11em", color: mixHex(dashboardTheme.accent, "var(--edb-on-primary)", 0.28) }}>Financial health</div>
                 <h4 className="fw-bold mb-2">Collection vs Receivables</h4>
-                <p className="mb-4" style={{ color: "rgba(255,255,255,.72)", maxWidth: 430 }}>A concise view of receipts, dues and future installments for the selected session.</p>
-                <div className="d-flex justify-content-between py-3" style={{ borderBottom: "1px solid rgba(255,255,255,.15)" }}><span style={{ color: "rgba(255,255,255,.70)" }}>Academic received</span><strong>{formatCurrency(totalFeeReceived)}</strong></div>
-                <div className="d-flex justify-content-between py-3" style={{ borderBottom: "1px solid rgba(255,255,255,.15)" }}><span style={{ color: "rgba(255,255,255,.70)" }}>Van received</span><strong>{formatCurrency(totalVanFee)}</strong></div>
-                <div className="d-flex justify-content-between py-3"><span style={{ color: "rgba(255,255,255,.70)" }}>Future installments</span><strong style={{ color: mixHex(dashboardTheme.accent, "#ffffff", 0.38) }}>{formatCurrency(futureSessionPending)}</strong></div>
+                <p className="mb-4" style={{ color: "color-mix(in srgb, var(--edb-on-primary) 72%, transparent)", maxWidth: 430 }}>A concise view of receipts, dues and future installments for the selected session.</p>
+                <div className="d-flex justify-content-between py-3" style={{ borderBottom: "1px solid color-mix(in srgb, var(--edb-border) 15%, transparent)" }}><span style={{ color: "color-mix(in srgb, var(--edb-on-primary) 70%, transparent)" }}>Academic received</span><strong>{formatCurrency(totalFeeReceived)}</strong></div>
+                <div className="d-flex justify-content-between py-3" style={{ borderBottom: "1px solid color-mix(in srgb, var(--edb-border) 15%, transparent)" }}><span style={{ color: "color-mix(in srgb, var(--edb-on-primary) 70%, transparent)" }}>Van received</span><strong>{formatCurrency(totalVanFee)}</strong></div>
+                <div className="d-flex justify-content-between py-3"><span style={{ color: "color-mix(in srgb, var(--edb-on-primary) 70%, transparent)" }}>Future installments</span><strong style={{ color: mixHex(dashboardTheme.accent, "var(--edb-on-primary)", 0.38) }}>{formatCurrency(futureSessionPending)}</strong></div>
               </div>
               <div className="col-12 col-lg-7 p-4 p-xl-5" style={{ background: `linear-gradient(145deg,${dashboardTheme.surface},${mixHex(dashboardTheme.accent, dashboardTheme.surface, 0.94)})` }}>
                 <div className="d-flex justify-content-between align-items-start gap-3 mb-3">
@@ -1686,7 +1680,7 @@ const Dashboard = () => {
                     <div className="text-uppercase small fw-bold" style={{ letterSpacing: ".08em", color: dashboardTheme.accent }}>Session mix</div>
                     <div className="fw-bold" style={{ color: dashboardTheme.primaryDark, fontSize: 18 }}>Receivable composition</div>
                   </div>
-                  <span className="badge rounded-pill" style={{ background: mixHex(dashboardTheme.accent, dashboardTheme.surface, 0.82), color: mixHex(dashboardTheme.accent, "#000000", 0.34), border: `1px solid ${mixHex(dashboardTheme.accent, dashboardTheme.surface, 0.60)}` }}>{selectedSessionName || "Session"}</span>
+                  <span className="badge rounded-pill" style={{ background: mixHex(dashboardTheme.accent, dashboardTheme.surface, 0.82), color: mixHex(dashboardTheme.accent, "var(--edb-text)", 0.34), border: `1px solid ${mixHex(dashboardTheme.accent, dashboardTheme.surface, 0.60)}` }}>{selectedSessionName || "Session"}</span>
                 </div>
                 <div className="position-relative mx-auto" style={{ height: 250, maxWidth: 560 }}>
                   {loading.finance && !feeOutlook ? (
@@ -1730,7 +1724,7 @@ const Dashboard = () => {
               >
                 <div
                   className="card h-100 shadow-lg hover-lift"
-                  style={{ background: "rgba(255, 255, 255, 0.95)" }}
+                  style={{ background: "color-mix(in srgb, var(--edb-surface) 95%, transparent)" }}
                 >
                   <div
                     className="card-header text-white d-flex justify-content-between align-items-center"
@@ -2154,7 +2148,7 @@ const Dashboard = () => {
                         position: "sticky",
                         top: 0,
                         zIndex: 1,
-                        background: "linear-gradient(135deg, #f8fafc, #e2e8f0)",
+                        background: "linear-gradient(135deg, var(--edb-surface), var(--edb-dashboard-bg))",
                       }}
                     >
                       <tr>
@@ -2220,12 +2214,12 @@ const Dashboard = () => {
                                 borderRight: i !== classColumns.length - 1 ? "1px solid #dee2e6" : "none",
                               }}
                             >
-                              <strong style={{ fontFamily: "'Inter', sans-serif", color: "#3b82f6" }}>{`T ${t}`}</strong>
+                              <strong style={{ fontFamily: "'Inter', sans-serif", color: "var(--edb-primary-text)" }}>{`T ${t}`}</strong>
                             </td>
                           );
                         })}
                         <td style={{ textAlign: "left" }}>
-                          <strong style={{ fontFamily: "'Inter', sans-serif", color: "#3b82f6" }}>{`T ${overallTotal}`}</strong>
+                          <strong style={{ fontFamily: "'Inter', sans-serif", color: "var(--edb-primary-text)" }}>{`T ${overallTotal}`}</strong>
                         </td>
                       </tr>
                     </tbody>
@@ -2303,22 +2297,22 @@ const Dashboard = () => {
           .dashboard-bg { position: relative; background-attachment: fixed; }
           .dashboard-overlay {
             position: absolute; inset: 0;
-            background: linear-gradient(135deg, rgba(255, 255, 255, 0.8), rgba(255, 255, 255, 0.6));
+            background: linear-gradient(135deg, color-mix(in srgb, var(--edb-surface) 80%, transparent), color-mix(in srgb, var(--edb-surface) 60%, transparent));
             z-index: 1; pointer-events: none;
           }
           .quick-links { top: 5rem; z-index: 3; }
           .dashboard-header-card {
             padding: 1rem 1.15rem;
             border-radius: 1.2rem;
-            background: rgba(255,255,255,0.72);
+            background: color-mix(in srgb, var(--edb-surface) 72%, transparent);
             backdrop-filter: blur(12px) saturate(1.15);
-            border: 1px solid rgba(255,255,255,0.35);
-            box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
+            border: 1px solid color-mix(in srgb, var(--edb-border) 35%, transparent);
+            box-shadow: 0 12px 30px color-mix(in srgb, var(--edb-primary-dark) 8%, transparent);
           }
           .quick-links-inner {
             backdrop-filter: blur(12px) saturate(1.2);
-            border-radius: 1.2rem; border: 1px solid rgba(255, 255, 255, 0.2);
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+            border-radius: 1.2rem; border: 1px solid color-mix(in srgb, var(--edb-border) 20%, transparent);
+            box-shadow: 0 4px 20px color-mix(in srgb, var(--edb-primary-dark) 10%, transparent);
           }
           .quick-section-grid {
             display: grid;
@@ -2328,9 +2322,9 @@ const Dashboard = () => {
           .quick-link-section {
             padding: 1rem;
             border-radius: 1.1rem;
-            background: linear-gradient(135deg, rgba(248,250,252,.96), rgba(255,255,255,.9));
-            border: 1px solid rgba(148,163,184,.25);
-            box-shadow: inset 0 1px 0 rgba(255,255,255,.7), 0 8px 24px rgba(15,23,42,.06);
+            background: linear-gradient(135deg, color-mix(in srgb, var(--edb-surface) 96%, transparent), color-mix(in srgb, var(--edb-surface) 90%, transparent));
+            border: 1px solid color-mix(in srgb, var(--edb-border) 25%, transparent);
+            box-shadow: inset 0 1px 0 color-mix(in srgb, var(--edb-primary-dark) 70%, transparent), 0 8px 24px color-mix(in srgb, var(--edb-primary-dark) 6%, transparent);
           }
           .quick-section-heading {
             display: flex;
@@ -2344,22 +2338,22 @@ const Dashboard = () => {
             display: grid;
             place-items: center;
             border-radius: .95rem;
-            color: #fff;
-            background: linear-gradient(135deg, #3b82f6, #4f46e5);
-            box-shadow: 0 8px 18px rgba(59,130,246,.25);
+            color: var(--edb-on-primary);
+            background: linear-gradient(135deg, var(--edb-primary), var(--edb-primary));
+            box-shadow: 0 8px 18px color-mix(in srgb, var(--edb-primary-dark) 25%, transparent);
           }
-          .quick-link-section-students .quick-section-icon { background: linear-gradient(135deg, #a855f7, #7c3aed); }
+          .quick-link-section-students .quick-section-icon { background: linear-gradient(135deg, var(--edb-primary), var(--edb-primary)); }
           .quick-link-section-fee .quick-section-icon { background: linear-gradient(135deg, #22c55e, #16a34a); }
-          .quick-link-section-reports .quick-section-icon { background: linear-gradient(135deg, #f59e0b, #d97706); }
+          .quick-link-section-reports .quick-section-icon { background: linear-gradient(135deg, var(--edb-accent), var(--edb-accent)); }
           .quick-link-section-admin .quick-section-icon { background: linear-gradient(135deg, #0ea5e9, #0369a1); }
           .quick-section-title {
             font-weight: 800;
-            color: #0f172a;
+            color: var(--edb-text);
             line-height: 1.15;
           }
           .quick-section-subtitle {
             font-size: .8rem;
-            color: #64748b;
+            color: var(--edb-muted-text);
           }
           .quick-links-grid {
             display: grid;
@@ -2385,18 +2379,18 @@ const Dashboard = () => {
             font-size: .72rem;
             font-weight: 800;
             letter-spacing: .02em;
-            color: #1d4ed8;
-            background: rgba(219,234,254,.9);
-            border: 1px solid rgba(59,130,246,.22);
+            color: var(--edb-primary-text);
+            background: color-mix(in srgb, var(--edb-primary-soft) 90%, transparent);
+            border: 1px solid color-mix(in srgb, var(--edb-primary) 22%, transparent);
             margin-bottom: .35rem;
           }
           .section-title {
             font-weight: 850;
-            color: #0f172a;
+            color: var(--edb-text);
             letter-spacing: -.02em;
           }
           .section-subtitle {
-            color: #64748b;
+            color: var(--edb-muted-text);
             font-size: .92rem;
           }
 
@@ -2405,8 +2399,8 @@ const Dashboard = () => {
             display: inline-flex; align-items: center; gap: .9rem;
             width: 100%;
             min-width: 0;
-            padding: .95rem 1.05rem; border-radius: 1.2rem; color: #fff; text-decoration: none;
-            border: 1px solid rgba(255, 255, 255, 0.22);
+            padding: .95rem 1.05rem; border-radius: 1.2rem; color: var(--edb-on-primary); text-decoration: none;
+            border: 1px solid color-mix(in srgb, var(--edb-border) 22%, transparent);
             position: relative; overflow: hidden;
             transition: transform 0.25s ease, box-shadow 0.25s ease, background-position 0.25s ease;
             background-size: 200% 100%; background-position: 0% 50%;
@@ -2414,13 +2408,13 @@ const Dashboard = () => {
           .link-card-ex::before{
             content:"";
             position:absolute; inset:-40%;
-            background: radial-gradient(circle at 30% 30%, rgba(255,255,255,.35), transparent 55%);
+            background: radial-gradient(circle at 30% 30%, color-mix(in srgb, var(--edb-surface) 35%, transparent), transparent 55%);
             transform: rotate(12deg);
             opacity: .65;
           }
           .link-card-ex:hover {
             transform: translateY(-4px);
-            box-shadow: 0 10px 26px rgba(0,0,0,0.22);
+            box-shadow: 0 10px 26px color-mix(in srgb, var(--edb-primary-dark) 22%, transparent);
             background-position: 100% 50%;
           }
           .link-card-ex:active { transform: translateY(0); }
@@ -2428,8 +2422,8 @@ const Dashboard = () => {
           .link-card-ex .icon-wrap {
             display: inline-grid; place-items: center;
             width: 2.7rem; height: 2.7rem; border-radius: 1rem;
-            background: rgba(255,255,255,0.18);
-            box-shadow: inset 0 0 0 2px rgba(255,255,255,0.22);
+            background: color-mix(in srgb, var(--edb-surface) 18%, transparent);
+            box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--edb-primary-dark) 22%, transparent);
             backdrop-filter: blur(10px);
             position: relative;
           }
@@ -2459,8 +2453,8 @@ const Dashboard = () => {
             width: 2rem; height: 2rem;
             display:inline-grid; place-items:center;
             border-radius: .9rem;
-            background: rgba(255,255,255,0.16);
-            border: 1px solid rgba(255,255,255,0.18);
+            background: color-mix(in srgb, var(--edb-surface) 16%, transparent);
+            border: 1px solid color-mix(in srgb, var(--edb-border) 18%, transparent);
             position: relative;
           }
           .link-card-ex .pill{
@@ -2468,16 +2462,16 @@ const Dashboard = () => {
             font-weight: 800;
             padding: .18rem .42rem;
             border-radius: 999px;
-            background: rgba(255,255,255,0.22);
-            border: 1px solid rgba(255,255,255,0.25);
+            background: color-mix(in srgb, var(--edb-surface) 22%, transparent);
+            border: 1px solid color-mix(in srgb, var(--edb-border) 25%, transparent);
           }
 
-          .card { border-radius: 1.2rem; background-clip: padding-box; border: 1px solid rgba(255,255,255,0.2); transition: transform .3s ease, box-shadow .3s ease; }
-          .card:not([style*="linear-gradient"]) { background-color: rgba(255,255,255,0.95) !important; backdrop-filter: blur(8px); }
+          .card { border-radius: 1.2rem; background-clip: padding-box; border: 1px solid color-mix(in srgb, var(--edb-border) 20%, transparent); transition: transform .3s ease, box-shadow .3s ease; }
+          .card:not([style*="linear-gradient"]) { background-color: color-mix(in srgb, var(--edb-surface) 95%, transparent) !important; backdrop-filter: blur(8px); }
           .card-header { border-top-left-radius: 1.2rem !important; border-top-right-radius: 1.2rem !important; padding: 1rem 1.5rem; }
-          .hover-lift:hover { transform: translateY(-4px); box-shadow: 0 8px 24px rgba(0,0,0,.15); }
+          .hover-lift:hover { transform: translateY(-4px); box-shadow: 0 8px 24px color-mix(in srgb, var(--edb-primary-dark) 15%, transparent); }
           .kpi-card { position: relative; overflow: hidden; backdrop-filter: blur(10px) saturate(1.3); border-radius: 1.2rem; }
-          .kpi-shimmer { position: absolute; inset: 0; background: linear-gradient(110deg,#fff1,#fff3,#fff1); background-size: 200% 100%; animation: shimmer 1.5s infinite linear; pointer-events:none;}
+          .kpi-shimmer { position: absolute; inset: 0; background: linear-gradient(110deg,color-mix(in srgb, var(--edb-surface) 6.67%, transparent),color-mix(in srgb, var(--edb-surface) 20%, transparent),color-mix(in srgb, var(--edb-surface) 6.67%, transparent)); background-size: 200% 100%; animation: shimmer 1.5s infinite linear; pointer-events:none;}
           @keyframes shimmer { to { background-position-x: -200%; } }
           .skeleton-chart { height: 100%; width: 100%; border-radius: 1rem;
             background: linear-gradient(110deg, #f3f4f6 8%, #e5e7eb 18%, #f3f4f6 33%);
@@ -2486,8 +2480,8 @@ const Dashboard = () => {
           .pulse-dot::after { content: ""; position: absolute; inset: 0; border-radius: 50%; box-shadow: 0 0 0 0 rgba(34,197,94,0.7); animation: pulse 1.8s infinite; }
           @keyframes pulse { 70% { box-shadow: 0 0 0 .5rem rgba(34,197,94,0); } 100% { box-shadow: 0 0 0 0 rgba(34,197,94,0); } }
           button.btn, a.btn { border-radius: .75rem; transition: transform .2s ease, box-shadow .2s ease; }
-          button.btn:hover, a.btn:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,.15); }
-          button:focus-visible, a:focus-visible { outline: 2px solid #3b82f6; outline-offset: 2px; }
+          button.btn:hover, a.btn:hover { transform: translateY(-2px); box-shadow: 0 4px 12px color-mix(in srgb, var(--edb-primary-dark) 15%, transparent); }
+          button:focus-visible, a:focus-visible { outline: 2px solid var(--edb-primary); outline-offset: 2px; }
           .table { border-radius: .75rem; overflow: hidden; }
           .table th, .table td { padding: .75rem; font-family: 'Inter', sans-serif; }
           .badge { border-radius: .5rem; padding: .5em .75em; font-weight: 600; }
@@ -2519,7 +2513,7 @@ const Dashboard = () => {
             .card-body { padding: 1rem; }
             .row.g-4 { gap: 1rem; }
           }
-          [role="alert"] { border-radius: .75rem; box-shadow: 0 4px 12px rgba(0,0,0,.1); }
+          [role="alert"] { border-radius: .75rem; box-shadow: 0 4px 12px color-mix(in srgb, var(--edb-primary-dark) 10%, transparent); }
           .card { animation: fadeInUp 0.6s ease-out; }
           @keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
         `}</style>

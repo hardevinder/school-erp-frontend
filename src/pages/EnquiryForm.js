@@ -140,7 +140,7 @@ export default function EnquiryForm() {
       <div
         className="position-absolute top-0 start-0 w-100 h-100"
         style={{
-          background: "rgba(0, 0, 0, 0.55)",
+          background: "color-mix(in srgb, var(--edb-primary-dark) 55%, transparent)",
           backdropFilter: "blur(3px)",
         }}
       ></div>
@@ -159,7 +159,7 @@ export default function EnquiryForm() {
                   height: "90px",
                   objectFit: "contain",
                   borderRadius: "50%",
-                  backgroundColor: "rgba(255,255,255,0.15)",
+                  backgroundColor: "color-mix(in srgb, var(--edb-surface) 15%, transparent)",
                   padding: "5px",
                 }}
               />
@@ -177,9 +177,9 @@ export default function EnquiryForm() {
               className="card border-0 shadow-lg"
               style={{
                 borderRadius: "1rem",
-                background: "rgba(20, 20, 20, 0.75)",
-                color: "#f1f1f1",
-                boxShadow: "0 0 25px rgba(0,0,0,0.3)",
+                background: "color-mix(in srgb, var(--edb-primary-dark) 75%, transparent)",
+                color: "var(--edb-on-primary)",
+                boxShadow: "0 0 25px color-mix(in srgb, var(--edb-primary-dark) 30%, transparent)",
               }}
             >
               <div className="card-body p-4 p-md-5">

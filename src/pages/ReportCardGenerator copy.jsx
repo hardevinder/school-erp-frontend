@@ -1507,8 +1507,8 @@ const FinalResultSummary = () => {
             <tr>
               <th
                 style={{
-                  background: "linear-gradient(180deg,#e6f7ff,#dbeafe)",
-                  color: "#08335a",
+                  background: "linear-gradient(180deg,var(--edb-primary-soft),var(--edb-primary-soft))",
+                  color: "var(--edb-primary-dark-text)",
                   textAlign: "left",
                   fontSize: "14px",
                 }}
@@ -1517,8 +1517,8 @@ const FinalResultSummary = () => {
               </th>
               <th
                 style={{
-                  background: "linear-gradient(180deg,#dbeafe,#bfdbfe)",
-                  color: "#08335a",
+                  background: "linear-gradient(180deg,var(--edb-primary-soft),var(--edb-primary-soft))",
+                  color: "var(--edb-primary-dark-text)",
                   fontSize: "14px",
                 }}
               >
@@ -1526,8 +1526,8 @@ const FinalResultSummary = () => {
               </th>
               <th
                 style={{
-                  background: "linear-gradient(180deg,#dbeafe,#bfdbfe)",
-                  color: "#08335a",
+                  background: "linear-gradient(180deg,var(--edb-primary-soft),var(--edb-primary-soft))",
+                  color: "var(--edb-primary-dark-text)",
                   fontSize: "14px",
                 }}
               >
@@ -1575,8 +1575,8 @@ const FinalResultSummary = () => {
             <tr>
               <th
                 style={{
-                  background: "linear-gradient(180deg,#e6f7ff,#dbeafe)",
-                  color: "#08335a",
+                  background: "linear-gradient(180deg,var(--edb-primary-soft),var(--edb-primary-soft))",
+                  color: "var(--edb-primary-dark-text)",
                   fontSize: "14px",
                 }}
               >
@@ -1584,8 +1584,8 @@ const FinalResultSummary = () => {
               </th>
               <th
                 style={{
-                  background: "linear-gradient(180deg,#e6f7ff,#dbeafe)",
-                  color: "#08335a",
+                  background: "linear-gradient(180deg,var(--edb-primary-soft),var(--edb-primary-soft))",
+                  color: "var(--edb-primary-dark-text)",
                   fontSize: "14px",
                 }}
               >
@@ -1631,21 +1631,21 @@ const FinalResultSummary = () => {
       <style>{`
         body {
           background:
-            radial-gradient(1200px 600px at 10% 0%, rgba(59,130,246,0.20), transparent 60%),
+            radial-gradient(1200px 600px at 10% 0%, color-mix(in srgb, var(--edb-primary) 20%, transparent), transparent 60%),
             radial-gradient(1000px 500px at 90% 10%, rgba(16,185,129,0.18), transparent 60%),
-            radial-gradient(900px 520px at 50% 92%, rgba(168,85,247,0.12), transparent 60%),
-            linear-gradient(180deg, #eef5ff 0%, #fbfdff 100%);
+            radial-gradient(900px 520px at 50% 92%, color-mix(in srgb, var(--edb-primary) 12%, transparent), transparent 60%),
+            linear-gradient(180deg, var(--edb-surface) 0%, var(--edb-surface) 100%);
         }
         .page-bg {
           background:
-            radial-gradient(1200px 600px at 10% 0%, rgba(59,130,246,0.18), transparent 60%),
+            radial-gradient(1200px 600px at 10% 0%, color-mix(in srgb, var(--edb-primary) 18%, transparent), transparent 60%),
             radial-gradient(1000px 500px at 90% 10%, rgba(16,185,129,0.16), transparent 60%),
-            radial-gradient(900px 520px at 50% 92%, rgba(168,85,247,0.10), transparent 60%),
-            linear-gradient(180deg, rgba(238,245,255,0.92) 0%, rgba(251,253,255,0.95) 100%);
+            radial-gradient(900px 520px at 50% 92%, color-mix(in srgb, var(--edb-primary) 10%, transparent), transparent 60%),
+            linear-gradient(180deg, color-mix(in srgb, var(--edb-surface) 92%, transparent) 0%, color-mix(in srgb, var(--edb-surface) 95%, transparent) 100%);
           border-radius: 18px;
           padding: 16px;
-          border: 1px solid rgba(199,210,254,0.7);
-          box-shadow: 0 12px 26px rgba(10, 30, 80, 0.10);
+          border: 1px solid color-mix(in srgb, var(--edb-border) 70%, transparent);
+          box-shadow: 0 12px 26px color-mix(in srgb, var(--edb-primary-dark) 10%, transparent);
         }
         .report-card {
           background: linear-gradient(180deg, rgba(255,255,255,0.96) 0%, rgba(248,251,255,0.96) 100%);
@@ -1656,11 +1656,11 @@ const FinalResultSummary = () => {
           overflow: hidden;
         }
         .panel {
-          background: rgba(255,255,255,0.92);
-          border: 1px solid rgba(199,210,254,0.75);
+          background: color-mix(in srgb, var(--edb-surface) 92%, transparent);
+          border: 1px solid color-mix(in srgb, var(--edb-border) 75%, transparent);
           border-radius: 16px;
           padding: 10px;
-          box-shadow: 0 8px 18px rgba(10, 30, 80, 0.08);
+          box-shadow: 0 8px 18px color-mix(in srgb, var(--edb-primary-dark) 8%, transparent);
         }
         .report-card .table-responsive {
           overflow-x: auto;
@@ -1685,7 +1685,7 @@ const FinalResultSummary = () => {
           position: sticky;
           left: 0;
           z-index: 2;
-          background: linear-gradient(180deg,#e6f7ff,#dbeafe);
+          background: linear-gradient(180deg,var(--edb-primary-soft),var(--edb-primary-soft));
           text-align: left;
           font-size: 14px;
         }
@@ -1693,7 +1693,7 @@ const FinalResultSummary = () => {
           position: sticky;
           left: 0;
           z-index: 1;
-          background: rgba(230,247,255,0.92);
+          background: color-mix(in srgb, var(--edb-primary-soft) 92%, transparent);
           text-align: left;
           font-size: 14px;
           font-weight: 900;
@@ -1703,9 +1703,9 @@ const FinalResultSummary = () => {
           font-weight: 900;
           padding: 4px 10px;
           border-radius: 999px;
-          background: rgba(59,130,246,0.12);
-          border: 1px solid rgba(59,130,246,0.22);
-          color:#0b1b3a;
+          background: color-mix(in srgb, var(--edb-primary) 12%, transparent);
+          border: 1px solid color-mix(in srgb, var(--edb-primary) 22%, transparent);
+          color:var(--edb-primary-dark-text);
           letter-spacing: 0.3px;
           text-transform: uppercase;
         }
@@ -1725,17 +1725,17 @@ const FinalResultSummary = () => {
           display: inline-block;
           padding: 2px 8px;
           border-radius: 10px;
-          background: rgba(255, 243, 199, 0.95);
-          border: 1px solid rgba(251, 191, 36, 0.55);
-          color: #0b1b3a;
+          background: color-mix(in srgb, var(--edb-primary-soft) 95%, transparent);
+          border: 1px solid color-mix(in srgb, var(--edb-primary) 55%, transparent);
+          color: var(--edb-primary-dark-text);
         }
         .rank-highlight{
           display: inline-block;
           padding: 2px 8px;
           border-radius: 10px;
-          background: rgba(255, 243, 199, 0.95);
-          border: 1px solid rgba(251, 191, 36, 0.55);
-          color: #0b1b3a;
+          background: color-mix(in srgb, var(--edb-primary-soft) 95%, transparent);
+          border: 1px solid color-mix(in srgb, var(--edb-primary) 55%, transparent);
+          color: var(--edb-primary-dark-text);
           font-size: 12px;
           font-weight: 900;
           line-height: 1.1;
@@ -1750,8 +1750,8 @@ const FinalResultSummary = () => {
           line-height: 1.3;
         }
         .rank-row-label {
-          background: linear-gradient(180deg,#c7d2fe,#a5b4fc) !important;
-          color: #0b1b3a;
+          background: linear-gradient(180deg,var(--edb-primary-soft),var(--edb-primary-soft)) !important;
+          color: var(--edb-primary-dark-text);
           font-weight: 900;
           text-align: left;
           font-size: 14px;
@@ -1760,16 +1760,16 @@ const FinalResultSummary = () => {
           font-weight: 900;
           text-align: right;
           padding-right: 16px !important;
-          background: rgba(255,255,255,0.92);
-          color:#0b1b3a;
+          background: color-mix(in srgb, var(--edb-surface) 92%, transparent);
+          color:var(--edb-primary-dark-text);
           font-size: 14px;
         }
         .grade-footer-note{
           margin-top: 8px;
           margin-bottom: 8px;
           font-size: 13px;
-          color: #334155;
-          border-top: 1px dashed rgba(148,163,184,0.7);
+          color: var(--edb-text);
+          border-top: 1px dashed color-mix(in srgb, var(--edb-border) 70%, transparent);
           padding-top: 6px;
           line-height: 1.2;
           white-space: nowrap;
@@ -2032,9 +2032,9 @@ const FinalResultSummary = () => {
                             width: "104px",
                             borderRadius: "12px",
                             objectFit: "cover",
-                            border: "2px solid #bfdbfe",
-                            boxShadow: "0 6px 14px rgba(0,0,0,0.14)",
-                            background: "#fff",
+                            border: "2px solid var(--edb-border)",
+                            boxShadow: "0 6px 14px color-mix(in srgb, var(--edb-primary-dark) 14%, transparent)",
+                            background: "var(--edb-surface)",
                           }}
                         />
                       </div>
@@ -2076,8 +2076,8 @@ const FinalResultSummary = () => {
                             rowSpan={2}
                             className="sticky-first-col"
                             style={{
-                              background: "linear-gradient(180deg,#e6f7ff,#dbeafe)",
-                              color: "#08335a",
+                              background: "linear-gradient(180deg,var(--edb-primary-soft),var(--edb-primary-soft))",
+                              color: "var(--edb-primary-dark-text)",
                               textAlign: "left",
                             }}
                           >
@@ -2087,8 +2087,8 @@ const FinalResultSummary = () => {
                           <th
                             colSpan={term1Components.length + (showTotals ? 2 : 0)}
                             style={{
-                              background: "linear-gradient(180deg,#dbeafe,#bfdbfe)",
-                              color: "#08335a",
+                              background: "linear-gradient(180deg,var(--edb-primary-soft),var(--edb-primary-soft))",
+                              color: "var(--edb-primary-dark-text)",
                             }}
                           >
                             {term1Id ? termLabel(term1Id) : "Term-I"}
@@ -2097,8 +2097,8 @@ const FinalResultSummary = () => {
                           <th
                             colSpan={term2Components.length + (showTotals ? 2 : 0)}
                             style={{
-                              background: "linear-gradient(180deg,#dbeafe,#bfdbfe)",
-                              color: "#08335a",
+                              background: "linear-gradient(180deg,var(--edb-primary-soft),var(--edb-primary-soft))",
+                              color: "var(--edb-primary-dark-text)",
                             }}
                           >
                             {term2Id ? termLabel(term2Id) : "Term-II"}
@@ -2108,8 +2108,8 @@ const FinalResultSummary = () => {
                             <th
                               colSpan={2}
                               style={{
-                                background: "linear-gradient(180deg,#c7d2fe,#a5b4fc)",
-                                color: "#08335a",
+                                background: "linear-gradient(180deg,var(--edb-primary-soft),var(--edb-primary-soft))",
+                                color: "var(--edb-primary-dark-text)",
                               }}
                             >
                               Grand Total
@@ -2119,33 +2119,33 @@ const FinalResultSummary = () => {
 
                         <tr>
                           {term1Components.map((c) => (
-                            <th key={`t1-${c.component_id}`} style={{ backgroundColor: "#eef6ff" }}>
+                            <th key={`t1-${c.component_id}`} style={{ backgroundColor: "var(--edb-surface)" }}>
                               {c.label}
                             </th>
                           ))}
                           {showTotals && (
                             <>
-                              <th style={{ backgroundColor: "#eef6ff", fontWeight: "bold" }}>Total</th>
-                              <th style={{ backgroundColor: "#eef6ff", fontWeight: "bold" }}>Grade</th>
+                              <th style={{ backgroundColor: "var(--edb-surface)", fontWeight: "bold" }}>Total</th>
+                              <th style={{ backgroundColor: "var(--edb-surface)", fontWeight: "bold" }}>Grade</th>
                             </>
                           )}
 
                           {term2Components.map((c) => (
-                            <th key={`t2-${c.component_id}`} style={{ backgroundColor: "#eef6ff" }}>
+                            <th key={`t2-${c.component_id}`} style={{ backgroundColor: "var(--edb-surface)" }}>
                               {c.label}
                             </th>
                           ))}
                           {showTotals && (
                             <>
-                              <th style={{ backgroundColor: "#eef6ff", fontWeight: "bold" }}>Total</th>
-                              <th style={{ backgroundColor: "#eef6ff", fontWeight: "bold" }}>Grade</th>
+                              <th style={{ backgroundColor: "var(--edb-surface)", fontWeight: "bold" }}>Total</th>
+                              <th style={{ backgroundColor: "var(--edb-surface)", fontWeight: "bold" }}>Grade</th>
                             </>
                           )}
 
                           {showTotals && (
                             <>
-                              <th style={{ backgroundColor: "#eef6ff", fontWeight: "bold" }}>Total</th>
-                              <th style={{ backgroundColor: "#eef6ff", fontWeight: "bold" }}>Grade</th>
+                              <th style={{ backgroundColor: "var(--edb-surface)", fontWeight: "bold" }}>Total</th>
+                              <th style={{ backgroundColor: "var(--edb-surface)", fontWeight: "bold" }}>Grade</th>
                             </>
                           )}
                         </tr>
@@ -2169,7 +2169,7 @@ const FinalResultSummary = () => {
                               <td
                                 className="sticky-first-col-td"
                                 style={{
-                                  backgroundColor: "rgba(230,247,255,0.92)",
+                                  backgroundColor: "color-mix(in srgb, var(--edb-primary-soft) 92%, transparent)",
                                   fontWeight: 900,
                                   textAlign: "left",
                                 }}
@@ -2223,10 +2223,10 @@ const FinalResultSummary = () => {
                               <td
                                 className="sticky-first-col-td"
                                 style={{
-                                  background: "linear-gradient(180deg,#c7d2fe,#a5b4fc)",
+                                  background: "linear-gradient(180deg,var(--edb-primary-soft),var(--edb-primary-soft))",
                                   fontWeight: 900,
                                   textAlign: "left",
-                                  color: "#0b1b3a",
+                                  color: "var(--edb-primary-dark-text)",
                                 }}
                               >
                                 TOTAL
@@ -2235,28 +2235,28 @@ const FinalResultSummary = () => {
                               {term1Components.map((_, idx) => (
                                 <td key={`b1-${idx}`}></td>
                               ))}
-                              <td style={{ backgroundColor: "#f2f7ff", fontWeight: 900 }}>
+                              <td style={{ backgroundColor: "var(--edb-surface)", fontWeight: 900 }}>
                                 <div className="grand-total-small">{t1 ? formatNumber(t1.total_weighted) : "-"}</div>
                               </td>
-                              <td style={{ backgroundColor: "#f2f7ff", fontWeight: 900 }}>
+                              <td style={{ backgroundColor: "var(--edb-surface)", fontWeight: 900 }}>
                                 {formatPercent(t1?.percent)}
                               </td>
 
                               {term2Components.map((_, idx) => (
                                 <td key={`b2-${idx}`}></td>
                               ))}
-                              <td style={{ backgroundColor: "#f2f7ff", fontWeight: 900 }}>
+                              <td style={{ backgroundColor: "var(--edb-surface)", fontWeight: 900 }}>
                                 <div className="grand-total-small">{t2 ? formatNumber(t2.total_weighted) : "-"}</div>
                               </td>
-                              <td style={{ backgroundColor: "#f2f7ff", fontWeight: 900 }}>
+                              <td style={{ backgroundColor: "var(--edb-surface)", fontWeight: 900 }}>
                                 {formatPercent(t2?.percent)}
                               </td>
 
-                              <td style={{ backgroundColor: "#e0f2fe" }}>
+                              <td style={{ backgroundColor: "var(--edb-primary-soft)" }}>
                                 <div className="grand-total-small">{formatNumber(student.total_weighted)}</div>
                               </td>
 
-                              <td style={{ backgroundColor: "#e0f2fe" }}>
+                              <td style={{ backgroundColor: "var(--edb-primary-soft)" }}>
                                 {(() => {
                                   const gp = student?.grand_percent_weighted;
                                   const gGrade =

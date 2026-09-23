@@ -1822,7 +1822,7 @@ const DayWiseReport = () => {
         <Modal.Body>
           <Card
             className="border-0 mb-3"
-            style={{ background: "linear-gradient(135deg, #f8fbff 0%, #eef5ff 100%)" }}
+            style={{ background: "linear-gradient(135deg, var(--edb-surface) 0%, var(--edb-surface) 100%)" }}
           >
             <Card.Body className="py-3">
               <Row className="g-3 align-items-end">

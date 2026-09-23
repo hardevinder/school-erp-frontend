@@ -480,8 +480,8 @@ export default function LearningResources() {
             /\.html?$/i.test(preview?.file.file_name || "") ?
               <iframe title="Study material preview" sandbox="" referrerPolicy="no-referrer"
                 srcDoc={`<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:;">` + (preview?.content || "")}
-                style={{ width: "100%", height: "65vh", border: "1px solid #dee2e6", background: "white" }} /> :
-              <pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", maxHeight: "65vh", overflow: "auto", padding: "1rem", background: "#f8f9fa" }}>{preview?.content}</pre>}
+                style={{ width: "100%", height: "65vh", border: "1px solid var(--edb-border)", background: "var(--edb-surface)" }} /> :
+              <pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", maxHeight: "65vh", overflow: "auto", padding: "1rem", background: "var(--edb-surface)" }}>{preview?.content}</pre>}
         </Modal.Body>
         <Modal.Footer>
           <a className="btn btn-primary" href={preview?.file.file_url} target="_blank" rel="noreferrer">Download original</a>

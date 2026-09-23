@@ -801,7 +801,7 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
 
         .quick-link-icon {
           min-width: 60px;
-          color: #343a40 !important;
+          color: var(--edb-text) !important;
           transition: color .2s ease, transform .15s ease;
           display: inline-flex;
           flex-direction: column;
@@ -815,9 +815,9 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
           width: 44px;
           height: 44px;
           border-radius: 12px;
-          background: linear-gradient(145deg, #f8f9fa, #e9ecef);
-          border: 1px solid #dee2e6;
-          box-shadow: 0 2px 4px rgba(0,0,0,.08);
+          background: linear-gradient(145deg, var(--edb-surface), var(--edb-dashboard-bg));
+          border: 1px solid var(--edb-border);
+          box-shadow: 0 2px 4px color-mix(in srgb, var(--edb-primary-dark) 8%, transparent);
           transition: all .2s ease;
         }
 
@@ -837,23 +837,23 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
 
         /* Hover state */
         .quick-link-icon:hover {
-          color: #0d6efd !important;
+          color: var(--edb-primary-text) !important;
           transform: translateY(-2px) scale(1.05);
         }
         .quick-link-icon:hover .ql-icon-wrap {
-          background: linear-gradient(145deg, #eaf3ff, #dbe7ff);
-          border-color: #cfe2ff;
-          box-shadow: 0 4px 8px rgba(13,110,253,.2);
+          background: linear-gradient(145deg, var(--edb-primary-soft), var(--edb-primary-soft));
+          border-color: var(--edb-border);
+          box-shadow: 0 4px 8px color-mix(in srgb, var(--edb-primary-dark) 20%, transparent);
         }
 
         /* Active route state */
         .quick-link-icon.ql-active {
-          color: #0b5ed7 !important;
+          color: var(--edb-primary-text) !important;
         }
         .quick-link-icon.ql-active .ql-icon-wrap {
-          background: linear-gradient(145deg, #e0edff, #cfe2ff);
-          border-color: #91c3ff;
-          box-shadow: 0 0 0 3px rgba(13,110,253,.2), 0 4px 10px rgba(13,110,253,.25);
+          background: linear-gradient(145deg, var(--edb-primary-soft), var(--edb-primary-soft));
+          border-color: var(--edb-border);
+          box-shadow: 0 0 0 3px color-mix(in srgb, var(--edb-primary-dark) 20%, transparent), 0 4px 10px color-mix(in srgb, var(--edb-primary-dark) 25%, transparent);
         }
 
         /* Pendings dropdown behaviour */
@@ -873,21 +873,21 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
 
         /* Dark mode tweaks */
         @media (prefers-color-scheme: dark) {
-          .quick-link-icon { color: #e9ecef !important; }
+          .quick-link-icon { color: var(--edb-muted-text) !important; }
           .quick-link-icon .ql-icon-wrap {
-            background: linear-gradient(145deg, #2a2f36, #23272e);
-            border-color: #3a3f47;
-            box-shadow: 0 2px 4px rgba(0,0,0,.4);
+            background: linear-gradient(145deg, var(--edb-primary-dark), var(--edb-primary-dark));
+            border-color: var(--edb-border);
+            box-shadow: 0 2px 4px color-mix(in srgb, var(--edb-primary-dark) 40%, transparent);
           }
           .quick-link-icon:hover .ql-icon-wrap {
-            background: linear-gradient(145deg, #1e2d44, #24344f);
-            border-color: #2f4b6a;
-            box-shadow: 0 4px 10px rgba(0,0,0,.55);
+            background: linear-gradient(145deg, var(--edb-primary-dark), var(--edb-primary-dark));
+            border-color: var(--edb-primary);
+            box-shadow: 0 4px 10px color-mix(in srgb, var(--edb-primary-dark) 55.00000000000001%, transparent);
           }
           .quick-link-icon.ql-active .ql-icon-wrap {
-            background: linear-gradient(145deg, #23406a, #1e3557);
-            border-color: #3a6db8;
-            box-shadow: 0 0 0 3px rgba(13,110,253,.35), 0 4px 12px rgba(13,110,253,.35);
+            background: linear-gradient(145deg, var(--edb-primary-dark), var(--edb-primary-dark));
+            border-color: var(--edb-primary);
+            box-shadow: 0 0 0 3px color-mix(in srgb, var(--edb-primary-dark) 35%, transparent), 0 4px 12px color-mix(in srgb, var(--edb-primary-dark) 35%, transparent);
           }
         }
       `}</style>

@@ -478,7 +478,7 @@ const StudentRemarksEntry = () => {
   const stickyColStyle = (leftPx) => ({
     position: "sticky",
     left: leftPx,
-    background: "#fff",
+    background: "var(--edb-surface)",
     zIndex: 2,
   });
 

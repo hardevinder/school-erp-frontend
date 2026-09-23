@@ -458,8 +458,8 @@ const CoScholasticEntry = () => {
       <div
         className="d-flex flex-wrap align-items-center justify-content-between mb-3 rounded-4 p-3 shadow-sm"
         style={{
-          background: "linear-gradient(135deg, #f8fafc, #eef2ff)",
-          border: "1px solid #e5e7eb",
+          background: "linear-gradient(135deg, var(--edb-surface), var(--edb-surface))",
+          border: "1px solid var(--edb-border)",
         }}
       >
         <div>

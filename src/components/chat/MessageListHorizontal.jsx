@@ -38,7 +38,7 @@ export default function MessageListHorizontal({ messages = [], currentUserId }) 
         overflowY: "hidden",
         whiteSpace: "nowrap",        // prevent wrapping
         padding: "10px 12px",
-        borderTop: "1px solid #eee",
+        borderTop: "1px solid var(--edb-border)",
         minHeight: 120,              // visible height of the strip
         maxHeight: 160,
         // optional: smooth track
@@ -66,7 +66,7 @@ export default function MessageListHorizontal({ messages = [], currentUserId }) 
                 padding: "8px 10px",
                 borderRadius: 12,
                 background: mine ? "#e6f0ff" : "#f5f5f5",
-                boxShadow: "0 1px 2px rgba(0,0,0,0.08)",
+                boxShadow: "0 1px 2px color-mix(in srgb, var(--edb-primary-dark) 8%, transparent)",
               }}
             >
               {m.text}

@@ -82,11 +82,11 @@ const GoogleIcon = () => (
       d="M272 544.3c72.3 0 132.9-23.9 177.2-65.1l-86.2-67c-24 16.1-54.6 25.7-91 25.7-69.9 0-129.1-47.2-150.3-110.7H33.7v69.6C77.8 490.3 168.8 544.3 272 544.3z"
     />
     <path
-      fill="#4A90E2"
+      fill="var(--edb-primary-text)"
       d="M121.7 327.2c-5.1-15.3-8-31.7-8-48.6s2.9-33.3 8-48.6V160.4H33.7C12.7 204.8 0 254.3 0 306.6c0 52.3 12.7 101.8 33.7 146.2l88-65.6z"
     />
     <path
-      fill="#FBBC05"
+      fill="var(--edb-accent-text)"
       d="M272 107.7c39.2 0 74.5 13.5 102.2 39.9l76.7-76.7C404.8 26.2 344.2 0 272 0 168.8 0 77.8 54 33.7 160.4l88 69.6C142.9 154.9 202.1 107.7 272 107.7z"
     />
   </svg>
@@ -330,7 +330,7 @@ const Login = () => {
         minHeight: "100dvh",
         position: "relative",
         overflow: "hidden",
-        backgroundColor: "#071120",
+        backgroundColor: "var(--edb-primary-dark)",
         backgroundImage: bgUrl
           ? `linear-gradient(135deg, rgba(4,10,24,0.88), rgba(8,23,45,0.78)), url(${bgUrl})`
           : "linear-gradient(135deg, #071120, #0b2545)",
@@ -345,7 +345,7 @@ const Login = () => {
           position: "absolute",
           inset: 0,
           background:
-            "radial-gradient(circle at top left, rgba(255,255,255,0.12), transparent 28%), radial-gradient(circle at bottom right, rgba(255,255,255,0.08), transparent 24%)",
+            "radial-gradient(circle at top left, color-mix(in srgb, var(--edb-surface) 12%, transparent), transparent 28%), radial-gradient(circle at bottom right, color-mix(in srgb, var(--edb-surface) 8%, transparent), transparent 24%)",
           pointerEvents: "none",
         }}
       />
@@ -357,8 +357,8 @@ const Login = () => {
               className="shadow-lg overflow-hidden"
               style={{
                 borderRadius: "28px",
-                border: "1px solid rgba(255,255,255,0.14)",
-                background: "rgba(255,255,255,0.08)",
+                border: "1px solid color-mix(in srgb, var(--edb-border) 14%, transparent)",
+                background: "color-mix(in srgb, var(--edb-surface) 8%, transparent)",
                 backdropFilter: "blur(14px)",
                 WebkitBackdropFilter: "blur(14px)",
               }}
@@ -372,7 +372,7 @@ const Login = () => {
                       height: "100%",
                       position: "relative",
                       padding: "42px",
-                      color: "#fff",
+                      color: "var(--edb-on-primary)",
                       backgroundImage: bgUrl
                         ? `linear-gradient(180deg, rgba(5,16,36,0.30), rgba(5,16,36,0.82)), url(${bgUrl})`
                         : "linear-gradient(180deg, rgba(8,25,50,0.95), rgba(10,38,77,0.92))",
@@ -386,10 +386,10 @@ const Login = () => {
                           width: 70,
                           height: 70,
                           borderRadius: "18px",
-                          background: "rgba(255,255,255,0.16)",
+                          background: "color-mix(in srgb, var(--edb-surface) 16%, transparent)",
                           display: "grid",
                           placeItems: "center",
-                          border: "1px solid rgba(255,255,255,0.20)",
+                          border: "1px solid color-mix(in srgb, var(--edb-border) 20%, transparent)",
                           overflow: "hidden",
                           flexShrink: 0,
                         }}
@@ -421,8 +421,8 @@ const Login = () => {
                             textTransform: "uppercase",
                             padding: "7px 12px",
                             borderRadius: "999px",
-                            background: "rgba(255,255,255,0.12)",
-                            border: "1px solid rgba(255,255,255,0.18)",
+                            background: "color-mix(in srgb, var(--edb-surface) 12%, transparent)",
+                            border: "1px solid color-mix(in srgb, var(--edb-border) 18%, transparent)",
                             marginBottom: 10,
                           }}
                         >
@@ -448,7 +448,7 @@ const Login = () => {
                         className="mb-0"
                         style={{
                           fontSize: "1.04rem",
-                          color: "rgba(255,255,255,0.82)",
+                          color: "color-mix(in srgb, var(--edb-on-primary) 82%, transparent)",
                           maxWidth: "520px",
                           lineHeight: 1.7,
                         }}
@@ -465,8 +465,8 @@ const Login = () => {
                         <div
                           style={{
                             borderRadius: "22px",
-                            background: "rgba(255,255,255,0.10)",
-                            border: "1px solid rgba(255,255,255,0.16)",
+                            background: "color-mix(in srgb, var(--edb-surface) 10%, transparent)",
+                            border: "1px solid color-mix(in srgb, var(--edb-border) 16%, transparent)",
                             padding: "18px 20px",
                           }}
                         >
@@ -484,8 +484,8 @@ const Login = () => {
                         <div
                           style={{
                             borderRadius: "20px",
-                            background: "rgba(255,255,255,0.08)",
-                            border: "1px solid rgba(255,255,255,0.14)",
+                            background: "color-mix(in srgb, var(--edb-surface) 8%, transparent)",
+                            border: "1px solid color-mix(in srgb, var(--edb-border) 14%, transparent)",
                             padding: "18px",
                             height: "100%",
                           }}
@@ -502,8 +502,8 @@ const Login = () => {
                         <div
                           style={{
                             borderRadius: "20px",
-                            background: "rgba(255,255,255,0.08)",
-                            border: "1px solid rgba(255,255,255,0.14)",
+                            background: "color-mix(in srgb, var(--edb-surface) 8%, transparent)",
+                            border: "1px solid color-mix(in srgb, var(--edb-border) 14%, transparent)",
                             padding: "18px",
                             height: "100%",
                           }}
@@ -520,14 +520,14 @@ const Login = () => {
                     <div
                       className="mt-4"
                       style={{
-                        borderTop: "1px solid rgba(255,255,255,0.14)",
+                        borderTop: "1px solid color-mix(in srgb, var(--edb-border) 14%, transparent)",
                         paddingTop: "20px",
                       }}
                     >
                       <div className="small text-white-50 mb-2">
                         Branch Message
                       </div>
-                      <div style={{ color: "rgba(255,255,255,0.92)" }}>
+                      <div style={{ color: "color-mix(in srgb, var(--edb-on-primary) 92%, transparent)" }}>
                         {schoolTagline}
                       </div>
                     </div>
@@ -540,7 +540,7 @@ const Login = () => {
                     style={{
                       minHeight: "760px",
                       background:
-                        "linear-gradient(180deg, rgba(255,255,255,0.96), rgba(248,251,255,0.94))",
+                        "linear-gradient(180deg, color-mix(in srgb, var(--edb-surface) 96%, transparent), color-mix(in srgb, var(--edb-surface) 94%, transparent))",
                       padding: "28px 22px",
                     }}
                   >
@@ -569,8 +569,8 @@ const Login = () => {
                           style={{
                             padding: "6px 12px",
                             borderRadius: "999px",
-                            background: "#eef4ff",
-                            color: "#16438b",
+                            background: "var(--edb-surface)",
+                            color: "var(--edb-primary-text)",
                             fontSize: "12px",
                             fontWeight: 700,
                             letterSpacing: "0.05em",
@@ -590,8 +590,8 @@ const Login = () => {
                             display: "inline-flex",
                             alignItems: "center",
                             gap: 8,
-                            background: "#eef4ff",
-                            color: "#16438b",
+                            background: "var(--edb-surface)",
+                            color: "var(--edb-primary-text)",
                             padding: "7px 12px",
                             borderRadius: "999px",
                             fontSize: "12px",
@@ -605,7 +605,7 @@ const Login = () => {
 
                         <h2
                           className="fw-bold mb-2"
-                          style={{ color: "#10233f", letterSpacing: "-0.02em" }}
+                          style={{ color: "var(--edb-primary-dark-text)", letterSpacing: "-0.02em" }}
                         >
                           Sign in to continue
                         </h2>
@@ -620,8 +620,8 @@ const Login = () => {
                         <div
                           className="alert border-0"
                           style={{
-                            background: "#fff0f0",
-                            color: "#a32020",
+                            background: "var(--edb-surface)",
+                            color: "var(--edb-primary-text)",
                             borderRadius: "16px",
                             padding: "14px 16px",
                           }}
@@ -634,7 +634,7 @@ const Login = () => {
                         <div className="mb-3">
                           <label
                             className="form-label fw-semibold"
-                            style={{ color: "#1b3357" }}
+                            style={{ color: "var(--edb-primary-dark-text)" }}
                           >
                             Username or Email
                           </label>
@@ -650,7 +650,7 @@ const Login = () => {
                             style={{
                               borderRadius: "16px",
                               minHeight: "56px",
-                              border: "1px solid #dbe4f0",
+                              border: "1px solid var(--edb-border)",
                               boxShadow: "none",
                               paddingLeft: "16px",
                             }}
@@ -660,7 +660,7 @@ const Login = () => {
                         <div className="mb-2">
                           <label
                             className="form-label fw-semibold"
-                            style={{ color: "#1b3357" }}
+                            style={{ color: "var(--edb-primary-dark-text)" }}
                           >
                             Password
                           </label>
@@ -677,7 +677,7 @@ const Login = () => {
                                 borderTopLeftRadius: "16px",
                                 borderBottomLeftRadius: "16px",
                                 minHeight: "56px",
-                                border: "1px solid #dbe4f0",
+                                border: "1px solid var(--edb-border)",
                                 boxShadow: "none",
                                 paddingLeft: "16px",
                               }}
@@ -690,10 +690,10 @@ const Login = () => {
                               style={{
                                 borderTopRightRadius: "16px",
                                 borderBottomRightRadius: "16px",
-                                border: "1px solid #dbe4f0",
+                                border: "1px solid var(--edb-border)",
                                 borderLeft: "none",
-                                background: "#fff",
-                                color: "#1b3357",
+                                background: "var(--edb-surface)",
+                                color: "var(--edb-primary-dark-text)",
                                 fontWeight: 600,
                                 minWidth: "88px",
                               }}
@@ -724,7 +724,7 @@ const Login = () => {
                             type="button"
                             className="btn btn-link p-0 text-decoration-none"
                             onClick={() => navigate("/forgot-password")}
-                            style={{ color: "#1a56b5", fontWeight: 600 }}
+                            style={{ color: "var(--edb-primary-text)", fontWeight: 600 }}
                           >
                             Forgot password?
                           </button>
@@ -739,11 +739,11 @@ const Login = () => {
                             borderRadius: "16px",
                             border: "none",
                             background:
-                              "linear-gradient(135deg, #0e4ea8 0%, #1f73e8 100%)",
-                            color: "#fff",
+                              "linear-gradient(135deg, var(--edb-primary) 0%, var(--edb-primary) 100%)",
+                            color: "var(--edb-on-primary)",
                             fontWeight: 700,
                             fontSize: "1rem",
-                            boxShadow: "0 18px 40px rgba(31,115,232,0.28)",
+                            boxShadow: "0 18px 40px color-mix(in srgb, var(--edb-primary) 28%, transparent)",
                           }}
                         >
                           {loading ? "Signing in..." : "Login to Dashboard"}
@@ -759,9 +759,9 @@ const Login = () => {
                           style={{
                             minHeight: "56px",
                             borderRadius: "16px",
-                            border: "1px solid #dbe4f0",
-                            background: "#fff",
-                            color: "#10233f",
+                            border: "1px solid var(--edb-border)",
+                            background: "var(--edb-surface)",
+                            color: "var(--edb-primary-dark-text)",
                             fontWeight: 600,
                           }}
                         >
@@ -774,11 +774,11 @@ const Login = () => {
                         className="mt-4 p-3"
                         style={{
                           borderRadius: "18px",
-                          background: "#f4f8ff",
-                          border: "1px solid #e2ebf8",
+                          background: "var(--edb-surface)",
+                          border: "1px solid var(--edb-border)",
                         }}
                       >
-                        <div className="fw-semibold mb-1" style={{ color: "#12315f" }}>
+                        <div className="fw-semibold mb-1" style={{ color: "var(--edb-primary-dark-text)" }}>
                           Branch Portal Access
                         </div>
                         <div className="small text-muted">
@@ -792,7 +792,7 @@ const Login = () => {
                         <button
                           className="btn btn-link p-0 align-baseline text-decoration-none"
                           onClick={() => navigate("/terms")}
-                          style={{ color: "#1a56b5", fontWeight: 600 }}
+                          style={{ color: "var(--edb-primary-text)", fontWeight: 600 }}
                         >
                           Terms
                         </button>{" "}
@@ -800,7 +800,7 @@ const Login = () => {
                         <button
                           className="btn btn-link p-0 align-baseline text-decoration-none"
                           onClick={() => navigate("/privacy")}
-                          style={{ color: "#1a56b5", fontWeight: 600 }}
+                          style={{ color: "var(--edb-primary-text)", fontWeight: 600 }}
                         >
                           Privacy Policy
                         </button>

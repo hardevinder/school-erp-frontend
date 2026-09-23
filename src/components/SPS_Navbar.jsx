@@ -456,7 +456,7 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
         style={{
           zIndex: 3000,
           background:
-            "linear-gradient(90deg, #ffffff 0%, #f7faff 55%, #eef4ff 100%)",
+            "linear-gradient(90deg, var(--edb-surface) 0%, var(--edb-surface) 55%, var(--edb-surface) 100%)",
           backdropFilter: "blur(10px)",
         }}
       >
@@ -773,11 +773,11 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
 
       <style>{`
         .app-header {
-          background-color: #ffffff !important;
+          background-color: var(--edb-surface) !important;
         }
 
         .navbar-brand span {
-          color: #102a56;
+          color: var(--edb-primary-dark-text);
           letter-spacing: 0.2px;
         }
 
@@ -787,7 +787,7 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
 
         .quick-link-icon {
           min-width: 62px;
-          color: #24324a !important;
+          color: var(--edb-text) !important;
           transition: color .2s ease, transform .15s ease;
           display: inline-flex;
           flex-direction: column;
@@ -801,9 +801,9 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
           width: 46px;
           height: 46px;
           border-radius: 14px;
-          background: linear-gradient(145deg, #ffffff, #edf4ff);
-          border: 1px solid #d8e6ff;
-          box-shadow: 0 8px 18px rgba(16, 42, 86, 0.08);
+          background: linear-gradient(145deg, var(--edb-surface), var(--edb-surface));
+          border: 1px solid var(--edb-border);
+          box-shadow: 0 8px 18px color-mix(in srgb, var(--edb-primary-dark) 8%, transparent);
           transition: all .2s ease;
         }
 
@@ -822,31 +822,31 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
         }
 
         .quick-link-icon:hover {
-          color: #0d6efd !important;
+          color: var(--edb-primary-text) !important;
           transform: translateY(-2px) scale(1.05);
         }
 
         .quick-link-icon:hover .ql-icon-wrap {
-          background: linear-gradient(145deg, #eef5ff, #dce9ff);
-          border-color: #bfd8ff;
-          box-shadow: 0 10px 22px rgba(13, 110, 253, 0.18);
+          background: linear-gradient(145deg, var(--edb-surface), var(--edb-primary-soft));
+          border-color: var(--edb-border);
+          box-shadow: 0 10px 22px color-mix(in srgb, var(--edb-primary-dark) 18%, transparent);
         }
 
         .quick-link-icon.ql-active {
-          color: #0b5ed7 !important;
+          color: var(--edb-primary-text) !important;
         }
 
         .quick-link-icon.ql-active .ql-icon-wrap {
-          background: linear-gradient(145deg, #dfeeff, #cfe2ff);
-          border-color: #91c3ff;
-          box-shadow: 0 0 0 3px rgba(13,110,253,.15), 0 8px 18px rgba(13,110,253,.18);
+          background: linear-gradient(145deg, var(--edb-primary-soft), var(--edb-primary-soft));
+          border-color: var(--edb-border);
+          box-shadow: 0 0 0 3px color-mix(in srgb, var(--edb-primary-dark) 15%, transparent), 0 8px 18px color-mix(in srgb, var(--edb-primary-dark) 18%, transparent);
         }
 
         .quick-link-dropdown .dropdown-menu {
           min-width: 260px;
           padding: 0.3rem 0;
           border-radius: 14px;
-          border: 1px solid #e5edff;
+          border: 1px solid var(--edb-border);
           overflow: hidden;
         }
 
@@ -887,32 +887,32 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
 
         @media (prefers-color-scheme: dark) {
           .app-header {
-            background: linear-gradient(90deg, #111827 0%, #0f172a 100%) !important;
+            background: linear-gradient(90deg, var(--edb-primary-dark) 0%, var(--edb-primary-dark) 100%) !important;
           }
 
           .navbar-brand span {
-            color: #f8fafc;
+            color: var(--edb-on-primary);
           }
 
           .quick-link-icon {
-            color: #e5e7eb !important;
+            color: var(--edb-muted-text) !important;
           }
 
           .quick-link-icon .ql-icon-wrap {
-            background: linear-gradient(145deg, #1f2937, #111827);
-            border-color: #374151;
-            box-shadow: 0 2px 8px rgba(0,0,0,.35);
+            background: linear-gradient(145deg, var(--edb-primary-dark), var(--edb-primary-dark));
+            border-color: var(--edb-border);
+            box-shadow: 0 2px 8px color-mix(in srgb, var(--edb-primary-dark) 35%, transparent);
           }
 
           .quick-link-icon:hover .ql-icon-wrap {
-            background: linear-gradient(145deg, #1d4ed8, #1e3a8a);
-            border-color: #3b82f6;
+            background: linear-gradient(145deg, var(--edb-primary), var(--edb-primary));
+            border-color: var(--edb-primary);
           }
 
           .quick-link-icon.ql-active .ql-icon-wrap {
-            background: linear-gradient(145deg, #2563eb, #1d4ed8);
-            border-color: #60a5fa;
-            box-shadow: 0 0 0 3px rgba(96,165,250,.2), 0 4px 12px rgba(37,99,235,.28);
+            background: linear-gradient(145deg, var(--edb-primary), var(--edb-primary));
+            border-color: var(--edb-primary);
+            box-shadow: 0 0 0 3px color-mix(in srgb, var(--edb-primary-dark) 20%, transparent), 0 4px 12px color-mix(in srgb, var(--edb-primary-dark) 28.000000000000004%, transparent);
           }
         }
       `}</style>

@@ -1389,7 +1389,7 @@ const Transactions = () => {
       <Card
         className="mb-3 shadow-sm border-0"
         style={{
-          background: "linear-gradient(135deg, #eef7ff 0%, #dff1ff 100%)",
+          background: "linear-gradient(135deg, var(--edb-surface) 0%, var(--edb-primary-soft) 100%)",
           borderLeft: "6px solid #0d6efd",
         }}
       >
@@ -1404,8 +1404,8 @@ const Transactions = () => {
                 <div
                   className="h-100"
                   style={{
-                    background: "#fff",
-                    border: "1px solid #cfe2ff",
+                    background: "var(--edb-surface)",
+                    border: "1px solid var(--edb-border)",
                     borderRadius: "10px",
                     padding: "0.65rem 0.8rem",
                   }}
@@ -1413,7 +1413,7 @@ const Transactions = () => {
                   <div
                     style={{
                       fontSize: "0.78rem",
-                      color: "#6c757d",
+                      color: "var(--edb-muted-text)",
                       fontWeight: 600,
                       textTransform: "uppercase",
                       marginBottom: "2px",
@@ -1425,7 +1425,7 @@ const Transactions = () => {
                     style={{
                       fontSize: "0.95rem",
                       fontWeight: 700,
-                      color: "#0b3d91",
+                      color: "var(--edb-primary-text)",
                     }}
                   >
                     {String(value)}
@@ -3642,7 +3642,7 @@ const Transactions = () => {
               ))}
             </Form.Select>
           </Form.Group>
-          <div className="form-text ms-2" style={{ fontSize: 12, color: "#6c757d" }}>
+          <div className="form-text ms-2" style={{ fontSize: 12, color: "var(--edb-muted-text)" }}>
             Pick session once — applies to collections.
           </div>
         </div>
@@ -3902,32 +3902,32 @@ const Transactions = () => {
               max-height: calc(100dvh - 0.7rem);
             }
             .collection-modal .modal-header {
-              background: linear-gradient(135deg, #0d6efd 0%, #0b5ed7 100%);
-              color: #fff;
+              background: linear-gradient(135deg, var(--edb-primary) 0%, var(--edb-primary) 100%);
+              color: var(--edb-on-primary);
               border-bottom: 0;
             }
             .collection-modal .modal-header .btn-close {
               filter: invert(1);
             }
             .modal-dialog.collection-modal .modal-body {
-              background: #f8fbff;
+              background: var(--edb-surface);
               padding: 0.65rem;
               overflow-y: auto;
             }
             .collection-panel {
-              background: #fff;
-              border: 1px solid #e9ecef;
+              background: var(--edb-surface);
+              border: 1px solid var(--edb-border);
               border-radius: 16px;
-              box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+              box-shadow: 0 10px 24px color-mix(in srgb, var(--edb-primary-dark) 6%, transparent);
             }
             .collection-table-wrap {
               width: 100%;
               overflow: auto;
               max-height: calc(100dvh - 330px);
               min-height: 260px;
-              border: 1px solid #dee2e6;
+              border: 1px solid var(--edb-border);
               border-radius: 12px;
-              background: #fff;
+              background: var(--edb-surface);
             }
             .collection-table-wrap table {
               min-width: 1180px;
@@ -3935,7 +3935,7 @@ const Transactions = () => {
             .edit-grid .form-label,
             .collection-details-grid .form-label {
               font-weight: 600;
-              color: #495057;
+              color: var(--edb-text);
               margin-bottom: 0.2rem;
               font-size: 0.82rem;
             }
@@ -3954,8 +3954,8 @@ const Transactions = () => {
               gap: 0.35rem;
               padding: 0.35rem 0.65rem;
               border-radius: 999px;
-              background: #f1f5f9;
-              color: #334155;
+              background: var(--edb-surface);
+              color: var(--edb-text);
               font-size: 0.8rem;
               font-weight: 600;
             }
@@ -3967,17 +3967,17 @@ const Transactions = () => {
               line-height: 1.35;
             }
             .selected-student-strip {
-              background: #ffffff;
-              border: 1px solid #dbe7ff;
+              background: var(--edb-surface);
+              border: 1px solid var(--edb-border);
               border-radius: 14px;
-              box-shadow: 0 8px 18px rgba(13, 110, 253, 0.08);
+              box-shadow: 0 8px 18px color-mix(in srgb, var(--edb-primary-dark) 8%, transparent);
               padding: 0.55rem 0.8rem;
               margin-bottom: 0.5rem;
             }
             .selected-student-name {
               font-size: 0.95rem;
               font-weight: 700;
-              color: #0b3d91;
+              color: var(--edb-input-text);
               line-height: 1.2;
             }
             .selected-student-meta {
@@ -3985,7 +3985,7 @@ const Transactions = () => {
               flex-wrap: wrap;
               gap: 0.35rem 0.75rem;
               font-size: 0.82rem;
-              color: #495057;
+              color: var(--edb-input-text);
               line-height: 1.35;
               margin-top: 0.15rem;
             }
@@ -4199,15 +4199,15 @@ const Transactions = () => {
                               .sb-menu {
                                 position: absolute; top: 100%; left: 0; right: 0;
                                 max-height: 280px; overflow: auto; z-index: 1056;
-                                background: #fff; border: 1px solid rgba(0,0,0,.125);
+                                background: var(--edb-surface); border: 1px solid color-mix(in srgb, var(--edb-border) 12.5%, transparent);
                                 border-radius: .375rem; margin-top: 4px;
-                                box-shadow: 0 4px 16px rgba(0,0,0,.12);
+                                box-shadow: 0 4px 16px color-mix(in srgb, var(--edb-primary-dark) 12%, transparent);
                               }
                               .sb-item { padding: .5rem .75rem; cursor: pointer; display: flex; flex-direction: column; gap: 2px; }
-                              .sb-item:hover, .sb-item.active { background: #f6f7f9; }
+                              .sb-item:hover, .sb-item.active { background: var(--edb-surface); }
                               .primary-line { font-weight: 600; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-                              .secondary-line { font-size: 12px; color: #6c757d; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-                              .pill { font-weight: 500; font-size: 12px; color: #495057; background: #eef1f5; border-radius: 999px; padding: 1px 8px; margin-left: 6px; }
+                              .secondary-line { font-size: 12px; color: var(--edb-muted-text); line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+                              .pill { font-weight: 500; font-size: 12px; color: var(--edb-text); background: var(--edb-dashboard-bg); border-radius: 999px; padding: 1px 8px; margin-left: 6px; }
                             `}</style>
 
                             <Form.Group className="mb-3">
@@ -5689,8 +5689,8 @@ const Transactions = () => {
         <Modal.Footer
           className="py-3 px-3"
           style={{
-            background: "#fff",
-            borderTop: "1px solid #e9ecef",
+            background: "var(--edb-surface)",
+            borderTop: "1px solid var(--edb-border)",
           }}
         >
           {editingTransaction ? (
@@ -5719,9 +5719,9 @@ const Transactions = () => {
               <div
                 className="d-flex flex-wrap align-items-center gap-2 px-2 py-2"
                 style={{
-                  background: "#f8f9fa",
+                  background: "var(--edb-surface)",
                   borderRadius: "12px",
-                  border: "1px solid #dee2e6",
+                  border: "1px solid var(--edb-border)",
                   minWidth: 0,
                   flex: "1 1 420px",
                 }}

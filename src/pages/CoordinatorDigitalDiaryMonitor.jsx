@@ -1735,31 +1735,31 @@ function DiaryStyles() {
   return (
     <style>{`
       .digital-diary-page {
-        background: linear-gradient(180deg, #f8fbff 0%, #eef4ff 100%);
+        background: linear-gradient(180deg, var(--edb-surface) 0%, var(--edb-surface) 100%);
         min-height: calc(100vh - 56px);
       }
       .fw-black { font-weight: 900; }
-      .text-white-75 { color: rgba(255,255,255,.78); }
+      .text-white-75 { color: var(--edb-on-primary); }
       .min-w-0 { min-width: 0; }
       .diary-hero {
         padding: 22px;
         background:
-          radial-gradient(circle at top right, rgba(255,255,255,.22), transparent 32%),
-          linear-gradient(135deg, #1f7ae0 0%, #4f46e5 48%, #7c3aed 100%);
+          radial-gradient(circle at top right, color-mix(in srgb, var(--edb-surface) 22%, transparent), transparent 32%),
+          linear-gradient(135deg, var(--edb-primary) 0%, var(--edb-primary) 48%, var(--edb-primary) 100%);
       }
       .eyebrow {
         text-transform: uppercase;
         letter-spacing: .13em;
         font-size: 11px;
         font-weight: 800;
-        color: rgba(255,255,255,.78);
+        color: var(--edb-on-primary);
       }
       .hero-stat {
         display: flex;
         gap: 12px;
         align-items: center;
-        border: 1px solid rgba(255,255,255,.18);
-        background: rgba(255,255,255,.14);
+        border: 1px solid color-mix(in srgb, var(--edb-border) 18%, transparent);
+        background: color-mix(in srgb, var(--edb-surface) 14%, transparent);
         border-radius: 18px;
         padding: 14px;
         backdrop-filter: blur(10px);
@@ -1773,14 +1773,14 @@ function DiaryStyles() {
         border-radius: 14px;
         font-size: 18px;
       }
-      .hero-value { color: #fff; font-size: 22px; line-height: 1; font-weight: 900; }
-      .hero-label { color: rgba(255,255,255,.76); font-size: 12px; font-weight: 700; }
+      .hero-value { color: var(--edb-on-primary); font-size: 22px; line-height: 1; font-weight: 900; }
+      .hero-label { color: var(--edb-on-primary); font-size: 12px; font-weight: 700; }
       .diary-pagination {
-        background: linear-gradient(180deg, #fff 0%, #f8fafc 100%);
-        border-color: #e5e7eb;
+        background: linear-gradient(180deg, var(--edb-surface) 0%, var(--edb-surface) 100%);
+        border-color: var(--edb-border);
       }
-      .diary-pagination-top { border-bottom: 1px solid #e5e7eb; }
-      .diary-pagination-bottom { border-top: 1px solid #e5e7eb; }
+      .diary-pagination-top { border-bottom: 1px solid var(--edb-border); }
+      .diary-pagination-bottom { border-top: 1px solid var(--edb-border); }
       .diary-table-scroll {
         max-height: calc(100vh - 300px);
         min-height: 360px;
@@ -1793,12 +1793,12 @@ function DiaryStyles() {
         position: sticky;
         top: 0;
         z-index: 2;
-        background: #f8fafc !important;
-        color: #334155;
+        background: var(--edb-surface) !important;
+        color: var(--edb-text);
         font-size: 12px;
         text-transform: uppercase;
         letter-spacing: .04em;
-        border-bottom: 1px solid #e2e8f0;
+        border-bottom: 1px solid var(--edb-border);
         white-space: nowrap;
       }
       .diary-title-col { min-width: 360px; }
@@ -1812,14 +1812,14 @@ function DiaryStyles() {
       }
       .empty-state { max-width: 360px; }
       .diary-modal-backdrop {
-        background: rgba(15, 23, 42, .58);
+        background: color-mix(in srgb, var(--edb-primary-dark) 58%, transparent);
         backdrop-filter: blur(4px);
       }
       .diary-view-header {
-        background: linear-gradient(135deg, #0f172a 0%, #1d4ed8 55%, #6d28d9 100%);
+        background: linear-gradient(135deg, var(--edb-primary-dark) 0%, var(--edb-primary) 55%, var(--edb-primary) 100%);
       }
       .diary-edit-header {
-        background: linear-gradient(135deg, #1f2937 0%, #2563eb 60%, #7c3aed 100%);
+        background: linear-gradient(135deg, var(--edb-primary-dark) 0%, var(--edb-primary) 60%, var(--edb-primary) 100%);
       }
       .diary-view-scroll-y {
         max-height: 72vh;
@@ -1830,7 +1830,7 @@ function DiaryStyles() {
       }
       .diary-view-canvas {
         min-width: 760px;
-        background: #f8fafc;
+        background: var(--edb-surface);
       }
       .info-box {
         background: #fff;
@@ -1854,44 +1854,44 @@ function DiaryStyles() {
         font-weight: 900;
       }
       .info-box small { color: #64748b; }
-      .content-preview-card { box-shadow: 0 8px 26px rgba(15, 23, 42, .06); }
+      .content-preview-card { box-shadow: 0 8px 26px color-mix(in srgb, var(--edb-primary-dark) 6%, transparent); }
       .diary-content-text {
-        color: #334155;
+        color: var(--edb-text);
         white-space: pre-wrap;
         line-height: 1.75;
         font-size: 15px;
       }
       .attachment-link { transition: all .18s ease; }
-      .attachment-link:hover { transform: translateY(-1px); box-shadow: 0 8px 20px rgba(15, 23, 42, .08); }
+      .attachment-link:hover { transform: translateY(-1px); box-shadow: 0 8px 20px color-mix(in srgb, var(--edb-primary-dark) 8%, transparent); }
       .ack-table-scroll {
         max-height: 65vh;
         overflow: auto;
       }
       .section-card {
-        border: 1px solid #e2e8f0;
+        border: 1px solid var(--edb-border);
         border-radius: 22px;
-        background: #fff;
+        background: var(--edb-surface);
         padding: 18px;
-        box-shadow: 0 12px 30px rgba(15, 23, 42, .06);
+        box-shadow: 0 12px 30px color-mix(in srgb, var(--edb-primary-dark) 6%, transparent);
       }
       .section-title {
         display: flex;
         align-items: center;
         gap: 8px;
         font-weight: 900;
-        color: #0f172a;
+        color: var(--edb-text);
         margin-bottom: 14px;
       }
       .upload-zone { cursor: pointer; transition: all .18s ease; }
-      .upload-zone:hover { transform: translateY(-1px); background: #dbeafe !important; }
+      .upload-zone:hover { transform: translateY(-1px); background: var(--edb-primary-soft) !important; }
       .student-picker-list {
         max-height: 320px;
         overflow-y: auto;
         padding-right: 4px;
       }
       .student-check { cursor: pointer; transition: background .15s ease; }
-      .student-check:hover { background: #fff; }
-      .preview-box { box-shadow: inset 0 0 0 1px rgba(15, 23, 42, .02); }
+      .student-check:hover { background: var(--edb-surface); }
+      .preview-box { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--edb-primary-dark) 2%, transparent); }
       .attachment-edit-row { min-width: 0; }
       @media (max-width: 768px) {
         .diary-table-scroll { max-height: none; min-height: 300px; }
