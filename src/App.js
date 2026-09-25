@@ -135,6 +135,7 @@ import DailyReadiness from "./pages/DailyReadiness";
 import LostFound from "./pages/LostFound";
 import TeacherPerformance from "./pages/TeacherPerformance";
 import SchoolCommandCenter from "./pages/SchoolCommandCenter";
+import PrincipalAcademicIntelligence from "./pages/PrincipalAcademicIntelligence"; // PATCH5_ACADEMIC_INTELLIGENCE
 import ParentConsents from "./pages/ParentConsents";
 import UnifiedActionInbox from "./pages/UnifiedActionInbox";
 import SchoolAiAssistant from "./pages/SchoolAiAssistant"; // SCHOOL_AI_IMPORT_V12
@@ -535,6 +536,14 @@ function App() {
             element={
               <RequireRole roles={["principal", "admin", "superadmin", "super_admin", "academic_coordinator", "coordinator", "hr"]}>
                 <SchoolCommandCenter />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="/academic-intelligence"
+            element={
+              <RequireRole roles={["principal", "admin", "superadmin", "super_admin", "academic_coordinator", "coordinator"]}>
+                <PrincipalAcademicIntelligence />
               </RequireRole>
             }
           />

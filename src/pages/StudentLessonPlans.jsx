@@ -2,6 +2,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import api from "../api";
 import Swal from "sweetalert2";
+import { useInstitution } from "../institution/InstitutionContext";
+import { useBranch } from "../branch/BranchContext";
+import LearningJourneyCard from "../components/learning/LearningJourneyCard";
 import {
   Alert,
   Badge,
@@ -328,6 +331,9 @@ async function getBlobWithFallback(paths) {
 }
 
 export default function StudentLessonPlans() {
+  const { institution } = useInstitution();
+  const { activeBranch, allBranches } = useBranch();
+  const branchName = allBranches ? "" : (activeBranch?.name || activeBranch?.branch_name || "");
   const [loading, setLoading] = useState(true);
   const [plans, setPlans] = useState([]);
   const [selectedPlanId, setSelectedPlanId] = useState(null);
@@ -697,6 +703,21 @@ export default function StudentLessonPlans() {
                       {shortDate(currentPlan.weekStart || currentPlan.startDate)} - {shortDate(currentPlan.weekEnd || currentPlan.endDate)}
                     </div>
                   </div>
+
+                  {(currentPlan.learningJourney || currentPlan.learning_journey) ? (
+                    <div className="mt-3 mb-4">
+                      <LearningJourneyCard
+                        journey={currentPlan.learningJourney || currentPlan.learning_journey}
+                        institution={institution}
+                        branchName={branchName}
+                        className={classNameOf(currentPlan)}
+                        subjectName={subjectNameOf(currentPlan)}
+                        topic={trimStr(currentPlan.topic)}
+                        teacherName={trimStr(currentPlan?.Teacher?.name || currentPlan?.teacherName)}
+                        weekRange={`${shortDate(currentPlan.weekStart || currentPlan.startDate)} → ${shortDate(currentPlan.weekEnd || currentPlan.endDate)}`}
+                      />
+                    </div>
+                  ) : null}
 
                   <Row className="g-3 mt-1">
                     <StudentInfoBox title="What to learn" icon="bi-bullseye" value={objectiveText} />

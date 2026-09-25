@@ -328,6 +328,7 @@ export default function Sidebar({ headerHeight = 56 }) {
         heading: "Main",
         items: [
           { key: "command-center", label: "School Command Center", icon: "bi-command", path: "/command-center" },
+          { key: "principal-academic-intelligence", label: "Academic Intelligence", icon: "bi-activity", path: "/academic-intelligence" }, // PATCH5_AI_NAV
           { key: "school-ai-principal", label: "Ask EduBridge", icon: "bi-stars", path: "/school-ai" }, // PRINCIPAL_LIVE_AI
           { key: "principal-action-inbox", label: "My Actions & Approvals", icon: "bi-inboxes-fill", path: "/action-inbox" },
           { key: "principal-parent-consents", label: "Parent Consent & Acknowledgement", icon: "bi-pen", path: "/parent-consents" },
@@ -1082,6 +1083,7 @@ export default function Sidebar({ headerHeight = 56 }) {
         items: [
           { key: "dashboard", label: "Dashboard", icon: "bi-speedometer2", path: "/dashboard" },
           { key: "command-center-admin", label: "School Command Center", icon: "bi-command", path: "/command-center" },
+          { key: "admin-academic-intelligence", label: "Academic Intelligence", icon: "bi-activity", path: "/academic-intelligence" },
           { key: "action-inbox-admin", label: "My Actions & Approvals", icon: "bi-inboxes-fill", path: "/action-inbox", roles: ["admin", "superadmin"] },
           { key: "parent-consents-admin", label: "Parent Consent & Acknowledgement", icon: "bi-pen", path: "/parent-consents", roles: ["admin", "superadmin"] },
           { key: "combined-circulars", label: "Circulars", icon: "bi-megaphone", path: "/combined-circulars" },
@@ -1255,6 +1257,7 @@ export default function Sidebar({ headerHeight = 56 }) {
         items: [
           { key: "dashboard", label: "Dashboard", icon: "bi-speedometer2", path: "/dashboard" },
           { key: "command-center-academic", label: "School Command Center", icon: "bi-command", path: "/command-center" },
+          { key: "coordinator-academic-intelligence", label: "Academic Intelligence", icon: "bi-activity", path: "/academic-intelligence" },
           { key: "action-inbox-academic", label: "My Actions & Approvals", icon: "bi-inboxes-fill", path: "/action-inbox", roles: ["academic_coordinator", "coordinator"] },
           { key: "parent-consents-academic", label: "Parent Consent & Acknowledgement", icon: "bi-pen", path: "/parent-consents", roles: ["academic_coordinator", "coordinator"] },
           { key: "circulars", label: "Circulars", icon: "bi-megaphone", path: "/combined-circulars" },

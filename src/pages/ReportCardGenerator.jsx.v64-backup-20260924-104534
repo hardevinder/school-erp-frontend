@@ -2224,10 +2224,11 @@ const FinalResultSummary = () => {
         };
       }),
       { id: "total", label: smartTotalLabel, source: "total_weighted", width: 9, align: "center" },
-      // SMCIS_GRADES_KEEP_SUBJECTS_V64
-      // Keep Grade for every subject. Only the bottom TOTAL / Grand Total row
-      // must have no grade; the renderer honors blank_on_total for that row.
-      { id: "grade", label: "GRADE", source: "grade", width: 8, align: "center", blank_on_total: isSmcisCodedTemplate },
+      // SMCIS client format: Total is the final scholastic column. Other smart
+      // templates keep their existing Grade column.
+      ...(isSmcisCodedTemplate
+        ? []
+        : [{ id: "grade", label: "GRADE", source: "grade", width: 8, align: "center" }]),
     ];
 
     const smartSubjectNames = [
@@ -2459,24 +2460,15 @@ const FinalResultSummary = () => {
         (drawingT1 !== "-" || drawingT2 !== "-")) {
       templateCoAreas.set("drawing", { area_name: "Drawing", t1: { grade: drawingT1 }, t2: { grade: drawingT2 } });
     }
-    // SMCIS_COSCHOLASTIC_CLEANUP_V65
-    // Do not print orphan grades. A Co-Scholastic row must have a real Activity
-    // name; otherwise data-na-mode="dash" renders a misleading "- | V" row.
-    const coScholasticRows = Array.from(templateCoAreas.values())
-      .filter((row) => {
-        const areaName = String(row?.area_name ?? row?.name ?? "").trim();
-        const normalized = areaName.toLowerCase();
-        return Boolean(areaName) && areaName !== "-" && normalized !== "null" && normalized !== "undefined";
-      })
-      .map((row) => {
-        const term1 = row.t1?.grade || "-";
-        const term2 = row.t2?.grade || "-";
-        return {
-          name: row.area_name || row.name, term1, term2, term1_grade: term1, term2_grade: term2,
-          grade: Number(reportTermId) === Number(term2Id) ? term2 : term1,
-          source: row.source || "mapped-area",
-        };
-      });
+    const coScholasticRows = Array.from(templateCoAreas.values()).map((row) => {
+      const term1 = row.t1?.grade || "-";
+      const term2 = row.t2?.grade || "-";
+      return {
+        name: row.area_name, term1, term2, term1_grade: term1, term2_grade: term2,
+        grade: Number(reportTermId) === Number(term2Id) ? term2 : term1,
+        source: row.source || "mapped-area",
+      };
+    });
 
     const dynamicReportAttendance = termBucket(reportTermId || term1Id || term2Id);
 

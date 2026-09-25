@@ -2,6 +2,9 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../api";
+import { useInstitution } from "../institution/InstitutionContext";
+import { useBranch } from "../branch/BranchContext";
+import LearningJourneyCard, { normalizeJourney } from "../components/learning/LearningJourneyCard";
 import Swal from "sweetalert2";
 import {
   Accordion,
@@ -88,6 +91,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const LessonPlanCRUD = () => {
   const navigate = useNavigate();
+  const { institution } = useInstitution();
+  const { activeBranch, allBranches } = useBranch();
+  const branchName = allBranches ? "" : (activeBranch?.name || activeBranch?.branch_name || "");
 
   const [lessonPlans, setLessonPlans] = useState([]);
   const [classes, setClasses] = useState([]);
@@ -114,6 +120,14 @@ const LessonPlanCRUD = () => {
   const [aiImportBusy, setAiImportBusy] = useState(false);
   const [aiImportInfo, setAiImportInfo] = useState(null);
   const lessonPlanImportInputRef = useRef(null);
+
+  // ✅ AI lesson/chapter material -> Lesson Plan + student Learning Journey
+  const [materialBusy, setMaterialBusy] = useState(false);
+  const [materialInfo, setMaterialInfo] = useState(null);
+  const [lessonMaterialDragActive, setLessonMaterialDragActive] = useState(false); // PATCH_LESSON_MATERIAL_DRAG_STATE
+  const [learningJourney, setLearningJourney] = useState(null);
+  const [showJourney, setShowJourney] = useState(false);
+  const lessonMaterialInputRef = useRef(null);
 
   const [searchClass, setSearchClass] = useState("");
   const [searchSubject, setSearchSubject] = useState("");
@@ -319,6 +333,34 @@ const LessonPlanCRUD = () => {
     }
   };
 
+  // PATCH_REUSE_LESSON_TO_PRACTICE
+  const openAcademicPractice = (assessmentType) => {
+    if (!formData.classId || !formData.subjectId || !formData.breakdownItemId) {
+      Swal.fire({ icon: "info", title: "Select syllabus topic", text: "Choose Class, Subject and Unit/Syllabus Topic first." });
+      return;
+    }
+    const params = new URLSearchParams({
+      create: "1",
+      assessment_type: assessmentType,
+      class_id: String(formData.classId),
+      subject_id: String(formData.subjectId),
+      breakdown_id: String(formData.breakdownId || ""),
+      breakdown_item_id: String(formData.breakdownItemId),
+      topic: safeStr(formData.topic || formData.subtopic || ""),
+      title: `${assessmentType === "worksheet" ? "Worksheet" : "Assessment"} – ${safeStr(formData.topic || "Topic")}`,
+      from: "lesson-plan",
+    });
+    if (Array.isArray(formData.sections) && formData.sections.length === 1) params.set("section_id", String(formData.sections[0]));
+    if (editing && editId) params.set("lesson_plan_id", String(editId));
+    const source = learningJourney?._sourceMaterial || learningJourney?.sourceMaterial || null;
+    if (source?.resourceId) {
+      params.set("source_resource_id", String(source.resourceId));
+      if (source.fileName) params.set("source_file_name", String(source.fileName));
+    }
+    navigate(`/assessments?${params.toString()}`);
+  };
+
+
   /* ---------------- PDF helpers ---------------- */
 
   const openBlobInNewTab = (blob, filename = "document.pdf") => {
@@ -434,7 +476,12 @@ const LessonPlanCRUD = () => {
     setAiBusy(false);
     setAiImportBusy(false);
     setAiImportInfo(null);
+    setMaterialBusy(false);
+    setMaterialInfo(null);
+    setLearningJourney(null);
+    setShowJourney(false);
     if (lessonPlanImportInputRef.current) lessonPlanImportInputRef.current.value = "";
+    if (lessonMaterialInputRef.current) lessonMaterialInputRef.current.value = "";
   };
 
   const openCreate = async () => {
@@ -497,6 +544,8 @@ const LessonPlanCRUD = () => {
     };
 
     setFormData(next);
+    setLearningJourney(normalizeJourney(full.learningJourney || full.learning_journey));
+    setMaterialInfo(null);
 
     await fetchSectionsForClass(next.classId);
 
@@ -785,6 +834,201 @@ const LessonPlanCRUD = () => {
     }
   };
 
+  /* ---------------- ✅ AI: Lesson/chapter PDF -> Lesson Plan + Learning Journey ---------------- */
+
+  const lessonMaterialEnabled = useMemo(() => {
+    return !!formData.classId && !!formData.subjectId && !!safeStr(formData.topic).trim() && !!formData.weekStart && !!formData.weekEnd;
+  }, [formData.classId, formData.subjectId, formData.topic, formData.weekStart, formData.weekEnd]);
+
+  const openLessonMaterialPicker = () => {
+    if (materialBusy || aiBusy || aiImportBusy || saving) return;
+    if (!lessonMaterialEnabled) {
+      fireTop({
+        icon: "warning",
+        title: "Complete lesson basics first",
+        text: "Select Class, Subject, Syllabus Topic, Week Start and Week End. Then upload the lesson/chapter PDF.",
+      });
+      return;
+    }
+    lessonMaterialInputRef.current?.click();
+  };
+
+  const applyMaterialDraft = (data) => {
+    const draft = data?.plan || data?.data?.plan || null;
+    if (!draft || typeof draft !== "object") return false;
+    const next = { ...formData };
+    const setText = (target, source) => {
+      if (source != null && safeStr(source).trim()) next[target] = safeStr(source).trim();
+    };
+    setText("topic", draft.topic);
+    setText("subtopic", draft.subtopic);
+    setText("specificObjectives", draft.specific_objectives || draft.specificObjectives);
+    setText("teachingMethod", draft.teaching_method || draft.teachingMethod);
+    setText("teachingAids", draft.teaching_aids || draft.teachingAids);
+    setText("activities", draft.activities);
+    setText("resources", draft.resources);
+    setText("evaluationMethod", draft.evaluation_method || draft.evaluationMethod);
+    setText("assessmentPlan", draft.assessment_plan || draft.assessmentPlan);
+    setText("homework", draft.homework);
+    setText("remedialPlan", draft.remedial_plan || draft.remedialPlan);
+    setText("enrichmentPlan", draft.enrichment_plan || draft.enrichmentPlan);
+    setText("remarks", draft.remarks);
+    if (draft.planned_periods != null && Number.isFinite(Number(draft.planned_periods))) {
+      next.plannedPeriods = String(Math.max(1, Math.round(Number(draft.planned_periods))));
+    }
+    setFormData(next);
+    setAiFilled(true);
+    const journey = normalizeJourney(data?.learningJourney || data?.learning_journey || data?.data?.learningJourney);
+    if (journey) setLearningJourney(journey);
+    return true;
+  };
+
+  const processLessonMaterialFile = async (file, inputTarget = null) => {
+    if (!file) return;
+
+    const allowedTypes = new Set([
+      "application/pdf",
+      "image/jpeg",
+      "image/png",
+      "image/webp",
+    ]);
+    const allowedExt = /\.(pdf|jpe?g|png|webp)$/i.test(file.name || "");
+
+    if (!allowedTypes.has(file.type) && !allowedExt) {
+      fireTop({
+        icon: "warning",
+        title: "Unsupported lesson file",
+        text: "Please upload a PDF, JPG, PNG or WEBP file.",
+      });
+      if (inputTarget) inputTarget.value = "";
+      return;
+    }
+
+    if (Number(file.size || 0) > 25 * 1024 * 1024) {
+      fireTop({
+        icon: "warning",
+        title: "Lesson file is too large",
+        text: "Maximum allowed size is 25 MB.",
+      });
+      if (inputTarget) inputTarget.value = "";
+      return;
+    }
+
+    if (!lessonMaterialEnabled) {
+      fireTop({
+        icon: "warning",
+        title: "Complete lesson basics first",
+        text: "Select Class, Subject, Syllabus Topic, Week Start and Week End. Then upload the lesson/chapter PDF.",
+      });
+      if (inputTarget) inputTarget.value = "";
+      return;
+    }
+
+    setMaterialBusy(true); // PATCH_LESSON_MATERIAL_SHARED_PROCESSOR
+    try {
+      const body = new FormData();
+      body.append("lesson_material", file);
+      body.append("classId", String(formData.classId));
+      body.append("subjectId", String(formData.subjectId));
+      body.append("topic", safeStr(formData.topic).trim());
+      if (safeStr(formData.subtopic).trim()) body.append("subtopic", safeStr(formData.subtopic).trim());
+      if (formData.breakdownId) body.append("breakdownId", String(formData.breakdownId));
+      if (formData.breakdownItemId) body.append("breakdownItemId", String(formData.breakdownItemId));
+      if (safeStr(formData.academicSession).trim()) body.append("academicSession", safeStr(formData.academicSession).trim());
+      body.append("term", formData.term || "FULL_YEAR");
+      body.append("weekStart", formData.weekStart);
+      body.append("weekEnd", formData.weekEnd);
+      const currentSource = learningJourney?._sourceMaterial || learningJourney?.sourceMaterial || null;
+      if (currentSource?.resourceId) body.append("sourceResourceId", String(currentSource.resourceId)); // PATCH_REUSE_SOURCE_RESOURCE_ON_UPLOAD
+
+      const res = await api.post("/api/ai/lesson-plan/from-material", body, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      const applied = applyMaterialDraft(res?.data);
+      if (!applied) throw new Error("AI response could not be mapped to the lesson plan.");
+      setMaterialInfo({
+        fileName: file.name,
+        documentTitle: res?.data?.document?.title || "",
+        language: res?.data?.document?.detected_language || "",
+        warnings: Array.isArray(res?.data?.warnings) ? res.data.warnings : [],
+      });
+      fireTop({
+        icon: "success",
+        title: "✨ Lesson created from your material",
+        text: "AI filled the lesson plan and prepared a student Learning Journey. Review before saving.",
+        timer: 2300,
+        showConfirmButton: false,
+      });
+      if (normalizeJourney(res?.data?.learningJourney)) setShowJourney(true);
+    } catch (error) {
+      console.error("Lesson material AI error:", error);
+      fireTop({
+        icon: "error",
+        title: "AI Lesson Material Error",
+        text: error?.response?.data?.message || error?.response?.data?.error || error?.message || "Could not create the lesson from this material.",
+      });
+    } finally {
+      setMaterialBusy(false);
+      if (inputTarget) inputTarget.value = "";
+    }
+  };
+
+  const handleLessonMaterialFile = async (event) => {
+    const file = event?.target?.files?.[0];
+    if (!file) return;
+    await processLessonMaterialFile(file, event?.target || null);
+  };
+
+  const handleLessonMaterialDragOver = (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!materialBusy && !saving) {
+      event.dataTransfer.dropEffect = "copy";
+      setLessonMaterialDragActive(true);
+    }
+  };
+
+  const handleLessonMaterialDragLeave = (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setLessonMaterialDragActive(false);
+  };
+
+  const handleLessonMaterialDrop = async (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setLessonMaterialDragActive(false);
+    if (materialBusy || aiBusy || aiImportBusy || saving) return;
+    const file = event.dataTransfer?.files?.[0];
+    if (!file) return;
+    await processLessonMaterialFile(file);
+  };
+
+  const handleLessonMaterialDropKeyDown = (event) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      openLessonMaterialPicker();
+    }
+  }; // PATCH_LESSON_MATERIAL_DROP_HANDLERS
+
+  const shareLearningJourney = async () => {
+    if (!learningJourney) return;
+    if (editing && editId) {
+      try {
+        await api.put(`/lesson-plans/${editId}`, { learningJourney, publish: true });
+        setFormData((prev) => ({ ...prev, publish: true }));
+        fireTop({ icon: "success", title: "Shared with students", text: "The branded Learning Journey is now available with this published lesson." });
+        fetchLessonPlans();
+      } catch (error) {
+        fireTop({ icon: "error", title: "Share failed", text: error?.response?.data?.error || error?.response?.data?.message || "Could not share the Learning Journey." });
+      }
+      return;
+    }
+    setFormData((prev) => ({ ...prev, publish: true }));
+    setShowJourney(false);
+    fireTop({ icon: "info", title: "Ready to share", text: "Publish has been enabled. Save the Lesson Plan to share this branded Learning Journey with students." });
+  };
+
   /* ---------------- ✅ AI: Import PDF / handwriting ---------------- */
 
   const lessonPlanImportEnabled = useMemo(() => {
@@ -1017,6 +1261,7 @@ const LessonPlanCRUD = () => {
       status: formData.status,
       completionStatus: formData.completionStatus,
       remarks: formData.remarks || null,
+      learningJourney: learningJourney || null,
       publish: !!formData.publish,
       sections: Array.isArray(formData.sections)
         ? formData.sections.map((x) => Number(x)).filter((n) => Number.isFinite(n) && n > 0)
@@ -1494,6 +1739,35 @@ const LessonPlanCRUD = () => {
         </Modal.Footer>
       </Modal>
 
+      {/* ✅ Branded Learning Journey preview/share */}
+      <Modal show={showJourney} onHide={() => setShowJourney(false)} size="xl" centered fullscreen="md-down" dialogClassName="learning-journey-modal">
+        <Modal.Header closeButton>
+          <Modal.Title>Student Learning Journey</Modal.Title>
+        </Modal.Header>
+        <Modal.Body className="learning-journey-modal-body">
+          <LearningJourneyCard
+            journey={learningJourney}
+            institution={institution}
+            branchName={branchName}
+            className={classMap.get(Number(formData.classId))?.class_name || ""}
+            subjectName={subjectMap.get(Number(formData.subjectId))?.name || ""}
+            topic={formData.topic}
+            weekRange={[fmtDate(formData.weekStart), fmtDate(formData.weekEnd)].filter(Boolean).join(" → ")}
+            printable
+            actions={
+              <>
+                <Button variant="outline-secondary" onClick={() => window.print()}>
+                  <i className="bi bi-printer me-1" /> Print / PDF
+                </Button>
+                <Button className="learning-journey-share-btn" onClick={shareLearningJourney}>
+                  <i className="bi bi-send me-1" /> Share with Students
+                </Button>
+              </>
+            }
+          />
+        </Modal.Body>
+      </Modal>
+
       {/* ✅ Create/Edit Modal */}
       <Modal
         show={showModal}
@@ -1537,6 +1811,41 @@ const LessonPlanCRUD = () => {
                   className="d-none"
                   onChange={handleLessonPlanImportFile}
                 />
+                <input
+                  ref={lessonMaterialInputRef}
+                  type="file"
+                  accept=".pdf,image/jpeg,image/png,image/webp"
+                  className="d-none"
+                  onChange={handleLessonMaterialFile}
+                />
+
+                <Button
+                  size="sm"
+                  className="lesson-ai-material-btn"
+                  variant={lessonMaterialEnabled ? "primary" : "outline-secondary"}
+                  onClick={openLessonMaterialPicker}
+                  disabled={materialBusy || aiImportBusy || aiBusy || saving}
+                  title={lessonMaterialEnabled ? "Upload lesson/chapter material and build the complete plan with AI" : "Select Class, Subject, Topic and Week dates first"}
+                >
+                  {materialBusy ? (
+                    <>
+                      <Spinner size="sm" animation="border" className="me-2" /> Building...
+                    </>
+                  ) : (
+                    <>✨ AI from Lesson PDF</>
+                  )}
+                </Button>
+
+                {/* PATCH_2_1_VISIBLE_LEARNING_JOURNEY */}
+                <Button
+                  size="sm"
+                  variant={learningJourney ? "outline-primary" : "outline-secondary"}
+                  onClick={() => learningJourney ? setShowJourney(true) : openLessonMaterialPicker()}
+                  disabled={materialBusy || aiImportBusy || aiBusy || saving}
+                  title={learningJourney ? "Preview the branded student Learning Journey" : "Generate a Learning Journey from the lesson/chapter PDF"}
+                >
+                  <i className="bi bi-map me-1" /> {learningJourney ? "Preview Journey" : "Learning Journey"}
+                </Button>
 
                 <Button
                   size="sm"
@@ -1596,6 +1905,56 @@ const LessonPlanCRUD = () => {
 
         <Form onSubmit={handleSubmit}>
           <Modal.Body style={modalBodyStyle}>
+            <div
+              className={`lesson-material-dropzone mb-3 ${lessonMaterialDragActive ? "is-dragging" : ""} ${!lessonMaterialEnabled ? "is-disabled" : ""} ${materialBusy ? "is-busy" : ""}`}
+              role="button"
+              tabIndex={lessonMaterialEnabled && !materialBusy ? 0 : -1}
+              aria-disabled={!lessonMaterialEnabled || materialBusy}
+              onClick={() => {
+                if (lessonMaterialEnabled && !materialBusy) openLessonMaterialPicker();
+              }}
+              onKeyDown={handleLessonMaterialDropKeyDown}
+              onDragEnter={handleLessonMaterialDragOver}
+              onDragOver={handleLessonMaterialDragOver}
+              onDragLeave={handleLessonMaterialDragLeave}
+              onDrop={handleLessonMaterialDrop}
+            >
+              <div className="lesson-material-dropzone__icon">
+                {materialBusy ? (
+                  <Spinner size="sm" animation="border" />
+                ) : (
+                  <i className="bi bi-cloud-arrow-up" />
+                )}
+              </div>
+              <div className="lesson-material-dropzone__copy">
+                <strong>Lesson / Chapter Material</strong>
+                <span>
+                  {materialBusy
+                    ? "AI is reading your lesson material…"
+                    : lessonMaterialEnabled
+                      ? "Drag & drop PDF/image here, or click to browse"
+                      : "Select Class, Subject, Syllabus Topic and Week dates first"}
+                </span>
+                <small>PDF, JPG, PNG or WEBP · Max 25 MB · Upload once and reuse for Learning Journey, Worksheet & Assessment.</small>
+              </div>
+              <div className="lesson-material-dropzone__action">
+                <span>{materialBusy ? "Processing…" : "Choose File"}</span>
+              </div>
+            </div> {/* PATCH_LESSON_MATERIAL_DROPZONE_UI */}
+
+            {materialInfo ? (
+              <div className={`alert mb-3 ${materialInfo.warnings?.length ? "alert-warning" : "lesson-material-success"}`} role="alert">
+                <div className="fw-semibold">✨ AI lesson material processed</div>
+                <div className="small mt-1">
+                  {materialInfo.fileName}
+                  {materialInfo.documentTitle && materialInfo.documentTitle !== materialInfo.fileName ? ` • ${materialInfo.documentTitle}` : ""}
+                  {materialInfo.language ? ` • ${materialInfo.language}` : ""}
+                </div>
+                <div className="small mt-1">Lesson Plan + branded student Learning Journey are ready for review.</div>
+                {materialInfo.warnings?.length ? <div className="small mt-1">{materialInfo.warnings.slice(0, 3).join(" • ")}</div> : null}
+              </div>
+            ) : null}
+
             {aiImportInfo ? (
               <div
                 className={`alert mb-3 ${
@@ -2039,6 +2398,91 @@ const LessonPlanCRUD = () => {
                           </Form.Group>
                         </Col>
                       </Row>
+                    </Accordion.Body>
+                  </Accordion.Item>
+
+                  <Accordion.Item eventKey="3" className="learning-journey-workspace">
+                    <Accordion.Header>
+                      <span className="d-flex align-items-center gap-2 flex-wrap">
+                        <span><i className="bi bi-map me-1" /> Student Learning Journey</span>
+                        <Badge bg={learningJourney ? "success" : "secondary"}>
+                          {learningJourney ? (formData.publish ? "SHARED" : "READY") : "NOT GENERATED"}
+                        </Badge>
+                      </span>
+                    </Accordion.Header>
+                    <Accordion.Body>
+                      <div className="learning-journey-workspace__intro">
+                        <div className="learning-journey-workspace__icon"><i className="bi bi-signpost-split" /></div>
+                        <div>
+                          <div className="fw-semibold">Student Learning Journey</div>
+                          <div className="small text-muted">
+                            Generate and share a visual roadmap before class.
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="learning-journey-workspace__requirements">
+                        {[
+                          [!!formData.classId, "Class"],
+                          [!!formData.subjectId, "Subject"],
+                          [!!safeStr(formData.topic).trim(), "Syllabus Topic"],
+                          [!!formData.weekStart && !!formData.weekEnd, "Week Dates"],
+                        ].map(([ok, label]) => (
+                          <span key={label} className={ok ? "is-ready" : "is-pending"}>
+                            <i className={`bi ${ok ? "bi-check-circle-fill" : "bi-circle"}`} /> {label}
+                          </span>
+                        ))}
+                      </div>
+
+                      {!learningJourney ? (
+                        <div className="learning-journey-workspace__empty">
+                          <div className="fw-semibold">1. Complete the lesson basics above</div>
+                          <div className="small text-muted mb-3">2. Upload the chapter/lesson PDF. AI will create the Lesson Plan and Learning Journey together.</div>
+                          <Button
+                            className="lesson-ai-material-btn"
+                            onClick={openLessonMaterialPicker}
+                            disabled={materialBusy || aiImportBusy || aiBusy || saving}
+                          >
+                            {materialBusy ? <><Spinner size="sm" animation="border" className="me-2" /> Building Journey...</> : <><i className="bi bi-stars me-1" /> Generate from Lesson PDF</>}
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="learning-journey-workspace__ready">
+                          <div>
+                            <div className="fw-semibold text-success"><i className="bi bi-check-circle-fill me-1" /> Learning Journey ready</div>
+                            <div className="small text-muted">
+                              {Array.isArray(learningJourney?.stages) ? `${learningJourney.stages.length} journey stages • ` : ""}
+                              Preview it exactly as students will see it, then share when ready.
+                            </div>
+                          </div>
+                          <div className="d-flex gap-2 flex-wrap mt-3">
+                            <Button variant="outline-primary" onClick={() => setShowJourney(true)}>
+                              <i className="bi bi-eye me-1" /> Preview Student View
+                            </Button>
+                            <Button className="learning-journey-share-btn" onClick={shareLearningJourney}>
+                              <i className="bi bi-send me-1" /> Share with Students
+                            </Button>
+                            <Button variant="outline-secondary" onClick={openLessonMaterialPicker} disabled={materialBusy}>
+                              <i className="bi bi-arrow-repeat me-1" /> Regenerate
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="academic-practice-next mt-3">
+                        <div>
+                          <div className="fw-semibold"><i className="bi bi-lightning-charge-fill me-1" /> Next: Practice & Check Understanding</div>
+                          <div className="small text-muted">Use this same syllabus topic to create student practice or a measurable assessment with AI.</div>
+                        </div>
+                        <div className="d-flex flex-wrap gap-2 mt-3">
+                          <Button variant="outline-primary" onClick={() => openAcademicPractice("worksheet")} disabled={!formData.classId || !formData.subjectId || !formData.breakdownItemId}>
+                            <i className="bi bi-file-earmark-richtext me-1" /> Create AI Worksheet
+                          </Button>
+                          <Button className="academic-practice-next__assessment" onClick={() => openAcademicPractice("test")} disabled={!formData.classId || !formData.subjectId || !formData.breakdownItemId}>
+                            <i className="bi bi-clipboard2-check me-1" /> Create AI Assessment
+                          </Button>
+                        </div>
+                      </div>
                     </Accordion.Body>
                   </Accordion.Item>
                 </Accordion>

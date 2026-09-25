@@ -293,7 +293,7 @@ body { margin: 0; }
   border: 1px solid color-mix(in srgb, var(--edb-primary) 45%, transparent);
   border-radius: 12px;
   background: linear-gradient(135deg, var(--edb-primary-dark) 0%, var(--edb-primary-dark) 52%, var(--edb-primary) 100%);
-  color: var(--edb-on-primary);
+  color: var(--edb-sidebar-text, var(--edb-on-primary));
   font-size: 13.5px;
   font-weight: 800;
   cursor: pointer;

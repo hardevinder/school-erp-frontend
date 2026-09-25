@@ -1,7 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import api from "../api";
+import AcademicTopicProgressCard from "../components/academic/AcademicTopicProgressCard";
 import "./Assessments.css";
+import AcademicBrandStrip from "../components/academic/AcademicBrandStrip"; // PATCH3_ACADEMIC_BRAND
 
 const unwrap = (response) => response?.data?.data ?? response?.data ?? [];
 const asList = (value) => Array.isArray(value) ? value : value?.rows || [];
@@ -25,7 +27,7 @@ const emptyForm = {
   online_class_id: "", class_id: "", section_id: "", subject_id: "", breakdown_id: "", breakdown_item_id: "", title: "", description: "", instructions: "Attempt all questions.",
   assessment_type: "test", mode: "online", total_marks: 20, duration_minutes: 30, starts_at: "", ends_at: "", publish_trigger: "manual", publish_at: "",
   max_attempts: 1, result_release: "manual", randomize_questions: false, randomize_options: false, questions: [emptyQuestion(0)], question_paper: null, supporting_files: [], source_materials: [],
-};
+}; // PATCH3_EMPTY_FORM
 const fmt = (value) => value ? new Date(value).toLocaleString() : "—";
 const toLocalInput = (value) => { if (!value) return ""; const d = new Date(value); const z = new Date(d.getTime() - d.getTimezoneOffset() * 60000); return z.toISOString().slice(0, 16); };
 const uniqueOptions = (rows, id, label) => [...new Map(rows.filter((r) => r[id] != null).map((r) => [Number(r[id]), { id: Number(r[id]), label: r[label] || `#${r[id]}` }])).values()];
@@ -50,15 +52,33 @@ export default function Assessments() {
   const pageSubtitle = assignmentOnly
     ? "Create, publish, collect scanned work, evaluate and publish assignment results."
     : worksheetOnly
-      ? "Create editable AI worksheets from lesson PDFs/images and download fully branded printable PDFs."
+      ? "Create AI worksheets from the same syllabus topic and share a branded practice sheet with students."
       : isManagementViewer
-      ? "School-wide assessment intelligence, student results, scanned papers and AI review visibility."
-      : "Online quizzes, scanned answer sheets, AI papers and published results.";
-  const newAssessmentData = useCallback(() => ({
-    ...emptyForm,
-    assessment_type: assessmentTypeFilter || "test",
-    online_class_id: query.get("online_class_id") || "",
-  }), [assessmentTypeFilter, query]);
+        ? "School-wide assessment intelligence, student results, scanned papers and AI review visibility."
+        : "Online quizzes, scanned answer sheets, AI papers and published results."; // PATCH3_WORKSHEET_PAGE
+  const newAssessmentData = useCallback(() => {
+    const assessmentType = assessmentTypeFilter || "test";
+    const topic = query.get("topic") || "";
+    const isWorksheet = assessmentType === "worksheet";
+    return {
+      ...emptyForm,
+      assessment_type: assessmentType,
+      mode: isWorksheet ? "offline" : "online",
+      instructions: isWorksheet ? "Complete all questions neatly." : emptyForm.instructions,
+      duration_minutes: isWorksheet ? "" : emptyForm.duration_minutes,
+      online_class_id: query.get("online_class_id") || "",
+      class_id: query.get("class_id") || "",
+      section_id: query.get("section_id") || "",
+      subject_id: query.get("subject_id") || "",
+      breakdown_id: query.get("breakdown_id") || "",
+      breakdown_item_id: query.get("breakdown_item_id") || "",
+      lesson_plan_id: query.get("lesson_plan_id") || "",
+      source_resource_id: query.get("source_resource_id") || "",
+      source_file_name: query.get("source_file_name") || "", // PATCH_REUSE_DEEP_LINK_SOURCE
+      description: topic,
+      title: query.get("title") || (topic ? `${isWorksheet ? "Worksheet" : "Assessment"} – ${topic}` : ""),
+    };
+  }, [assessmentTypeFilter, query]); // PATCH3_DEEP_LINK_PREFILL
   const [rows, setRows] = useState([]); const [options, setOptions] = useState([]); const [loading, setLoading] = useState(true); const [notice, setNotice] = useState(null);
   const [builder, setBuilder] = useState(null); const [attempt, setAttempt] = useState(null); const [offline, setOffline] = useState(null); const [submissions, setSubmissions] = useState(null);
   const flash = useCallback((type, text) => { setNotice({ type, text }); window.scrollTo({ top: 0, behavior: "smooth" }); }, []);
@@ -127,6 +147,7 @@ export default function Assessments() {
       <Summary icon="bi-laptop" label="Online" value={rows.filter((r) => r.mode === "online").length} />
       <Summary icon="bi-file-earmark-arrow-up" label="Offline" value={rows.filter((r) => r.mode === "offline").length} />
       {!assignmentOnly && <Summary icon="bi-journal-check" label="Assignments" value={rows.filter((r) => r.assessment_type === "assignment").length} />}
+      {!worksheetOnly && <Summary icon="bi-file-earmark-richtext" label="Worksheets" value={rows.filter((r) => r.assessment_type === "worksheet").length} />}
     </div>
 
     {loading ? <div className="card border-0 shadow-sm p-5 text-center">Loading assessments…</div> : rows.length === 0 ? <div className="assessment-empty card border-0 shadow-sm p-5 text-center"><i className="bi bi-clipboard2-check" /><h4>No assessments yet</h4><p className="text-muted mb-0">Teachers can create an online quiz or publish an offline written paper.</p></div> :
@@ -172,7 +193,11 @@ function AssessmentBuilder({ options, state, onClose, onSaved, onError }) {
   const [materialNotice, setMaterialNotice] = useState("");
   const [syllabusOptions, setSyllabusOptions] = useState([]);
   const [syllabusLoading, setSyllabusLoading] = useState(false);
+  const [materialBusy, setMaterialBusy] = useState(false);
+  const [syllabusBusy, setSyllabusBusy] = useState(false);
+  const [syllabusLinks, setSyllabusLinks] = useState([]);
   const questionImportRef = useRef(null);
+  const materialInputRef = useRef(null); // PATCH3_BUILDER_STATE
   const materialImportRef = useRef(null);
   const classRows = options.filter((o) => !form.class_id || Number(o.class_id) === Number(form.class_id));
   const sectionRows = classRows.filter((o) => !form.section_id || Number(o.section_id) === Number(form.section_id));
@@ -208,6 +233,27 @@ function AssessmentBuilder({ options, state, onClose, onSaved, onError }) {
       description: current.description || (selected ? [selected.item.unitTitle, selected.item.topics, selected.item.subtopics].filter(Boolean).join(" · ") : ""),
     }));
   };
+  const syllabusItems = useMemo(() => syllabusLinks.flatMap((breakdown) => (breakdown.items || []).map((item) => ({
+    id: item.id,
+    breakdown_id: breakdown.id,
+    label: `${item.unitNumber ? `Unit ${item.unitNumber} – ` : ""}${item.unitTitle || "Syllabus Topic"}${item.topics ? ` · ${item.topics}` : ""}`,
+    topic: item.topics || item.unitTitle || "",
+  }))), [syllabusLinks]);
+  const selectedClassName = classes.find((x) => Number(x.id) === Number(form.class_id))?.label || "";
+  const selectedSubjectName = subjects.find((x) => Number(x.id) === Number(form.subject_id))?.label || "";
+  const selectedSyllabus = syllabusItems.find((x) => Number(x.id) === Number(form.breakdown_item_id));
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!form.class_id || !form.subject_id) { setSyllabusLinks([]); return undefined; }
+    setSyllabusBusy(true);
+    api.get("/syllabus-breakdowns/link-options", { params: { classId: form.class_id, subjectId: form.subject_id } })
+      .then((response) => { if (!cancelled) setSyllabusLinks(asList(unwrap(response))); })
+      .catch(() => { if (!cancelled) setSyllabusLinks([]); })
+      .finally(() => { if (!cancelled) setSyllabusBusy(false); });
+    return () => { cancelled = true; };
+  }, [form.class_id, form.subject_id]);
+
   const updateQuestion = (index, patch) => setForm((f) => ({ ...f, questions: f.questions.map((q, i) => i === index ? { ...q, ...patch } : q) }));
   const addQuestion = () => setForm((f) => ({ ...f, questions: [...f.questions, emptyQuestion(f.questions.length)] }));
   const removeQuestion = (index) => setForm((f) => ({ ...f, questions: f.questions.filter((_, i) => i !== index).map((q, i) => ({ ...q, sort_order: i })) }));
@@ -215,46 +261,100 @@ function AssessmentBuilder({ options, state, onClose, onSaved, onError }) {
     if (!form.class_id || !form.subject_id || !form.title) return onError("Select class, subject and enter a title before AI generation.");
     setAiBusy(true);
     try {
-      const result = unwrap(await api.post("/api/assessments/ai/generate", { class_id: form.class_id, section_id: form.section_id || null, subject_id: form.subject_id, breakdown_id: form.breakdown_id || null, breakdown_item_id: form.breakdown_item_id || null, assessment_type: form.assessment_type, title: form.title, topic: form.description, total_marks: Number(form.total_marks), duration_minutes: Number(form.duration_minutes), question_count: Math.max(10, (form.questions || []).filter((q) => String(q.question_text || "").trim()).length), question_types: ["mcq", "true_false", "fill_blank", "short", "long"], language: "English" }));
+      const result = unwrap(await api.post("/api/assessments/ai/generate", { class_id: form.class_id, section_id: form.section_id || null, subject_id: form.subject_id, breakdown_id: form.breakdown_id || null, breakdown_item_id: form.breakdown_item_id || null, assessment_type: form.assessment_type, title: form.title, topic: form.description, total_marks: Number(form.total_marks), duration_minutes: Number(form.duration_minutes || 0), question_count: Math.max(1, form.questions.filter((q) => q.question_text?.trim()).length || 10), question_types: ["mcq", "true_false", "fill_blank", "short", "long"], language: "English" })); // PATCH3_AI_SYLLABUS_LINK
       setForm((f) => ({ ...f, title: result.title || f.title, description: result.description || f.description, instructions: result.instructions || f.instructions, questions: result.questions || f.questions, ai_meta: result.ai_meta }));
     } catch (error) { onError(error.response?.data?.message || "AI could not generate the test."); }
     finally { setAiBusy(false); }
   };
-  const generateFromMaterial = async () => {
-    const files = Array.from(form.source_materials || []);
-    if (!form.class_id || !form.subject_id || !form.title) return onError("Select class, subject and enter a title first.");
-    if (!files.length) return onError("Upload at least one lesson PDF or image first.");
-    setAiBusy(true); setMaterialNotice("");
+const generateFromMaterial = async () => {
+    const files = form.source_materials || [];
+    if (!form.class_id || !form.subject_id) return onError("Select class and subject first.");
+    if (!form.breakdown_item_id) return onError("Select the syllabus topic first so this work is tracked correctly.");
+    if (!files.length) return onError("Upload at least one lesson PDF or image.");
+    setMaterialBusy(true); setImportNotice("");
     try {
       const fd = new FormData();
       files.forEach((file) => fd.append("source_materials", file));
       fd.append("class_id", form.class_id);
       if (form.section_id) fd.append("section_id", form.section_id);
       fd.append("subject_id", form.subject_id);
-      if (form.breakdown_id) fd.append("breakdown_id", form.breakdown_id);
-      if (form.breakdown_item_id) fd.append("breakdown_item_id", form.breakdown_item_id);
+      fd.append("breakdown_id", form.breakdown_id || "");
+      fd.append("breakdown_item_id", form.breakdown_item_id || "");
       fd.append("assessment_type", form.assessment_type || "test");
-      fd.append("title", form.title);
-      fd.append("topic", form.description || "");
-      fd.append("total_marks", String(Number(form.total_marks) || 20));
-      fd.append("duration_minutes", String(Number(form.duration_minutes) || 30));
-      fd.append("question_count", String(Math.max(10, (form.questions || []).filter((q) => String(q.question_text || "").trim()).length)));
+      fd.append("title", form.title || "");
+      fd.append("topic", form.description || selectedSyllabus?.topic || "");
+      fd.append("total_marks", String(form.total_marks || 20));
+      if (form.duration_minutes) fd.append("duration_minutes", String(form.duration_minutes));
+      fd.append("question_count", String(Math.max(1, form.questions.filter((q) => q.question_text?.trim()).length || 10)));
       fd.append("question_types", JSON.stringify(["mcq", "true_false", "fill_blank", "short", "long"]));
-      fd.append("language", "English");
-      const result = unwrap(await api.post("/api/assessments/ai/generate-from-material", fd, { headers: { "Content-Type": "multipart/form-data" }, timeout: 180000 }));
+      const result = unwrap(await api.post("/api/assessments/ai/generate-from-material", fd));
       setForm((current) => ({
         ...current,
         title: result.title || current.title,
-        description: result.description || current.description,
+        description: result.description || current.description || selectedSyllabus?.topic || "",
         instructions: result.instructions || current.instructions,
-        questions: Array.isArray(result.questions) && result.questions.length ? result.questions.map((question, index) => ({ ...question, sort_order: index })) : current.questions,
+        questions: Array.isArray(result.questions) && result.questions.length ? result.questions.map((q, i) => ({ ...q, sort_order: i })) : current.questions,
         ai_meta: result.ai_meta || current.ai_meta,
       }));
-      setMaterialNotice(`${result.questions?.length || 0} question(s) created from ${files.length} lesson source file(s). Review before saving.`);
+      setImportNotice(`${form.assessment_type === "worksheet" ? "Worksheet" : "Assessment"} generated from lesson material and linked to the syllabus topic. Review before saving.`);
     } catch (error) {
-      onError(error.response?.data?.message || "AI could not create questions from this lesson material.");
-    } finally { setAiBusy(false); }
-  };
+      onError(error.response?.data?.message || error.message || "AI could not create questions from this lesson material.");
+    } finally { setMaterialBusy(false); }
+  }; // PATCH3_MATERIAL_AI
+  const generateFromCurrentLessonMaterial = async () => {
+    if (!form.class_id || !form.subject_id) return onError("Select class and subject first.");
+    if (!form.breakdown_item_id) return onError("Select the syllabus topic first so this work is tracked correctly.");
+    if (!form.lesson_plan_id && !form.source_resource_id) {
+      return onError("No reusable lesson source is linked. Upload lesson material once or use Syllabus Topic Only.");
+    }
+
+    setMaterialBusy(true);
+    setImportNotice("");
+    try {
+      const result = unwrap(await api.post("/api/assessments/ai/generate-from-current-lesson-material", {
+        class_id: form.class_id,
+        section_id: form.section_id || null,
+        subject_id: form.subject_id,
+        breakdown_id: form.breakdown_id || null,
+        breakdown_item_id: form.breakdown_item_id || null,
+        lesson_plan_id: form.lesson_plan_id || null,
+        source_resource_id: form.source_resource_id || null,
+        assessment_type: form.assessment_type || "test",
+        title: form.title || "",
+        topic: form.description || selectedSyllabus?.topic || "",
+        total_marks: Number(form.total_marks || 20),
+        duration_minutes: Number(form.duration_minutes || 0),
+        question_count: Math.max(1, form.questions.filter((q) => q.question_text?.trim()).length || 10),
+        question_types: ["mcq", "true_false", "fill_blank", "short", "long"],
+        language: "English",
+      }));
+
+      setForm((current) => ({
+        ...current,
+        title: result.title || current.title,
+        description: result.description || current.description || selectedSyllabus?.topic || "",
+        instructions: result.instructions || current.instructions,
+        questions:
+          Array.isArray(result.questions) && result.questions.length
+            ? result.questions.map((q, i) => ({ ...q, sort_order: i }))
+            : current.questions,
+        ai_meta: result.ai_meta || current.ai_meta,
+      }));
+
+      setImportNotice(
+        `${form.assessment_type === "worksheet" ? "Worksheet" : "Assessment"} generated from the current Lesson Plan material. Review before saving.`
+      );
+    } catch (error) {
+      onError(
+        error.response?.data?.message ||
+          error.message ||
+          "AI could not create questions from the current Lesson Plan material."
+      );
+    } finally {
+      setMaterialBusy(false);
+    }
+  }; // PATCH_REUSE_CURRENT_SOURCE_HANDLER
+
 
   const importQuestionDocument = async (file) => {
     if (!file) return;
@@ -299,7 +399,7 @@ function AssessmentBuilder({ options, state, onClose, onSaved, onError }) {
     try {
       const fd = new FormData();
       const data = { ...form, questions: form.mode === "online" ? form.questions : form.questions.filter((q) => q.question_text?.trim()), starts_at: form.starts_at ? new Date(form.starts_at).toISOString() : "", ends_at: form.ends_at ? new Date(form.ends_at).toISOString() : "", publish_at: form.publish_at ? new Date(form.publish_at).toISOString() : "" };
-      delete data.question_paper; delete data.supporting_files; delete data.source_materials;
+      delete data.question_paper; delete data.supporting_files; delete data.source_materials; delete data.lesson_plan_id; delete data.source_resource_id; delete data.source_file_name; // PATCH_REUSE_HELPER_FIELDS_NOT_PERSISTED // PATCH3_SOURCE_FILES_NOT_PERSISTED delete data.source_materials;
       for (const [key, value] of Object.entries(data)) {
         if (value === undefined || value === null) continue;
         if (["questions", "ai_meta", "settings"].includes(key)) fd.append(key, JSON.stringify(value || (key === "questions" ? [] : {})));
@@ -319,8 +419,10 @@ function AssessmentBuilder({ options, state, onClose, onSaved, onError }) {
     } catch (error) { onError(error.response?.data?.errors?.join(". ") || error.response?.data?.message || "Could not save assessment."); }
     finally { setBusy(false); }
   };
-  return <Modal title={`${state.mode === "edit" ? "Edit" : "Create"} Assessment`} large onClose={onClose}><form onSubmit={submit}>
+  const documentTypeLabel = form.assessment_type === "worksheet" ? "AI WORKSHEET" : form.assessment_type === "assignment" ? "ASSIGNMENT" : "AI ASSESSMENT";
+  return <Modal title={`${state.mode === "edit" ? "Edit" : "Create"} ${form.assessment_type === "worksheet" ? "Worksheet" : "Assessment"}`} large onClose={onClose}><form onSubmit={submit}>
     <div className="assessment-builder-body">
+      <AcademicBrandStrip documentType={documentTypeLabel} title={form.title} className={selectedClassName} subjectName={selectedSubjectName} topic={selectedSyllabus?.topic || form.description} />
       <div className="row g-3">
         <SelectField label="Class" required value={form.class_id} options={classes} onChange={(v) => setForm({ ...form, class_id: v, section_id: "", subject_id: "", breakdown_id: "", breakdown_item_id: "" })} />
         <SelectField label="Section" value={form.section_id} options={sections} onChange={(v) => setForm({ ...form, section_id: v, subject_id: "", breakdown_id: "", breakdown_item_id: "" })} empty="All sections" />
@@ -360,9 +462,52 @@ function AssessmentBuilder({ options, state, onClose, onSaved, onError }) {
         {materialNotice && <div className="alert alert-success py-2 small mt-3 mb-0"><i className="bi bi-check2-circle me-1" />{materialNotice}</div>}
       </div>
 
+      <div className="assessment-syllabus-link mt-4">
+        <div className="d-flex justify-content-between gap-2 flex-wrap align-items-center">
+          <div><div className="fw-semibold"><i className="bi bi-diagram-3 me-2" />Linked Syllabus Topic</div><div className="small text-muted">Worksheet and assessment evidence will update the same syllabus tracker topic.</div></div>
+          {form.breakdown_item_id && <span className="badge rounded-pill text-bg-success"><i className="bi bi-link-45deg me-1" />Linked</span>}
+        </div>
+        <select className="form-select mt-3" value={form.breakdown_item_id || ""} disabled={!form.class_id || !form.subject_id || syllabusBusy} onChange={(e) => { const item = syllabusItems.find((x) => Number(x.id) === Number(e.target.value)); setForm((current) => ({ ...current, breakdown_item_id: e.target.value, breakdown_id: item?.breakdown_id || "", description: current.description || item?.topic || "" })); }}>
+          <option value="">{syllabusBusy ? "Loading syllabus…" : syllabusItems.length ? "-- Select syllabus topic --" : "No linked syllabus topics found"}</option>
+          {syllabusItems.map((item) => <option value={item.id} key={`${item.breakdown_id}-${item.id}`}>{item.label}</option>)}
+        </select>
+      </div>
+
+      {(form.lesson_plan_id || form.source_resource_id) && (
+        <div className="assessment-current-source mt-3">
+          <div>
+            <div className="fw-semibold">
+              <i className="bi bi-link-45deg me-1" />
+              Current Lesson Material
+            </div>
+            <div className="small text-muted">
+              {form.source_file_name || "The lesson/chapter file already used for this Lesson Plan."}
+            </div>
+          </div>
+          <button
+            type="button"
+            className="btn btn-primary text-nowrap"
+            disabled={materialBusy || aiBusy || importBusy || !form.breakdown_item_id}
+            onClick={generateFromCurrentLessonMaterial}
+          >
+            <i className={`bi ${materialBusy ? "bi-hourglass-split" : "bi-recycle"} me-1`} />
+            {materialBusy ? "Generating…" : "Use Current Lesson Material"}
+          </button>
+        </div>
+      )} {/* PATCH_REUSE_CURRENT_SOURCE_UI */}
+
+      <div className="assessment-ai-material mt-3">
+        <div className="assessment-ai-material__copy"><div className="assessment-ai-material__icon"><i className="bi bi-stars" /></div><div><div className="fw-semibold">Upload Different Material</div>{/* PATCH_REUSE_UPLOAD_DIFFERENT_LABEL */}<div className="small text-muted">Choose another lesson PDF/image if you do not want to use the current lesson source.</div></div></div>
+        <div className="assessment-ai-material__actions">
+          <input ref={materialInputRef} className="form-control" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" multiple onChange={(e) => setForm((current) => ({ ...current, source_materials: Array.from(e.target.files || []) }))} />
+          <button type="button" className="btn btn-primary text-nowrap" disabled={materialBusy || aiBusy || importBusy || !(form.source_materials || []).length || !form.breakdown_item_id} onClick={generateFromMaterial}><i className={`bi ${materialBusy ? "bi-hourglass-split" : "bi-magic"} me-1`} />{materialBusy ? "Generating…" : form.assessment_type === "worksheet" ? "Generate Worksheet" : "Generate Assessment"}</button>
+        </div>
+        {(form.source_materials || []).length > 0 && <div className="small mt-2 text-muted"><i className="bi bi-paperclip me-1" />{form.source_materials.length} lesson source file(s) selected.</div>}
+      </div>
+
       {form.mode === "offline" && <div className="assessment-upload-box mt-4"><h6><i className="bi bi-file-earmark-pdf me-2" />Offline Question Paper</h6><p className="text-muted small">Upload PDF/Word/image, or keep questions below to generate a branded PDF.</p><input className="form-control" type="file" accept=".pdf,.doc,.docx,image/*" onChange={(e) => setForm({ ...form, question_paper: e.target.files?.[0] || null })} /></div>}
 
-      <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-4 mb-2"><div><h5 className="mb-0">Questions</h5><small className="text-muted">Generate from topic, generate from lesson material, or import an existing question paper. Teacher review is required.</small></div><div className="d-flex flex-wrap gap-2"><button type="button" className="btn btn-outline-primary" disabled={aiBusy || importBusy} onClick={generateAi}><i className="bi bi-stars me-1" />{aiBusy ? "Generating…" : "AI Generate"}</button><button type="button" className="btn btn-primary" disabled={importBusy || aiBusy} onClick={() => questionImportRef.current?.click()}><i className="bi bi-file-earmark-scan me-1" />{importBusy ? "Reading…" : "AI Import Questions"}</button><input ref={questionImportRef} hidden type="file" accept="application/pdf,image/jpeg,image/png,image/webp" onChange={(e) => importQuestionDocument(e.target.files?.[0])} /><button type="button" className="btn btn-outline-secondary" onClick={addQuestion}>Add Question</button></div></div>
+      <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-4 mb-2"><div><h5 className="mb-0">Questions</h5><small className="text-muted">Generate from topic, generate from lesson material, or import an existing question paper. Teacher review is required.</small></div><div className="d-flex flex-wrap gap-2"><button type="button" className="btn btn-outline-primary" disabled={aiBusy || importBusy || materialBusy || !form.breakdown_item_id} onClick={generateAi}><i className="bi bi-stars me-1" />{aiBusy ? "Generating…" : form.assessment_type === "worksheet" ? "AI Worksheet from Topic" : "AI Assessment from Topic"}</button><button type="button" className="btn btn-primary" disabled={importBusy || aiBusy} onClick={() => questionImportRef.current?.click()}><i className="bi bi-file-earmark-scan me-1" />{importBusy ? "Reading…" : "AI Import Questions"}</button><input ref={questionImportRef} hidden type="file" accept="application/pdf,image/jpeg,image/png,image/webp" onChange={(e) => importQuestionDocument(e.target.files?.[0])} /><button type="button" className="btn btn-outline-secondary" onClick={addQuestion}>Add Question</button></div></div>
       {importNotice && <div className="alert alert-info py-2 small"><i className="bi bi-check2-circle me-1" />{importNotice}</div>}
       {form.questions.map((q, index) => <QuestionEditor key={`${q.id || "new"}-${index}`} index={index} value={q} onChange={(patch) => updateQuestion(index, patch)} onRemove={() => removeQuestion(index)} />)}
       <div className="assessment-upload-box mt-3"><label className="form-label fw-semibold">Supporting materials</label><input className="form-control" type="file" multiple onChange={(e) => setForm({ ...form, supporting_files: Array.from(e.target.files || []) })} /></div>
@@ -492,6 +637,7 @@ function GradePanel({ assessment, enrollment, readOnly = false, onClose, onSaved
     {(attempt?.answers || []).map((answer, index) => { const grade = answerGrades.find((g) => g.answer_id === answer.id) || {}; return <div className={`answer-grade mt-3 ${answer.ai_review_required ? "ai-review-needed" : ""}`} key={answer.id}><div className="d-flex justify-content-between gap-2"><strong>Q{index + 1}. {answer.question?.question_text}</strong>{answer.ai_review_required && <span className="badge text-bg-warning">Manual review</span>}</div>{answer.ai_detected_text && <p className="mb-1 mt-2"><span className="text-muted">AI read:</span> {answer.ai_detected_text}</p>}{answer.ai_remark && <p className="mb-2 small text-muted"><strong>Why:</strong> {answer.ai_remark}{answer.ai_confidence != null ? ` · confidence ${Number(answer.ai_confidence).toFixed(0)}%` : ""}</p>}{readOnly ? <div className="assessment-readonly-answer"><span><strong>Marks:</strong> {grade.awarded_marks ?? 0}/{answer.question?.marks ?? "—"}</span><span><strong>Teacher remark:</strong> {grade.teacher_remark || "—"}</span></div> : <div className="row g-2"><Input label={`Marks / ${answer.question?.marks}`} type="number" min="0" max={answer.question?.marks} step="0.5" value={grade.awarded_marks} onChange={(v) => updateAnswer(answer.id, { awarded_marks: v })} /><Input label="Teacher remark / why marks cut" value={grade.teacher_remark} onChange={(v) => updateAnswer(answer.id, { teacher_remark: v })} /></div>}</div>; })}
     {Array.isArray(attempt?.remedials) && attempt.remedials.length > 0 && <div className="smart-remedials mt-3"><h6><i className="bi bi-stars me-1" />Small remedials</h6>{attempt.remedials.map((r, i) => <div key={i}><strong>{r.topic || "Practice"}:</strong> {r.action}</div>)}</div>}
     {readOnly ? <div className="assessment-readonly-final mt-3"><div><span>Final Marks</span><strong>{marks}/{assessment.total_marks}</strong></div><div><span>Overall Feedback</span><strong>{feedback || "—"}</strong></div></div> : <div className="row g-3 mt-2"><Input label={`Final Marks / ${assessment.total_marks}`} type="number" min="0" max={assessment.total_marks} step="0.5" value={marks} onChange={setMarks} /><div className="col-12"><label className="form-label">Overall feedback</label><textarea className="form-control" rows="3" value={feedback} onChange={(e) => setFeedback(e.target.value)} /></div><div className="col-12"><label className="form-label">Corrected sheet / feedback file</label><input className="form-control" type="file" multiple onChange={(e) => setFiles(Array.from(e.target.files || []))} /></div></div>}
+    {assessment?.breakdown_item_id && <AcademicTopicProgressCard itemId={assessment.breakdown_item_id} compact />}
     <div className={`d-flex mt-3 ${readOnly ? "justify-content-end" : "justify-content-between"}`}>{readOnly ? <button className="btn btn-primary" onClick={onClose}>Close</button> : <><button className="btn btn-outline-primary" disabled={aiBusy || attempt?.submission_source === "online"} onClick={rerunAi}><i className="bi bi-stars me-1" />{aiBusy ? "Analysing…" : "Re-run AI"}</button><div><button className="btn btn-light me-2" onClick={onClose}>Cancel</button><button className="btn btn-success" disabled={busy} onClick={submit}>{busy ? "Saving…" : "Approve & Save"}</button></div></>}</div>
   </div>;
 }

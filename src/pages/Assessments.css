@@ -37,3 +37,32 @@
   background: linear-gradient(135deg, color-mix(in srgb, var(--edb-primary) 4.5%, transparent), color-mix(in srgb, var(--edb-primary) 3.5%, transparent));
 }
 .assessment-ai-source h6 { color: var(--edb-primary-text); }
+
+
+/* PATCH3_AI_WORKSHEET_ASSESSMENT */
+.assessment-page{--assessment-primary:var(--theme-primary,#66131b);--assessment-ink:var(--theme-text,#261f1d)}
+.assessment-page .btn-primary{--bs-btn-bg:var(--theme-primary,#66131b);--bs-btn-border-color:var(--theme-primary,#66131b);--bs-btn-hover-bg:var(--theme-primary-dark,#470a11);--bs-btn-hover-border-color:var(--theme-primary-dark,#470a11)}
+.assessment-page .btn-outline-primary{--bs-btn-color:var(--theme-primary,#66131b);--bs-btn-border-color:rgba(var(--theme-primary-rgb,102,19,27),.44);--bs-btn-hover-bg:var(--theme-primary,#66131b);--bs-btn-hover-border-color:var(--theme-primary,#66131b)}
+.assessment-syllabus-link{border:1px solid rgba(var(--theme-primary-rgb,102,19,27),.14);background:var(--theme-surface,#fffdfa);border-radius:15px;padding:15px}.assessment-syllabus-link .fw-semibold{color:var(--theme-primary-dark,#470a11)}
+.assessment-ai-material{border:1px solid rgba(var(--theme-primary-rgb,102,19,27),.14);border-radius:16px;padding:15px;background:linear-gradient(135deg,rgba(var(--theme-primary-rgb,102,19,27),.055),rgba(var(--theme-accent-rgb,196,154,69),.08))}.assessment-ai-material__copy{display:flex;gap:11px;align-items:flex-start}.assessment-ai-material__icon{width:40px;height:40px;display:grid;place-items:center;flex:0 0 auto;border-radius:12px;background:var(--theme-primary,#66131b);color:#fff}.assessment-ai-material__actions{display:grid;grid-template-columns:minmax(260px,1fr) auto;gap:10px;align-items:center;margin-top:13px}.assessment-type{background:rgba(var(--theme-primary-rgb,102,19,27),.08);color:var(--theme-primary-dark,#470a11)}.assessment-summary>i,.assessment-mini-metric>i{background:rgba(var(--theme-primary-rgb,102,19,27),.08);color:var(--theme-primary,#66131b)}
+@media(max-width:700px){.assessment-ai-material__actions{grid-template-columns:1fr}.assessment-ai-material__actions .btn{width:100%}}
+
+
+/* PATCH_REUSE_SOURCE_OPTIONS_CSS */
+.assessment-current-source{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:14px;
+  padding:12px 13px;
+  border:1px solid color-mix(in srgb,var(--theme-primary,#66131b) 20%,transparent);
+  border-radius:13px;
+  background:var(--theme-surface,#fff);
+}
+.assessment-current-source .fw-semibold{
+  color:var(--theme-primary,var(--portal-primary,#66131b));
+}
+@media(max-width:700px){
+  .assessment-current-source{align-items:stretch;flex-direction:column}
+  .assessment-current-source .btn{width:100%}
+}
