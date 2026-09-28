@@ -215,7 +215,7 @@ function TypeManagementModal({ show, onClose, onSaved, scopes }) {
   };
 
   return (
-    <div className="modal d-block" style={{ background: "rgba(15,23,42,.55)", zIndex: 4500 }}>
+    <div className="modal d-block" style={{ background: "color-mix(in srgb, var(--edb-primary-dark) 55%, transparent)", zIndex: 4500 }}>
       <div className="modal-dialog modal-dialog-centered modal-lg">
         <form className="modal-content border-0 shadow" onSubmit={save}>
           <div className="modal-header"><h5 className="modal-title">Add Official Letter / Document Type</h5><button type="button" className="btn-close" onClick={onClose} /></div>

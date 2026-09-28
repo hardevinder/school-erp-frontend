@@ -45,12 +45,16 @@ export default function Assessments() {
   const query = useMemo(() => new URLSearchParams(location.search), [location.search]);
   const assessmentTypeFilter = query.get("assessment_type") || "";
   const assignmentOnly = assessmentTypeFilter === "assignment";
-  const pageTitle = assignmentOnly ? "Assignments" : "Assessments & Tests";
+  const worksheetOnly = assessmentTypeFilter === "worksheet";
+  const focusedLearningMaterial = assignmentOnly || worksheetOnly;
+  const pageTitle = assignmentOnly ? "Assignments" : worksheetOnly ? "Worksheets" : "Assessments & Tests";
   const pageSubtitle = assignmentOnly
-    ? "Create, publish, collect scanned work, evaluate and publish assignment results."
-    : isManagementViewer
-      ? "School-wide assessment intelligence, student results, scanned papers and AI review visibility."
-      : "Online quizzes, scanned answer sheets, AI papers and published results.";
+    ? "Write and publish assignments in a clean teacher notebook, then collect and evaluate student work."
+    : worksheetOnly
+      ? "Create classroom worksheets in a notebook-style workspace, publish them and review student work."
+      : isManagementViewer
+        ? "School-wide assessment intelligence, student results, scanned papers and AI review visibility."
+        : "Online quizzes, worksheets, scanned answer sheets, AI papers and published results.";
   const newAssessmentData = useCallback(() => ({
     ...emptyForm,
     assessment_type: assessmentTypeFilter || "test",
@@ -109,10 +113,11 @@ export default function Assessments() {
   return <div className="assessment-page container-fluid py-3">
     <div className="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
       <div><h2 className="mb-1">{pageTitle}</h2><div className="text-muted">{pageSubtitle}</div></div>
-      <div className="d-flex gap-2">
+      <div className="d-flex flex-wrap gap-2 assessment-page-switcher">
         {(query.get("online_class_id") || assessmentTypeFilter) && <button className="btn btn-outline-secondary" onClick={() => navigate("/assessments")}>Show all</button>}
         {!assignmentOnly && <button className="btn btn-outline-primary" onClick={() => navigate("/assessments?assessment_type=assignment")}><i className="bi bi-journal-check me-2" />Assignments</button>}
-        {canCreate && <button className="btn btn-primary" onClick={() => setBuilder({ mode: "create", data: newAssessmentData() })}><i className="bi bi-plus-lg me-2" />{assignmentOnly ? "Create Assignment" : "Create Assessment"}</button>}
+        {!worksheetOnly && <button className="btn btn-outline-primary" onClick={() => navigate("/assessments?assessment_type=worksheet")}><i className="bi bi-file-earmark-text me-2" />Worksheets</button>}
+        {canCreate && <button className="btn btn-primary" onClick={() => setBuilder({ mode: "create", data: newAssessmentData() })}><i className="bi bi-plus-lg me-2" />{assignmentOnly ? "Create Assignment" : worksheetOnly ? "Create Worksheet" : "Create Assessment"}</button>}
       </div>
     </div>
     {notice && <div className={`alert alert-${notice.type} alert-dismissible`}>{notice.text}<button className="btn-close" onClick={() => setNotice(null)} /></div>}
@@ -122,7 +127,8 @@ export default function Assessments() {
       <Summary icon="bi-broadcast" label="Published" value={rows.filter((r) => r.status === "published").length} />
       <Summary icon="bi-laptop" label="Online" value={rows.filter((r) => r.mode === "online").length} />
       <Summary icon="bi-file-earmark-arrow-up" label="Offline" value={rows.filter((r) => r.mode === "offline").length} />
-      {!assignmentOnly && <Summary icon="bi-journal-check" label="Assignments" value={rows.filter((r) => r.assessment_type === "assignment").length} />}
+      {!focusedLearningMaterial && <Summary icon="bi-journal-check" label="Assignments" value={rows.filter((r) => r.assessment_type === "assignment").length} />}
+      {!focusedLearningMaterial && <Summary icon="bi-file-earmark-text" label="Worksheets" value={rows.filter((r) => r.assessment_type === "worksheet").length} />}
     </div>
 
     {loading ? <div className="card border-0 shadow-sm p-5 text-center">Loading assessments…</div> : rows.length === 0 ? <div className="assessment-empty card border-0 shadow-sm p-5 text-center"><i className="bi bi-clipboard2-check" /><h4>No assessments yet</h4><p className="text-muted mb-0">Teachers can create an online quiz or publish an offline written paper.</p></div> :
@@ -143,8 +149,8 @@ export default function Assessments() {
           {row.can_view_submissions && !["draft", "scheduled", "cancelled"].includes(row.status) && <button className="btn btn-sm btn-outline-success" onClick={() => openSubmissions(row)}><i className="bi bi-people me-1" />{row.can_manage ? "Submissions" : "Student Results"}</button>}
           {row.can_manage && ["closed", "evaluated", "result_published"].includes(row.status) && <button className="btn btn-sm btn-success" onClick={() => mutate(row, "results/publish", "Publish all evaluated results to students and parents?")}>Publish Results</button>}
           {row.can_manage && !["cancelled", "result_published"].includes(row.status) && <button className="btn btn-sm btn-link text-danger" onClick={() => cancel(row)}>Cancel</button>}
-          {isStudent && row.status === "published" && row.mode === "online" && !["submitted", "evaluated"].includes(row.enrollment?.status) && <button className="btn btn-sm btn-primary" onClick={() => startAttempt(row)}>{row.assessment_type === "assignment" ? "Open Assignment" : "Attempt Test"}</button>}
-          {isStudent && row.status === "published" && row.mode === "offline" && !["submitted", "evaluated"].includes(row.enrollment?.status) && <button className="btn btn-sm btn-primary" onClick={() => setOffline(row)}><i className="bi bi-camera me-1" />{row.assessment_type === "assignment" ? "Upload Work" : "Upload Answer Sheets"}</button>}
+          {isStudent && row.status === "published" && row.mode === "online" && !["submitted", "evaluated"].includes(row.enrollment?.status) && <button className="btn btn-sm btn-primary" onClick={() => startAttempt(row)}>{row.assessment_type === "assignment" ? "Open Assignment" : row.assessment_type === "worksheet" ? "Open Worksheet" : "Attempt Test"}</button>}
+          {isStudent && row.status === "published" && row.mode === "offline" && !["submitted", "evaluated"].includes(row.enrollment?.status) && <button className="btn btn-sm btn-primary" onClick={() => setOffline(row)}><i className="bi bi-camera me-1" />{["assignment", "worksheet"].includes(row.assessment_type) ? "Upload Work" : "Upload Answer Sheets"}</button>}
           {(row.files || []).filter((f) => ["question_paper", "supporting_material"].includes(f.kind)).map((file) => <button key={file.id} className="btn btn-sm btn-outline-secondary" onClick={() => openBlob(`/api/assessments/${row.id}/files/${file.id}`, file.original_name)}><i className="bi bi-download me-1" />{file.original_name}</button>)}
         </div></div>
       </article></div>)}</div>}
@@ -172,13 +178,14 @@ function AssessmentBuilder({ options, state, onClose, onSaved, onError }) {
   const updateQuestion = (index, patch) => setForm((f) => ({ ...f, questions: f.questions.map((q, i) => i === index ? { ...q, ...patch } : q) }));
   const addQuestion = () => setForm((f) => ({ ...f, questions: [...f.questions, emptyQuestion(f.questions.length)] }));
   const removeQuestion = (index) => setForm((f) => ({ ...f, questions: f.questions.filter((_, i) => i !== index).map((q, i) => ({ ...q, sort_order: i })) }));
+  const materialName = form.assessment_type === "worksheet" ? "Worksheet" : form.assessment_type === "assignment" ? "Assignment" : "Assessment";
   const generateAi = async () => {
     if (!form.class_id || !form.subject_id || !form.title) return onError("Select class, subject and enter a title before AI generation.");
     setAiBusy(true);
     try {
-      const result = unwrap(await api.post("/api/assessments/ai/generate", { class_id: form.class_id, section_id: form.section_id || null, subject_id: form.subject_id, title: form.title, topic: form.description, total_marks: Number(form.total_marks), duration_minutes: Number(form.duration_minutes), question_count: Math.max(1, form.questions.length || 10), question_types: ["mcq", "true_false", "fill_blank", "short", "long"], language: "English" }));
+      const result = unwrap(await api.post("/api/assessments/ai/generate", { class_id: form.class_id, section_id: form.section_id || null, subject_id: form.subject_id, title: form.title, topic: form.description, total_marks: Number(form.total_marks), duration_minutes: Number(form.duration_minutes), question_count: Math.max(1, form.questions.length || 10), question_types: ["mcq", "true_false", "fill_blank", "short", "long"], language: "English", assessment_type: form.assessment_type }));
       setForm((f) => ({ ...f, title: result.title || f.title, description: result.description || f.description, instructions: result.instructions || f.instructions, questions: result.questions || f.questions, ai_meta: result.ai_meta }));
-    } catch (error) { onError(error.response?.data?.message || "AI could not generate the test."); }
+    } catch (error) { onError(error.response?.data?.message || `AI could not generate the ${materialName.toLowerCase()}.`); }
     finally { setAiBusy(false); }
   };
   const importQuestionDocument = async (file) => {
@@ -194,6 +201,7 @@ function AssessmentBuilder({ options, state, onClose, onSaved, onError }) {
       fd.append("class_id", form.class_id);
       if (form.section_id) fd.append("section_id", form.section_id);
       fd.append("subject_id", form.subject_id);
+      fd.append("assessment_type", form.assessment_type);
       if (form.title) fd.append("title", form.title);
       if (form.description) fd.append("topic", form.description);
       const result = unwrap(await api.post("/api/assessments/ai/import-document", fd));
@@ -233,56 +241,90 @@ function AssessmentBuilder({ options, state, onClose, onSaved, onError }) {
       if (form.question_paper) fd.append("question_paper", form.question_paper);
       for (const file of form.supporting_files || []) fd.append("supporting_files", file);
       if (state.mode === "edit") await api.patch(`/api/assessments/${state.id}`, fd); else await api.post("/api/assessments", fd);
-      onSaved(state.mode === "edit" ? "Assessment updated." : "Assessment created.");
-    } catch (error) { onError(error.response?.data?.errors?.join(". ") || error.response?.data?.message || "Could not save assessment."); }
+      onSaved(state.mode === "edit" ? `${materialName} updated.` : `${materialName} created.`);
+    } catch (error) { onError(error.response?.data?.errors?.join(". ") || error.response?.data?.message || `Could not save ${materialName.toLowerCase()}.`); }
     finally { setBusy(false); }
   };
-  return <Modal title={`${state.mode === "edit" ? "Edit" : "Create"} Assessment`} large onClose={onClose}><form onSubmit={submit}>
-    <div className="assessment-builder-body">
-      <div className="row g-3">
-        <SelectField label="Class" required value={form.class_id} options={classes} onChange={(v) => setForm({ ...form, class_id: v, section_id: "", subject_id: "" })} />
-        <SelectField label="Section" value={form.section_id} options={sections} onChange={(v) => setForm({ ...form, section_id: v, subject_id: "" })} empty="All sections" />
-        <SelectField label="Subject" required value={form.subject_id} options={subjects} onChange={(v) => setForm({ ...form, subject_id: v })} />
-        <Input label="Linked Online Class ID" value={form.online_class_id} onChange={(v) => setForm({ ...form, online_class_id: v })} placeholder="Optional" />
-        <Input label="Title" required value={form.title} onChange={(v) => setForm({ ...form, title: v })} />
-        <SelectField label="Type" value={form.assessment_type} options={[{ id: "quiz", label: "Quiz" }, { id: "test", label: "Test" }, { id: "assignment", label: "Assignment" }, { id: "practice", label: "Practice" }]} onChange={(v) => setForm({ ...form, assessment_type: v })} />
-        <SelectField label="Mode" value={form.mode} options={[{ id: "online", label: "Online attempt" }, { id: "offline", label: "Written / scanned upload" }]} onChange={(v) => setForm({ ...form, mode: v })} />
-        <Input label="Total Marks" type="number" min="0" step="0.5" value={form.total_marks} onChange={(v) => setForm({ ...form, total_marks: v })} />
-        <Input label="Duration (minutes)" type="number" min="1" value={form.duration_minutes} onChange={(v) => setForm({ ...form, duration_minutes: v })} />
-        <Input label="Maximum Attempts" type="number" min="1" max="10" value={form.max_attempts} onChange={(v) => setForm({ ...form, max_attempts: v })} />
-        <Input label="Available From" type="datetime-local" value={form.starts_at} onChange={(v) => setForm({ ...form, starts_at: v })} />
-        <Input label="Deadline" type="datetime-local" value={form.ends_at} onChange={(v) => setForm({ ...form, ends_at: v })} />
-        <SelectField label="Publish" value={form.publish_trigger} options={[{ id: "manual", label: "Save as draft" }, { id: "immediate", label: "Publish immediately" }, { id: "scheduled", label: "At scheduled time" }, { id: "after_class", label: "When linked Zoom class ends" }]} onChange={(v) => setForm({ ...form, publish_trigger: v })} />
-        {form.publish_trigger === "scheduled" && <Input label="Publish At" required type="datetime-local" value={form.publish_at} onChange={(v) => setForm({ ...form, publish_at: v })} />}
-        <SelectField label="Result Release" value={form.result_release} options={[{ id: "manual", label: "Teacher publishes results" }, { id: "immediate", label: "Immediately for auto-checked tests" }]} onChange={(v) => setForm({ ...form, result_release: v })} />
-        <div className="col-12"><label className="form-label">Description / chapters / topic</label><textarea className="form-control" rows="2" value={form.description || ""} onChange={(e) => setForm({ ...form, description: e.target.value })} /></div>
-        <div className="col-12"><label className="form-label">Instructions</label><textarea className="form-control" rows="2" value={form.instructions || ""} onChange={(e) => setForm({ ...form, instructions: e.target.value })} /></div>
-        <div className="col-12 d-flex flex-wrap gap-4"><Check label="Randomize questions" checked={form.randomize_questions} onChange={(v) => setForm({ ...form, randomize_questions: v })} /><Check label="Randomize options" checked={form.randomize_options} onChange={(v) => setForm({ ...form, randomize_options: v })} /></div>
-      </div>
+  return <Modal title={`${state.mode === "edit" ? "Edit" : "Create"} ${materialName}`} large onClose={onClose}><form onSubmit={submit}>
+    <div className="assessment-builder-body assessment-notebook-builder">
+      <section className="assessment-notebook-sheet">
+        <div className="assessment-notebook-kicker"><i className="bi bi-journal-text" /> Choose where this work belongs</div>
+        <ChoiceField label="Class" required value={form.class_id} options={classes} onChange={(v) => setForm({ ...form, class_id: v, section_id: "", subject_id: "" })} />
+        <ChoiceField label="Section" value={form.section_id} options={sections} onChange={(v) => setForm({ ...form, section_id: v, subject_id: "" })} allowEmpty empty="All sections" />
+        <ChoiceField label="Subject" required value={form.subject_id} options={subjects} onChange={(v) => setForm({ ...form, subject_id: v })} />
+      </section>
 
-      {form.mode === "offline" && <div className="assessment-upload-box mt-4"><h6><i className="bi bi-file-earmark-pdf me-2" />Offline Question Paper</h6><p className="text-muted small">Upload PDF/Word/image, or keep questions below to generate a branded PDF.</p><input className="form-control" type="file" accept=".pdf,.doc,.docx,image/*" onChange={(e) => setForm({ ...form, question_paper: e.target.files?.[0] || null })} /></div>}
+      <section className="assessment-notebook-sheet mt-3">
+        <div className="assessment-notebook-kicker"><i className="bi bi-pencil-square" /> Write the learning work</div>
+        <ChoiceField label="Type" value={form.assessment_type} options={[{ id: "assignment", label: "Assignment" }, { id: "worksheet", label: "Worksheet" }, { id: "quiz", label: "Quiz" }, { id: "test", label: "Test" }, { id: "practice", label: "Practice" }]} onChange={(v) => setForm({ ...form, assessment_type: v })} />
+        <NotebookLine label="Title" required value={form.title} onChange={(v) => setForm({ ...form, title: v })} placeholder={form.assessment_type === "worksheet" ? "e.g. Fractions Practice Worksheet" : "e.g. Chapter 4 Home Assignment"} />
+        <NotebookArea label="Chapter / Topic / What students should work on" value={form.description || ""} onChange={(v) => setForm({ ...form, description: v })} placeholder="Write the chapter, topic, learning focus or task in your own words…" />
+        <NotebookArea label="Teacher Instructions" value={form.instructions || ""} onChange={(v) => setForm({ ...form, instructions: v })} placeholder="Write clear instructions for students…" compact />
+      </section>
 
-      <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-4 mb-2"><div><h5 className="mb-0">Questions</h5><small className="text-muted">Generate with AI or import a printed/handwritten PDF or screenshot. Teacher review is required.</small></div><div className="d-flex flex-wrap gap-2"><button type="button" className="btn btn-outline-primary" disabled={aiBusy || importBusy} onClick={generateAi}><i className="bi bi-stars me-1" />{aiBusy ? "Generating…" : "AI Generate"}</button><button type="button" className="btn btn-primary" disabled={importBusy || aiBusy} onClick={() => questionImportRef.current?.click()}><i className="bi bi-file-earmark-scan me-1" />{importBusy ? "Reading…" : "AI Import Questions"}</button><input ref={questionImportRef} hidden type="file" accept="application/pdf,image/jpeg,image/png,image/webp" onChange={(e) => importQuestionDocument(e.target.files?.[0])} /><button type="button" className="btn btn-outline-secondary" onClick={addQuestion}>Add Question</button></div></div>
+      <section className="assessment-notebook-sheet mt-3">
+        <div className="assessment-notebook-kicker"><i className="bi bi-sliders" /> Delivery & planning</div>
+        <ChoiceField label="Mode" value={form.mode} options={[{ id: "offline", label: "Written / scanned upload" }, { id: "online", label: "Online attempt" }]} onChange={(v) => setForm({ ...form, mode: v })} />
+        <div className="assessment-planning-grid">
+          <CompactField label="Total Marks" type="number" min="0" step="0.5" value={form.total_marks} onChange={(v) => setForm({ ...form, total_marks: v })} />
+          <CompactField label="Duration (minutes)" type="number" min="1" value={form.duration_minutes} onChange={(v) => setForm({ ...form, duration_minutes: v })} />
+          <CompactField label="Maximum Attempts" type="number" min="1" max="10" value={form.max_attempts} onChange={(v) => setForm({ ...form, max_attempts: v })} />
+          <CompactField label="Available From" type="datetime-local" value={form.starts_at} onChange={(v) => setForm({ ...form, starts_at: v })} />
+          <CompactField label="Deadline" type="datetime-local" value={form.ends_at} onChange={(v) => setForm({ ...form, ends_at: v })} />
+          <CompactField label="Linked Online Class ID" value={form.online_class_id} onChange={(v) => setForm({ ...form, online_class_id: v })} placeholder="Optional" />
+        </div>
+        <ChoiceField label="Publish" value={form.publish_trigger} options={[{ id: "manual", label: "Save as draft" }, { id: "immediate", label: "Publish now" }, { id: "scheduled", label: "Scheduled" }, { id: "after_class", label: "After linked class" }]} onChange={(v) => setForm({ ...form, publish_trigger: v })} />
+        {form.publish_trigger === "scheduled" && <div className="assessment-planning-grid"><CompactField label="Publish At" required type="datetime-local" value={form.publish_at} onChange={(v) => setForm({ ...form, publish_at: v })} /></div>}
+        <ChoiceField label="Result Release" value={form.result_release} options={[{ id: "manual", label: "Teacher publishes results" }, { id: "immediate", label: "Immediate when auto-checked" }]} onChange={(v) => setForm({ ...form, result_release: v })} />
+        <div className="assessment-inline-checks"><Check label="Randomize questions" checked={form.randomize_questions} onChange={(v) => setForm({ ...form, randomize_questions: v })} /><Check label="Randomize options" checked={form.randomize_options} onChange={(v) => setForm({ ...form, randomize_options: v })} /></div>
+      </section>
+
+      {form.mode === "offline" && <div className="assessment-upload-box mt-3"><h6><i className="bi bi-file-earmark-pdf me-2" />Question Paper / Printable Work</h6><p className="text-muted small">Upload PDF/Word/image, or keep the questions below to generate the branded PDF.</p><input className="form-control" type="file" accept=".pdf,.doc,.docx,image/*" onChange={(e) => setForm({ ...form, question_paper: e.target.files?.[0] || null })} /></div>}
+
+      <div className="assessment-question-heading mt-4 mb-2"><div><h5 className="mb-0">Questions / Tasks</h5><small className="text-muted">Write naturally like a worksheet notebook. Long text areas expand while you type.</small></div><div className="d-flex flex-wrap gap-2"><button type="button" className="btn btn-outline-primary" disabled={aiBusy || importBusy} onClick={generateAi}><i className="bi bi-stars me-1" />{aiBusy ? "Generating…" : "AI Generate"}</button><button type="button" className="btn btn-primary" disabled={importBusy || aiBusy} onClick={() => questionImportRef.current?.click()}><i className="bi bi-file-earmark-scan me-1" />{importBusy ? "Reading…" : "AI Import Questions"}</button><input ref={questionImportRef} hidden type="file" accept="application/pdf,image/jpeg,image/png,image/webp" onChange={(e) => importQuestionDocument(e.target.files?.[0])} /><button type="button" className="btn btn-outline-secondary" onClick={addQuestion}><i className="bi bi-plus-lg me-1" />Add Question</button></div></div>
       {importNotice && <div className="alert alert-info py-2 small"><i className="bi bi-check2-circle me-1" />{importNotice}</div>}
       {form.questions.map((q, index) => <QuestionEditor key={`${q.id || "new"}-${index}`} index={index} value={q} onChange={(patch) => updateQuestion(index, patch)} onRemove={() => removeQuestion(index)} />)}
       <div className="assessment-upload-box mt-3"><label className="form-label fw-semibold">Supporting materials</label><input className="form-control" type="file" multiple onChange={(e) => setForm({ ...form, supporting_files: Array.from(e.target.files || []) })} /></div>
     </div>
-    <div className="modal-action-bar"><button type="button" className="btn btn-light" onClick={onClose}>Close</button><button className="btn btn-primary" disabled={busy}>{busy ? "Saving…" : "Save Assessment"}</button></div>
+    <div className="modal-action-bar"><button type="button" className="btn btn-light" onClick={onClose}>Close</button><button className="btn btn-primary" disabled={busy}>{busy ? "Saving…" : `Save ${materialName}`}</button></div>
   </form></Modal>;
 }
 
 function QuestionEditor({ index, value, onChange, onRemove }) {
   const objective = ["mcq", "true_false"].includes(value.question_type); const options = value.question_type === "true_false" ? ["True", "False"] : (value.options || ["", "", "", ""]);
-  return <div className="question-editor card border-0 mt-3"><div className="card-body"><div className="d-flex justify-content-between"><strong>Question {index + 1}{value.source_number ? ` · Source ${value.source_number}` : ""}</strong><button type="button" className="btn btn-sm btn-link text-danger" onClick={onRemove}>Remove</button></div>{value.needs_review && <div className="alert alert-warning py-2 small mb-2">{Array.isArray(value.warnings) && value.warnings.length ? value.warnings.join(" · ") : "Please verify this scanned question."}</div>}<div className="row g-2 mt-1">
-    <SelectField label="Question Type" value={value.question_type} options={[{ id: "mcq", label: "MCQ" }, { id: "true_false", label: "True / False" }, { id: "fill_blank", label: "Fill in the blank" }, { id: "short", label: "Short answer" }, { id: "long", label: "Long answer" }]} onChange={(v) => onChange({ question_type: v, options: v === "true_false" ? ["True", "False"] : v === "mcq" ? (value.options?.length ? value.options : ["", "", "", ""]) : [] })} />
-    <Input label="Marks" type="number" min="0.5" step="0.5" value={value.marks} onChange={(v) => onChange({ marks: v })} />
-    <SelectField label="Difficulty" value={value.difficulty || "medium"} options={[{ id: "easy", label: "Easy" }, { id: "medium", label: "Medium" }, { id: "hard", label: "Hard" }]} onChange={(v) => onChange({ difficulty: v })} />
-    <Input label="Topic" value={value.topic || ""} onChange={(v) => onChange({ topic: v })} />
-    <div className="col-12"><label className="form-label">Question</label><textarea required className="form-control" rows="2" value={value.question_text} onChange={(e) => onChange({ question_text: e.target.value })} /></div>
-    {objective && <div className="col-12"><label className="form-label">Options and correct answer</label><div className="row g-2">{options.map((option, oi) => <div className="col-md-6" key={oi}><div className="input-group"><span className="input-group-text"><input type="radio" name={`correct-${index}`} checked={value.correct_answer != null && Number(value.correct_answer) === oi} onChange={() => onChange({ correct_answer: oi })} /></span><input className="form-control" required value={option} disabled={value.question_type === "true_false"} onChange={(e) => { const next = [...options]; next[oi] = e.target.value; onChange({ options: next }); }} /></div></div>)}</div></div>}
-    {value.question_type === "fill_blank" && <Input label="Accepted answer(s), comma separated" value={Array.isArray(value.correct_answer) ? value.correct_answer.join(", ") : value.correct_answer || ""} onChange={(v) => onChange({ correct_answer: v.split(",").map((x) => x.trim()).filter(Boolean) })} />}
-    {["short", "long"].includes(value.question_type) && <div className="col-12"><label className="form-label">Answer key / marking guidance</label><textarea className="form-control" rows="2" value={value.explanation || ""} onChange={(e) => onChange({ explanation: e.target.value })} /></div>}
-  </div></div></div>;
+  return <section className="assessment-question-sheet mt-3">
+    <div className="assessment-question-sheet-head"><div><span>Question {index + 1}</span>{value.source_number ? <small>Source {value.source_number}</small> : null}</div><button type="button" className="btn btn-sm btn-link text-danger" onClick={onRemove}>Remove</button></div>
+    {value.needs_review && <div className="alert alert-warning py-2 small mb-2">{Array.isArray(value.warnings) && value.warnings.length ? value.warnings.join(" · ") : "Please verify this scanned question."}</div>}
+    <ChoiceField compact label="Question Type" value={value.question_type} options={[{ id: "mcq", label: "MCQ" }, { id: "true_false", label: "True / False" }, { id: "fill_blank", label: "Fill Blank" }, { id: "short", label: "Short" }, { id: "long", label: "Long" }]} onChange={(v) => onChange({ question_type: v, options: v === "true_false" ? ["True", "False"] : v === "mcq" ? (value.options?.length ? value.options : ["", "", "", ""]) : [] })} />
+    <div className="assessment-planning-grid assessment-question-meta">
+      <CompactField label="Marks" type="number" min="0.5" step="0.5" value={value.marks} onChange={(v) => onChange({ marks: v })} />
+      <CompactField label="Topic" value={value.topic || ""} onChange={(v) => onChange({ topic: v })} />
+    </div>
+    <ChoiceField compact label="Difficulty" value={value.difficulty || "medium"} options={[{ id: "easy", label: "Easy" }, { id: "medium", label: "Medium" }, { id: "hard", label: "Hard" }]} onChange={(v) => onChange({ difficulty: v })} />
+    <NotebookArea label="Question / Task" required value={value.question_text} onChange={(v) => onChange({ question_text: v })} placeholder="Write the question or task here…" compact />
+    {objective && <div className="assessment-options-block"><label>Options and correct answer</label><div className="assessment-options-grid">{options.map((option, oi) => <div className={`assessment-option-line ${value.correct_answer != null && Number(value.correct_answer) === oi ? "is-correct" : ""}`} key={oi}><input type="radio" name={`correct-${index}`} checked={value.correct_answer != null && Number(value.correct_answer) === oi} onChange={() => onChange({ correct_answer: oi })} /><input required value={option} disabled={value.question_type === "true_false"} placeholder={`Option ${oi + 1}`} onChange={(e) => { const next = [...options]; next[oi] = e.target.value; onChange({ options: next }); }} /></div>)}</div></div>}
+    {value.question_type === "fill_blank" && <NotebookLine label="Accepted answer(s), comma separated" value={Array.isArray(value.correct_answer) ? value.correct_answer.join(", ") : value.correct_answer || ""} onChange={(v) => onChange({ correct_answer: v.split(",").map((x) => x.trim()).filter(Boolean) })} />}
+    {["short", "long"].includes(value.question_type) && <NotebookArea label="Answer key / marking guidance" value={value.explanation || ""} onChange={(v) => onChange({ explanation: v })} placeholder="Write the expected answer or marking guidance…" compact />}
+  </section>;
+}
+
+function ChoiceField({ label, options = [], value, onChange, allowEmpty = false, empty = "All", required = false, compact = false }) {
+  return <div className={`assessment-choice-field ${compact ? "is-compact" : ""}`}><div className="assessment-choice-label">{label}{required ? <span>*</span> : null}</div><div className="assessment-choice-list">{allowEmpty && <button type="button" className={`assessment-choice ${String(value || "") === "" ? "active" : ""}`} onClick={() => onChange("")}>{empty}</button>}{options.map((option) => <button type="button" key={option.id} className={`assessment-choice ${String(value) === String(option.id) ? "active" : ""}`} onClick={() => onChange(String(option.id))}>{option.label}</button>)}{!options.length && !allowEmpty && <span className="assessment-choice-empty">Choose the previous option first</span>}</div></div>;
+}
+
+function NotebookLine({ label, value, onChange, required = false, placeholder = "" }) {
+  return <label className="assessment-notebook-line"><span>{label}{required ? <b>*</b> : null}</span><input required={required} value={value ?? ""} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} /></label>;
+}
+
+function NotebookArea({ label, value, onChange, required = false, placeholder = "", compact = false }) {
+  const ref = useRef(null);
+  const resize = useCallback(() => { const el = ref.current; if (!el) return; el.style.height = "auto"; el.style.height = `${Math.max(compact ? 78 : 112, el.scrollHeight)}px`; }, [compact]);
+  useEffect(() => { resize(); }, [resize, value]);
+  return <label className={`assessment-notebook-area ${compact ? "is-compact" : ""}`}><span>{label}{required ? <b>*</b> : null}</span><textarea ref={ref} required={required} value={value ?? ""} placeholder={placeholder} onChange={(e) => { onChange(e.target.value); requestAnimationFrame(resize); }} /></label>;
+}
+
+function CompactField({ label, onChange, ...props }) {
+  return <label className="assessment-compact-field"><span>{label}</span><input onChange={(e) => onChange(e.target.value)} {...props} /></label>;
 }
 
 function AttemptModal({ payload, onClose, onSubmitted, onError }) {

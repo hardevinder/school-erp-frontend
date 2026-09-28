@@ -343,7 +343,7 @@ const StudentFeeReport = () => {
     <div
       style={{
         background:
-          "linear-gradient(140deg, #f5f0ff 0%, #edf7ff 40%, #fff8ed 80%)",
+          "linear-gradient(140deg, var(--edb-surface) 0%, var(--edb-surface) 40%, var(--edb-surface) 80%)",
         minHeight: "100vh",
         paddingBottom: "32px",
       }}
@@ -355,8 +355,8 @@ const StudentFeeReport = () => {
           style={{
             borderRadius: "20px",
             background:
-              "linear-gradient(135deg, #5b21b6 0%, #6366f1 50%, #ec4899 100%)",
-            color: "#fff",
+              "linear-gradient(135deg, var(--edb-primary) 0%, var(--edb-primary) 50%, #ec4899 100%)",
+            color: "var(--edb-on-primary)",
           }}
         >
           <Card.Body>
@@ -369,7 +369,7 @@ const StudentFeeReport = () => {
                       width: 34,
                       height: 34,
                       borderRadius: "999px",
-                      background: "rgba(255,255,255,0.18)",
+                      background: "color-mix(in srgb, var(--edb-surface) 18%, transparent)",
                       alignItems: "center",
                       justifyContent: "center",
                       fontSize: 18,
@@ -380,7 +380,7 @@ const StudentFeeReport = () => {
                   Student Fee Report
                   <span
                     className="ms-2 px-2 py-1 rounded-pill"
-                    style={{ background: "rgba(255,255,255,0.2)", fontSize: 12 }}
+                    style={{ background: "color-mix(in srgb, var(--edb-surface) 20%, transparent)", fontSize: 12 }}
                   >
                     #{admissionNumber}
                   </span>
@@ -421,7 +421,7 @@ const StudentFeeReport = () => {
                     variant="light"
                     onClick={exportToExcel}
                     className="fw-semibold"
-                    style={{ color: "#4f46e5" }}
+                    style={{ color: "var(--edb-primary-text)" }}
                   >
                     📊 Export to Excel
                   </Button>
@@ -438,7 +438,7 @@ const StudentFeeReport = () => {
               className="h-100 border-0 shadow-sm"
               style={{
                 borderRadius: "16px",
-                background: "linear-gradient(160deg,#fff,#e0f2fe)",
+                background: "linear-gradient(160deg,var(--edb-surface),var(--edb-primary-soft))",
               }}
             >
               <Card.Body>
@@ -452,7 +452,7 @@ const StudentFeeReport = () => {
               className="h-100 border-0 shadow-sm"
               style={{
                 borderRadius: "16px",
-                background: "linear-gradient(160deg,#fff,#fef3c7)",
+                background: "linear-gradient(160deg,var(--edb-surface),#fef3c7)",
               }}
             >
               <Card.Body>
@@ -472,7 +472,7 @@ const StudentFeeReport = () => {
               className="h-100 border-0 shadow-sm"
               style={{
                 borderRadius: "16px",
-                background: "linear-gradient(160deg,#fff,#fee2e2)",
+                background: "linear-gradient(160deg,var(--edb-surface),var(--edb-primary-soft))",
               }}
             >
               <Card.Body>
@@ -499,9 +499,9 @@ const StudentFeeReport = () => {
                 maxHeight: "430px",
                 overflowY: "auto",
                 borderRadius: "14px",
-                boxShadow: "0 4px 18px rgba(15, 23, 42, 0.08)",
-                border: "1px solid rgba(79,70,229,0.08)",
-                background: "#fff",
+                boxShadow: "0 4px 18px color-mix(in srgb, var(--edb-primary-dark) 8%, transparent)",
+                border: "1px solid color-mix(in srgb, var(--edb-primary) 8%, transparent)",
+                background: "var(--edb-surface)",
               }}
             >
               <Table
@@ -517,7 +517,7 @@ const StudentFeeReport = () => {
                     top: 0,
                     zIndex: 1,
                     background:
-                      "linear-gradient(180deg, #eff6ff 0%, #ffffff 100%)",
+                      "linear-gradient(180deg, var(--edb-surface) 0%, var(--edb-surface) 100%)",
                   }}
                 >
                   <tr>

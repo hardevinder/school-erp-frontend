@@ -35,7 +35,7 @@
 
 .fs-sub {
   font-size: 12px;
-  color: #6c757d;
+  color: var(--edb-muted-text);
   margin-top: 2px;
 }
 
@@ -85,7 +85,7 @@
 
 .fs-hint {
   font-size: 11px;
-  color: #6c757d;
+  color: var(--edb-muted-text);
   margin-top: 4px;
 }
 
@@ -93,7 +93,7 @@
 .fs-lbl2 {
   font-size: 11px;
   margin-bottom: 4px;
-  color: #495057;
+  color: var(--edb-text);
 }
 
 .fs-inp2 {
@@ -163,8 +163,8 @@
   position: sticky;
   top: 0;
   z-index: 2;
-  background: #fff;
-  border-bottom: 1px solid #e9ecef;
+  background: var(--edb-surface);
+  border-bottom: 1px solid var(--edb-border);
 }
 
 /* Reduce horizontal scroll: allow wrapping */
@@ -182,7 +182,7 @@
 .rmsc .dropdown-container {
   position: relative;
   z-index: 41;
-  background: #fff;
+  background: var(--edb-surface);
 }
 
 .rmsc .dropdown-heading {
@@ -202,9 +202,9 @@
 .rmsc .dropdown-content {
   position: absolute !important;
   z-index: 9999 !important;
-  background: #fff !important;
-  border: 1px solid #dcdcdc;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  background: var(--edb-surface) !important;
+  border: 1px solid var(--edb-border);
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--edb-primary-dark) 12%, transparent);
 }
 
 /* ---------- SweetAlert2 compact modal ---------- */
@@ -248,7 +248,7 @@
 .fs-lbl {
   font-size: 11px;
   margin-bottom: 4px;
-  color: #495057;
+  color: var(--edb-text);
   display: block;
 }
 
@@ -256,7 +256,7 @@
   width: 100%;
   padding: 6px 10px;
   font-size: 12px;
-  border: 1px solid #dee2e6;
+  border: 1px solid var(--edb-border);
   border-radius: 8px;
   outline: none;
 }

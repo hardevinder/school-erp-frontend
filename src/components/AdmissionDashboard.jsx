@@ -174,31 +174,31 @@ export default function AdmissionDashboard() {
         label: "Enquiries",
         icon: "bi-chat-dots",
         href: "/enquiries",
-        gradient: "linear-gradient(135deg, #0ea5e9, #0369a1)",
+        gradient: "linear-gradient(135deg, var(--edb-primary), var(--edb-primary-dark))",
       },
       {
         label: "Registrations",
         icon: "bi-person-plus",
         href: "/registrations",
-        gradient: "linear-gradient(135deg, #22c55e, #16a34a)",
+        gradient: "linear-gradient(135deg, var(--edb-primary), var(--edb-primary-dark))",
       },
       {
         label: "Admission Assessments",
         icon: "bi-ui-checks-grid",
         href: ADMISSION_ASSESSMENTS_HREF,
-        gradient: "linear-gradient(135deg, #a855f7, #7e22ce)",
+        gradient: "linear-gradient(135deg, var(--edb-primary), var(--edb-primary-dark))",
       },
       {
         label: "Projection Report",
         icon: "bi-graph-up-arrow",
         href: PROJECTION_HREF,
-        gradient: "linear-gradient(135deg, #f97316, #ea580c)",
+        gradient: "linear-gradient(135deg, var(--edb-primary), var(--edb-primary-dark))",
       },
       {
         label: "Academic Calendar",
         icon: "bi-calendar3",
         href: "/academic-calendar-view",
-        gradient: "linear-gradient(135deg, #6366f1, #4338ca)",
+        gradient: "linear-gradient(135deg, var(--edb-primary), var(--edb-primary-dark))",
       },
     ],
     []
@@ -244,7 +244,7 @@ export default function AdmissionDashboard() {
       className="dashboard-surface"
       style={{
         backgroundImage:
-          "linear-gradient(135deg, rgba(14,165,233,0.10), rgba(34,197,94,0.10), rgba(99,102,241,0.10))",
+          "linear-gradient(135deg, rgba(14,165,233,0.10), rgba(34,197,94,0.10), color-mix(in srgb, var(--edb-primary) 10%, transparent))",
         minHeight: "100vh",
       }}
     >
@@ -299,8 +299,8 @@ export default function AdmissionDashboard() {
                   style={{
                     width: 44,
                     height: 44,
-                    background: "rgba(255,255,255,0.22)",
-                    border: "1px solid rgba(255,255,255,0.25)",
+                    background: "color-mix(in srgb, var(--edb-surface) 22%, transparent)",
+                    border: "1px solid color-mix(in srgb, var(--edb-border) 25%, transparent)",
                     flexShrink: 0,
                   }}
                 >
@@ -370,7 +370,7 @@ export default function AdmissionDashboard() {
                           style={{
                             width: 40,
                             height: 40,
-                            background: "#e0f2fe",
+                            background: "var(--edb-primary-soft)",
                             color: "#075985",
                             fontWeight: 700,
                           }}
@@ -477,7 +477,7 @@ export default function AdmissionDashboard() {
             to { opacity: 1; transform: translateY(0); }
           }
           code {
-            background: rgba(0,0,0,.04);
+            background: color-mix(in srgb, var(--edb-primary-dark) 4%, transparent);
             padding: 2px 6px;
             border-radius: 8px;
           }

@@ -547,17 +547,17 @@ const StudentIdCards = () => {
       className="container-fluid py-3"
       style={{
         background:
-          "radial-gradient(circle at top left, rgba(99,102,241,0.14), transparent 32%), linear-gradient(180deg, #f8fafc 0%, #ffffff 260px, #ffffff 100%)",
+          "radial-gradient(circle at top left, color-mix(in srgb, var(--edb-primary) 14%, transparent), transparent 32%), linear-gradient(180deg, var(--edb-surface) 0%, var(--edb-surface) 260px, var(--edb-surface) 100%)",
         minHeight: "100vh",
       }}
     >
       <div
         className="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-3 p-3"
         style={{
-          background: "rgba(255,255,255,0.92)",
-          border: "1px solid rgba(226,232,240,0.95)",
+          background: "color-mix(in srgb, var(--edb-surface) 92%, transparent)",
+          border: "1px solid color-mix(in srgb, var(--edb-border) 95%, transparent)",
           borderRadius: 18,
-          boxShadow: "0 14px 32px rgba(15,23,42,0.07)",
+          boxShadow: "0 14px 32px color-mix(in srgb, var(--edb-primary-dark) 7%, transparent)",
           backdropFilter: "blur(10px)",
         }}
       >
@@ -569,8 +569,8 @@ const StudentIdCards = () => {
                 width: 38,
                 height: 38,
                 borderRadius: 12,
-                background: "linear-gradient(135deg,#4f46e5,#06b6d4)",
-                color: "#fff",
+                background: "linear-gradient(135deg,var(--edb-primary),#06b6d4)",
+                color: "var(--edb-on-primary)",
               }}
             >
               <i className="bi bi-person-vcard-fill"></i>
@@ -829,7 +829,7 @@ const StudentIdCards = () => {
                   <div className="col-xl-4 col-md-6" key={field.key}>
                     <label
                       className="d-flex align-items-center gap-2 border rounded-3 px-3 py-2 h-100"
-                      style={{ cursor: "pointer", background: "#fff" }}
+                      style={{ cursor: "pointer", background: "var(--edb-surface)" }}
                     >
                       <input
                         type="checkbox"
@@ -925,7 +925,7 @@ const StudentIdCards = () => {
                                   width: 42,
                                   height: 42,
                                   objectFit: "cover",
-                                  border: "2px solid #e5e7eb",
+                                  border: "2px solid var(--edb-border)",
                                 }}
                                 onError={(e) => {
                                   e.currentTarget.src = NO_PHOTO_SVG;
@@ -1023,7 +1023,7 @@ const StudentIdCards = () => {
               {previewLoading ? (
                 <div
                   className="d-flex align-items-center justify-content-center text-muted rounded-4 border"
-                  style={{ height: 720, background: "#fafafa" }}
+                  style={{ height: 720, background: "var(--edb-surface)" }}
                 >
                   Loading preview...
                 </div>
@@ -1034,15 +1034,15 @@ const StudentIdCards = () => {
                   style={{
                     width: "100%",
                     height: 720,
-                    border: "1px solid #e5e7eb",
+                    border: "1px solid var(--edb-border)",
                     borderRadius: 18,
-                    background: "#fff",
+                    background: "var(--edb-surface)",
                   }}
                 />
               ) : (
                 <div
                   className="d-flex align-items-center justify-content-center text-muted rounded-4 border"
-                  style={{ height: 720, background: "#fafafa" }}
+                  style={{ height: 720, background: "var(--edb-surface)" }}
                 >
                   Preview will appear here.
                 </div>

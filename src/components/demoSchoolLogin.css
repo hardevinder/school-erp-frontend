@@ -1,14 +1,14 @@
 /* src/pages/login.css */
 
 :root {
-  --demo-navy: #12233f;
-  --demo-navy-deep: #0b172a;
-  --demo-text: #172033;
-  --demo-muted: #697386;
-  --demo-line: #e5e9f0;
-  --demo-surface: #ffffff;
-  --demo-background: #f7f8fb;
-  --demo-focus: rgba(18, 35, 63, 0.12);
+  --demo-navy: var(--edb-primary-dark);
+  --demo-navy-deep: var(--edb-primary-dark);
+  --demo-text: var(--edb-primary-dark);
+  --demo-muted: var(--edb-muted-text);
+  --demo-line: var(--edb-border);
+  --demo-surface: var(--edb-surface);
+  --demo-background: var(--edb-surface);
+  --demo-focus: color-mix(in srgb, var(--edb-primary-dark) 12%, transparent);
   --demo-danger: #b42318;
 }
 
@@ -56,9 +56,9 @@ input {
   inset: 0;
   background: linear-gradient(
     180deg,
-    rgba(8, 19, 37, 0.14) 0%,
-    rgba(8, 19, 37, 0.16) 42%,
-    rgba(8, 19, 37, 0.82) 100%
+    color-mix(in srgb, var(--edb-primary-dark) 14%, transparent) 0%,
+    color-mix(in srgb, var(--edb-primary-dark) 16%, transparent) 42%,
+    color-mix(in srgb, var(--edb-primary-dark) 82%, transparent) 100%
   );
   pointer-events: none;
 }
@@ -68,9 +68,9 @@ input {
   inset: 0;
   background: linear-gradient(
     90deg,
-    rgba(8, 19, 37, 0.28) 0%,
-    rgba(8, 19, 37, 0.04) 52%,
-    rgba(8, 19, 37, 0.08) 100%
+    color-mix(in srgb, var(--edb-primary-dark) 28%, transparent) 0%,
+    color-mix(in srgb, var(--edb-primary-dark) 4%, transparent) 52%,
+    color-mix(in srgb, var(--edb-primary-dark) 8%, transparent) 100%
   );
 }
 
@@ -81,7 +81,7 @@ input {
   padding: 44px clamp(34px, 5vw, 76px);
   display: flex;
   flex-direction: column;
-  color: #fff;
+  color: var(--edb-on-primary);
 }
 
 .demo-login__mini-brand {
@@ -99,7 +99,7 @@ input {
   height: 42px;
   object-fit: contain;
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.95);
+  background: color-mix(in srgb, var(--edb-surface) 95%, transparent);
   padding: 5px;
 }
 
@@ -115,13 +115,13 @@ input {
   font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.16em;
-  color: rgba(255, 255, 255, 0.78);
+  color: var(--edb-on-primary);
 }
 
 .demo-login__visual-copy h1 {
   margin: 0;
   max-width: 620px;
-  color: #fff;
+  color: var(--edb-on-primary);
   font-size: clamp(42px, 5.2vw, 76px);
   line-height: 0.98;
   letter-spacing: -0.045em;
@@ -131,7 +131,7 @@ input {
 .demo-login__visual-copy p {
   max-width: 610px;
   margin: 24px 0 0;
-  color: rgba(255, 255, 255, 0.8);
+  color: var(--edb-on-primary);
   font-size: clamp(15px, 1.25vw, 18px);
   line-height: 1.72;
 }
@@ -141,7 +141,7 @@ input {
   align-items: center;
   gap: 9px;
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--edb-on-primary);
 }
 
 .demo-login__dot {
@@ -159,10 +159,10 @@ input {
   justify-content: center;
   background: radial-gradient(
       circle at 85% 4%,
-      rgba(34, 64, 112, 0.055),
+      color-mix(in srgb, var(--edb-primary-dark) 5.5%, transparent),
       transparent 32%
     ),
-    #fff;
+    var(--edb-surface);
   overflow-y: auto;
 }
 
@@ -195,7 +195,7 @@ input {
 .demo-login__brand-row small {
   display: block;
   margin-top: 2px;
-  color: #7b8494;
+  color: var(--edb-muted-text);
   font-size: 12px;
 }
 
@@ -222,7 +222,7 @@ input {
   padding: 12px 14px;
   border: 1px solid #f4c7c3;
   border-radius: 12px;
-  background: #fff5f4;
+  background: var(--edb-surface);
   color: var(--demo-danger);
   font-size: 13px;
   line-height: 1.45;
@@ -237,7 +237,7 @@ input {
   justify-content: center;
   flex: 0 0 auto;
   background: var(--demo-danger);
-  color: #fff;
+  color: var(--edb-on-primary);
   font-size: 12px;
   font-weight: 800;
 }
@@ -249,7 +249,7 @@ input {
 .demo-login__field label,
 .demo-login__label-row label {
   margin: 0 0 8px;
-  color: #364152;
+  color: var(--edb-text);
   font-size: 13px;
   font-weight: 650;
 }
@@ -275,14 +275,14 @@ input {
   min-height: 52px;
   display: flex;
   align-items: center;
-  border: 1px solid #dce1e8;
+  border: 1px solid var(--edb-border);
   border-radius: 12px;
-  background: #fff;
+  background: var(--edb-surface);
   transition: border-color 0.18s ease, box-shadow 0.18s ease;
 }
 
 .demo-login__input-wrap:focus-within {
-  border-color: #8591a5;
+  border-color: var(--edb-primary);
   box-shadow: 0 0 0 4px var(--demo-focus);
 }
 
@@ -293,7 +293,7 @@ input {
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
-  color: #8993a3;
+  color: var(--edb-input-text);
 }
 
 .demo-login__input-icon svg,
@@ -314,7 +314,7 @@ input {
 }
 
 .demo-login__input-wrap input::placeholder {
-  color: #a3aab6;
+  color: var(--edb-muted-text);
 }
 
 .demo-login__eye {
@@ -327,7 +327,7 @@ input {
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
-  color: #768195;
+  color: var(--edb-muted-text);
 }
 
 .demo-login__remember {
@@ -336,7 +336,7 @@ input {
   display: flex;
   align-items: center;
   gap: 9px;
-  color: #626d7d;
+  color: var(--edb-muted-text);
   font-size: 13px;
   cursor: pointer;
 }
@@ -365,8 +365,8 @@ input {
   padding: 0 20px;
   border: 0;
   background: var(--demo-navy);
-  color: #fff;
-  box-shadow: 0 10px 24px rgba(18, 35, 63, 0.15);
+  color: var(--edb-on-primary-dark);
+  box-shadow: 0 10px 24px color-mix(in srgb, var(--edb-primary-dark) 15%, transparent);
 }
 
 .demo-login__submit:hover:not(:disabled) {
@@ -382,8 +382,8 @@ input {
 .demo-login__spinner {
   width: 17px;
   height: 17px;
-  border: 2px solid rgba(255, 255, 255, 0.35);
-  border-top-color: #fff;
+  border: 2px solid color-mix(in srgb, var(--edb-border) 35%, transparent);
+  border-top-color: var(--edb-border);
   border-radius: 50%;
   animation: demo-login-spin 0.7s linear infinite;
 }
@@ -415,39 +415,39 @@ input {
   z-index: 1;
   display: inline-block;
   padding: 0 12px;
-  background: #fff;
-  color: #98a0ad;
+  background: var(--edb-surface);
+  color: var(--edb-muted-text);
   font-size: 11px;
 }
 
 .demo-login__google {
   padding: 0 18px;
-  border: 1px solid #dce1e8;
-  background: #fff;
-  color: #354052;
+  border: 1px solid var(--edb-border);
+  background: var(--edb-surface);
+  color: var(--edb-text);
 }
 
 .demo-login__google:hover:not(:disabled) {
-  background: #fafbfc;
-  border-color: #c9d0da;
+  background: var(--edb-surface);
+  border-color: var(--edb-border);
 }
 
 .demo-login__security {
   margin-top: 27px;
   padding: 14px 15px;
-  border: 1px solid #e5e9f0;
+  border: 1px solid var(--edb-border);
   border-radius: 12px;
   display: flex;
   align-items: center;
   gap: 12px;
-  background: #fafbfc;
+  background: var(--edb-surface);
 }
 
 .demo-login__security-icon {
   width: 34px;
   height: 34px;
   border-radius: 10px;
-  background: #eef2f7;
+  background: var(--edb-dashboard-bg);
   color: var(--demo-navy);
   display: inline-flex;
   align-items: center;
@@ -465,25 +465,25 @@ input {
 }
 
 .demo-login__security strong {
-  color: #364152;
+  color: var(--edb-text);
   font-size: 12px;
 }
 
 .demo-login__security div > span {
   margin-top: 1px;
-  color: #8490a0;
+  color: var(--edb-muted-text);
   font-size: 11px;
 }
 
 .demo-login__footer {
   margin-top: 31px;
   padding-top: 21px;
-  border-top: 1px solid #edf0f4;
+  border-top: 1px solid var(--edb-border);
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 15px;
-  color: #9aa2ae;
+  color: var(--edb-muted-text);
   font-size: 10.5px;
 }
 
@@ -497,7 +497,7 @@ input {
   padding: 0;
   border: 0;
   background: transparent;
-  color: #7a8493;
+  color: var(--edb-muted-text);
   font-size: inherit;
 }
 
@@ -542,7 +542,7 @@ input {
     z-index: 2;
     min-height: 100dvh;
     padding: 28px 18px;
-    background: rgba(8, 19, 37, 0.48);
+    background: color-mix(in srgb, var(--edb-primary-dark) 48%, transparent);
     backdrop-filter: blur(3px);
   }
 
@@ -551,8 +551,8 @@ input {
     margin: auto;
     padding: 28px;
     border-radius: 22px;
-    background: rgba(255, 255, 255, 0.98);
-    box-shadow: 0 22px 70px rgba(0, 0, 0, 0.26);
+    background: color-mix(in srgb, var(--edb-surface) 98%, transparent);
+    box-shadow: 0 22px 70px color-mix(in srgb, var(--edb-primary-dark) 26%, transparent);
   }
 
   .demo-login__brand-row {
@@ -564,7 +564,7 @@ input {
   .demo-login__panel {
     align-items: flex-start;
     padding: 0;
-    background: #fff;
+    background: var(--edb-surface);
   }
 
   .demo-login__visual {

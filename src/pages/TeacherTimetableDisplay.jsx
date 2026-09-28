@@ -348,7 +348,7 @@ const TeacherTimetableDisplay = () => {
   };
 
   const workloadStyle = {
-    backgroundColor: '#e9ecef',
+    backgroundColor: "var(--edb-dashboard-bg)",
     padding: '3px 6px',
     borderRadius: '4px',
     display: 'inline-block',
@@ -471,7 +471,7 @@ const TeacherTimetableDisplay = () => {
                             if (hasOrig) {
                               return (
                                 <td key={p.id} style={cellStyle}>
-                                  <div className="p-2 border rounded shadow-sm" style={{ backgroundColor: '#f8d7da' }}>
+                                  <div className="p-2 border rounded shadow-sm" style={{ backgroundColor: "var(--edb-primary-soft)" }}>
                                     <div className="small fw-bold">Freed by:</div>
                                     <div className="small">
                                       {hasOrig.Teacher?.name || ''} - <strong>{hasOrig.Class?.class_name || ''}</strong> -{' '}
@@ -485,7 +485,7 @@ const TeacherTimetableDisplay = () => {
                             if (hasSub) {
                               return (
                                 <td key={p.id} style={cellStyle}>
-                                  <div className="p-2 border rounded shadow-sm" style={{ backgroundColor: '#d4edda' }}>
+                                  <div className="p-2 border rounded shadow-sm" style={{ backgroundColor: "var(--edb-primary-soft)" }}>
                                     <div className="small fw-bold">Covering:</div>
                                     <div className="small">
                                       {hasSub.OriginalTeacher?.name || ''} - <strong>{hasSub.Class?.class_name || ''}</strong> -{' '}

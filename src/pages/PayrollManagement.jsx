@@ -27,39 +27,39 @@ const emptyForm = moneyFields.reduce(
 const styles = {
   page: {
     background:
-      "linear-gradient(180deg, #f5f8ff 0%, #f8fafc 38%, #ffffff 100%)",
+      "linear-gradient(180deg, var(--edb-surface) 0%, var(--edb-surface) 38%, var(--edb-surface) 100%)",
     minHeight: "100vh",
   },
   hero: {
     borderRadius: 24,
     background:
-      "radial-gradient(circle at top left, rgba(255,255,255,.32), transparent 30%), linear-gradient(135deg, #123524 0%, #0f766e 52%, #1d4ed8 100%)",
-    boxShadow: "0 18px 45px rgba(15, 23, 42, 0.18)",
+      "radial-gradient(circle at top left, color-mix(in srgb, var(--edb-surface) 32%, transparent), transparent 30%), linear-gradient(135deg, var(--edb-primary-dark) 0%, #0f766e 52%, var(--edb-primary) 100%)",
+    boxShadow: "0 18px 45px color-mix(in srgb, var(--edb-primary-dark) 18%, transparent)",
     overflow: "hidden",
   },
   glassCard: {
-    border: "1px solid rgba(255,255,255,.28)",
-    background: "rgba(255,255,255,.14)",
+    border: "1px solid color-mix(in srgb, var(--edb-border) 28%, transparent)",
+    background: "color-mix(in srgb, var(--edb-surface) 14%, transparent)",
     backdropFilter: "blur(8px)",
     borderRadius: 18,
   },
   softCard: {
-    border: "1px solid #e5e7eb",
+    border: "1px solid var(--edb-border)",
     borderRadius: 22,
-    boxShadow: "0 14px 40px rgba(15, 23, 42, 0.08)",
+    boxShadow: "0 14px 40px color-mix(in srgb, var(--edb-primary-dark) 8%, transparent)",
   },
   miniCard: {
-    border: "1px solid #e5e7eb",
+    border: "1px solid var(--edb-border)",
     borderRadius: 18,
-    boxShadow: "0 10px 26px rgba(15, 23, 42, 0.06)",
+    boxShadow: "0 10px 26px color-mix(in srgb, var(--edb-primary-dark) 6%, transparent)",
   },
   stickyPanel: {
     position: "sticky",
     top: 12,
   },
   tableHead: {
-    background: "#f8fafc",
-    color: "#475569",
+    background: "var(--edb-surface)",
+    color: "var(--edb-text)",
     fontSize: 12,
     textTransform: "uppercase",
     letterSpacing: ".04em",
@@ -636,7 +636,7 @@ export default function PayrollManagement() {
                   ))}
                 </div>
 
-                <div className="rounded-4 p-3 mb-3" style={{ background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+                <div className="rounded-4 p-3 mb-3" style={{ background: "var(--edb-surface)", border: "1px solid var(--edb-border)" }}>
                   <DetailLine label="Monthly Earnings" value={currency(formTotals.earnings)} />
                   <DetailLine label="Fixed Deductions" value={currency(formTotals.deductions)} />
                   <DetailLine label="Estimated Net" value={currency(formTotals.net)} strong />

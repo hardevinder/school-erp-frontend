@@ -117,9 +117,9 @@ const OpeningBalances = () => {
   .sb-menu {
     position: absolute; top: 100%; left: 0; right: 0;
     max-height: 280px; overflow: auto; z-index: 1056;
-    background: #fff; border: 1px solid rgba(0,0,0,.125);
+    background: var(--edb-surface); border: 1px solid color-mix(in srgb, var(--edb-border) 12.5%, transparent);
     border-radius: .375rem; margin-top: 4px;
-    box-shadow: 0 4px 16px rgba(0,0,0,.12);
+    box-shadow: 0 4px 16px var(--edb-shell-shadow);
   }
   .sb-item {
     padding: .5rem .75rem; cursor: pointer;
@@ -128,18 +128,18 @@ const OpeningBalances = () => {
     text-align: left;                 /* ← ensures left alignment */
     gap: 2px;
   }
-  .sb-item:hover, .sb-item.active { background: #f6f7f9; }
+  .sb-item:hover, .sb-item.active { background: var(--edb-surface); }
   .primary-line {
     width: 100%; font-weight: 600; line-height: 1.2;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
   .secondary-line {
-    width: 100%; font-size: 12px; color: #6c757d; line-height: 1.2;
+    width: 100%; font-size: 12px; color: var(--edb-muted-text); line-height: 1.2;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
   .pill {
-    font-weight: 500; font-size: 12px; color: #495057;
-    background: #eef1f5; border-radius: 999px; padding: 1px 8px; margin-left: 6px;
+    font-weight: 500; font-size: 12px; color: var(--edb-text);
+    background: var(--edb-dashboard-bg); border-radius: 999px; padding: 1px 8px; margin-left: 6px;
   }
 </style>
 

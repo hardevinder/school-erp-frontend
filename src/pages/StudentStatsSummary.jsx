@@ -591,29 +591,29 @@ const StudentStatsSummary = () => {
     <div className="container-fluid mt-2">
       <style>{`
         .ss-page {
-          color: #111827;
+          color: var(--edb-text);
         }
         .ss-card {
-          border: 1px solid rgba(15, 23, 42, 0.07);
+          border: 1px solid color-mix(in srgb, var(--edb-border) 7%, transparent);
           border-radius: 20px;
           overflow: hidden;
-          background: #ffffff;
-          box-shadow: 0 12px 35px rgba(15, 23, 42, 0.06);
+          background: var(--edb-surface);
+          box-shadow: 0 12px 35px color-mix(in srgb, var(--edb-primary-dark) 6%, transparent);
         }
         .ss-topbar {
           position: sticky;
           top: 0;
           z-index: 20;
-          background: rgba(255,255,255,0.92);
+          background: color-mix(in srgb, var(--edb-surface) 92%, transparent);
           backdrop-filter: blur(10px);
-          border: 1px solid rgba(15, 23, 42, 0.08);
+          border: 1px solid color-mix(in srgb, var(--edb-border) 8%, transparent);
           border-radius: 18px;
           padding: 14px 16px;
-          box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
+          box-shadow: 0 10px 30px color-mix(in srgb, var(--edb-primary-dark) 6%, transparent);
         }
         .ss-hero {
-          background: linear-gradient(135deg, #eff6ff 0%, #ffffff 45%, #f5f3ff 100%);
-          border: 1px solid rgba(99, 102, 241, 0.08);
+          background: linear-gradient(135deg, var(--edb-surface) 0%, var(--edb-surface) 45%, var(--edb-surface) 100%);
+          border: 1px solid color-mix(in srgb, var(--edb-primary) 8%, transparent);
           border-radius: 18px;
           padding: 14px 16px;
         }
@@ -622,11 +622,11 @@ const StudentStatsSummary = () => {
           font-size: 20px;
           margin: 0;
           letter-spacing: 0.2px;
-          color: #111827;
+          color: var(--edb-text);
         }
         .ss-sub {
           font-size: 12px;
-          color: #6b7280;
+          color: var(--edb-muted-text);
           margin-top: 4px;
         }
         .ss-pill {
@@ -635,28 +635,28 @@ const StudentStatsSummary = () => {
           gap: 6px;
           padding: 6px 10px;
           border-radius: 999px;
-          background: rgba(255,255,255,0.9);
-          border: 1px solid rgba(15, 23, 42, 0.08);
+          background: color-mix(in srgb, var(--edb-surface) 90%, transparent);
+          border: 1px solid color-mix(in srgb, var(--edb-border) 8%, transparent);
           font-size: 11px;
           font-weight: 800;
-          color: #374151;
+          color: var(--edb-text);
         }
         .ss-tabbtn {
-          border: 1px solid rgba(15, 23, 42, 0.10);
-          background: #fff;
+          border: 1px solid color-mix(in srgb, var(--edb-border) 10%, transparent);
+          background: var(--edb-surface);
           padding: 8px 12px;
           border-radius: 999px;
           font-size: 12px;
           font-weight: 800;
           cursor: pointer;
           transition: all 0.18s ease;
-          color: #374151;
+          color: var(--edb-text);
         }
         .ss-tabbtn.active {
-          background: linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%);
-          border-color: rgba(99,102,241,0.45);
-          color: #3730a3;
-          box-shadow: 0 6px 18px rgba(99,102,241,0.16);
+          background: linear-gradient(135deg, var(--edb-surface) 0%, var(--edb-primary-soft) 100%);
+          border-color: color-mix(in srgb, var(--edb-primary) 45%, transparent);
+          color: var(--edb-primary-text);
+          box-shadow: 0 6px 18px color-mix(in srgb, var(--edb-primary-dark) 16%, transparent);
         }
         .ss-chip {
           display: inline-flex;
@@ -666,23 +666,23 @@ const StudentStatsSummary = () => {
           padding: 7px 10px;
           font-size: 11px;
           font-weight: 800;
-          border: 1px solid rgba(0,0,0,0.08);
+          border: 1px solid color-mix(in srgb, var(--edb-border) 8%, transparent);
           white-space: nowrap;
         }
         .ss-dot {
           width: 10px;
           height: 10px;
           border-radius: 999px;
-          border: 1px solid rgba(0,0,0,0.12);
+          border: 1px solid color-mix(in srgb, var(--edb-border) 12%, transparent);
           flex: 0 0 auto;
         }
         .ss-stat {
           border-radius: 18px;
-          border: 1px solid rgba(15, 23, 42, 0.07);
-          background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+          border: 1px solid color-mix(in srgb, var(--edb-border) 7%, transparent);
+          background: linear-gradient(180deg, var(--edb-surface) 0%, var(--edb-surface) 100%);
           padding: 14px 14px 12px;
           min-height: 96px;
-          box-shadow: 0 10px 24px rgba(15, 23, 42, 0.04);
+          box-shadow: 0 10px 24px color-mix(in srgb, var(--edb-primary-dark) 4%, transparent);
         }
         .ss-stat.clickable,
         .ss-row.clickable,
@@ -694,65 +694,65 @@ const StudentStatsSummary = () => {
         .ss-stat.clickable:hover,
         .ss-row.clickable:hover {
           transform: translateY(-1px);
-          box-shadow: 0 14px 28px rgba(15, 23, 42, 0.08);
-          border-color: rgba(79, 70, 229, 0.22);
+          box-shadow: 0 14px 28px color-mix(in srgb, var(--edb-primary-dark) 8%, transparent);
+          border-color: color-mix(in srgb, var(--edb-primary) 22%, transparent);
         }
         .ss-table td.clickable:hover,
         .ss-table th.clickable:hover {
-          background: #eef2ff !important;
+          background: var(--edb-surface) !important;
         }
         .ss-stat .num {
           font-size: 24px;
           font-weight: 900;
           line-height: 1.1;
-          color: #0f172a;
+          color: var(--edb-text);
         }
         .ss-stat .lbl {
           font-size: 12px;
-          color: #6b7280;
+          color: var(--edb-muted-text);
           margin-top: 4px;
           font-weight: 700;
         }
         .ss-stat .subtxt {
           font-size: 11px;
-          color: #94a3b8;
+          color: var(--edb-muted-text);
           margin-top: 4px;
         }
         .ss-sectionTitle {
           font-size: 12px;
           font-weight: 900;
           letter-spacing: 0.2px;
-          color: #6b7280;
+          color: var(--edb-muted-text);
           text-transform: uppercase;
         }
         .ss-stacked {
           height: 18px;
           border-radius: 999px;
-          background: #f3f4f6;
+          background: var(--edb-dashboard-bg);
           overflow: hidden;
-          border: 1px solid rgba(15, 23, 42, 0.06);
+          border: 1px solid color-mix(in srgb, var(--edb-border) 6%, transparent);
         }
         .ss-seg {
           height: 100%;
           display: inline-block;
         }
         .ss-row {
-          border: 1px solid rgba(15, 23, 42, 0.06);
+          border: 1px solid color-mix(in srgb, var(--edb-border) 6%, transparent);
           border-radius: 18px;
           padding: 14px;
-          background: #fff;
-          box-shadow: 0 10px 22px rgba(15, 23, 42, 0.035);
+          background: var(--edb-surface);
+          box-shadow: 0 10px 22px color-mix(in srgb, var(--edb-primary-dark) 3.5000000000000004%, transparent);
         }
         .ss-matrixWrap {
           max-height: 72vh;
           border-radius: 18px;
           overflow: auto;
-          border: 1px solid rgba(15, 23, 42, 0.08);
-          box-shadow: inset 0 1px 0 rgba(255,255,255,0.8);
+          border: 1px solid color-mix(in srgb, var(--edb-border) 8%, transparent);
+          box-shadow: inset 0 1px 0 color-mix(in srgb, var(--edb-primary-dark) 80%, transparent);
         }
         .ss-note {
-          border: 1px solid rgba(245, 158, 11, 0.25);
-          background: linear-gradient(90deg, rgba(255, 251, 235, 0.98), rgba(255,255,255,0.98));
+          border: 1px solid color-mix(in srgb, var(--edb-primary) 25%, transparent);
+          background: linear-gradient(90deg, color-mix(in srgb, var(--edb-surface) 98%, transparent), color-mix(in srgb, var(--edb-surface) 98%, transparent));
           color: #92400e;
           border-radius: 14px;
           padding: 10px 12px;
@@ -765,26 +765,26 @@ const StudentStatsSummary = () => {
           align-items: center;
           justify-content: center;
           text-align: center;
-          color: #6b7280;
+          color: var(--edb-muted-text);
           padding: 24px;
         }
         .ss-empty h6 {
           font-size: 16px;
           font-weight: 900;
-          color: #374151;
+          color: var(--edb-text);
           margin-bottom: 6px;
         }
         .ss-mutedSmall {
           font-size: 11px;
-          color: #94a3b8;
+          color: var(--edb-muted-text);
         }
         .ss-table thead th {
-          background: linear-gradient(90deg, #eef2ff 0%, #f8fafc 100%);
-          border-bottom: 1px solid rgba(15, 23, 42, 0.08);
-          color: #0f172a;
+          background: linear-gradient(90deg, var(--edb-surface) 0%, var(--edb-surface) 100%);
+          border-bottom: 1px solid color-mix(in srgb, var(--edb-border) 8%, transparent);
+          color: var(--edb-text);
         }
         .ss-table tbody td {
-          border-color: rgba(15, 23, 42, 0.06);
+          border-color: color-mix(in srgb, var(--edb-border) 6%, transparent);
         }
         .ss-searchWrap {
           min-width: 250px;
@@ -793,7 +793,7 @@ const StudentStatsSummary = () => {
           font-size: 10px;
           font-weight: 900;
           letter-spacing: 0.2px;
-          color: #4f46e5;
+          color: var(--edb-primary-text);
           text-transform: uppercase;
         }
         @media (max-width: 768px) {
@@ -885,7 +885,7 @@ const StudentStatsSummary = () => {
           </div>
         ) : null}
 
-        <div className="ss-note mb-3" style={{ borderColor: "rgba(79,70,229,0.18)", color: "#4338ca", background: "linear-gradient(90deg, rgba(238,242,255,0.96), rgba(255,255,255,0.96))" }}>
+        <div className="ss-note mb-3" style={{ borderColor: "color-mix(in srgb, var(--edb-primary) 18%, transparent)", color: "var(--edb-primary-text)", background: "linear-gradient(90deg, color-mix(in srgb, var(--edb-surface) 96%, transparent), color-mix(in srgb, var(--edb-surface) 96%, transparent))" }}>
           {exportHint}
         </div>
 
@@ -1089,7 +1089,7 @@ const StudentStatsSummary = () => {
                                       className="ss-seg"
                                       style={{
                                         width: `${Math.max(0, Math.min(100, pct))}%`,
-                                        background: "linear-gradient(90deg, #6366f1, #8b5cf6)",
+                                        background: "linear-gradient(90deg, var(--edb-primary), var(--edb-primary))",
                                       }}
                                     />
                                   </div>
@@ -1123,7 +1123,7 @@ const StudentStatsSummary = () => {
                             <div
                               key={`bar-${c.class_key}`}
                               className="border rounded-4 p-3 clickable"
-                              style={{ borderColor: "rgba(15, 23, 42, 0.08)" }}
+                              style={{ borderColor: "color-mix(in srgb, var(--edb-border) 8%, transparent)" }}
                               onClick={() => openClassExportModal(c)}
                               title={`Click to export ${c.class_name}`}
                             >
@@ -1259,7 +1259,7 @@ const StudentStatsSummary = () => {
                                     position: "sticky",
                                     left: 0,
                                     zIndex: 4,
-                                    background: "#ffffff",
+                                    background: "var(--edb-surface)",
                                     fontWeight: 900,
                                     minWidth: 150,
                                   }}
@@ -1298,7 +1298,7 @@ const StudentStatsSummary = () => {
 
                                 <td
                                   className="text-center clickable"
-                                  style={{ fontWeight: 900, background: "#f8fafc" }}
+                                  style={{ fontWeight: 900, background: "var(--edb-surface)" }}
                                   title={`Click to export ${c.class_name}`}
                                   onClick={() => openClassExportModal(c)}
                                 >
@@ -1314,7 +1314,7 @@ const StudentStatsSummary = () => {
                                 position: "sticky",
                                 left: 0,
                                 zIndex: 4,
-                                background: "#f1f5f9",
+                                background: "var(--edb-surface)",
                                 fontWeight: 900,
                               }}
                             >
@@ -1329,7 +1329,7 @@ const StudentStatsSummary = () => {
                                 <td
                                   key={`coltot-${getHouseKey(h.house_id)}`}
                                   className="text-center clickable"
-                                  style={{ fontWeight: 900, background: "#f1f5f9" }}
+                                  style={{ fontWeight: 900, background: "var(--edb-surface)" }}
                                   title={`Click to export ${h.house_name}`}
                                   onClick={() => openHouseExportModal(h)}
                                 >
@@ -1340,7 +1340,7 @@ const StudentStatsSummary = () => {
 
                             <td
                               className="text-center"
-                              style={{ fontWeight: 900, background: "#e2e8f0" }}
+                              style={{ fontWeight: 900, background: "var(--edb-dashboard-bg)" }}
                             >
                               {matrix.grandTotal}
                             </td>
@@ -1365,8 +1365,8 @@ const StudentStatsSummary = () => {
               <Col md={12}>
                 <div
                   style={{
-                    background: "#f8fafc",
-                    border: "1px solid rgba(15,23,42,0.08)",
+                    background: "var(--edb-surface)",
+                    border: "1px solid color-mix(in srgb, var(--edb-border) 8%, transparent)",
                     borderRadius: 12,
                     padding: 12,
                   }}

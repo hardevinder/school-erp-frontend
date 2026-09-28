@@ -167,7 +167,7 @@ const ChatContainer = ({ currentUserId }) => {
     String(msg.senderId) === String(currentUserId) ? "You" : msg.senderName || "Anonymous";
 
   const messageStyle = (msg) => ({
-    backgroundColor: String(msg.senderId) === String(currentUserId) ? "#DCF8C6" : "#FFFFFF",
+    backgroundColor: String(msg.senderId) === String(currentUserId) ? "#DCF8C6" : "var(--edb-surface)",
     alignSelf: String(msg.senderId) === String(currentUserId) ? "flex-end" : "flex-start",
     padding: "10px",
     borderRadius: "10px",
@@ -194,7 +194,7 @@ const ChatContainer = ({ currentUserId }) => {
         height: "100%",
         display: "flex",
         flexDirection: "column",
-        border: "1px solid #ccc",
+        border: "1px solid var(--edb-border)",
         borderRadius: "8px",
         overflow: "hidden",
       }}
@@ -202,8 +202,8 @@ const ChatContainer = ({ currentUserId }) => {
       {/* Single Header */}
       <div
         style={{
-          backgroundColor: "#6a11cb",
-          color: "#fff",
+          backgroundColor: "var(--edb-primary)",
+          color: "var(--edb-on-primary)",
           padding: "8px 12px",
           display: "flex",
           alignItems: "center",
@@ -220,7 +220,7 @@ const ChatContainer = ({ currentUserId }) => {
             style={{
               background: "none",
               border: "none",
-              color: "#fff",
+              color: "var(--edb-on-primary)",
               fontSize: "1.2rem",
               cursor: "pointer",
               marginRight: "8px",
@@ -240,7 +240,7 @@ const ChatContainer = ({ currentUserId }) => {
       <div style={{ flexGrow: 1, display: "flex", flexDirection: "column" }}>
         {viewContacts ? (
           // Contacts View (with search and list)
-          <div style={{ flexGrow: 1, padding: "8px", overflowY: "auto", backgroundColor: "#f9f9f9" }}>
+          <div style={{ flexGrow: 1, padding: "8px", overflowY: "auto", backgroundColor: "var(--edb-surface)" }}>
             <div style={{ marginBottom: "8px" }}>
               <input
                 type="text"
@@ -251,7 +251,7 @@ const ChatContainer = ({ currentUserId }) => {
                   width: "100%",
                   padding: "8px",
                   borderRadius: "20px",
-                  border: "1px solid #ccc",
+                  border: "1px solid var(--edb-border)",
                   outline: "none",
                 }}
               />
@@ -272,7 +272,7 @@ const ChatContainer = ({ currentUserId }) => {
                     display: "flex",
                     justifyContent: "space-between",
                     alignItems: "center",
-                    borderBottom: "1px solid #ddd",
+                    borderBottom: "1px solid var(--edb-border)",
                     borderRadius: "4px",
                     marginBottom: "4px",
                   }}
@@ -284,7 +284,7 @@ const ChatContainer = ({ currentUserId }) => {
                     <span
                       style={{
                         backgroundColor: "red",
-                        color: "white",
+                        color: "var(--edb-on-primary)",
                         borderRadius: "50%",
                         padding: "4px 8px",
                         fontSize: "12px",
@@ -301,7 +301,7 @@ const ChatContainer = ({ currentUserId }) => {
           </div>
         ) : (
           // Conversation View
-          <div style={{ flexGrow: 1, display: "flex", flexDirection: "column", backgroundColor: "#f9f9f9" }}>
+          <div style={{ flexGrow: 1, display: "flex", flexDirection: "column", backgroundColor: "var(--edb-surface)" }}>
             <div style={{ flexGrow: 1, padding: "8px", overflowY: "auto" }}>
               {messages.length > 0 ? (
                 messages.map((msg) => (
@@ -309,7 +309,7 @@ const ChatContainer = ({ currentUserId }) => {
                     <strong>{getDisplayName(msg)}</strong>
                     <div>{msg.text}</div>
                     {String(msg.senderId) !== String(currentUserId) && msg.senderRole && (
-                      <div style={{ fontSize: "0.8em", color: "#888" }}>{msg.senderRole}</div>
+                      <div style={{ fontSize: "0.8em", color: "var(--edb-muted-text)" }}>{msg.senderRole}</div>
                     )}
                   </div>
                 ))
@@ -321,10 +321,10 @@ const ChatContainer = ({ currentUserId }) => {
             <div
               style={{
                 padding: "8px",
-                borderTop: "1px solid #ccc",
+                borderTop: "1px solid var(--edb-border)",
                 display: "flex",
                 alignItems: "center",
-                backgroundColor: "#fff",
+                backgroundColor: "var(--edb-surface)",
               }}
             >
               <input
@@ -337,7 +337,7 @@ const ChatContainer = ({ currentUserId }) => {
                   flexGrow: 1,
                   padding: "10px",
                   borderRadius: "20px",
-                  border: "1px solid #ccc",
+                  border: "1px solid var(--edb-border)",
                   outline: "none",
                 }}
               />
@@ -349,7 +349,7 @@ const ChatContainer = ({ currentUserId }) => {
                   cursor: "pointer",
                   fontSize: "1.5rem",
                   marginLeft: "8px",
-                  color: "#6a11cb",
+                  color: "var(--edb-primary-text)",
                 }}
               >
                 <FaPaperPlane />

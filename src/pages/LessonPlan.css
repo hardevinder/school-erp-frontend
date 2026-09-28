@@ -41,3 +41,603 @@
     max-height: 100vh;
   }
 }
+
+/* =============================================================
+   Teacher Lesson Notebook editor (2026-09-25)
+   Form-heavy create/edit UI -> continuous notebook/workbook experience.
+   Existing lesson-plan APIs, AI import/generate, workflow and PDF stay intact.
+   ============================================================= */
+.lesson-plan-notebook-content {
+  --lp-primary: var(--edb-primary, #4f46e5);
+  --lp-primary-dark: var(--edb-primary-dark, #3730a3);
+  --lp-primary-soft: var(--edb-primary-soft, color-mix(in srgb, var(--lp-primary) 9%, white));
+  --lp-accent: var(--edb-accent, #c49a45);
+  --lp-surface: var(--edb-surface, #ffffff);
+  --lp-page-bg: var(--edb-dashboard-bg, #f7f9fc);
+  --lp-text: var(--edb-text, #172033);
+  --lp-muted: var(--edb-muted, #667085);
+  --lp-border: var(--edb-border, #e4e7ec);
+  --lp-line: color-mix(in srgb, var(--lp-primary) 13%, var(--lp-border));
+  border: 0 !important;
+  border-radius: 18px;
+  color: var(--lp-text);
+  background: color-mix(in srgb, var(--lp-page-bg) 92%, white);
+  box-shadow: 0 26px 70px rgba(15, 23, 42, .18);
+}
+
+.lesson-plan-notebook-dialog {
+  width: min(96vw, 1480px);
+  max-width: min(96vw, 1480px);
+}
+
+.lesson-plan-notebook-header {
+  padding: .8rem 1.15rem;
+  border-bottom: 1px solid var(--lp-border, #e4e7ec);
+  background: var(--lp-surface, #fff);
+}
+
+.lp-notebook-kicker,
+.lp-section-eyebrow {
+  color: var(--lp-primary, #4f46e5);
+  font-size: .64rem;
+  font-weight: 850;
+  letter-spacing: .115em;
+}
+
+.lesson-plan-notebook-body {
+  background: color-mix(in srgb, var(--lp-page-bg, #f7f9fc) 90%, white);
+}
+
+.lesson-plan-notebook-shell {
+  display: grid;
+  gap: 1rem;
+  width: min(100%, 1320px);
+  margin: 0 auto;
+}
+
+.lp-context-card,
+.lp-planning-strip {
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--lp-border);
+  border-radius: 14px;
+  background: var(--lp-surface);
+  box-shadow: 0 5px 18px color-mix(in srgb, var(--lp-primary-dark) 5%, transparent);
+}
+
+.lp-context-heading,
+.lp-paper-title-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.lp-context-heading h5,
+.lp-paper-title-row h5 {
+  color: var(--lp-text);
+  font-weight: 780;
+}
+
+.lp-status-pills {
+  display: flex;
+  gap: .4rem;
+}
+
+.lp-compact-label {
+  margin-bottom: .3rem;
+  color: var(--lp-muted);
+  font-size: .69rem;
+  font-weight: 760;
+  letter-spacing: .015em;
+}
+
+.lp-compact-control.form-control,
+.lp-compact-control.form-select {
+  min-height: 39px;
+  border-color: var(--lp-border);
+  border-radius: 9px;
+  color: var(--lp-text);
+  background-color: var(--lp-surface);
+  font-size: .84rem;
+}
+
+.lp-compact-control.form-control:focus,
+.lp-compact-control.form-select:focus {
+  border-color: var(--lp-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--lp-primary) 11%, transparent);
+}
+
+.lp-sections-row {
+  display: grid;
+  grid-template-columns: 145px 1fr;
+  gap: .8rem;
+  align-items: start;
+  margin-top: 1rem;
+  padding-top: .9rem;
+  border-top: 1px dashed var(--lp-border);
+}
+
+.lp-sections-label {
+  display: grid;
+  gap: .25rem;
+  color: var(--lp-text);
+  font-size: .75rem;
+  font-weight: 760;
+}
+
+.lp-sections-label .form-check {
+  margin: 0;
+  color: var(--lp-muted);
+  font-size: .72rem;
+  font-weight: 600;
+}
+
+.lp-section-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .45rem;
+  min-height: 34px;
+}
+
+.lp-section-chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 54px;
+  padding: .46rem .72rem;
+  border: 1px solid var(--lp-border);
+  border-radius: 999px;
+  color: var(--lp-text);
+  background: var(--lp-surface);
+  cursor: pointer;
+  font-size: .76rem;
+  font-weight: 720;
+  transition: .15s ease;
+}
+
+.lp-section-chip input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.lp-section-chip:hover {
+  border-color: color-mix(in srgb, var(--lp-primary) 50%, var(--lp-border));
+  background: var(--lp-primary-soft);
+}
+
+.lp-section-chip.active {
+  border-color: var(--lp-primary);
+  color: #fff;
+  background: var(--lp-primary);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--lp-primary) 18%, transparent);
+}
+
+.lp-empty-note,
+.lp-inline-hint {
+  color: var(--lp-muted);
+  font-size: .74rem;
+}
+
+.lp-inline-hint { margin-top: .35rem; }
+
+.lp-notebook-paper {
+  position: relative;
+  padding: 1.25rem 1.35rem 1.5rem 3.45rem;
+  border: 1px solid var(--lp-border);
+  border-radius: 16px;
+  background:
+    linear-gradient(90deg, transparent 0, transparent 42px, color-mix(in srgb, #ef4444 22%, transparent) 43px, transparent 44px),
+    var(--lp-surface);
+  box-shadow: 0 8px 25px color-mix(in srgb, var(--lp-primary-dark) 6%, transparent);
+}
+
+.lp-notebook-paper::before {
+  content: "";
+  position: absolute;
+  left: 17px;
+  top: 24px;
+  bottom: 24px;
+  width: 12px;
+  background: radial-gradient(circle, color-mix(in srgb, var(--lp-muted) 30%, transparent) 0 3px, transparent 3.5px) 0 0 / 12px 38px repeat-y;
+  opacity: .72;
+}
+
+.lp-paper-title-row {
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--lp-border);
+}
+
+.lp-auto-grow-badge {
+  flex: 0 0 auto;
+  padding: .36rem .62rem;
+  border: 1px solid color-mix(in srgb, var(--lp-primary) 20%, var(--lp-border));
+  border-radius: 999px;
+  color: var(--lp-primary);
+  background: var(--lp-primary-soft);
+  font-size: .68rem;
+  font-weight: 760;
+}
+
+.lp-notebook-section {
+  padding: 1.15rem 0 .25rem;
+  border-bottom: 1px dashed color-mix(in srgb, var(--lp-border) 80%, transparent);
+}
+
+.lp-notebook-section:last-child { border-bottom: 0; }
+
+.lp-notebook-section-title {
+  display: flex;
+  align-items: flex-start;
+  gap: .72rem;
+  margin-bottom: .85rem;
+}
+
+.lp-notebook-section-title > div {
+  display: grid;
+  gap: .08rem;
+}
+
+.lp-notebook-section-title strong {
+  color: var(--lp-text);
+  font-size: .93rem;
+  font-weight: 800;
+}
+
+.lp-notebook-section-title small {
+  color: var(--lp-muted);
+  font-size: .72rem;
+}
+
+.lp-section-number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 31px;
+  width: 31px;
+  height: 31px;
+  border-radius: 9px;
+  color: #fff;
+  background: var(--lp-primary);
+  font-size: .68rem;
+  font-weight: 850;
+}
+
+.lp-syllabus-focus {
+  padding-bottom: 1rem;
+}
+
+.lp-writing-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.lp-writing-block {
+  margin: .45rem 0 1rem;
+}
+
+.lp-writing-block > label {
+  display: block;
+  margin: 0 0 .25rem;
+  color: var(--lp-primary-dark);
+  font-size: .75rem;
+  font-weight: 800;
+}
+
+.lp-writing-area.form-control {
+  field-sizing: content;
+  width: 100%;
+  min-height: 96px;
+  padding: 5px 4px 7px;
+  border: 0;
+  border-radius: 0;
+  outline: none;
+  resize: none;
+  overflow: hidden;
+  color: var(--lp-text);
+  background-color: transparent;
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent 29px,
+    var(--lp-line) 29px,
+    var(--lp-line) 30px
+  );
+  background-attachment: local;
+  box-shadow: none !important;
+  font-size: .91rem;
+  line-height: 30px;
+}
+
+.lp-writing-area-compact.form-control { min-height: 66px; }
+
+.lp-writing-area.form-control:focus {
+  background-color: color-mix(in srgb, var(--lp-primary) 2.5%, transparent);
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent 29px,
+    color-mix(in srgb, var(--lp-primary) 25%, var(--lp-border)) 29px,
+    color-mix(in srgb, var(--lp-primary) 25%, var(--lp-border)) 30px
+  );
+}
+
+.lp-writing-area::placeholder {
+  color: color-mix(in srgb, var(--lp-muted) 72%, transparent);
+  font-style: italic;
+}
+
+.lp-planning-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.2rem;
+}
+
+.lp-planning-title {
+  display: grid;
+  min-width: 170px;
+}
+
+.lp-planning-title strong {
+  color: var(--lp-text);
+  font-size: .87rem;
+}
+
+.lp-planning-title span {
+  color: var(--lp-muted);
+  font-size: .68rem;
+}
+
+.lp-planning-controls {
+  display: grid;
+  grid-template-columns: 150px 150px 125px 95px;
+  gap: .7rem;
+  align-items: end;
+}
+
+.lp-planning-controls > div > label {
+  display: block;
+  margin-bottom: .25rem;
+  color: var(--lp-muted);
+  font-size: .68rem;
+  font-weight: 760;
+}
+
+.lp-publish-toggle {
+  display: flex;
+  align-items: center;
+  min-height: 39px;
+  padding: 0 .3rem;
+}
+
+.lp-publish-toggle .form-check { margin: 0; }
+
+.lesson-plan-notebook-content .lesson-plan-modal-footer {
+  border-top-color: var(--lp-border);
+  background: var(--lp-surface) !important;
+}
+
+@media (max-width: 991.98px) {
+  .lesson-plan-notebook-dialog {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .lp-notebook-paper {
+    padding-left: 2.35rem;
+    border-radius: 12px;
+  }
+
+  .lp-notebook-paper::before { display: none; }
+
+  .lp-planning-strip {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .lp-planning-controls {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 767.98px) {
+  .lesson-plan-notebook-content { border-radius: 0; }
+  .lesson-plan-notebook-body { padding: .75rem; }
+  .lp-context-card { padding: .85rem; }
+  .lp-sections-row { grid-template-columns: 1fr; gap: .45rem; }
+  .lp-sections-label { display: flex; align-items: center; justify-content: space-between; }
+  .lp-notebook-paper {
+    padding: 1rem;
+    background: var(--lp-surface);
+  }
+  .lp-writing-grid { grid-template-columns: 1fr; gap: 0; }
+  .lp-paper-title-row { flex-direction: column; }
+  .lp-auto-grow-badge { align-self: flex-start; }
+  .lp-planning-controls { grid-template-columns: 1fr 1fr; }
+}
+
+@media (max-width: 479.98px) {
+  .lp-planning-controls { grid-template-columns: 1fr; }
+}
+
+/* =============================================================
+   Button/chip selectors for Lesson Plan create/edit (2026-09-25)
+   Dropdowns in the teacher notebook are replaced with direct choices.
+   ============================================================= */
+.lp-primary-choice-stack,
+.lp-syllabus-choice-stack {
+  display: grid;
+  gap: .85rem;
+}
+
+.lp-primary-choice-stack {
+  padding: .9rem;
+  border: 1px solid color-mix(in srgb, var(--lp-primary) 12%, var(--lp-border));
+  border-radius: 13px;
+  background: color-mix(in srgb, var(--lp-primary) 2.5%, var(--lp-surface));
+}
+
+.lp-context-fields {
+  padding-top: .15rem;
+}
+
+.lp-choice-group {
+  min-width: 0;
+}
+
+.lp-choice-label,
+.lp-planning-controls-buttons .lp-choice-group > .lp-choice-label {
+  display: block;
+  margin: 0 0 .38rem;
+  color: var(--lp-muted);
+  font-size: .69rem;
+  font-weight: 800;
+  letter-spacing: .018em;
+}
+
+.lp-choice-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .42rem;
+  min-height: 36px;
+  align-items: center;
+}
+
+.lp-choice-list.scroll {
+  max-height: 118px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 1px 5px 3px 1px;
+  scrollbar-width: thin;
+}
+
+.lp-choice-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 100%;
+  min-height: 36px;
+  padding: .44rem .75rem;
+  border: 1px solid var(--lp-border);
+  border-radius: 10px;
+  color: var(--lp-text);
+  background: var(--lp-surface);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--lp-primary-dark) 4%, transparent);
+  cursor: pointer;
+  font-size: .78rem;
+  font-weight: 720;
+  line-height: 1.2;
+  text-align: center;
+  transition: border-color .14s ease, background-color .14s ease, color .14s ease, transform .14s ease, box-shadow .14s ease;
+}
+
+.lp-choice-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--lp-primary) 58%, var(--lp-border));
+  background: var(--lp-primary-soft);
+  box-shadow: 0 4px 10px color-mix(in srgb, var(--lp-primary) 9%, transparent);
+}
+
+.lp-choice-btn.active {
+  border-color: var(--lp-primary);
+  color: #fff;
+  background: var(--lp-primary);
+  box-shadow: 0 5px 14px color-mix(in srgb, var(--lp-primary) 20%, transparent);
+}
+
+.lp-choice-btn.retained:not(.active) {
+  border-style: dashed;
+}
+
+.lp-choice-btn:disabled {
+  cursor: not-allowed;
+  opacity: .52;
+}
+
+.lp-choice-group.dense .lp-choice-list {
+  gap: .34rem;
+}
+
+.lp-choice-group.dense .lp-choice-btn {
+  min-height: 32px;
+  padding: .36rem .62rem;
+  border-radius: 999px;
+  font-size: .73rem;
+}
+
+.lp-syllabus-choice-stack .lp-choice-group {
+  padding: .55rem .65rem .68rem;
+  border: 1px solid color-mix(in srgb, var(--lp-border) 90%, transparent);
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--lp-page-bg) 35%, transparent);
+}
+
+.lp-syllabus-choice-stack .lp-inline-hint {
+  margin-top: -.55rem;
+  margin-left: .65rem;
+}
+
+.lp-planning-controls-buttons {
+  grid-template-columns: minmax(260px, 1.2fr) minmax(230px, 1fr) minmax(210px, .8fr);
+}
+
+.lp-planning-inline {
+  display: grid;
+  grid-template-columns: minmax(105px, 1fr) auto;
+  gap: .7rem;
+  align-items: end;
+}
+
+.lp-planning-inline > div > label {
+  display: block;
+  margin-bottom: .25rem;
+  color: var(--lp-muted);
+  font-size: .68rem;
+  font-weight: 760;
+}
+
+@media (max-width: 1199.98px) {
+  .lp-planning-controls-buttons {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .lp-planning-inline {
+    grid-column: 1 / -1;
+    grid-template-columns: 150px auto;
+    justify-content: start;
+  }
+}
+
+@media (max-width: 767.98px) {
+  .lp-primary-choice-stack {
+    padding: .75rem;
+  }
+
+  .lp-choice-list.scroll {
+    max-height: 150px;
+  }
+
+  .lp-choice-btn {
+    min-height: 34px;
+    padding: .4rem .65rem;
+    font-size: .75rem;
+  }
+
+  .lp-planning-controls-buttons {
+    grid-template-columns: 1fr;
+  }
+
+  .lp-planning-inline {
+    grid-column: auto;
+    grid-template-columns: 1fr auto;
+  }
+}
+
+@media (max-width: 479.98px) {
+  .lp-planning-inline {
+    grid-template-columns: 1fr;
+  }
+}

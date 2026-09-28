@@ -244,7 +244,7 @@ const ReceiptContent = ({ school = {}, receipt = [], slipId = "—", student = {
         <h5>
           Overall Total Received: <strong>₹{grandTotal.toFixed(2)}</strong>
         </h5>
-        <p style={{ fontSize: "0.9rem", color: "#555" }}>
+        <p style={{ fontSize: "0.9rem", color: "var(--edb-text)" }}>
           (Fee Received ₹{totalReceived.toFixed(2)}
           {showFineColumn ? ` + Fine ₹${totalFine.toFixed(2)}` : ""}
           {totalVan > 0 ? ` + Van Fee ₹${totalVan.toFixed(2)}` : ""}
@@ -273,7 +273,7 @@ const ReceiptContent = ({ school = {}, receipt = [], slipId = "—", student = {
         <Col className="text-end">
           <p
             style={{
-              borderTop: "1px solid #000",
+              borderTop: "1px solid var(--edb-border)",
               display: "inline-block",
               paddingTop: "5px",
               marginRight: "20px",

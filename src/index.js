@@ -12,7 +12,10 @@ import { installBranchFetch } from "./branch/installBranchFetch"; // EDUBRIDGE_M
 import { installBranchAxios } from "./branch/installBranchAxios"; // EDUBRIDGE_MULTI_BRANCH_AXIOS_V1
 import "./branchSelectionPersistence";
 import "./theme/PortalThemeOverrides.css"; // PORTAL_THEME_OVERRIDE_V2
+import { applyPortalTheme } from "./theme/portalThemeRuntime";
 import "./theme/PortalDynamicExtended.css"; // PORTAL_DYNAMIC_EXTENDED_V4
+import "./theme/PortalSemantic.css";
+applyPortalTheme();
 installBranchFetch();
 installBranchAxios();
 

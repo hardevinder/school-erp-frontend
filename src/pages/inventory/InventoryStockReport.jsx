@@ -178,7 +178,7 @@ export default function InventoryStockReport() {
                     return (
                       <tr
                         key={inventoryUtils.normalizeId(row) || idx}
-                        style={isLow ? { background: "#fff5f5" } : undefined}
+                        style={isLow ? { background: "var(--edb-surface)" } : undefined}
                       >
                         <td className="fw-medium">{row?.item?.name || row?.item_name || row?.name || "—"}</td>
                         <td>{inventoryUtils.getCode(row)}</td>

@@ -106,8 +106,8 @@ const createModalHtml = () => `
     .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
     .full { grid-column: 1 / -1; }
     .form-label { font-weight: 600; margin-bottom: 4px; }
-    .form-field { width: 100%; padding: 8px 10px; border: 1px solid #ddd; border-radius: 6px; }
-    .hint { font-size: 12px; color: #6b7280; }
+    .form-field { width: 100%; padding: 8px 10px; border: 1px solid var(--edb-border); border-radius: 6px; }
+    .hint { font-size: 12px; color: var(--edb-muted-text); }
   </style>
 
   <div class="form-grid">

@@ -636,7 +636,7 @@ const Circulars = () => {
       </div>
 
       {showModal && (
-        <div className="modal show d-block circular-modal" style={{ backgroundColor: "rgba(15, 23, 42, .58)" }}>
+        <div className="modal show d-block circular-modal" style={{ backgroundColor: "color-mix(in srgb, var(--edb-primary-dark) 58%, transparent)" }}>
           <div className="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable modal-fullscreen-sm-down">
             <div className="modal-content circular-modal-content rounded-4 border-0 shadow-lg overflow-hidden">
               <div className="modal-header modal-header-gradient text-white">
@@ -912,7 +912,7 @@ const Circulars = () => {
                                     <iframe
                                       title="PDF preview"
                                       src={`${editingCircular.fileUrl}#view=FitH`}
-                                      style={{ width: "100%", height: 320, border: 0, borderRadius: 12, background: "#f8fafc" }}
+                                      style={{ width: "100%", height: 320, border: 0, borderRadius: 12, background: "var(--edb-surface)" }}
                                     />
                                   ) : (
                                     <div className="attachment-mini">
@@ -963,21 +963,21 @@ const Circulars = () => {
 
       <style>{`
         .circular-page {
-          background: linear-gradient(180deg, #f8fbff 0%, #eef4ff 100%);
+          background: linear-gradient(180deg, var(--edb-surface) 0%, var(--edb-surface) 100%);
           min-height: calc(100vh - 56px);
         }
 
         .fw-black { font-weight: 900; }
-        .text-white-75 { color: rgba(255,255,255,.78); }
+        .text-white-75 { color: var(--edb-on-primary); }
 
         .circular-hero {
           border-radius: 26px;
           padding: 24px;
-          color: #fff;
+          color: var(--edb-on-primary);
           background:
-            radial-gradient(circle at top right, rgba(255,255,255,.22), transparent 30%),
-            linear-gradient(135deg, #1f7ae0 0%, #4f46e5 48%, #7c3aed 100%);
-          box-shadow: 0 16px 40px rgba(37, 99, 235, .18);
+            radial-gradient(circle at top right, color-mix(in srgb, var(--edb-surface) 22%, transparent), transparent 30%),
+            linear-gradient(135deg, var(--edb-primary) 0%, var(--edb-primary) 48%, var(--edb-primary) 100%);
+          box-shadow: 0 16px 40px color-mix(in srgb, var(--edb-primary-dark) 18%, transparent);
         }
 
         .eyebrow {
@@ -985,15 +985,15 @@ const Circulars = () => {
           letter-spacing: .13em;
           font-size: 11px;
           font-weight: 800;
-          color: rgba(255,255,255,.78);
+          color: var(--edb-on-primary);
         }
 
         .hero-stat-card {
           display: flex;
           align-items: center;
           gap: 12px;
-          border: 1px solid rgba(255,255,255,.18);
-          background: rgba(255,255,255,.14);
+          border: 1px solid color-mix(in srgb, var(--edb-border) 18%, transparent);
+          background: color-mix(in srgb, var(--edb-surface) 14%, transparent);
           backdrop-filter: blur(10px);
           padding: 14px;
           border-radius: 18px;
@@ -1006,7 +1006,7 @@ const Circulars = () => {
           width: 42px;
           height: 42px;
           border-radius: 14px;
-          background: #fff !important;
+          background: var(--edb-surface) !important;
         }
 
         .hero-stat-value {
@@ -1017,7 +1017,7 @@ const Circulars = () => {
 
         .hero-stat-label {
           font-size: 12px;
-          color: rgba(255,255,255,.78);
+          color: var(--edb-on-primary);
           font-weight: 700;
         }
 
@@ -1026,25 +1026,25 @@ const Circulars = () => {
           display: flex;
           align-items: center;
           gap: 10px;
-          border: 1px solid #e2e8f0;
+          border: 1px solid var(--edb-border);
           border-radius: 999px;
           padding: 10px 14px;
-          background: #f8fafc;
+          background: var(--edb-surface);
         }
 
-        .search-box i { color: #64748b; }
+        .search-box i { color: var(--edb-input-text); }
         .search-box input {
           border: 0;
           outline: 0;
           width: 100%;
           background: transparent;
-          color: #0f172a;
+          color: var(--edb-input-text);
           font-weight: 600;
         }
 
         .circular-table thead th {
-          background: #f8fafc;
-          color: #475569;
+          background: var(--edb-surface);
+          color: var(--edb-text);
           font-size: 12px;
           text-transform: uppercase;
           letter-spacing: .04em;
@@ -1072,32 +1072,32 @@ const Circulars = () => {
           font-weight: 800;
         }
 
-        .audience-both { background: #eef2ff; color: #4338ca; }
-        .audience-student { background: #ecfdf5; color: #047857; }
-        .audience-teacher { background: #fff7ed; color: #c2410c; }
+        .audience-both { background: var(--edb-surface); color: var(--edb-primary-text); }
+        .audience-student { background: var(--edb-primary-soft); color: #047857; }
+        .audience-teacher { background: var(--edb-surface); color: #c2410c; }
 
         .target-summary { min-width: 150px; }
 
         .empty-state {
           max-width: 320px;
-          color: #64748b;
+          color: var(--edb-muted-text);
         }
         .empty-state i {
           font-size: 42px;
-          color: #94a3b8;
+          color: var(--edb-muted-text);
         }
 
         .modal-header-gradient {
           border: 0;
-          background: linear-gradient(135deg, #1f7ae0 0%, #4f46e5 55%, #7c3aed 100%);
+          background: linear-gradient(135deg, var(--edb-primary) 0%, var(--edb-primary) 55%, var(--edb-primary) 100%);
         }
 
         .section-card {
-          border: 1px solid #e2e8f0;
-          background: #fff;
+          border: 1px solid var(--edb-border);
+          background: var(--edb-surface);
           border-radius: 20px;
           padding: 16px;
-          box-shadow: 0 8px 24px rgba(15, 23, 42, .05);
+          box-shadow: 0 8px 24px color-mix(in srgb, var(--edb-primary-dark) 5%, transparent);
         }
 
         .section-title {
@@ -1105,17 +1105,17 @@ const Circulars = () => {
           align-items: center;
           gap: 8px;
           font-weight: 900;
-          color: #0f172a;
+          color: var(--edb-text);
           margin-bottom: 14px;
         }
-        .section-title i { color: #2563eb; }
+        .section-title i { color: var(--edb-primary-text); }
 
         .audience-card {
           width: 100%;
           text-align: left;
-          border: 1px solid #e2e8f0;
-          background: #f8fafc;
-          color: #0f172a;
+          border: 1px solid var(--edb-border);
+          background: var(--edb-surface);
+          color: var(--edb-text);
           border-radius: 16px;
           padding: 13px;
           display: flex;
@@ -1125,14 +1125,14 @@ const Circulars = () => {
         }
 
         .audience-card:hover {
-          border-color: #93c5fd;
+          border-color: var(--edb-border);
           transform: translateY(-1px);
         }
 
         .audience-card.active {
-          border-color: #2563eb;
-          background: #eff6ff;
-          box-shadow: 0 10px 22px rgba(37, 99, 235, .12);
+          border-color: var(--edb-primary);
+          background: var(--edb-surface);
+          box-shadow: 0 10px 22px color-mix(in srgb, var(--edb-primary-dark) 12%, transparent);
         }
 
         .audience-card strong {
@@ -1142,7 +1142,7 @@ const Circulars = () => {
 
         .audience-card small {
           display: block;
-          color: #64748b;
+          color: var(--edb-muted-text);
           line-height: 1.3;
           margin-top: 2px;
         }
@@ -1154,8 +1154,8 @@ const Circulars = () => {
           align-items: center;
           justify-content: center;
           border-radius: 12px;
-          color: #2563eb;
-          background: #dbeafe;
+          color: var(--edb-primary-text);
+          background: var(--edb-primary-soft);
           flex: 0 0 auto;
         }
 
@@ -1171,9 +1171,9 @@ const Circulars = () => {
         }
 
         .class-chip {
-          border: 1px solid #e2e8f0;
-          background: #f8fafc;
-          color: #334155;
+          border: 1px solid var(--edb-border);
+          background: var(--edb-surface);
+          color: var(--edb-text);
           border-radius: 999px;
           padding: 8px 10px;
           font-weight: 800;
@@ -1185,15 +1185,15 @@ const Circulars = () => {
         }
 
         .class-chip.active {
-          background: #ecfdf5;
+          background: var(--edb-primary-soft);
           color: #047857;
           border-color: #34d399;
         }
 
         .upload-box {
-          border: 1px dashed #cbd5e1;
+          border: 1px dashed var(--edb-border);
           border-radius: 18px;
-          background: #f8fafc;
+          background: var(--edb-surface);
           padding: 14px;
           display: flex;
           align-items: center;
@@ -1206,14 +1206,14 @@ const Circulars = () => {
           top: 16px;
           border-radius: 24px;
           overflow: hidden;
-          background: #fff;
-          border: 1px solid #e2e8f0;
-          box-shadow: 0 16px 36px rgba(15, 23, 42, .08);
+          background: var(--edb-surface);
+          border: 1px solid var(--edb-border);
+          box-shadow: 0 16px 36px color-mix(in srgb, var(--edb-primary-dark) 8%, transparent);
         }
 
         .preview-header {
-          color: #fff;
-          background: linear-gradient(135deg, #0f172a, #334155);
+          color: var(--edb-on-primary);
+          background: linear-gradient(135deg, var(--edb-primary-dark), var(--edb-muted-text));
           padding: 16px;
           display: flex;
           align-items: center;
@@ -1224,7 +1224,7 @@ const Circulars = () => {
         .preview-body { padding: 18px; }
 
         .preview-text {
-          color: #334155;
+          color: var(--edb-text);
           white-space: pre-wrap;
           line-height: 1.55;
           min-height: 120px;
@@ -1237,7 +1237,7 @@ const Circulars = () => {
         }
 
         .selected-class-preview span {
-          background: #ecfdf5;
+          background: var(--edb-primary-soft);
           color: #047857;
           border: 1px solid #a7f3d0;
           border-radius: 999px;
@@ -1250,15 +1250,15 @@ const Circulars = () => {
           display: flex;
           align-items: center;
           gap: 8px;
-          border: 1px solid #e2e8f0;
-          background: #f8fafc;
+          border: 1px solid var(--edb-border);
+          background: var(--edb-surface);
           border-radius: 14px;
           padding: 10px 12px;
-          color: #334155;
+          color: var(--edb-text);
           font-weight: 700;
         }
 
-        .attachment-mini i { color: #2563eb; }
+        .attachment-mini i { color: var(--edb-primary-text); }
 
         .circular-modal {
           overflow-y: auto;
@@ -1283,8 +1283,8 @@ const Circulars = () => {
         }
 
         .circular-modal-footer {
-          background: rgba(255,255,255,.96);
-          border-top: 1px solid #e2e8f0;
+          background: color-mix(in srgb, var(--edb-surface) 96%, transparent);
+          border-top: 1px solid var(--edb-border);
           flex: 0 0 auto;
         }
 

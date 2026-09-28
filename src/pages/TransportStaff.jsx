@@ -110,14 +110,14 @@ const TransportStaff = () => {
         width: 100%;
         height: 36px;
         padding: 7px 10px;
-        border: 1px solid rgba(0,0,0,.15);
+        border: 1px solid color-mix(in srgb, var(--edb-border) 15%, transparent);
         border-radius: 10px;
         outline: none;
         font-size: 13px;
       }
       .ts-input:focus, .ts-select:focus{
-        border-color: rgba(0,0,0,.35);
-        box-shadow: 0 0 0 3px rgba(0,0,0,.06);
+        border-color: color-mix(in srgb, var(--edb-primary) 35%, transparent);
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--edb-primary-dark) 6%, transparent);
       }
       .ts-full{ grid-column: 1 / -1; }
       .ts-note{
@@ -128,7 +128,7 @@ const TransportStaff = () => {
       .ts-divider{
         grid-column: 1 / -1;
         height: 1px;
-        background: rgba(0,0,0,.10);
+        background: color-mix(in srgb, var(--edb-primary-dark) 10%, transparent);
         margin: 2px 0;
       }
       .swal2-actions{ margin-top: 10px !important; }
@@ -156,15 +156,15 @@ const TransportStaff = () => {
         height: 36px;
         padding: 0 10px;
         border-radius: 10px;
-        border: 1px solid rgba(0,0,0,.15);
-        background: #fff;
+        border: 1px solid color-mix(in srgb, var(--edb-border) 15%, transparent);
+        background: var(--edb-surface);
         cursor: pointer;
         white-space: nowrap;
         font-size: 12px;
         line-height: 1;
       }
       .ts-inline button:hover{
-        background: rgba(0,0,0,.04);
+        background: color-mix(in srgb, var(--edb-primary-dark) 4%, transparent);
       }
     `;
     document.head.appendChild(style);

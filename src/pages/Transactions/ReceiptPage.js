@@ -139,7 +139,7 @@ const ReceiptPrint = () => {
   const overallTotalInWords = numberToWords(Math.round(overallTotalReceived));
 
   return (
-    <div className="container position-relative p-2" style={{ backgroundColor: "#f8f9fa", minHeight: "100vh" }}>
+    <div className="container position-relative p-2" style={{ backgroundColor: "var(--edb-surface)", minHeight: "100vh" }}>
       {/* Inject print-specific styles */}
       <style>{printStyles}</style>
 
@@ -157,7 +157,7 @@ const ReceiptPrint = () => {
       <div
         ref={printableRef}
         className="receipt-container mx-auto bg-white p-3"
-        style={{ maxWidth: "800px", margin: "10px auto", border: "1px solid #ddd" }}
+        style={{ maxWidth: "800px", margin: "10px auto", border: "1px solid var(--edb-border)" }}
       >
         {/* School Header */}
         <div className="mb-3">
@@ -279,7 +279,7 @@ const ReceiptPrint = () => {
           <Col className="text-end">
             <p
               style={{
-                borderTop: "1px solid #000",
+                borderTop: "1px solid var(--edb-border)",
                 display: "inline-block",
                 paddingTop: "5px",
                 marginRight: "20px",

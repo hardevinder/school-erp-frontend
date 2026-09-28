@@ -469,7 +469,7 @@ function DiaryCard({ item, canAck }) {
       <div className={`card-header ${headerClass} py-3 px-4`}>
         <div className="d-flex justify-content-between align-items-center">
           <div className="d-flex align-items-center gap-3">
-            <div className="rounded-circle p-2" style={{ background: "rgba(255,255,255,.2)" }}>
+            <div className="rounded-circle p-2" style={{ background: "color-mix(in srgb, var(--edb-surface) 20%, transparent)" }}>
               <i className="bi bi-calendar3" style={{ color: "currentColor" }}></i>
             </div>
             <div>
@@ -1366,7 +1366,7 @@ function ManageDiaries() {
       {showModal && (
         <div
           className="modal show d-block position-fixed"
-          style={{ backgroundColor: "rgba(0,0,0,.5)" }}
+          style={{ backgroundColor: "color-mix(in srgb, var(--edb-primary-dark) 50%, transparent)" }}
           tabIndex="-1"
         >
           <div className="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">

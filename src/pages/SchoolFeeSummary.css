@@ -49,14 +49,14 @@
   position: sticky;
   top: 0;
   z-index: 9; /* above table headers */
-  background: #fff;
+  background: var(--edb-surface);
   border-bottom: 1px solid var(--bs-border-color, #dee2e6);
 }
 
 /* Body takes remaining height between header and footer */
 .modal-body-fixed {
   padding: 0;
-  background: #fff;
+  background: var(--edb-surface);
   overflow: hidden;
   height: calc(100% - 56px - 56px); /* header + footer */
   display: flex;
@@ -71,7 +71,7 @@
   align-items: center;
   padding: .75rem 1rem;
   border-bottom: 1px solid var(--bs-border-color, #e9ecef);
-  background: #fff;
+  background: var(--edb-surface);
 }
 .modal-search { min-width: 260px; }
 
@@ -90,8 +90,8 @@
   position: sticky;
   top: 0;
   z-index: 10;
-  background: #f8f9fa !important;
-  box-shadow: 0 2px 3px rgba(0, 0, 0, 0.05);
+  background: var(--edb-surface) !important;
+  box-shadow: 0 2px 3px color-mix(in srgb, var(--edb-primary-dark) 5%, transparent);
 }
 
 /* ─────────────────────────────
@@ -101,8 +101,8 @@
   max-height: calc(10 * 2.6rem + 70px); /* about 10 rows + header/footer spacing */
   overflow-y: auto;
   overflow-x: auto;
-  border-top: 1px solid #dee2e6;
-  border-bottom: 1px solid #dee2e6;
+  border-top: 1px solid var(--edb-border);
+  border-bottom: 1px solid var(--edb-border);
   -webkit-overflow-scrolling: touch;
   scrollbar-gutter: stable both-edges;
 }
@@ -116,9 +116,9 @@
 .modal-table thead .sticky-overall {
   position: sticky;
   right: 0;
-  background: #f8f9fa !important;
+  background: var(--edb-surface) !important;
   z-index: 11;
-  box-shadow: -1px 0 0 rgba(0, 0, 0, 0.05);
+  box-shadow: -1px 0 0 color-mix(in srgb, var(--edb-primary-dark) 5%, transparent);
 }
 
 /* Main page summary header also sticky */
@@ -128,9 +128,9 @@
 .text-danger-soft { color: #b02a37 !important; }
 .text-success-soft { color: #1b5e20 !important; }
 
-.due-full   { background: #fff1f1 !important; color: #b02a37 !important; font-weight: 600; }
-.due-partial{ background: #fff7e6 !important; color: #7a5b00 !important; font-weight: 600; }
-.due-zero   { background: #eef9f0 !important; color: #1b5e20 !important; font-weight: 600; }
+.due-full   { background: var(--edb-surface) !important; color: #b02a37 !important; font-weight: 600; }
+.due-partial{ background: var(--edb-primary-soft) !important; color: var(--edb-accent-text) !important; font-weight: 600; }
+.due-zero   { background: var(--edb-dashboard-bg) !important; color: #1b5e20 !important; font-weight: 600; }
 
 /* Readability */
 .modal-table {
@@ -146,7 +146,7 @@
    ───────────────────────────── */
 .slc {
   position: sticky;
-  background: #fff !important;
+  background: var(--edb-surface) !important;
   z-index: 7;
   background-clip: padding-box;
 }
@@ -169,10 +169,10 @@
 .modal-table .sticky-overall {
   position: sticky;
   right: 0;
-  background: #fff !important;
+  background: var(--edb-surface) !important;
   z-index: 6;
   background-clip: padding-box;
-  box-shadow: -1px 0 0 rgba(0,0,0,0.05);
+  box-shadow: -1px 0 0 color-mix(in srgb, var(--edb-primary-dark) 5%, transparent);
   text-align: right;
   font-weight: 600;
 }
@@ -185,7 +185,7 @@
 .modal-table .feehead-group-header {
   position: sticky;
   top: 0;
-  background: #fff !important;
+  background: var(--edb-surface) !important;
   z-index: 7;
   text-align: center;
   vertical-align: middle;
@@ -199,7 +199,7 @@
 .modal-table .feehead-group-header {
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
-  background-color: #fff !important;
+  background-color: var(--edb-surface) !important;
 }
 
 /* Clickable chips in summary table */
@@ -229,16 +229,16 @@
 .ob-row { transition: background-color .2s ease; }
 .ob-overdue { background-color: #fff1f1; }
 .ob-overdue .ob-amount { color: #b42318; font-weight: 600; }
-.ob-ok .ob-amount { color: #6c757d; }
+.ob-ok .ob-amount { color: var(--edb-muted-text); }
 
 .table-total-row {
-  background-color: #f8f9fa !important;
+  background-color: var(--edb-surface) !important;
   font-weight: 600;
-  border-top: 2px solid #dee2e6;
+  border-top: 2px solid var(--edb-border);
 }
 .table-total-row th,
 .table-total-row td {
-  border-top: 2px solid #dee2e6 !important;
+  border-top: 2px solid var(--edb-border) !important;
 }
 
 /* ─────────────────────────────
@@ -248,6 +248,6 @@
   position: sticky;
   bottom: 0;
   z-index: 9;
-  background: #f8f9fa !important;
-  box-shadow: 0 -2px 3px rgba(0, 0, 0, 0.05);
+  background: var(--edb-surface) !important;
+  box-shadow: 0 -2px 3px color-mix(in srgb, var(--edb-primary-dark) 5%, transparent);
 }

@@ -63,14 +63,14 @@ const modalCss = `
     .bankModal .bank-field{
       width:100%;
       padding:10px 10px;
-      border:1px solid rgba(0,0,0,.15);
+      border:1px solid color-mix(in srgb, var(--edb-border) 15%, transparent);
       border-radius:10px;
       outline:none;
-      background:#fff;
+      background:var(--edb-surface);
     }
     .bankModal .bank-field:focus{
-      border-color: rgba(13,110,253,.55);
-      box-shadow: 0 0 0 .2rem rgba(13,110,253,.15);
+      border-color: color-mix(in srgb, var(--edb-primary) 55%, transparent);
+      box-shadow: 0 0 0 .2rem var(--edb-shell-shadow);
     }
     .bankModal .bank-box{
       max-height: 72vh;
@@ -81,10 +81,10 @@ const modalCss = `
       display:flex;
       align-items:center;
       gap:8px;
-      border:1px solid rgba(0,0,0,.08);
+      border:1px solid color-mix(in srgb, var(--edb-border) 8%, transparent);
       padding:10px 12px;
       border-radius:10px;
-      background:#fff;
+      background:var(--edb-surface);
       margin-top:4px;
     }
     @media (max-width: 576px){

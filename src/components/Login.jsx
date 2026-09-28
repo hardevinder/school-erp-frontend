@@ -53,7 +53,7 @@ const joinRooms = (user, roles = []) => {
 const GoogleIcon = () => (
   <svg width="20" height="20" viewBox="0 0 533.5 544.3" aria-hidden="true">
     <path
-      fill="#4285F4"
+      fill="var(--edb-primary-text)"
       d="M533.5 278.4c0-17.4-1.6-34.1-4.7-50.2H272v95.1h147.1c-6.3 34-25 62.8-53.3 82v67h86.2c50.4-46.5 81.5-115 81.5-193.9z"
     />
     <path
@@ -61,7 +61,7 @@ const GoogleIcon = () => (
       d="M272 544.3c72.3 0 132.9-23.9 177.2-65.1l-86.2-67c-24 16.1-54.6 25.7-91 25.7-69.9 0-129.1-47.2-150.3-110.7H33.7v69.6C77.8 490.3 168.8 544.3 272 544.3z"
     />
     <path
-      fill="#FBBC04"
+      fill="var(--edb-accent-text)"
       d="M121.7 327.2a163.7 163.7 0 0 1 0-104.4v-69.6H33.7a272.3 272.3 0 0 0 0 243.6l88-69.6z"
     />
     <path

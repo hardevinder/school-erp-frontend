@@ -144,7 +144,7 @@ export default function ChangePassword() {
               <div className="d-flex align-items-center gap-3 mb-4">
                 <div
                   className="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0"
-                  style={{ width: 52, height: 52, background: "#eef2ff" }}
+                  style={{ width: 52, height: 52, background: "var(--edb-surface)" }}
                 >
                   <i className="bi bi-shield-lock fs-4 text-primary" />
                 </div>

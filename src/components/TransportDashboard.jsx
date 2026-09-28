@@ -110,7 +110,7 @@ const StatPill = ({ label, value, tone = "secondary", to }) => {
         alignItems: "center",
         gap: 8,
         padding: "10px 12px",
-        border: "1px solid rgba(0,0,0,.06)",
+        border: "1px solid color-mix(in srgb, var(--edb-border) 6%, transparent)",
       }}
       title={label}
     >
@@ -498,7 +498,7 @@ export default function TransportDashboard() {
         label: "Transport Routes",
         icon: "bi-signpost-split",
         href: "/transportations",
-        gradient: "linear-gradient(135deg, #0ea5e9, #0369a1)",
+        gradient: "linear-gradient(135deg, var(--edb-primary), var(--edb-primary-dark))",
         desc: `Routes: ${routeKpis.total} · Fine: ${routeKpis.withFine}`,
         show: isTransport || isAdmin || isSuperadmin || isAccounts,
       },
@@ -506,7 +506,7 @@ export default function TransportDashboard() {
         label: "Buses",
         icon: "bi-bus-front",
         href: "/buses",
-        gradient: "linear-gradient(135deg, #22c55e, #16a34a)",
+        gradient: "linear-gradient(135deg, var(--edb-primary), var(--edb-primary-dark))",
         desc: `Total: ${busKpis.total} · Active: ${busKpis.active}`,
         show: isTransport || isAdmin || isSuperadmin || isAccounts,
       },
@@ -514,7 +514,7 @@ export default function TransportDashboard() {
         label: "Live Operations",
         icon: "bi-arrow-left-right",
         href: "/transport-live-operations",
-        gradient: "linear-gradient(135deg, #0f766e, #0f4c81)",
+        gradient: "linear-gradient(135deg, var(--edb-primary), var(--edb-primary-dark))",
         desc: "Temporary bus/driver override & delay alerts",
         show: isTransport || isAdmin || isSuperadmin,
       }, // EDUBRIDGE_TRANSPORT_LIVE_OPS_DASHBOARD_TILE_V1
@@ -522,7 +522,7 @@ export default function TransportDashboard() {
         label: "Assign Students",
         icon: "bi-person-check",
         href: "/student-transport-assignments",
-        gradient: "linear-gradient(135deg, #6366f1, #4338ca)",
+        gradient: "linear-gradient(135deg, var(--edb-primary), var(--edb-primary-dark))",
         desc: `Live: ${studentsWithTransportCount} students`,
         show: isTransport || isAdmin || isSuperadmin || isAccounts,
       },
@@ -530,7 +530,7 @@ export default function TransportDashboard() {
         label: "Transport Fee Overrides",
         icon: "bi-cash-coin",
         href: "/student-transport-fee-head-amounts",
-        gradient: "linear-gradient(135deg, #8b5cf6, #6d28d9)",
+        gradient: "linear-gradient(135deg, var(--edb-primary), var(--edb-primary-dark))",
         desc: "Student-wise fee head transport override",
         show: isTransport || isAdmin || isSuperadmin || isAccounts,
       },
@@ -538,7 +538,7 @@ export default function TransportDashboard() {
         label: "Transport Expenses",
         icon: "bi-receipt-cutoff",
         href: "/transport-expenses",
-        gradient: "linear-gradient(135deg, #f97316, #c2410c)",
+        gradient: "linear-gradient(135deg, var(--edb-primary), var(--edb-primary-dark))",
         desc: "Vehicle and route-wise expense management",
         show: isTransport || isAdmin || isSuperadmin || isAccounts,
       },
@@ -546,7 +546,7 @@ export default function TransportDashboard() {
         label: "Drivers / Conductors",
         icon: "bi-person-badge",
         href: "/transport-staff",
-        gradient: "linear-gradient(135deg, #ef4444, #b91c1c)",
+        gradient: "linear-gradient(135deg, var(--edb-primary), var(--edb-primary-dark))",
         desc: `Drivers: ${staffCounts.drivers} · Conductors: ${staffCounts.conductors}`,
         show: isTransport || isAdmin || isSuperadmin || isAccounts,
       },
@@ -556,7 +556,7 @@ export default function TransportDashboard() {
         label: "Live Bus Tracking",
         icon: "bi-geo-alt-fill",
         href: "/live-bus-tracking",
-        gradient: "linear-gradient(135deg, #10b981, #047857)",
+        gradient: "linear-gradient(135deg, var(--edb-primary), var(--edb-primary-dark))",
         desc: `Live: ${liveTrackingCounts.live} · Stale: ${liveTrackingCounts.stale}`,
         show: canViewLiveTracking,
       },
@@ -566,7 +566,7 @@ export default function TransportDashboard() {
         label: "Mark Attendance (Mobile)",
         icon: "bi-check2-square",
         href: "/transport-attendance",
-        gradient: "linear-gradient(135deg, #f59e0b, #b45309)",
+        gradient: "linear-gradient(135deg, var(--edb-primary), var(--edb-primary-dark))",
         desc: "Pickup/Drop marking (Driver/Conductor)",
         show: canMarkMobile,
       },
@@ -576,7 +576,7 @@ export default function TransportDashboard() {
         label: "Attendance Report",
         icon: "bi-clipboard-data",
         href: "/transport-attendance-report",
-        gradient: "linear-gradient(135deg, #14b8a6, #0f766e)",
+        gradient: "linear-gradient(135deg, var(--edb-primary), var(--edb-primary-dark))",
         desc: `Bus-wise present/absent · ${todayYYYYMMDD()}`,
         show: canSeeReport,
       },
@@ -693,7 +693,7 @@ export default function TransportDashboard() {
       className="dashboard-surface"
       style={{
         backgroundImage:
-          "linear-gradient(135deg, rgba(14,165,233,0.10), rgba(34,197,94,0.10), rgba(99,102,241,0.10))",
+          "linear-gradient(135deg, rgba(14,165,233,0.10), rgba(34,197,94,0.10), color-mix(in srgb, var(--edb-primary) 10%, transparent))",
         minHeight: "100vh",
       }}
     >
@@ -817,8 +817,8 @@ export default function TransportDashboard() {
                   style={{
                     width: 44,
                     height: 44,
-                    background: "rgba(255,255,255,0.22)",
-                    border: "1px solid rgba(255,255,255,0.25)",
+                    background: "color-mix(in srgb, var(--edb-surface) 22%, transparent)",
+                    border: "1px solid color-mix(in srgb, var(--edb-border) 25%, transparent)",
                   }}
                 >
                   <i className={`bi ${q.icon} fs-4`} />
@@ -963,9 +963,9 @@ export default function TransportDashboard() {
             from { opacity: 0; transform: translateY(10px); }
             to { opacity: 1; transform: translateY(0); }
           }
-          code { background: rgba(0,0,0,.04); padding: 2px 6px; border-radius: 8px; }
+          code { background: color-mix(in srgb, var(--edb-primary-dark) 4%, transparent); padding: 2px 6px; border-radius: 8px; }
           .place-items-center { display: grid; place-items: center; }
-          a:hover .card { transform: translateY(-2px); box-shadow: 0 12px 28px rgba(0,0,0,.10); }
+          a:hover .card { transform: translateY(-2px); box-shadow: 0 12px 28px color-mix(in srgb, var(--edb-primary-dark) 10%, transparent); }
         `}</style>
 
         {/* Bootstrap Icons */}

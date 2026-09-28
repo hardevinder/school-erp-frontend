@@ -1,8 +1,8 @@
 :root {
-  --glass-bg: rgba(255, 255, 255, 0.08);
-  --glass-border: rgba(255, 255, 255, 0.25);
-  --white-75: rgba(255,255,255,0.75);
-  --white-50: rgba(255,255,255,0.55);
+  --glass-bg: color-mix(in srgb, var(--edb-surface) 8%, transparent);
+  --glass-border: color-mix(in srgb, var(--edb-border) 25%, transparent);
+  --white-75: color-mix(in srgb, var(--edb-surface) 75%, transparent);
+  --white-50: color-mix(in srgb, var(--edb-surface) 55%, transparent);
 }
 
 .text-white-75 { color: var(--white-75) !important; }
@@ -50,7 +50,7 @@
   -webkit-backdrop-filter: blur(10px);
   border: 1px solid var(--glass-border);
   border-radius: 18px;
-  box-shadow: 0 20px 70px rgba(0,0,0,0.45);
+  box-shadow: 0 20px 70px color-mix(in srgb, var(--edb-primary-dark) 45%, transparent);
 
   /* Make the form usable on tiny phones by allowing horizontal pan */
   min-width: 380px;       /* adjust if needed */
@@ -61,19 +61,19 @@
 
 .glass-card__footer {
   background: transparent;
-  border-top: 1px solid rgba(255,255,255,0.15);
+  border-top: 1px solid color-mix(in srgb, var(--edb-border) 15%, transparent);
 }
 
 /* Inputs look nice against dark bg */
 .glass-card .form-control {
-  background: rgba(255,255,255,0.9);
-  border: 1px solid rgba(0,0,0,0.12);
+  background: color-mix(in srgb, var(--edb-surface) 90%, transparent);
+  border: 1px solid color-mix(in srgb, var(--edb-border) 12%, transparent);
   border-radius: 12px;
 }
 
 .glass-card .form-control:focus {
   outline: none;
-  box-shadow: 0 0 0 0.25rem rgba(13,110,253,0.25);
+  box-shadow: 0 0 0 0.25rem color-mix(in srgb, var(--edb-primary-dark) 25%, transparent);
 }
 
 .glass-card .btn-outline-light {
@@ -96,16 +96,16 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: rgba(255,255,255,0.15);
-  border: 1px solid rgba(255,255,255,0.3);
+  background: color-mix(in srgb, var(--edb-surface) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--edb-border) 30%, transparent);
   border-radius: 14px;
   font-size: 26px;
 }
 
 /* Subtle translucent hint card */
 .bg-translucent {
-  background: rgba(255,255,255,0.06);
-  border: 1px dashed rgba(255,255,255,0.25) !important;
+  background: color-mix(in srgb, var(--edb-surface) 6%, transparent);
+  border: 1px dashed color-mix(in srgb, var(--edb-border) 25%, transparent) !important;
   border-radius: 12px;
 }
 
@@ -125,7 +125,7 @@
 .blob-1 {
   top: -120px;
   left: -120px;
-  background: radial-gradient(circle at 30% 30%, #7aa2ff, transparent 60%);
+  background: radial-gradient(circle at 30% 30%, var(--edb-primary-soft), transparent 60%);
   animation: float1 18s ease-in-out infinite;
 }
 .blob-2 {
@@ -145,7 +145,7 @@
 }
 
 .btn-outline-light {
-  border-color: rgba(255,255,255,0.6);
+  border-color: color-mix(in srgb, var(--edb-border) 60%, transparent);
 }
 
 .alert {
@@ -202,6 +202,6 @@
   height: 10px;
 }
 .login-hero ::-webkit-scrollbar-thumb {
-  background: rgba(255,255,255,0.25);
+  background: color-mix(in srgb, var(--edb-surface) 25%, transparent);
   border-radius: 10px;
 }

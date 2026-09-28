@@ -1,56 +1,8 @@
-import { applyPortalTheme as applySavedPortalTheme } from "../theme/portalThemeRuntime"; // PORTAL_THEME_RUNTIME_V2
-export const DEFAULT_PORTAL_THEME = Object.freeze({
-  primary: "#66131b",
-  primaryDark: "#470a11",
-  accent: "#c49a45",
-  sidebarBg: "#fcf8f2",
-  navbarBg: "#fffdf9",
-  navbarTitle: "#66131b",
-  navbarSubtitle: "#c49a45",
-  dashboardBg: "#f6f3ee",
-  surface: "#fffdfa",
-  text: "#261f1d",
-});
-
-const safeHex = (value, fallback) => /^#[0-9a-f]{6}$/i.test(String(value || "")) ? String(value).toLowerCase() : fallback;
-
-const hexToRgb = (hex) => {
-  const value = safeHex(hex, "#000000").slice(1);
-  return `${parseInt(value.slice(0, 2), 16)}, ${parseInt(value.slice(2, 4), 16)}, ${parseInt(value.slice(4, 6), 16)}`;
-};
-
-export function normalizePortalTheme(theme = {}) {
-  const source = theme && typeof theme === "object" && !Array.isArray(theme) ? theme : {};
-  return Object.keys(DEFAULT_PORTAL_THEME).reduce((acc, key) => {
-    acc[key] = safeHex(source[key], DEFAULT_PORTAL_THEME[key]);
-    return acc;
-  }, {});
-}
-
-export function applyPortalTheme(themeConfig) {
-  const theme = normalizePortalTheme(themeConfig);
-  const root = document.documentElement;
-  const values = {
-    "--theme-primary": theme.primary,
-    "--theme-primary-dark": theme.primaryDark,
-    "--theme-accent": theme.accent,
-    "--theme-sidebar-bg": theme.sidebarBg,
-    "--theme-navbar-bg": theme.navbarBg,
-    "--theme-navbar-title": theme.navbarTitle,
-    "--theme-navbar-subtitle": theme.navbarSubtitle,
-    "--theme-dashboard-bg": theme.dashboardBg,
-    "--theme-surface": theme.surface,
-    "--theme-text": theme.text,
-    "--theme-primary-rgb": hexToRgb(theme.primary),
-    "--theme-accent-rgb": hexToRgb(theme.accent),
-  };
-  Object.entries(values).forEach(([key, value]) => root.style.setProperty(key, value));
-  return theme;
-}
+import { applyPortalTheme } from "../theme/portalThemeRuntime";
+export { applyPortalTheme, DEFAULT_PORTAL_THEME, normalizePortalTheme } from "../theme/portalThemeRuntime";
 
 // Update browser branding from the same institution record used by the UI.
 export function applyInstitutionBranding(institution) {
-  applySavedPortalTheme(institution?.theme_config); // PORTAL_THEME_RUNTIME_V2
   applyPortalTheme(institution?.theme_config);
   if (!institution?.name) return;
   const name = institution.name.trim();

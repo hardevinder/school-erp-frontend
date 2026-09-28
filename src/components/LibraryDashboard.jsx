@@ -313,37 +313,37 @@ export default function LibraryDashboard() {
         label: "Books",
         icon: "bi-journals",
         href: "/library/books",
-        gradient: "linear-gradient(135deg, #3b82f6, #2563eb)",
+        gradient: "linear-gradient(135deg, var(--edb-primary), var(--edb-primary-dark))",
       },
       {
         label: "Members",
         icon: "bi-people",
         href: "/library/members",
-        gradient: "linear-gradient(135deg, #22c55e, #16a34a)",
+        gradient: "linear-gradient(135deg, var(--edb-primary), var(--edb-primary-dark))",
       },
       {
         label: "Issue / Return",
         icon: "bi-arrow-left-right",
         href: "/library/issue-return",
-        gradient: "linear-gradient(135deg, #f59e0b, #d97706)",
+        gradient: "linear-gradient(135deg, var(--edb-primary), var(--edb-primary-dark))",
       },
       {
         label: "Requests",
         icon: "bi-inbox",
         href: "/library/requests",
-        gradient: "linear-gradient(135deg, #a855f7, #7c3aed)",
+        gradient: "linear-gradient(135deg, var(--edb-primary), var(--edb-primary-dark))",
       },
       {
         label: "Reports",
         icon: "bi-bar-chart",
         href: "/library/reports",
-        gradient: "linear-gradient(135deg, #0ea5e9, #0369a1)",
+        gradient: "linear-gradient(135deg, var(--edb-primary), var(--edb-primary-dark))",
       },
       {
         label: "Settings",
         icon: "bi-gear",
         href: "/library/settings",
-        gradient: "linear-gradient(135deg, #64748b, #475569)",
+        gradient: "linear-gradient(135deg, var(--edb-primary), var(--edb-primary-dark))",
       },
     ],
     []
@@ -485,7 +485,7 @@ export default function LibraryDashboard() {
       className="lib-bg dashboard-surface"
       style={{
         backgroundImage:
-          "linear-gradient(135deg, rgba(59,130,246,.10), rgba(168,85,247,.08), rgba(34,197,94,.10), rgba(245,158,11,.08))",
+          "linear-gradient(135deg, color-mix(in srgb, var(--edb-primary) 10%, transparent), color-mix(in srgb, var(--edb-primary) 8%, transparent), rgba(34,197,94,.10), color-mix(in srgb, var(--edb-accent) 8%, transparent))",
         minHeight: "100vh",
       }}
     >
@@ -545,8 +545,8 @@ export default function LibraryDashboard() {
                   style={{
                     width: 44,
                     height: 44,
-                    background: "rgba(255,255,255,0.22)",
-                    border: "1px solid rgba(255,255,255,0.25)",
+                    background: "color-mix(in srgb, var(--edb-surface) 22%, transparent)",
+                    border: "1px solid color-mix(in srgb, var(--edb-border) 25%, transparent)",
                   }}
                 >
                   <i className={`bi ${q.icon} fs-4`} />
@@ -707,7 +707,7 @@ export default function LibraryDashboard() {
                   <div key={a.id} className="d-flex gap-2 mb-3">
                     <div
                       className="rounded-circle d-inline-flex align-items-center justify-content-center flex-shrink-0"
-                      style={{ width: 36, height: 36, background: "rgba(59,130,246,.12)" }}
+                      style={{ width: 36, height: 36, background: "color-mix(in srgb, var(--edb-primary) 12%, transparent)" }}
                     >
                       <i className={`bi ${a.icon}`} />
                     </div>
@@ -793,8 +793,8 @@ export default function LibraryDashboard() {
                                   style={{
                                     width: 38,
                                     height: 38,
-                                    background: "#eef2ff",
-                                    color: "#3730a3",
+                                    background: "var(--edb-surface)",
+                                    color: "var(--edb-primary-text)",
                                     fontWeight: 700,
                                   }}
                                   title={i.memberName}
@@ -1074,10 +1074,10 @@ export default function LibraryDashboard() {
         {/* Styles */}
         <style>{`
           .lib-link { transition: transform .2s ease, box-shadow .2s ease; }
-          .lib-link:hover { transform: translateY(-2px); box-shadow: 0 10px 22px rgba(0,0,0,.12); }
+          .lib-link:hover { transform: translateY(-2px); box-shadow: 0 10px 22px color-mix(in srgb, var(--edb-primary-dark) 12%, transparent); }
           .card { animation: fadeInUp .45s ease-out; }
           @keyframes fadeInUp { from { opacity: 0; transform: translateY(10px);} to { opacity: 1; transform: translateY(0);} }
-          .toast { background: white; }
+          .toast { background: var(--edb-surface); }
         `}</style>
 
         {/* Bootstrap Icons */}

@@ -223,7 +223,7 @@ const Subjects = () => {
       <style>{`
         .min-w-0 { min-width: 0 !important; }
         .controls-wrap { flex-wrap: wrap; }
-        .shadow-soft { box-shadow: 0 10px 30px rgba(0,0,0,0.08); }
+        .shadow-soft { box-shadow: 0 10px 30px color-mix(in srgb, var(--edb-primary-dark) 8%, transparent); }
         .card-borderless { border: 0 !important; }
         .glass {
           backdrop-filter: saturate(180%) blur(8px);
@@ -234,26 +234,26 @@ const Subjects = () => {
           z-index: 5;
         }
         .toolbar-bg {
-          background: linear-gradient(135deg, #f6f9ff 0%, #ffffff 100%);
+          background: linear-gradient(135deg, var(--edb-surface) 0%, var(--edb-surface) 100%);
         }
         .chip { 
-          border: 1px solid rgba(0,0,0,0.08);
+          border: 1px solid color-mix(in srgb, var(--edb-border) 8%, transparent);
           transition: all .15s ease;
         }
         .chip.active, .chip:hover { 
           transform: translateY(-1px);
-          box-shadow: 0 6px 16px rgba(0,0,0,0.08);
+          box-shadow: 0 6px 16px color-mix(in srgb, var(--edb-primary-dark) 8%, transparent);
         }
         .table-hover tbody tr:hover {
-          background: #f9fbff;
+          background: var(--edb-surface);
         }
         .skeleton {
-          position: relative; overflow: hidden; background: #eef1f6; border-radius: .5rem;
+          position: relative; overflow: hidden; background: var(--edb-dashboard-bg); border-radius: .5rem;
         }
         .skeleton::after {
           content: ""; position: absolute; inset: 0;
           transform: translateX(-100%);
-          background: linear-gradient(90deg, transparent, rgba(255,255,255,.5), transparent);
+          background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--edb-surface) 50%, transparent), transparent);
           animation: shimmer 1.2s infinite;
         }
         @keyframes shimmer { 100% { transform: translateX(100%);} }
@@ -590,14 +590,14 @@ const Subjects = () => {
 
       {/* Add/Edit Modal */}
       {showModal && (
-        <div className="modal show d-block" style={{ background: "rgba(0,0,0,0.4)" }}>
+        <div className="modal show d-block" style={{ background: "color-mix(in srgb, var(--edb-primary-dark) 40%, transparent)" }}>
           <div className="modal-dialog modal-dialog-centered modal-fullscreen-sm-down">
             <form className="modal-content" onSubmit={saveSubject}>
               <div
                 className="modal-header"
                 style={{
                   background:
-                    "linear-gradient(135deg, rgba(13,110,253,.1), rgba(25,135,84,.1))",
+                    "linear-gradient(135deg, color-mix(in srgb, var(--edb-primary) 10%, transparent), rgba(25,135,84,.1))",
                 }}
               >
                 <h5 className="modal-title">

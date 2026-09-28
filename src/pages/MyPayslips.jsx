@@ -221,7 +221,7 @@ export default function MyPayslips() {
     <div className="container-fluid py-3">
       <div
         className="rounded-4 p-3 p-lg-4 mb-3 text-white shadow-sm position-relative overflow-hidden"
-        style={{ background: "linear-gradient(135deg, #123524 0%, #1f6f4a 55%, #0f172a 100%)" }}
+        style={{ background: "linear-gradient(135deg, var(--edb-primary-dark) 0%, #1f6f4a 55%, var(--edb-primary-dark) 100%)" }}
       >
         <div
           className="position-absolute rounded-circle bg-white bg-opacity-10"
@@ -376,7 +376,7 @@ export default function MyPayslips() {
               <div className="card-body p-0">
                 <div
                   className="p-3 p-lg-4 text-white"
-                  style={{ background: "linear-gradient(135deg, #0f172a 0%, #123524 100%)" }}
+                  style={{ background: "linear-gradient(135deg, var(--edb-primary-dark) 0%, var(--edb-primary-dark) 100%)" }}
                 >
                   <div className="d-flex flex-wrap justify-content-between align-items-start gap-3">
                     <div>

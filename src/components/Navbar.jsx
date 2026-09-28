@@ -1305,10 +1305,10 @@ const CollegeNavbar = ({
 
         .college-navbar {
           min-height: 68px;
-          background: linear-gradient(90deg, rgba(255,253,249,.985), rgba(250,244,236,.985));
+          background: linear-gradient(90deg, color-mix(in srgb, var(--edb-surface) 98.5%, transparent), color-mix(in srgb, var(--edb-dashboard-bg) 98.5%, transparent));
           backdrop-filter: blur(18px);
-          border-bottom: 1px solid #e7d7c2;
-          box-shadow: 0 8px 26px rgba(92, 28, 32, .07);
+          border-bottom: 1px solid var(--edb-border);
+          box-shadow: 0 8px 26px color-mix(in srgb, var(--edb-primary-dark) 7.000000000000001%, transparent);
         }
 
 
@@ -1332,13 +1332,13 @@ const CollegeNavbar = ({
 
           padding: 3px;
 
-          background: white;
+          background: var(--edb-surface);
 
           border-radius: 12px;
 
-          border: 1px solid #ead9c5;
+          border: 1px solid var(--edb-border);
 
-          box-shadow: 0 5px 15px rgba(92, 28, 32, .08);
+          box-shadow: 0 5px 15px color-mix(in srgb, var(--edb-primary-dark) 8%, transparent);
         }
 
 
@@ -1355,7 +1355,7 @@ const CollegeNavbar = ({
           white-space:
             nowrap;
 
-          color: #65131a;
+          color: var(--edb-primary-dark-text);
 
           font-family:
             Georgia,
@@ -1372,7 +1372,7 @@ const CollegeNavbar = ({
 
           margin-top: 2px;
 
-          color: #a27635;
+          color: var(--edb-accent-text);
 
           font-size: 9px;
 
@@ -1389,10 +1389,10 @@ const CollegeNavbar = ({
         .college-role-select {
           min-width: 165px;
 
-          border: 1px solid #ead9c5 !important;
+          border: 1px solid var(--edb-border) !important;
           border-radius: 10px;
-          background: #fbf4eb;
-          color: #6d2027;
+          background: var(--edb-primary-soft);
+          color: var(--edb-input-text);
 
           font-size: 11px;
 
@@ -1439,8 +1439,8 @@ const CollegeNavbar = ({
 
           border-radius: 11px;
 
-          background: #fffaf4;
-          border: 1px solid #eadbca;
+          background: var(--edb-surface);
+          border: 1px solid var(--edb-border);
 
           transition:
             .18s ease;
@@ -1460,7 +1460,7 @@ const CollegeNavbar = ({
 
 
         .college-quick-link:hover {
-          color: #74151d;
+          color: var(--edb-primary-dark-text);
 
           transform:
             translateY(-1px);
@@ -1468,21 +1468,21 @@ const CollegeNavbar = ({
 
 
         .college-quick-link:hover > span {
-          background: #f8eee3;
-          border-color: #dfc39d;
+          background: var(--edb-primary-soft);
+          border-color: var(--edb-border);
         }
 
 
         .college-quick-link.active {
-          color: #74151d;
+          color: var(--edb-primary-dark-text);
         }
 
 
         .college-quick-link.active > span {
-          background: linear-gradient(135deg, #6a1119, #8e2a33);
-          color: #fff;
-          border-color: #74151d;
-          box-shadow: 0 0 0 3px rgba(116, 21, 29, .08);
+          background: linear-gradient(135deg, var(--edb-primary-dark), var(--edb-primary));
+          color: var(--edb-on-primary);
+          border-color: var(--edb-primary);
+          box-shadow: 0 0 0 3px color-mix(in srgb, var(--edb-primary-dark) 8%, transparent);
         }
 
 
@@ -1499,16 +1499,16 @@ const CollegeNavbar = ({
 
           border-radius: 12px;
 
-          border: 1px solid #ead9c5;
-          background: #fffaf4;
-          color: #74151d;
+          border: 1px solid var(--edb-border);
+          background: var(--edb-surface);
+          color: var(--edb-primary-dark-text);
         }
 
 
         .college-navbar__bell:hover {
-          color: #5f1017;
-          background: #f7eadc;
-          border-color: #dfc39d;
+          color: var(--edb-primary-dark-text);
+          background: var(--edb-primary-soft);
+          border-color: var(--edb-border);
         }
 
 
@@ -1529,9 +1529,9 @@ const CollegeNavbar = ({
 
           border-radius: 13px;
 
-          border: 1px solid #ead9c5;
-          background: #fffdf9;
-          color: #652026;
+          border: 1px solid var(--edb-border);
+          background: var(--edb-surface);
+          color: var(--edb-primary-dark-text);
 
           font-size: 12px;
 
@@ -1541,9 +1541,9 @@ const CollegeNavbar = ({
 
 
         .college-profile-button:hover {
-          background: #fbf1e7;
-          border-color: #dfc39d;
-          color: #5f1017;
+          background: var(--edb-primary-soft);
+          border-color: var(--edb-border);
+          color: var(--edb-primary-dark-text);
         }
 
         .college-profile-button img {
@@ -1564,11 +1564,11 @@ const CollegeNavbar = ({
 
           padding: 7px;
 
-          border: 1px solid #ead9c5;
+          border: 1px solid var(--edb-border);
 
           border-radius: 13px;
 
-          box-shadow: 0 14px 40px rgba(92, 28, 32, .14);
+          box-shadow: 0 14px 40px color-mix(in srgb, var(--edb-primary-dark) 14.000000000000002%, transparent);
         }
 
 
@@ -1587,36 +1587,36 @@ const CollegeNavbar = ({
 
 
         .college-navbar .branch-switcher .input-group-text {
-          background: #f7eee4 !important;
-          border-color: #e7d5bf !important;
-          color: #74151d !important;
+          background: var(--edb-primary-soft) !important;
+          border-color: var(--edb-border) !important;
+          color: var(--edb-input-text) !important;
         }
 
         .college-navbar .branch-switcher .form-select {
-          background-color: #fffaf4 !important;
-          border-color: #e7d5bf !important;
-          color: #5f2a2f !important;
+          background-color: var(--edb-surface) !important;
+          border-color: var(--edb-border) !important;
+          color: var(--edb-input-text) !important;
           font-weight: 650;
         }
 
         .college-navbar .branch-switcher .form-select:focus,
         .college-role-select:focus {
-          border-color: #c99a4a !important;
-          box-shadow: 0 0 0 3px rgba(201,154,74,.12) !important;
+          border-color: var(--edb-primary) !important;
+          box-shadow: 0 0 0 3px color-mix(in srgb, var(--edb-primary-dark) 12%, transparent) !important;
         }
 
         .college-quick-link small {
-          color: #6f5a4e;
+          color: var(--edb-muted-text);
         }
 
         .college-quick-link.active small,
         .college-quick-link:hover small {
-          color: #74151d;
+          color: var(--edb-primary-dark-text);
         }
 
         .college-profile-menu .dropdown-item:hover {
-          background: #fbf1e7;
-          color: #74151d;
+          background: var(--edb-primary-soft);
+          color: var(--edb-primary-dark-text);
         }
 
         @media (
@@ -1668,155 +1668,155 @@ const CollegeNavbar = ({
         .college-navbar {
           min-height: 70px;
           background:
-            radial-gradient(circle at 88% -60%, rgba(230,190,118,.11), transparent 240px),
-            linear-gradient(90deg, #641116 0%, #560a0f 52%, #45070b 100%);
-          border-bottom: 1px solid rgba(225,183,118,.24);
-          box-shadow: 0 8px 26px rgba(45,0,5,.16);
+            radial-gradient(circle at 88% -60%, color-mix(in srgb, var(--edb-accent) 11%, transparent), transparent 240px),
+            linear-gradient(90deg, var(--edb-primary-dark) 0%, var(--edb-primary-dark) 52%, var(--edb-primary-dark) 100%);
+          border-bottom: 1px solid color-mix(in srgb, var(--edb-primary) 24%, transparent);
+          box-shadow: 0 8px 26px color-mix(in srgb, var(--edb-primary-dark) 16%, transparent);
           backdrop-filter: none;
         }
 
         .college-navbar__brand img {
-          background: #fffdf9;
-          border-color: rgba(226,190,128,.68);
-          box-shadow: 0 5px 15px rgba(30,0,3,.24);
+          background: var(--edb-surface);
+          border-color: color-mix(in srgb, var(--edb-primary) 68%, transparent);
+          box-shadow: 0 5px 15px color-mix(in srgb, var(--edb-primary-dark) 24%, transparent);
         }
 
         .college-navbar__brand strong {
-          color: #fff9f5;
+          color: var(--edb-on-primary);
           font-family: inherit;
           font-weight: 780;
           letter-spacing: -.01em;
         }
 
         .college-navbar__brand small {
-          color: #e7c77f;
+          color: var(--edb-on-primary);
           letter-spacing: .12em;
         }
 
         .college-role-select {
-          border-color: rgba(230,197,140,.24) !important;
-          background-color: rgba(255,255,255,.075) !important;
-          color: #fff3ef !important;
+          border-color: color-mix(in srgb, var(--edb-border) 24%, transparent) !important;
+          background-color: color-mix(in srgb, var(--edb-surface) 7.5%, transparent) !important;
+          color: var(--edb-muted-text) !important;
           font-weight: 760;
           box-shadow: none !important;
         }
 
         .college-role-select option {
-          background: #561016;
-          color: #fff;
+          background: var(--edb-primary-dark);
+          color: var(--edb-on-primary);
         }
 
         .college-quick-link {
-          color: #e2cbc5;
+          color: var(--edb-muted-text);
         }
 
         .college-quick-link > span {
-          background: rgba(255,255,255,.06);
-          border-color: rgba(229,196,140,.18);
-          color: #efd9b0;
+          background: color-mix(in srgb, var(--edb-surface) 6%, transparent);
+          border-color: color-mix(in srgb, var(--edb-border) 18%, transparent);
+          color: var(--edb-accent-text);
         }
 
         .college-quick-link small {
-          color: #dbc1bb;
+          color: var(--edb-muted-text);
           font-weight: 720;
         }
 
         .college-quick-link:hover,
         .college-quick-link.active {
-          color: #fff;
+          color: var(--edb-on-primary);
         }
 
         .college-quick-link:hover > span {
-          background: rgba(255,255,255,.10);
-          border-color: rgba(230,197,140,.30);
+          background: color-mix(in srgb, var(--edb-surface) 10%, transparent);
+          border-color: color-mix(in srgb, var(--edb-border) 30%, transparent);
         }
 
         .college-quick-link:hover small,
         .college-quick-link.active small {
-          color: #fff;
+          color: var(--edb-on-primary);
         }
 
         .college-quick-link.active > span {
-          background: rgba(217,167,78,.18);
-          color: #ffe3a8;
-          border-color: rgba(233,197,129,.38);
-          box-shadow: inset 0 0 0 1px rgba(255,255,255,.025);
+          background: color-mix(in srgb, var(--edb-accent) 18%, transparent);
+          color: var(--edb-accent-text);
+          border-color: color-mix(in srgb, var(--edb-border) 38%, transparent);
+          box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--edb-primary-dark) 2.5%, transparent);
         }
 
         .college-navbar__bell {
-          border-color: rgba(229,196,140,.20);
-          background: rgba(255,255,255,.065);
-          color: #efd8ab;
+          border-color: color-mix(in srgb, var(--edb-border) 20%, transparent);
+          background: color-mix(in srgb, var(--edb-surface) 6.5%, transparent);
+          color: var(--edb-accent-text);
         }
 
         .college-navbar__bell:hover {
-          color: #fff1d2;
-          background: rgba(255,255,255,.10);
-          border-color: rgba(229,196,140,.34);
+          color: var(--edb-text);
+          background: color-mix(in srgb, var(--edb-surface) 10%, transparent);
+          border-color: color-mix(in srgb, var(--edb-border) 34%, transparent);
         }
 
         .college-profile-button {
-          border-color: rgba(229,196,140,.20);
-          background: rgba(255,255,255,.065);
-          color: #fff0eb;
+          border-color: color-mix(in srgb, var(--edb-border) 20%, transparent);
+          background: color-mix(in srgb, var(--edb-surface) 6.5%, transparent);
+          color: var(--edb-muted-text);
           box-shadow: none;
         }
 
         .college-profile-button:hover {
-          background: rgba(255,255,255,.10);
-          border-color: rgba(229,196,140,.34);
-          color: #fff;
+          background: color-mix(in srgb, var(--edb-surface) 10%, transparent);
+          border-color: color-mix(in srgb, var(--edb-border) 34%, transparent);
+          color: var(--edb-on-primary);
         }
 
         .college-profile-button img {
-          border: 1px solid rgba(229,196,140,.24);
-          background: #fff;
+          border: 1px solid color-mix(in srgb, var(--edb-border) 24%, transparent);
+          background: var(--edb-surface);
         }
 
         .college-navbar .branch-switcher .input-group-text {
-          background: rgba(218,171,90,.14) !important;
-          border-color: rgba(229,196,140,.22) !important;
-          color: #f1d394 !important;
+          background: color-mix(in srgb, var(--edb-accent) 14%, transparent) !important;
+          border-color: color-mix(in srgb, var(--edb-border) 22%, transparent) !important;
+          color: var(--edb-input-text) !important;
         }
 
         .college-navbar .branch-switcher .form-select {
-          background-color: rgba(255,255,255,.075) !important;
-          border-color: rgba(229,196,140,.22) !important;
-          color: #fff3ef !important;
+          background-color: color-mix(in srgb, var(--edb-surface) 7.5%, transparent) !important;
+          border-color: color-mix(in srgb, var(--edb-border) 22%, transparent) !important;
+          color: var(--edb-on-primary) !important;
           font-weight: 700;
         }
 
         .college-navbar .branch-switcher .form-select option {
-          background: #561016;
-          color: #fff;
+          background: var(--edb-primary-dark);
+          color: var(--edb-on-primary);
         }
 
         .college-navbar .branch-switcher .form-select:focus,
         .college-role-select:focus {
-          border-color: rgba(231,191,112,.64) !important;
-          box-shadow: 0 0 0 3px rgba(218,171,90,.10) !important;
+          border-color: color-mix(in srgb, var(--edb-primary) 64%, transparent) !important;
+          box-shadow: 0 0 0 3px color-mix(in srgb, var(--edb-primary-dark) 10%, transparent) !important;
         }
 
         .college-profile-menu {
-          border-color: #dcc49a;
-          background: #fffaf4;
-          box-shadow: 0 16px 40px rgba(45,0,5,.22);
+          border-color: var(--edb-border);
+          background: var(--edb-surface);
+          box-shadow: 0 16px 40px color-mix(in srgb, var(--edb-primary-dark) 22%, transparent);
         }
 
         .college-profile-menu .dropdown-item {
-          color: #5b2227;
+          color: var(--edb-primary-dark-text);
         }
 
         .college-profile-menu .dropdown-item:hover {
-          background: #f5e8de;
-          color: #641116;
+          background: var(--edb-primary-soft);
+          color: var(--edb-primary-dark-text);
         }
 
         .college-navbar .navbar-toggler,
         .college-navbar .btn-light {
-          border-color: rgba(229,196,140,.22) !important;
-          background: rgba(255,255,255,.07) !important;
-          color: #fff !important;
+          border-color: color-mix(in srgb, var(--edb-border) 22%, transparent) !important;
+          background: color-mix(in srgb, var(--edb-surface) 7%, transparent) !important;
+          color: var(--edb-on-primary) !important;
         }
 
         @media (max-width: 767px) {

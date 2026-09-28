@@ -1,17 +1,4 @@
-:root {
-  --theme-primary: #66131b;
-  --theme-primary-dark: #470a11;
-  --theme-accent: #c49a45;
-  --theme-sidebar-bg: #fcf8f2;
-  --theme-navbar-bg: #fffdf9;
-  --theme-navbar-title: #66131b;
-  --theme-navbar-subtitle: #c49a45;
-  --theme-dashboard-bg: #f6f3ee;
-  --theme-surface: #fffdfa;
-  --theme-text: #261f1d;
-  --theme-primary-rgb: 102, 19, 27;
-  --theme-accent-rgb: 196, 154, 69;
-}
+
 
 /* PORTAL_THEME_V1 — theme the app chrome while preserving semantic status colours. */
 .app-sidebar {

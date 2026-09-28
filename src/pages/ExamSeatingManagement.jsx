@@ -853,7 +853,7 @@ export default function ExamSeatingManagement() {
           overflow-x: hidden !important;
         }
         .exam-seating-workflow-card .card-footer { flex: 0 0 auto; }
-        .exam-student-manual-list { max-height: 170px; overflow-y: auto; background: #fff; }
+        .exam-student-manual-list { max-height: 170px; overflow-y: auto; background: var(--edb-surface); }
         .min-width-0 { min-width: 0; }
         .exam-seating-list-card { position: relative; z-index: 0; clear: both; }
         @media (max-width: 1199.98px) {

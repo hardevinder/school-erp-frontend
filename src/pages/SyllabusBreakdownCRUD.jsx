@@ -42,6 +42,13 @@ function pickArrayFromApi(data) {
 
 const toUpperStatus = (s) => String(s || "").trim().toUpperCase();
 
+const growNotebookTextarea = (event) => {
+  const el = event.currentTarget;
+  if (!el) return;
+  el.style.height = "auto";
+  el.style.height = `${el.scrollHeight}px`;
+};
+
 /* ---------------- Component ---------------- */
 
 const SyllabusBreakdownCRUD = () => {
@@ -60,6 +67,11 @@ const SyllabusBreakdownCRUD = () => {
 
   // selection panel
   const [selected, setSelected] = useState(null);
+
+  // quick workspace: class -> subject -> term (same spirit as Teacher Assignment)
+  const [workspaceClassId, setWorkspaceClassId] = useState("");
+  const [workspaceTerm, setWorkspaceTerm] = useState("FULL_YEAR");
+  const [workspaceSubjectSearch, setWorkspaceSubjectSearch] = useState("");
 
   // modal
   const [showModal, setShowModal] = useState(false);
@@ -101,6 +113,28 @@ const SyllabusBreakdownCRUD = () => {
     });
     return Array.from(map.values());
   }, [normalizedAssignments]);
+
+  const workspaceSubjects = useMemo(() => {
+    if (!workspaceClassId) return [];
+    const map = new Map();
+    normalizedAssignments.forEach((a) => {
+      if (String(a.class_id) !== String(workspaceClassId)) return;
+      const subject = a.SubjectObj;
+      if (subject?.id && !map.has(String(subject.id))) map.set(String(subject.id), subject);
+    });
+
+    const query = workspaceSubjectSearch.trim().toLowerCase();
+    return Array.from(map.values())
+      .filter((subject) => !query || String(subject.name || "").toLowerCase().includes(query))
+      .sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), undefined, { numeric: true, sensitivity: "base" }));
+  }, [normalizedAssignments, workspaceClassId, workspaceSubjectSearch]);
+
+  useEffect(() => {
+    if (!classes.length) return;
+    if (!workspaceClassId || !classes.some((c) => String(c.id) === String(workspaceClassId))) {
+      setWorkspaceClassId(String(classes[0].id));
+    }
+  }, [classes, workspaceClassId]);
 
   /* ---------------- Subjects for selected class ---------------- */
   const subjectsForSelectedClass = useMemo(() => {
@@ -557,106 +591,222 @@ const SyllabusBreakdownCRUD = () => {
     return s === "SUBMITTED" || s === "APPROVED";
   };
 
+  const findWorkspaceBreakdown = (subjectId) =>
+    safeArr(breakdowns).find((b) => {
+      const classId = b.class_id ?? b.classId ?? b.Class?.id;
+      const subject = b.subject_id ?? b.subjectId ?? b.Subject?.id;
+      return (
+        String(classId) === String(workspaceClassId) &&
+        String(subject) === String(subjectId) &&
+        String(b.term || "FULL_YEAR") === String(workspaceTerm)
+      );
+    }) || null;
+
+  const workspaceStatusCount = useMemo(() => {
+    const result = { total: 0, started: 0, approved: 0 };
+    const subjectIds = new Set(workspaceSubjects.map((s) => String(s.id)));
+    result.total = subjectIds.size;
+    safeArr(breakdowns).forEach((b) => {
+      const classId = b.class_id ?? b.classId ?? b.Class?.id;
+      const subjectId = b.subject_id ?? b.subjectId ?? b.Subject?.id;
+      if (String(classId) !== String(workspaceClassId)) return;
+      if (!subjectIds.has(String(subjectId))) return;
+      if (String(b.term || "FULL_YEAR") !== String(workspaceTerm)) return;
+      result.started += 1;
+      if (toUpperStatus(b.status) === "APPROVED") result.approved += 1;
+    });
+    return result;
+  }, [breakdowns, workspaceClassId, workspaceSubjects, workspaceTerm]);
+
+  const openWorkspaceSubject = async (subjectId) => {
+    const existing = findWorkspaceBreakdown(subjectId);
+
+    if (existing) {
+      if (isLocked(existing.status)) {
+        await handleView(existing);
+        setTimeout(() => document.getElementById("sb-details-panel")?.scrollIntoView({ behavior: "smooth", block: "start" }), 80);
+        return;
+      }
+      await openEditModal(existing);
+      return;
+    }
+
+    setEditing(false);
+    setEditId(null);
+    setFormData({
+      academic_session: "",
+      class_id: String(workspaceClassId),
+      subject_id: String(subjectId),
+      term: workspaceTerm,
+      book_ref: "",
+      objectives: "",
+      items: [
+        {
+          seq_no: 1,
+          unit_no: "",
+          unit_title: "",
+          topics: "",
+          subtopics: "",
+          periods: "",
+          planned_from: "",
+          planned_to: "",
+          planned_month: "",
+          remarks: "",
+        },
+      ],
+    });
+    setShowModal(true);
+  };
+
   /* ---------------- Render ---------------- */
 
   return (
-    <div className="container-fluid py-3">
-      <style>{`
-        .sb-wrap { max-width: 100%; overflow-x: hidden; }
-        .sb-title { word-break: break-word; }
-        .sb-card-row .form-label { font-size: .8rem; color: #6c757d; margin-bottom: .25rem; }
-        .sb-sticky-actions { position: sticky; bottom: 0; background: #fff; padding-top: .75rem; }
-        @media (max-width: 576px) {
-          .modal-fullscreen-sm-down .modal-dialog { margin: 0; }
-        }
-      `}</style>
-
+    <div className="container-fluid py-3 syllabus-breakdown-page">
       <div className="sb-wrap">
-        <Row className="align-items-center g-2">
-          <Col xs={12} md={8}>
-            <h3 className="mb-0 sb-title">📘 Syllabus Breakdown</h3>
-            <div className="text-muted small">Create unit-wise syllabus plan and download PDF for hard-copy.</div>
+        <section className="sb-workspace-hero">
+          <div>
+            <div className="sb-workspace-eyebrow">ACADEMIC WORKSPACE</div>
+            <h3 className="mb-1">Syllabus Breakdown</h3>
+            <p className="mb-0">Pick an assigned class and subject, then start or continue the breakup. No repeated dropdown selection.</p>
+          </div>
+          <div className="sb-workspace-summary">
+            <div><strong>{workspaceStatusCount.started}</strong><span>Started</span></div>
+            <div><strong>{workspaceStatusCount.approved}</strong><span>Approved</span></div>
+            <div><strong>{workspaceStatusCount.total}</strong><span>Subjects</span></div>
+          </div>
+        </section>
 
-            {loadingAssignments && (
-              <div className="small text-muted mt-1">
-                <span className="spinner-border spinner-border-sm me-2" />
-                Loading assigned subjects…
-              </div>
+        {loadingAssignments && (
+          <div className="sb-loading-line">
+            <span className="spinner-border spinner-border-sm" /> Loading assigned classes and subjects…
+          </div>
+        )}
+
+        <section className="sb-workspace-card mt-3">
+          <div className="sb-step-head">
+            <span className="sb-step-number">1</span>
+            <div><strong>Select Class</strong><small>Only classes assigned to you are shown.</small></div>
+          </div>
+          <div className="sb-class-strip">
+            {classes.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                className={`sb-choice-pill ${String(workspaceClassId) === String(c.id) ? "active" : ""}`}
+                onClick={() => {
+                  setWorkspaceClassId(String(c.id));
+                  setWorkspaceSubjectSearch("");
+                }}
+              >
+                {c.class_name}
+              </button>
+            ))}
+            {!loadingAssignments && classes.length === 0 && (
+              <div className="sb-empty-note">No syllabus classes are assigned to you yet.</div>
             )}
-          </Col>
+          </div>
+        </section>
 
-          <Col xs={12} md={4}>
-            <div className="d-grid d-md-flex justify-content-md-end">
-              <Button variant="primary" onClick={openCreateModal}>
-                + Create Breakdown
-              </Button>
+        <section className="sb-workspace-card mt-3">
+          <div className="sb-step-row">
+            <div className="sb-step-head">
+              <span className="sb-step-number">2</span>
+              <div><strong>Choose Term & Subject</strong><small>Click a subject card to create, continue or view its breakdown.</small></div>
             </div>
-          </Col>
-        </Row>
-
-        {/* Filters */}
-        <Card className="mt-3 shadow-sm">
-          <Card.Body>
-            <Row className="g-2">
-              <Col xs={12} sm={6} lg={3}>
-                <Form.Label className="small text-muted mb-1">Class</Form.Label>
-                <Form.Select
-                  value={searchClassId}
-                  onChange={(e) => {
-                    setSearchClassId(e.target.value);
-                    setSearchSubjectId("");
-                  }}
+            <div className="sb-term-switch">
+              {termOptions.map((term) => (
+                <button
+                  key={term.value}
+                  type="button"
+                  className={workspaceTerm === term.value ? "active" : ""}
+                  onClick={() => setWorkspaceTerm(term.value)}
                 >
-                  <option value="">All</option>
-                  {classes.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.class_name}
-                    </option>
-                  ))}
-                </Form.Select>
-              </Col>
+                  {term.label}
+                </button>
+              ))}
+            </div>
+          </div>
 
-              <Col xs={12} sm={6} lg={3}>
-                <Form.Label className="small text-muted mb-1">Subject</Form.Label>
-                <Form.Select
-                  value={searchSubjectId}
-                  onChange={(e) => setSearchSubjectId(e.target.value)}
-                  disabled={!!searchClassId && subjectsForFilterClass.length === 0}
+          <div className="sb-subject-tools">
+            <div className="sb-search-box">
+              <i className="bi bi-search" />
+              <input
+                value={workspaceSubjectSearch}
+                onChange={(e) => setWorkspaceSubjectSearch(e.target.value)}
+                placeholder="Search subject…"
+              />
+            </div>
+            <span>{workspaceSubjects.length} subject{workspaceSubjects.length === 1 ? "" : "s"}</span>
+          </div>
+
+          <div className="sb-subject-grid">
+            {workspaceSubjects.map((subject) => {
+              const existing = findWorkspaceBreakdown(subject.id);
+              const status = existing ? toUpperStatus(existing.status) : "NOT STARTED";
+              const locked = existing ? isLocked(existing.status) : false;
+              return (
+                <button
+                  type="button"
+                  key={subject.id}
+                  className={`sb-subject-card ${existing ? "has-breakdown" : ""} ${status.toLowerCase().replace(/\s+/g, "-")}`}
+                  onClick={() => openWorkspaceSubject(subject.id)}
                 >
-                  <option value="">All</option>
-                  {subjectsForFilterClass.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </Form.Select>
-              </Col>
+                  <span className="sb-subject-icon"><i className="bi bi-journal-text" /></span>
+                  <span className="sb-subject-copy">
+                    <strong>{subject.name}</strong>
+                    <small>{existing ? (locked ? "Click to view details" : "Click to continue editing") : "Click to start breakdown"}</small>
+                  </span>
+                  <span className={`sb-status-chip ${status.toLowerCase().replace(/\s+/g, "-")}`}>{status}</span>
+                  <i className={`bi ${locked ? "bi-eye" : existing ? "bi-pencil-square" : "bi-plus-circle"} sb-card-action-icon`} />
+                </button>
+              );
+            })}
+            {!loadingAssignments && workspaceClassId && workspaceSubjects.length === 0 && (
+              <div className="sb-empty-note sb-grid-empty">No assigned subjects found for this class.</div>
+            )}
+          </div>
+        </section>
 
-              <Col xs={12} sm={6} lg={3}>
-                <Form.Label className="small text-muted mb-1">Term</Form.Label>
-                <Form.Select value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}>
-                  <option value="">All</option>
-                  {termOptions.map((t) => (
-                    <option key={t.value} value={t.value}>
-                      {t.label}
-                    </option>
-                  ))}
-                </Form.Select>
-              </Col>
-
-              <Col xs={12} sm={6} lg={3}>
-                <Form.Label className="small text-muted mb-1">Status</Form.Label>
-                <Form.Select value={searchStatus} onChange={(e) => setSearchStatus(e.target.value)}>
-                  <option value="">All</option>
-                  <option value="DRAFT">DRAFT</option>
-                  <option value="SUBMITTED">SUBMITTED</option>
-                  <option value="APPROVED">APPROVED</option>
-                  <option value="RETURNED">RETURNED</option>
-                </Form.Select>
-              </Col>
-            </Row>
-          </Card.Body>
-        </Card>
+        <details className="sb-record-tools mt-3">
+          <summary>All Breakdown Records & Filters</summary>
+          <Card className="mt-2 shadow-sm sb-filter-card">
+            <Card.Body>
+              <Row className="g-2">
+                <Col xs={12} sm={6} lg={3}>
+                  <Form.Label className="small text-muted mb-1">Class</Form.Label>
+                  <Form.Select value={searchClassId} onChange={(e) => { setSearchClassId(e.target.value); setSearchSubjectId(""); }}>
+                    <option value="">All</option>
+                    {classes.map((c) => <option key={c.id} value={c.id}>{c.class_name}</option>)}
+                  </Form.Select>
+                </Col>
+                <Col xs={12} sm={6} lg={3}>
+                  <Form.Label className="small text-muted mb-1">Subject</Form.Label>
+                  <Form.Select value={searchSubjectId} onChange={(e) => setSearchSubjectId(e.target.value)} disabled={!!searchClassId && subjectsForFilterClass.length === 0}>
+                    <option value="">All</option>
+                    {subjectsForFilterClass.map((subject) => <option key={subject.id} value={subject.id}>{subject.name}</option>)}
+                  </Form.Select>
+                </Col>
+                <Col xs={12} sm={6} lg={3}>
+                  <Form.Label className="small text-muted mb-1">Term</Form.Label>
+                  <Form.Select value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}>
+                    <option value="">All</option>
+                    {termOptions.map((term) => <option key={term.value} value={term.value}>{term.label}</option>)}
+                  </Form.Select>
+                </Col>
+                <Col xs={12} sm={6} lg={3}>
+                  <Form.Label className="small text-muted mb-1">Status</Form.Label>
+                  <Form.Select value={searchStatus} onChange={(e) => setSearchStatus(e.target.value)}>
+                    <option value="">All</option>
+                    <option value="DRAFT">DRAFT</option>
+                    <option value="SUBMITTED">SUBMITTED</option>
+                    <option value="APPROVED">APPROVED</option>
+                    <option value="RETURNED">RETURNED</option>
+                  </Form.Select>
+                </Col>
+              </Row>
+            </Card.Body>
+          </Card>
+        </details>
 
         <Row className="mt-3 g-3">
           {/* Left: List */}
@@ -818,8 +968,8 @@ const SyllabusBreakdownCRUD = () => {
           </Col>
 
           {/* Right: Detail Panel */}
-          <Col xs={12} lg={4}>
-            <Card className="shadow-sm">
+          <Col xs={12} lg={4} id="sb-details-panel">
+            <Card className="shadow-sm sb-details-card">
               <Card.Header className="fw-semibold">Details</Card.Header>
               <Card.Body>
                 {selected ? (
@@ -890,7 +1040,7 @@ const SyllabusBreakdownCRUD = () => {
           </Col>
         </Row>
 
-        {/* Modal: Create/Edit */}
+        {/* Modal: Create/Edit - Notebook editor */}
         <Modal
           show={showModal}
           onHide={() => setShowModal(false)}
@@ -903,76 +1053,93 @@ const SyllabusBreakdownCRUD = () => {
           size="xl"
           centered
           fullscreen="sm-down"
-          dialogClassName="modal-fullscreen-sm-down syllabus-breakdown-modal-dialog"
-          contentClassName="syllabus-breakdown-modal-content"
+          dialogClassName="modal-fullscreen-sm-down syllabus-breakdown-modal-dialog sb-notebook-modal-dialog"
+          contentClassName="syllabus-breakdown-modal-content sb-notebook-modal-content"
         >
-          <Modal.Header closeButton>
-            <Modal.Title>{editing ? "Edit Syllabus Breakdown" : "Create Syllabus Breakdown"}</Modal.Title>
+          <Modal.Header closeButton className="sb-notebook-modal-header">
+            <div>
+              <div className="sb-notebook-kicker">TEACHER SYLLABUS NOTEBOOK</div>
+              <Modal.Title>{editing ? "Edit Syllabus Breakdown" : "Create Syllabus Breakdown"}</Modal.Title>
+              <div className="sb-notebook-modal-subtitle">
+                Write naturally like a notebook. Long text expands while you type.
+              </div>
+            </div>
           </Modal.Header>
 
-          <Modal.Body className="syllabus-breakdown-modal-body">
+          <Modal.Body className="syllabus-breakdown-modal-body sb-notebook-modal-body">
             <Form onSubmit={handleSave}>
-              <Row className="g-2">
-                <Col xs={12} md={3}>
-                  <Form.Label>Academic Session</Form.Label>
-                  <Form.Control
-                    name="academic_session"
-                    value={formData.academic_session}
-                    onChange={handleHeaderChange}
-                    placeholder="2025-26"
-                  />
-                </Col>
+              <div className="sb-notebook-paper">
+                <div className="sb-notebook-margin-line" />
 
-                <Col xs={12} md={3}>
-                  <Form.Label>Class</Form.Label>
-                  <Form.Select name="class_id" value={formData.class_id} onChange={handleHeaderChange} required>
-                    <option value="">-- Select --</option>
-                    {classes.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.class_name}
+                <div className="sb-notebook-header-grid">
+                  <label className="sb-notebook-inline-field">
+                    <span>Academic Session</span>
+                    <input
+                      name="academic_session"
+                      value={formData.academic_session}
+                      onChange={handleHeaderChange}
+                      placeholder="2025-26"
+                    />
+                  </label>
+
+                  <label className="sb-notebook-inline-field">
+                    <span>Class</span>
+                    <select
+                      name="class_id"
+                      value={formData.class_id}
+                      onChange={handleHeaderChange}
+                      required
+                    >
+                      <option value="">Select class</option>
+                      {classes.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.class_name}
+                        </option>
+                      ))}
+                    </select>
+                    <small>Assigned classes only</small>
+                  </label>
+
+                  <label className="sb-notebook-inline-field">
+                    <span>Subject</span>
+                    <select
+                      name="subject_id"
+                      value={formData.subject_id}
+                      onChange={handleHeaderChange}
+                      required
+                      disabled={!formData.class_id}
+                    >
+                      <option value="">
+                        {!formData.class_id ? "Select class first" : "Select subject"}
                       </option>
-                    ))}
-                  </Form.Select>
-                  <div className="small text-muted mt-1">Showing only assigned classes.</div>
-                </Col>
+                      {subjectsForSelectedClass.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.name}
+                        </option>
+                      ))}
+                    </select>
+                    <small>Filtered by selected class</small>
+                  </label>
 
-                <Col xs={12} md={3}>
-                  <Form.Label>Subject</Form.Label>
-                  <Form.Select
-                    name="subject_id"
-                    value={formData.subject_id}
-                    onChange={handleHeaderChange}
-                    required
-                    disabled={!formData.class_id}
-                  >
-                    <option value="">{!formData.class_id ? "Select Class first" : "-- Select --"}</option>
-                    {subjectsForSelectedClass.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name}
-                      </option>
-                    ))}
-                  </Form.Select>
-                  <div className="small text-muted mt-1">Subjects auto-filtered by selected class.</div>
-                </Col>
+                  <label className="sb-notebook-inline-field">
+                    <span>Term</span>
+                    <select name="term" value={formData.term} onChange={handleHeaderChange}>
+                      {termOptions.map((t) => (
+                        <option key={t.value} value={t.value}>
+                          {t.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
 
-                <Col xs={12} md={3}>
-                  <Form.Label>Term</Form.Label>
-                  <Form.Select name="term" value={formData.term} onChange={handleHeaderChange}>
-                    {termOptions.map((t) => (
-                      <option key={t.value} value={t.value}>
-                        {t.label}
-                      </option>
-                    ))}
-                  </Form.Select>
-                </Col>
-              </Row>
-
-              <div className="sb-ai-import-banner mt-3">
-                <div className="d-flex align-items-start gap-3">
-                  <div className="sb-ai-import-banner-icon"><i className="bi bi-stars" /></div>
-                  <div className="flex-grow-1">
-                    <div className="fw-semibold">Create syllabus breakup with AI</div>
-                    <div className="small text-muted">Upload a PDF, scanned page, handwritten photo or screenshot. AI fills the draft; you review before saving.</div>
+                <div className="sb-notebook-ai-strip">
+                  <div className="sb-notebook-ai-copy">
+                    <div className="sb-notebook-ai-icon"><i className="bi bi-stars" /></div>
+                    <div>
+                      <strong>Have a PDF, scan or handwritten syllabus?</strong>
+                      <span>Let AI prepare the first draft, then continue editing here like a notebook.</span>
+                    </div>
                   </div>
                   <Button
                     type="button"
@@ -981,210 +1148,212 @@ const SyllabusBreakdownCRUD = () => {
                     disabled={!formData.class_id || !formData.subject_id}
                     className="text-nowrap"
                   >
-                    <i className="bi bi-cloud-arrow-up me-2" />AI Import PDF / Handwriting
+                    <i className="bi bi-cloud-arrow-up me-2" />
+                    AI Import
                   </Button>
                 </div>
-                {(!formData.class_id || !formData.subject_id) && (
-                  <div className="small text-primary mt-2"><i className="bi bi-info-circle me-1" />Select Class and Subject to enable AI import.</div>
-                )}
-              </div>
 
-              <Row className="g-2 mt-2">
-                <Col xs={12} md={6}>
-                  <Form.Label>Book Reference</Form.Label>
-                  <Form.Control
-                    name="book_ref"
-                    value={formData.book_ref}
-                    onChange={handleHeaderChange}
-                    placeholder="Book / Publisher / Edition"
-                  />
-                </Col>
+                <div className="sb-notebook-overview">
+                  <label className="sb-notebook-writing-block sb-notebook-book-ref">
+                    <span className="sb-notebook-section-label">Book / Reference</span>
+                    <input
+                      name="book_ref"
+                      value={formData.book_ref}
+                      onChange={handleHeaderChange}
+                      placeholder="Write book name, publisher, edition or reference..."
+                    />
+                  </label>
 
-                <Col xs={12} md={6}>
-                  <Form.Label>Objectives</Form.Label>
-                  <Form.Control
-                    as="textarea"
-                    rows={2}
-                    name="objectives"
-                    value={formData.objectives}
-                    onChange={handleHeaderChange}
-                    placeholder="Overall objectives for the syllabus..."
-                  />
-                </Col>
-              </Row>
+                  <label className="sb-notebook-writing-block">
+                    <span className="sb-notebook-section-label">Overall Objectives</span>
+                    <textarea
+                      name="objectives"
+                      value={formData.objectives}
+                      onChange={handleHeaderChange}
+                      placeholder="Write the overall learning objectives here..."
+                      rows={3}
+                      className="sb-auto-grow"
+                      onInput={growNotebookTextarea}
+                      onFocus={growNotebookTextarea}
+                    />
+                  </label>
+                </div>
 
-              <div className="d-flex justify-content-between align-items-center mt-3">
-                <div className="fw-semibold">Units / Chapters</div>
-                <Button variant="outline-primary" onClick={addItemRow} type="button">
-                  + Add Row
-                </Button>
-              </div>
+                <div className="sb-notebook-chapters-head">
+                  <div>
+                    <div className="sb-notebook-section-label">Units / Chapters</div>
+                    <div className="sb-notebook-help">
+                      Keep writing continuously. Topics and subtopics expand automatically.
+                    </div>
+                  </div>
+                  <Button
+                    variant="outline-primary"
+                    onClick={addItemRow}
+                    type="button"
+                    className="sb-notebook-add-btn"
+                  >
+                    <i className="bi bi-plus-lg me-1" />
+                    Add Chapter
+                  </Button>
+                </div>
 
-              {/* Desktop table */}
-              <div className="d-none d-lg-block mt-2 syllabus-breakdown-row-scroller">
-                <Table bordered hover className="align-middle mb-0">
-                  <thead className="table-light">
-                    <tr>
-                      <th style={{ width: 60 }}>#</th>
-                      <th style={{ minWidth: 120 }}>Unit No</th>
-                      <th style={{ minWidth: 220 }}>Unit Title *</th>
-                      <th style={{ minWidth: 240 }}>Topics</th>
-                      <th style={{ minWidth: 240 }}>Subtopics</th>
-                      <th style={{ width: 120 }}>Periods</th>
-                      <th style={{ minWidth: 160 }}>From</th>
-                      <th style={{ minWidth: 160 }}>To</th>
-                      <th style={{ minWidth: 160 }}>Month</th>
-                      <th style={{ minWidth: 180 }}>Remarks</th>
-                      <th style={{ width: 90 }}>Del</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(formData.items || []).map((it, idx) => (
-                      <tr key={idx}>
-                        <td className="text-center">{idx + 1}</td>
+                <div className="sb-notebook-units">
+                  {(formData.items || []).map((it, idx) => (
+                    <section className="sb-notebook-unit" key={idx}>
+                      <div className="sb-notebook-unit-number">{idx + 1}</div>
 
-                        <td>
-                          <Form.Control value={it.unit_no} onChange={(e) => updateItem(idx, "unit_no", e.target.value)} placeholder="1 / I" />
-                        </td>
+                      <div className="sb-notebook-unit-content">
+                        <div className="sb-notebook-unit-title-row">
+                          <label className="sb-notebook-unit-no">
+                            <span>Unit</span>
+                            <input
+                              value={it.unit_no}
+                              onChange={(e) => updateItem(idx, "unit_no", e.target.value)}
+                              placeholder={`${idx + 1}`}
+                            />
+                          </label>
 
-                        <td>
-                          <Form.Control
-                            value={it.unit_title}
-                            onChange={(e) => updateItem(idx, "unit_title", e.target.value)}
-                            placeholder="Chapter / Unit title"
-                            required
-                          />
-                        </td>
+                          <label className="sb-notebook-unit-title">
+                            <span>Chapter / Unit Title *</span>
+                            <textarea
+                              rows={1}
+                              value={it.unit_title}
+                              onChange={(e) => updateItem(idx, "unit_title", e.target.value)}
+                              placeholder="Write chapter or unit title..."
+                              required
+                              className="sb-auto-grow"
+                              onInput={growNotebookTextarea}
+                              onFocus={growNotebookTextarea}
+                            />
+                          </label>
 
-                        <td>
-                          <Form.Control as="textarea" rows={2} value={it.topics} onChange={(e) => updateItem(idx, "topics", e.target.value)} placeholder="Topics..." />
-                        </td>
-
-                        <td>
-                          <Form.Control as="textarea" rows={2} value={it.subtopics} onChange={(e) => updateItem(idx, "subtopics", e.target.value)} placeholder="Subtopics..." />
-                        </td>
-
-                        <td>
-                          <Form.Control type="number" value={it.periods} onChange={(e) => updateItem(idx, "periods", e.target.value)} placeholder="e.g. 8" />
-                        </td>
-
-                        <td>
-                          <Form.Control type="date" value={it.planned_from} onChange={(e) => updateItem(idx, "planned_from", e.target.value)} />
-                        </td>
-
-                        <td>
-                          <Form.Control type="date" value={it.planned_to} onChange={(e) => updateItem(idx, "planned_to", e.target.value)} />
-                        </td>
-
-                        <td>
-                          <Form.Control value={it.planned_month} maxLength={20} onChange={(e) => updateItem(idx, "planned_month", e.target.value.slice(0, 20))} placeholder="April / Q1" />
-                        </td>
-
-                        <td>
-                          <Form.Control value={it.remarks} onChange={(e) => updateItem(idx, "remarks", e.target.value)} placeholder="Notes..." />
-                        </td>
-
-                        <td className="text-center">
-                          <Button
-                            variant="outline-danger"
-                            size="sm"
+                          <button
+                            className="sb-notebook-remove"
                             onClick={() => removeItemRow(idx)}
                             disabled={(formData.items || []).length === 1}
                             type="button"
+                            title="Remove chapter"
+                            aria-label={`Remove chapter ${idx + 1}`}
                           >
-                            ✕
-                          </Button>
-                        </td>
-                      </tr>
-                    ))}
+                            <i className="bi bi-trash3" />
+                          </button>
+                        </div>
 
-                    {(formData.items || []).length === 0 && (
-                      <tr>
-                        <td colSpan={11} className="text-center text-muted py-3">
-                          No rows. Click “Add Row”.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </Table>
-              </div>
+                        <label className="sb-notebook-writing-block">
+                          <span className="sb-notebook-section-label">Topics</span>
+                          <textarea
+                            rows={3}
+                            value={it.topics}
+                            onChange={(e) => updateItem(idx, "topics", e.target.value)}
+                            placeholder="Write topics covered in this chapter..."
+                            className="sb-auto-grow"
+                            onInput={growNotebookTextarea}
+                            onFocus={growNotebookTextarea}
+                          />
+                        </label>
 
-              {/* Mobile cards */}
-              <div className="d-lg-none mt-2 d-flex flex-column gap-2">
-                {(formData.items || []).map((it, idx) => (
-                  <Card key={idx} className="shadow-sm">
-                    <Card.Body className="sb-card-row">
-                      <div className="d-flex justify-content-between align-items-center mb-2">
-                        <div className="fw-semibold">Unit #{idx + 1}</div>
-                        <Button
-                          variant="outline-danger"
-                          size="sm"
-                          onClick={() => removeItemRow(idx)}
-                          disabled={(formData.items || []).length === 1}
-                          type="button"
-                        >
-                          Remove
-                        </Button>
+                        <label className="sb-notebook-writing-block">
+                          <span className="sb-notebook-section-label">Subtopics / Teaching Points</span>
+                          <textarea
+                            rows={3}
+                            value={it.subtopics}
+                            onChange={(e) => updateItem(idx, "subtopics", e.target.value)}
+                            placeholder="Write subtopics, teaching points or sequence..."
+                            className="sb-auto-grow"
+                            onInput={growNotebookTextarea}
+                            onFocus={growNotebookTextarea}
+                          />
+                        </label>
+
+                        <div className="sb-notebook-plan-strip">
+                          <label>
+                            <span>Periods</span>
+                            <input
+                              type="number"
+                              value={it.periods}
+                              onChange={(e) => updateItem(idx, "periods", e.target.value)}
+                              placeholder="8"
+                            />
+                          </label>
+
+                          <label>
+                            <span>Planned From</span>
+                            <input
+                              type="date"
+                              value={it.planned_from}
+                              onChange={(e) => updateItem(idx, "planned_from", e.target.value)}
+                            />
+                          </label>
+
+                          <label>
+                            <span>Planned To</span>
+                            <input
+                              type="date"
+                              value={it.planned_to}
+                              onChange={(e) => updateItem(idx, "planned_to", e.target.value)}
+                            />
+                          </label>
+
+                          <label>
+                            <span>Month</span>
+                            <input
+                              value={it.planned_month}
+                              maxLength={20}
+                              onChange={(e) =>
+                                updateItem(idx, "planned_month", e.target.value.slice(0, 20))
+                              }
+                              placeholder="April / Q1"
+                            />
+                          </label>
+                        </div>
+
+                        <label className="sb-notebook-writing-block sb-notebook-remarks">
+                          <span className="sb-notebook-section-label">Teacher Notes / Remarks</span>
+                          <textarea
+                            rows={2}
+                            value={it.remarks}
+                            onChange={(e) => updateItem(idx, "remarks", e.target.value)}
+                            placeholder="Optional notes, resources, activities or reminders..."
+                            className="sb-auto-grow"
+                            onInput={growNotebookTextarea}
+                            onFocus={growNotebookTextarea}
+                          />
+                        </label>
                       </div>
+                    </section>
+                  ))}
 
-                      <Row className="g-2">
-                        <Col xs={12} sm={4}>
-                          <Form.Label>Unit No</Form.Label>
-                          <Form.Control value={it.unit_no} onChange={(e) => updateItem(idx, "unit_no", e.target.value)} placeholder="1 / I" />
-                        </Col>
+                  {(formData.items || []).length === 0 && (
+                    <div className="sb-notebook-empty">
+                      No chapter added yet.
+                      <Button variant="link" type="button" onClick={addItemRow}>
+                        Add your first chapter
+                      </Button>
+                    </div>
+                  )}
+                </div>
 
-                        <Col xs={12} sm={8}>
-                          <Form.Label>Unit Title *</Form.Label>
-                          <Form.Control value={it.unit_title} onChange={(e) => updateItem(idx, "unit_title", e.target.value)} placeholder="Chapter / Unit title" required />
-                        </Col>
-
-                        <Col xs={12}>
-                          <Form.Label>Topics</Form.Label>
-                          <Form.Control as="textarea" rows={2} value={it.topics} onChange={(e) => updateItem(idx, "topics", e.target.value)} placeholder="Topics..." />
-                        </Col>
-
-                        <Col xs={12}>
-                          <Form.Label>Subtopics</Form.Label>
-                          <Form.Control as="textarea" rows={2} value={it.subtopics} onChange={(e) => updateItem(idx, "subtopics", e.target.value)} placeholder="Subtopics..." />
-                        </Col>
-
-                        <Col xs={12} sm={4}>
-                          <Form.Label>Periods</Form.Label>
-                          <Form.Control type="number" value={it.periods} onChange={(e) => updateItem(idx, "periods", e.target.value)} placeholder="e.g. 8" />
-                        </Col>
-
-                        <Col xs={12} sm={4}>
-                          <Form.Label>From</Form.Label>
-                          <Form.Control type="date" value={it.planned_from} onChange={(e) => updateItem(idx, "planned_from", e.target.value)} />
-                        </Col>
-
-                        <Col xs={12} sm={4}>
-                          <Form.Label>To</Form.Label>
-                          <Form.Control type="date" value={it.planned_to} onChange={(e) => updateItem(idx, "planned_to", e.target.value)} />
-                        </Col>
-
-                        <Col xs={12} sm={6}>
-                          <Form.Label>Month</Form.Label>
-                          <Form.Control value={it.planned_month} maxLength={20} onChange={(e) => updateItem(idx, "planned_month", e.target.value.slice(0, 20))} placeholder="April / Q1" />
-                        </Col>
-
-                        <Col xs={12} sm={6}>
-                          <Form.Label>Remarks</Form.Label>
-                          <Form.Control value={it.remarks} onChange={(e) => updateItem(idx, "remarks", e.target.value)} placeholder="Notes..." />
-                        </Col>
-                      </Row>
-                    </Card.Body>
-                  </Card>
-                ))}
+                <button
+                  type="button"
+                  className="sb-notebook-add-page"
+                  onClick={addItemRow}
+                >
+                  <i className="bi bi-plus-circle me-2" />
+                  Continue with another chapter
+                </button>
               </div>
 
-              <div className="sb-sticky-actions">
-                <div className="d-grid d-sm-flex gap-2 justify-content-end mt-3">
+              <div className="sb-sticky-actions sb-notebook-actions">
+                <div className="sb-notebook-action-note">
+                  <i className="bi bi-journal-check" />
+                  <span>Your writing stays visible while you type.</span>
+                </div>
+                <div className="d-flex gap-2">
                   <Button variant="secondary" onClick={() => setShowModal(false)} type="button">
                     Close
                   </Button>
                   <Button variant="primary" type="submit">
-                    {editing ? "Update" : "Save"}
+                    {editing ? "Update Draft" : "Save Draft"}
                   </Button>
                 </div>
               </div>

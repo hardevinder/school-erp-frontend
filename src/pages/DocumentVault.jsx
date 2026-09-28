@@ -163,7 +163,7 @@ function UploadModal({ show, requirement, owner, onClose, onSaved, uploadFn }) {
   };
 
   return (
-    <div className="modal d-block" tabIndex="-1" style={{ background: "rgba(15,23,42,.55)", zIndex: 4000 }}>
+    <div className="modal d-block" tabIndex="-1" style={{ background: "color-mix(in srgb, var(--edb-primary-dark) 55%, transparent)", zIndex: 4000 }}>
       <div className="modal-dialog modal-dialog-centered modal-lg">
         <form className="modal-content border-0 shadow" onSubmit={submit}>
           <div className="modal-header">
@@ -385,7 +385,7 @@ function TypeManager({ scopes }) {
       </div>
 
       {showAdd && (
-        <div className="modal d-block" style={{ background: "rgba(15,23,42,.55)", zIndex: 4000 }}>
+        <div className="modal d-block" style={{ background: "color-mix(in srgb, var(--edb-primary-dark) 55%, transparent)", zIndex: 4000 }}>
           <div className="modal-dialog modal-dialog-centered">
             <form className="modal-content" onSubmit={saveNew}>
               <div className="modal-header"><h5 className="modal-title">Add {OWNER_LABELS[scope]} Document Type</h5><button type="button" className="btn-close" onClick={() => setShowAdd(false)} /></div>
@@ -507,7 +507,7 @@ export default function DocumentVault() {
 
   return (
     <div className="container-fluid py-3 px-3 px-lg-4" style={{ maxWidth: 1500 }}>
-      <div className="rounded-4 p-4 mb-4 text-white shadow-sm" style={{ background: "linear-gradient(135deg,#1d4ed8,#4f46e5 55%,#7c3aed)" }}>
+      <div className="rounded-4 p-4 mb-4 text-white shadow-sm" style={{ background: "linear-gradient(135deg,var(--edb-primary),var(--edb-primary) 55%,var(--edb-primary))" }}>
         <div className="d-flex justify-content-between align-items-start gap-3 flex-wrap">
           <div>
             <div className="text-uppercase small fw-bold opacity-75 mb-1">Secure Digital Records</div>

@@ -84,6 +84,67 @@ const asUpper = (v) => safeStr(v).toUpperCase();
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+const growNotebookTextarea = (event) => {
+  const el = event.currentTarget;
+  if (!el) return;
+  el.style.height = "auto";
+  el.style.height = `${el.scrollHeight}px`;
+};
+
+const ChoiceButtons = ({
+  label,
+  options = [],
+  value,
+  onChange,
+  disabled = false,
+  emptyText = "No options available",
+  dense = false,
+  scroll = false,
+}) => {
+  const normalized = (options || [])
+    .map((option) => {
+      if (option && typeof option === "object" && Object.prototype.hasOwnProperty.call(option, "value")) {
+        return { value: option.value, label: option.label ?? option.value };
+      }
+      return { value: option, label: option };
+    })
+    .filter((option) => option.value !== undefined && option.value !== null && safeStr(option.label).trim());
+
+  const current = safeStr(value);
+  const hasCurrent = normalized.some((option) => safeStr(option.value) === current);
+  const shown = current && !hasCurrent
+    ? [{ value, label: current, retained: true }, ...normalized]
+    : normalized;
+
+  return (
+    <div className={`lp-choice-group ${dense ? "dense" : ""}`}>
+      {label ? <div className="lp-choice-label">{label}</div> : null}
+      <div className={`lp-choice-list ${scroll ? "scroll" : ""}`}>
+        {shown.length ? (
+          shown.map((option, index) => {
+            const selected = safeStr(option.value) === current;
+            return (
+              <button
+                key={`${safeStr(option.value)}_${index}`}
+                type="button"
+                className={`lp-choice-btn ${selected ? "active" : ""} ${option.retained ? "retained" : ""}`}
+                aria-pressed={selected}
+                disabled={disabled}
+                onClick={() => onChange?.(option.value)}
+                title={safeStr(option.label)}
+              >
+                {safeStr(option.label)}
+              </button>
+            );
+          })
+        ) : (
+          <span className="lp-empty-note">{emptyText}</span>
+        )}
+      </div>
+    </div>
+  );
+};
+
 /* ---------------- component ---------------- */
 
 const LessonPlanCRUD = () => {
@@ -1503,11 +1564,12 @@ const LessonPlanCRUD = () => {
         backdrop="static"
         keyboard={false}
         fullscreen="md-down"
-        dialogClassName="lesson-plan-modal-dialog"
-        contentClassName="border-0 lesson-plan-modal-content"
+        dialogClassName="lesson-plan-modal-dialog lesson-plan-notebook-dialog"
+        contentClassName="border-0 lesson-plan-modal-content lesson-plan-notebook-content"
       >
-        <Modal.Header closeButton className="bg-white">
+        <Modal.Header closeButton className="lesson-plan-notebook-header">
           <div className="w-100">
+            <div className="lp-notebook-kicker">TEACHER LESSON NOTEBOOK</div>
             <Modal.Title className="d-flex align-items-center justify-content-between gap-2">
               <span className="d-flex align-items-center gap-2">
                 <span>{editing ? "Edit Lesson Plan" : "Create Lesson Plan"}</span>
@@ -1595,7 +1657,7 @@ const LessonPlanCRUD = () => {
         </Modal.Header>
 
         <Form onSubmit={handleSubmit}>
-          <Modal.Body style={modalBodyStyle}>
+          <Modal.Body style={modalBodyStyle} className="lesson-plan-notebook-body">
             {aiImportInfo ? (
               <div
                 className={`alert mb-3 ${
@@ -1619,431 +1681,427 @@ const LessonPlanCRUD = () => {
               </div>
             ) : null}
 
-            <Row className="g-3">
-              {/* Left column */}
-              <Col xs={12} lg={6}>
-                <Card className="border-0 shadow-sm">
-                  <Card.Body>
-                    <div className="fw-semibold mb-2">Basics</div>
+            <div className="lesson-plan-notebook-shell">
+              <section className="lp-context-card">
+                <div className="lp-context-heading">
+                  <div>
+                    <div className="lp-section-eyebrow">SET THE CONTEXT</div>
+                    <h5 className="mb-1">Lesson Context</h5>
+                    <div className="text-muted small">Keep the essentials compact; spend the space on actual teaching notes.</div>
+                  </div>
+                  <div className="lp-status-pills d-md-none">
+                    <Badge bg={statusVariant(asUpper(formData.status))}>{asUpper(formData.status)}</Badge>
+                    <Badge bg={completionVariant(asUpper(formData.completionStatus))}>{asUpper(formData.completionStatus)}</Badge>
+                  </div>
+                </div>
 
-                    <Row className="g-2">
-                      <Col xs={12} md={6}>
-                        <Form.Group>
-                          <Form.Label className="small">Class *</Form.Label>
-                          <Form.Select
-                            value={formData.classId}
-                            onChange={(e) => onField("classId", e.target.value)}
-                            required
-                          >
-                            <option value="">-- Select Class --</option>
-                            {classes.map((c) => (
-                              <option key={c.id} value={c.id}>
-                                {c.class_name}
-                              </option>
-                            ))}
-                          </Form.Select>
-                        </Form.Group>
-                      </Col>
+                <div className="lp-primary-choice-stack mt-3">
+                  <ChoiceButtons
+                    label="Class *"
+                    options={classes.map((c) => ({ value: c.id, label: c.class_name }))}
+                    value={formData.classId}
+                    onChange={(value) => onField("classId", value)}
+                    emptyText="No assigned classes found"
+                    scroll
+                  />
 
-                      <Col xs={12} md={6}>
-                        <Form.Group>
-                          <Form.Label className="small">Subject *</Form.Label>
-                          <Form.Select
-                            value={formData.subjectId}
-                            onChange={(e) => onField("subjectId", e.target.value)}
-                            required
-                          >
-                            <option value="">-- Select Subject --</option>
-                            {subjects.map((s) => (
-                              <option key={s.id} value={s.id}>
-                                {s.name}
-                              </option>
-                            ))}
-                          </Form.Select>
-                        </Form.Group>
-                      </Col>
+                  <ChoiceButtons
+                    label="Subject *"
+                    options={subjects.map((subject) => ({ value: subject.id, label: subject.name }))}
+                    value={formData.subjectId}
+                    onChange={(value) => onField("subjectId", value)}
+                    emptyText="No assigned subjects found"
+                    scroll
+                  />
 
-                      <Col xs={12} md={6}>
-                        <Form.Group>
-                          <Form.Label className="small">Term</Form.Label>
-                          <Form.Select value={formData.term} onChange={(e) => onField("term", e.target.value)}>
-                            {termOptions.map((t) => (
-                              <option key={t.value} value={t.value}>
-                                {t.label}
-                              </option>
-                            ))}
-                          </Form.Select>
-                        </Form.Group>
-                      </Col>
+                  <ChoiceButtons
+                    label="Term"
+                    options={termOptions}
+                    value={formData.term}
+                    onChange={(value) => onField("term", value)}
+                    dense
+                  />
+                </div>
 
-                      <Col xs={12} md={6}>
-                        <Form.Group>
-                          <Form.Label className="small">Academic Session</Form.Label>
-                          <Form.Control
-                            placeholder="e.g. 2025-26"
-                            value={formData.academicSession}
-                            onChange={(e) => onField("academicSession", e.target.value)}
-                          />
-                        </Form.Group>
-                      </Col>
+                <Row className="g-3 mt-1 lp-context-fields">
+                  <Col xs={12} md={4}>
+                    <Form.Group>
+                      <Form.Label className="lp-compact-label">Week Start *</Form.Label>
+                      <Form.Control
+                        className="lp-compact-control"
+                        type="date"
+                        value={formData.weekStart}
+                        onChange={(e) => onField("weekStart", e.target.value)}
+                        required
+                      />
+                    </Form.Group>
+                  </Col>
 
-                      <Col xs={12} md={6}>
-                        <Form.Group>
-                          <Form.Label className="small">Week Start *</Form.Label>
-                          <Form.Control
-                            type="date"
-                            value={formData.weekStart}
-                            onChange={(e) => onField("weekStart", e.target.value)}
-                            required
-                          />
-                        </Form.Group>
-                      </Col>
+                  <Col xs={12} md={4}>
+                    <Form.Group>
+                      <Form.Label className="lp-compact-label">Week End *</Form.Label>
+                      <Form.Control
+                        className="lp-compact-control"
+                        type="date"
+                        value={formData.weekEnd}
+                        onChange={(e) => onField("weekEnd", e.target.value)}
+                        required
+                      />
+                    </Form.Group>
+                  </Col>
 
-                      <Col xs={12} md={6}>
-                        <Form.Group>
-                          <Form.Label className="small">Week End *</Form.Label>
-                          <Form.Control
-                            type="date"
-                            value={formData.weekEnd}
-                            onChange={(e) => onField("weekEnd", e.target.value)}
-                            required
-                          />
-                        </Form.Group>
-                      </Col>
-                    </Row>
+                  <Col xs={12} md={4}>
+                    <Form.Group>
+                      <Form.Label className="lp-compact-label">Academic Session</Form.Label>
+                      <Form.Control
+                        className="lp-compact-control"
+                        placeholder="2026-27"
+                        value={formData.academicSession}
+                        onChange={(e) => onField("academicSession", e.target.value)}
+                      />
+                    </Form.Group>
+                  </Col>
+                </Row>
 
-                    <hr className="my-3" />
+                <div className="lp-sections-row">
+                  <div className="lp-sections-label">
+                    <span>Applicable Sections</span>
+                    <Form.Check
+                      type="switch"
+                      id="toggleAllSections"
+                      label="All"
+                      checked={allSelected}
+                      disabled={!formData.classId || sections.length === 0}
+                      onChange={(e) => toggleAllSections(e.target.checked)}
+                    />
+                  </div>
+                  <div className="lp-section-chips">
+                    {!formData.classId ? (
+                      <span className="lp-empty-note">Choose a class to load sections.</span>
+                    ) : sections.length === 0 ? (
+                      <span className="lp-empty-note">No sections found for this class.</span>
+                    ) : (
+                      sections.map((section) => {
+                        const checked = formData.sections?.includes(Number(section.id));
+                        return (
+                          <label key={section.id} className={`lp-section-chip ${checked ? "active" : ""}`}>
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={(e) => toggleSection(section.id, e.target.checked)}
+                            />
+                            <span>{section.section_name || section.name || `#${section.id}`}</span>
+                          </label>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              </section>
 
-                    <div className="fw-semibold mb-2">Applicable Sections</div>
+              <section className="lp-notebook-paper">
+                <div className="lp-paper-title-row">
+                  <div>
+                    <div className="lp-section-eyebrow">WRITE THE LESSON</div>
+                    <h5 className="mb-1">Teaching Notebook</h5>
+                    <div className="text-muted small">Write naturally. Notes grow as you type, so nothing gets hidden inside a small field.</div>
+                  </div>
+                  <span className="lp-auto-grow-badge">Auto-expanding notes</span>
+                </div>
 
-                    <div className="d-flex justify-content-between align-items-center mb-2">
-                      <div className="text-muted small">Select one or more sections (recommended)</div>
-                      <Form.Check
-                        type="switch"
-                        id="toggleAllSections"
-                        label="Select All"
-                        checked={allSelected}
-                        disabled={!formData.classId || sections.length === 0}
-                        onChange={(e) => toggleAllSections(e.target.checked)}
+                <div className="lp-notebook-section lp-syllabus-focus">
+                  <div className="lp-notebook-section-title">
+                    <span className="lp-section-number">01</span>
+                    <div>
+                      <strong>Syllabus Focus</strong>
+                      <small>Pick the unit/topic already planned in Syllabus Breakdown.</small>
+                    </div>
+                  </div>
+
+                  <div className="lp-syllabus-choice-stack mt-1">
+                    <ChoiceButtons
+                      label="Unit / Breakdown Item"
+                      options={breakdownItems.map((item) => ({
+                        value: item.id,
+                        label: `${item.unitNumber ? `${item.unitNumber} - ` : ""}${item.unitTitle || `Unit #${item.id}`}`,
+                      }))}
+                      value={formData.breakdownItemId}
+                      onChange={(value) => onField("breakdownItemId", value)}
+                      disabled={!formData.classId || !formData.subjectId}
+                      emptyText={
+                        formData.classId && formData.subjectId
+                          ? "No breakdown items found"
+                          : "Select Class & Subject first"
+                      }
+                      scroll
+                    />
+                    {breakdown ? (
+                      <div className="lp-inline-hint">Breakdown #{breakdown.id}{breakdown.status ? ` • ${breakdown.status}` : ""}</div>
+                    ) : null}
+
+                    <ChoiceButtons
+                      label="Topic"
+                      options={topicOptions.map((topic) => ({ value: topic, label: topic }))}
+                      value={formData.topic}
+                      onChange={(value) => onField("topic", value)}
+                      disabled={!topicOptions.length}
+                      emptyText="Select a unit to load topics"
+                      scroll
+                    />
+
+                    <ChoiceButtons
+                      label="Subtopic"
+                      options={subtopicOptions.map((subtopic) => ({ value: subtopic, label: subtopic }))}
+                      value={formData.subtopic}
+                      onChange={(value) => onField("subtopic", value)}
+                      disabled={!subtopicOptions.length}
+                      emptyText="Select a unit to load subtopics"
+                      scroll
+                    />
+                  </div>
+                </div>
+
+                <div className="lp-notebook-section">
+                  <div className="lp-notebook-section-title">
+                    <span className="lp-section-number">02</span>
+                    <div>
+                      <strong>Learning Intention</strong>
+                      <small>What should students understand or be able to do?</small>
+                    </div>
+                  </div>
+                  <div className="lp-writing-block">
+                    <label>Specific Objectives</label>
+                    <Form.Control
+                      as="textarea"
+                      rows={3}
+                      className="lp-writing-area"
+                      placeholder="Write the learning objectives here..."
+                      value={formData.specificObjectives}
+                      onChange={(e) => onField("specificObjectives", e.target.value)}
+                      onInput={growNotebookTextarea}
+                    />
+                  </div>
+                </div>
+
+                <div className="lp-notebook-section">
+                  <div className="lp-notebook-section-title">
+                    <span className="lp-section-number">03</span>
+                    <div>
+                      <strong>Teaching Notes</strong>
+                      <small>How you plan to explain, demonstrate and engage the class.</small>
+                    </div>
+                  </div>
+
+                  <div className="lp-writing-grid">
+                    <div className="lp-writing-block">
+                      <label>Teaching Method</label>
+                      <Form.Control
+                        as="textarea"
+                        rows={2}
+                        className="lp-writing-area lp-writing-area-compact"
+                        placeholder="Lecture, demonstration, discussion, group work..."
+                        value={formData.teachingMethod}
+                        onChange={(e) => onField("teachingMethod", e.target.value)}
+                        onInput={growNotebookTextarea}
                       />
                     </div>
-
-                    <div className="border rounded p-2" style={{ maxHeight: 160, overflowY: "auto" }}>
-                      {!formData.classId ? (
-                        <div className="text-muted small">Select a class to load sections.</div>
-                      ) : sections.length === 0 ? (
-                        <div className="text-muted small">
-                          No sections found for this class (or sections API not available).
-                        </div>
-                      ) : (
-                        <Row className="g-2">
-                          {sections.map((s) => (
-                            <Col xs={6} md={4} key={s.id}>
-                              <Form.Check
-                                type="checkbox"
-                                id={`sec_${s.id}`}
-                                label={s.section_name || s.name || `#${s.id}`}
-                                checked={formData.sections?.includes(Number(s.id))}
-                                onChange={(e) => toggleSection(s.id, e.target.checked)}
-                              />
-                            </Col>
-                          ))}
-                        </Row>
-                      )}
+                    <div className="lp-writing-block">
+                      <label>Teaching Aids</label>
+                      <Form.Control
+                        as="textarea"
+                        rows={2}
+                        className="lp-writing-area lp-writing-area-compact"
+                        placeholder="Smartboard, charts, lab material, models..."
+                        value={formData.teachingAids}
+                        onChange={(e) => onField("teachingAids", e.target.value)}
+                        onInput={growNotebookTextarea}
+                      />
                     </div>
-                  </Card.Body>
-                </Card>
+                  </div>
 
-                <Card className="border-0 shadow-sm mt-3">
-                  <Card.Body>
-                    <div className="fw-semibold mb-2">Workflow</div>
+                  <div className="lp-writing-block">
+                    <label>Classroom Activities</label>
+                    <Form.Control
+                      as="textarea"
+                      rows={3}
+                      className="lp-writing-area"
+                      placeholder="Write the activity sequence, examples, discussion prompts or student tasks..."
+                      value={formData.activities}
+                      onChange={(e) => onField("activities", e.target.value)}
+                      onInput={growNotebookTextarea}
+                    />
+                  </div>
 
-                    <Row className="g-2">
-                      <Col xs={12} md={6}>
-                        <Form.Group>
-                          <Form.Label className="small">Status</Form.Label>
-                          <Form.Select value={formData.status} onChange={(e) => onField("status", e.target.value)}>
-                            <option value="Draft">Draft</option>
-                            <option value="Submitted">Submitted</option>
-                            <option value="Approved">Approved</option>
-                            <option value="Returned">Returned</option>
-                          </Form.Select>
-                        </Form.Group>
-                      </Col>
+                  <div className="lp-writing-block">
+                    <label>Resources / Material</label>
+                    <Form.Control
+                      as="textarea"
+                      rows={2}
+                      className="lp-writing-area"
+                      placeholder="Books, links, worksheets, videos, reference material..."
+                      value={formData.resources}
+                      onChange={(e) => onField("resources", e.target.value)}
+                      onInput={growNotebookTextarea}
+                    />
+                  </div>
+                </div>
 
-                      <Col xs={12} md={6}>
-                        <Form.Group>
-                          <Form.Label className="small">Completion</Form.Label>
-                          <Form.Select
-                            value={formData.completionStatus}
-                            onChange={(e) => onField("completionStatus", e.target.value)}
-                          >
-                            <option value="Planned">Planned</option>
-                            <option value="Completed">Completed</option>
-                            <option value="Partial">Partial</option>
-                          </Form.Select>
-                        </Form.Group>
-                      </Col>
+                <div className="lp-notebook-section">
+                  <div className="lp-notebook-section-title">
+                    <span className="lp-section-number">04</span>
+                    <div>
+                      <strong>Check Learning & Homework</strong>
+                      <small>How learning will be checked and what students will continue at home.</small>
+                    </div>
+                  </div>
 
-                      <Col xs={12} md={6}>
-                        <Form.Group>
-                          <Form.Label className="small">Planned Periods</Form.Label>
-                          <Form.Control
-                            type="number"
-                            min={0}
-                            value={formData.plannedPeriods}
-                            onChange={(e) => onField("plannedPeriods", e.target.value)}
-                          />
-                        </Form.Group>
-                      </Col>
+                  <div className="lp-writing-grid">
+                    <div className="lp-writing-block">
+                      <label>Evaluation Method</label>
+                      <Form.Control
+                        as="textarea"
+                        rows={2}
+                        className="lp-writing-area lp-writing-area-compact"
+                        placeholder="Oral questions, quiz, practical, worksheet..."
+                        value={formData.evaluationMethod}
+                        onChange={(e) => onField("evaluationMethod", e.target.value)}
+                        onInput={growNotebookTextarea}
+                      />
+                    </div>
+                    <div className="lp-writing-block">
+                      <label>Assessment Plan</label>
+                      <Form.Control
+                        as="textarea"
+                        rows={2}
+                        className="lp-writing-area lp-writing-area-compact"
+                        placeholder="Criteria, rubric, short test or evidence of learning..."
+                        value={formData.assessmentPlan}
+                        onChange={(e) => onField("assessmentPlan", e.target.value)}
+                        onInput={growNotebookTextarea}
+                      />
+                    </div>
+                  </div>
 
-                      <Col xs={12} md={6} className="d-flex align-items-end">
-                        <Form.Check
-                          type="switch"
-                          id="publishSwitch"
-                          label="Publish"
-                          checked={!!formData.publish}
-                          onChange={(e) => onField("publish", e.target.checked)}
-                        />
-                      </Col>
-                    </Row>
-                  </Card.Body>
-                </Card>
-              </Col>
+                  <div className="lp-writing-block">
+                    <label>Homework / Practice</label>
+                    <Form.Control
+                      as="textarea"
+                      rows={3}
+                      className="lp-writing-area"
+                      placeholder="Write homework, practice questions or follow-up work..."
+                      value={formData.homework}
+                      onChange={(e) => onField("homework", e.target.value)}
+                      onInput={growNotebookTextarea}
+                    />
+                  </div>
+                </div>
 
-              {/* Right column */}
-              <Col xs={12} lg={6}>
-                <Accordion defaultActiveKey="0" alwaysOpen className="shadow-sm rounded">
-                  <Accordion.Item eventKey="0">
-                    <Accordion.Header>Pick from Syllabus Breakdown</Accordion.Header>
-                    <Accordion.Body>
-                      <div className="text-muted small mb-2">
-                        Select Unit → then Topic/Subtopic dropdown will auto-load.
-                      </div>
+                <div className="lp-notebook-section">
+                  <div className="lp-notebook-section-title">
+                    <span className="lp-section-number">05</span>
+                    <div>
+                      <strong>Support & Extension</strong>
+                      <small>Plan support for students who need help and extension for those ready to go further.</small>
+                    </div>
+                  </div>
 
-                      <Row className="g-2">
-                        <Col xs={12}>
-                          <Form.Group>
-                            <Form.Label className="small">Unit / Breakdown Item</Form.Label>
-                            <Form.Select
-                              value={formData.breakdownItemId}
-                              onChange={(e) => onField("breakdownItemId", e.target.value)}
-                              disabled={!formData.classId || !formData.subjectId}
-                            >
-                              <option value="">
-                                {formData.classId && formData.subjectId
-                                  ? breakdownItems.length
-                                    ? "-- Select Unit --"
-                                    : "No breakdown items found"
-                                  : "Select class & subject first"}
-                              </option>
+                  <div className="lp-writing-grid">
+                    <div className="lp-writing-block">
+                      <label>Remedial Plan</label>
+                      <Form.Control
+                        as="textarea"
+                        rows={3}
+                        className="lp-writing-area"
+                        placeholder="Extra explanation, practice or support..."
+                        value={formData.remedialPlan}
+                        onChange={(e) => onField("remedialPlan", e.target.value)}
+                        onInput={growNotebookTextarea}
+                      />
+                    </div>
+                    <div className="lp-writing-block">
+                      <label>Enrichment Plan</label>
+                      <Form.Control
+                        as="textarea"
+                        rows={3}
+                        className="lp-writing-area"
+                        placeholder="Challenge task, extension activity or deeper exploration..."
+                        value={formData.enrichmentPlan}
+                        onChange={(e) => onField("enrichmentPlan", e.target.value)}
+                        onInput={growNotebookTextarea}
+                      />
+                    </div>
+                  </div>
 
-                              {breakdownItems.map((it) => (
-                                <option key={it.id} value={it.id}>
-                                  {it.unitNumber ? `${it.unitNumber} - ` : ""}
-                                  {it.unitTitle || `Unit #${it.id}`}
-                                </option>
-                              ))}
-                            </Form.Select>
+                  <div className="lp-writing-block">
+                    <label>Teacher Remarks</label>
+                    <Form.Control
+                      as="textarea"
+                      rows={2}
+                      className="lp-writing-area"
+                      placeholder="Any note you want to keep with this lesson plan..."
+                      value={formData.remarks}
+                      onChange={(e) => onField("remarks", e.target.value)}
+                      onInput={growNotebookTextarea}
+                    />
+                  </div>
+                </div>
+              </section>
 
-                            {breakdown && (
-                              <div className="text-muted small mt-1">
-                                Breakdown: #{breakdown.id}{" "}
-                                {breakdown.status ? `• Status: ${breakdown.status}` : ""}
-                              </div>
-                            )}
-                          </Form.Group>
-                        </Col>
+              <section className="lp-planning-strip">
+                <div className="lp-planning-title">
+                  <strong>Plan & Workflow</strong>
+                  <span>Compact controls only — your writing stays above.</span>
+                </div>
+                <div className="lp-planning-controls lp-planning-controls-buttons">
+                  <ChoiceButtons
+                    label="Status"
+                    options={[
+                      { value: "Draft", label: "Draft" },
+                      { value: "Submitted", label: "Submitted" },
+                      { value: "Approved", label: "Approved" },
+                      { value: "Returned", label: "Returned" },
+                    ]}
+                    value={formData.status}
+                    onChange={(value) => onField("status", value)}
+                    dense
+                  />
 
-                        <Col xs={12} md={6}>
-                          <Form.Group>
-                            <Form.Label className="small">Topic</Form.Label>
-                            <Form.Select
-                              value={formData.topic}
-                              onChange={(e) => onField("topic", e.target.value)}
-                              disabled={!topicOptions.length}
-                            >
-                              <option value="">
-                                {topicOptions.length ? "-- Select Topic --" : "Select unit first"}
-                              </option>
-                              {topicOptions.map((t, idx) => (
-                                <option key={`${t}_${idx}`} value={t}>
-                                  {t}
-                                </option>
-                              ))}
-                            </Form.Select>
-                          </Form.Group>
-                        </Col>
+                  <ChoiceButtons
+                    label="Completion"
+                    options={[
+                      { value: "Planned", label: "Planned" },
+                      { value: "Completed", label: "Completed" },
+                      { value: "Partial", label: "Partial" },
+                    ]}
+                    value={formData.completionStatus}
+                    onChange={(value) => onField("completionStatus", value)}
+                    dense
+                  />
 
-                        <Col xs={12} md={6}>
-                          <Form.Group>
-                            <Form.Label className="small">Subtopic</Form.Label>
-                            <Form.Select
-                              value={formData.subtopic}
-                              onChange={(e) => onField("subtopic", e.target.value)}
-                              disabled={!subtopicOptions.length}
-                            >
-                              <option value="">
-                                {subtopicOptions.length ? "-- Select Subtopic --" : "Select unit first"}
-                              </option>
-                              {subtopicOptions.map((t, idx) => (
-                                <option key={`${t}_${idx}`} value={t}>
-                                  {t}
-                                </option>
-                              ))}
-                            </Form.Select>
-                          </Form.Group>
-                        </Col>
-                      </Row>
-
-                      <div className="mt-3 small text-muted">Tip: Choose Unit + Topic for best AI output ✨</div>
-                    </Accordion.Body>
-                  </Accordion.Item>
-
-                  <Accordion.Item eventKey="1">
-                    <Accordion.Header>Teaching Plan</Accordion.Header>
-                    <Accordion.Body>
-                      <Row className="g-2">
-                        <Col xs={12}>
-                          <Form.Group>
-                            <Form.Label className="small">Specific Objectives</Form.Label>
-                            <Form.Control
-                              as="textarea"
-                              rows={2}
-                              value={formData.specificObjectives}
-                              onChange={(e) => onField("specificObjectives", e.target.value)}
-                            />
-                          </Form.Group>
-                        </Col>
-
-                        <Col xs={12} md={6}>
-                          <Form.Group>
-                            <Form.Label className="small">Teaching Method</Form.Label>
-                            <Form.Control
-                              placeholder="Lecture / Activity / Demo / Group work..."
-                              value={formData.teachingMethod}
-                              onChange={(e) => onField("teachingMethod", e.target.value)}
-                            />
-                          </Form.Group>
-                        </Col>
-
-                        <Col xs={12} md={6}>
-                          <Form.Group>
-                            <Form.Label className="small">Teaching Aids</Form.Label>
-                            <Form.Control
-                              placeholder="PPT / Smartboard / Charts / Lab tools..."
-                              value={formData.teachingAids}
-                              onChange={(e) => onField("teachingAids", e.target.value)}
-                            />
-                          </Form.Group>
-                        </Col>
-
-                        <Col xs={12}>
-                          <Form.Group>
-                            <Form.Label className="small">Activities</Form.Label>
-                            <Form.Control
-                              as="textarea"
-                              rows={2}
-                              value={formData.activities}
-                              onChange={(e) => onField("activities", e.target.value)}
-                            />
-                          </Form.Group>
-                        </Col>
-
-                        <Col xs={12}>
-                          <Form.Group>
-                            <Form.Label className="small">Resources</Form.Label>
-                            <Form.Control
-                              as="textarea"
-                              rows={2}
-                              value={formData.resources}
-                              onChange={(e) => onField("resources", e.target.value)}
-                            />
-                          </Form.Group>
-                        </Col>
-                      </Row>
-                    </Accordion.Body>
-                  </Accordion.Item>
-
-                  <Accordion.Item eventKey="2">
-                    <Accordion.Header>Evaluation & Homework</Accordion.Header>
-                    <Accordion.Body>
-                      <Row className="g-2">
-                        <Col xs={12} md={6}>
-                          <Form.Group>
-                            <Form.Label className="small">Evaluation Method</Form.Label>
-                            <Form.Control
-                              placeholder="Quiz / Oral / Worksheet / Practical..."
-                              value={formData.evaluationMethod}
-                              onChange={(e) => onField("evaluationMethod", e.target.value)}
-                            />
-                          </Form.Group>
-                        </Col>
-
-                        <Col xs={12} md={6}>
-                          <Form.Group>
-                            <Form.Label className="small">Assessment Plan</Form.Label>
-                            <Form.Control
-                              placeholder="Short test, rubric, criteria..."
-                              value={formData.assessmentPlan}
-                              onChange={(e) => onField("assessmentPlan", e.target.value)}
-                            />
-                          </Form.Group>
-                        </Col>
-
-                        <Col xs={12}>
-                          <Form.Group>
-                            <Form.Label className="small">Homework</Form.Label>
-                            <Form.Control
-                              as="textarea"
-                              rows={2}
-                              value={formData.homework}
-                              onChange={(e) => onField("homework", e.target.value)}
-                            />
-                          </Form.Group>
-                        </Col>
-
-                        <Col xs={12} md={6}>
-                          <Form.Group>
-                            <Form.Label className="small">Remedial Plan</Form.Label>
-                            <Form.Control
-                              as="textarea"
-                              rows={2}
-                              value={formData.remedialPlan}
-                              onChange={(e) => onField("remedialPlan", e.target.value)}
-                            />
-                          </Form.Group>
-                        </Col>
-
-                        <Col xs={12} md={6}>
-                          <Form.Group>
-                            <Form.Label className="small">Enrichment Plan</Form.Label>
-                            <Form.Control
-                              as="textarea"
-                              rows={2}
-                              value={formData.enrichmentPlan}
-                              onChange={(e) => onField("enrichmentPlan", e.target.value)}
-                            />
-                          </Form.Group>
-                        </Col>
-
-                        <Col xs={12}>
-                          <Form.Group>
-                            <Form.Label className="small">Remarks</Form.Label>
-                            <Form.Control
-                              as="textarea"
-                              rows={2}
-                              value={formData.remarks}
-                              onChange={(e) => onField("remarks", e.target.value)}
-                            />
-                          </Form.Group>
-                        </Col>
-                      </Row>
-                    </Accordion.Body>
-                  </Accordion.Item>
-                </Accordion>
-              </Col>
-            </Row>
+                  <div className="lp-planning-inline">
+                    <div>
+                      <label>Planned Periods</label>
+                      <Form.Control
+                        className="lp-compact-control"
+                        type="number"
+                        min={0}
+                        value={formData.plannedPeriods}
+                        onChange={(e) => onField("plannedPeriods", e.target.value)}
+                      />
+                    </div>
+                    <div className="lp-publish-toggle">
+                      <Form.Check
+                        type="switch"
+                        id="publishSwitch"
+                        label="Publish"
+                        checked={!!formData.publish}
+                        onChange={(e) => onField("publish", e.target.checked)}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </section>
+            </div>
           </Modal.Body>
 
           <Modal.Footer className="bg-white lesson-plan-modal-footer">

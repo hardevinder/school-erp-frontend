@@ -353,7 +353,7 @@ function MessageListVertical({ messages = [], currentUserId, scrollKey, loading 
   }, [scrollKey, messages.length]);
 
   return (
-    <div ref={boxRef} style={{ flex: 1, overflowY: "auto", padding: "1rem", background: "#f8f9fa" }}>
+    <div ref={boxRef} style={{ flex: 1, overflowY: "auto", padding: "1rem", background: "var(--edb-surface)" }}>
       {loading && !messages.length && <Spinner animation="border" size="sm" />}
       {messages.map((m) => {
         const mine = String(m.from) === String(currentUserId);

@@ -1,0 +1,40 @@
+import React,{useCallback,useEffect,useMemo,useState} from "react";
+import {useNavigate} from "react-router-dom";
+import api from "../services/academicIntelligenceApi";
+import {useInstitution} from "../institution/InstitutionContext";
+import {useBranch} from "../branch/BranchContext";
+import "./PrincipalAcademicIntelligence.css";
+
+const pct=(v)=>v==null?"—":`${Number(v).toFixed(1)}%`;
+const nice=(v)=>String(v||"").toLowerCase().replace(/_/g," ").replace(/\b\w/g,(m)=>m.toUpperCase());
+const Status=({value})=><span className={`pai-status pai-status--${String(value||"not_started").toLowerCase().replace(/_/g,"-")}`}>{nice(value)}</span>;
+
+export default function PrincipalAcademicIntelligence(){
+  const navigate=useNavigate(); const {institution,terms}=useInstitution(); const {activeBranch,allBranches}=useBranch();
+  const [data,setData]=useState(null),[loading,setLoading]=useState(true),[error,setError]=useState("");
+  const [session,setSession]=useState(""),[term,setTerm]=useState(""),[classId,setClassId]=useState(null),[breakdownId,setBreakdownId]=useState(null),[topicId,setTopicId]=useState(null);
+  const load=useCallback(async()=>{setLoading(true);setError("");try{const r=await api.overview({...session&&{academicSession:session},...term&&{term}});setData(r.data||null)}catch(e){setError(e?.response?.data?.message||e?.message||"Unable to load Academic Intelligence.")}finally{setLoading(false)}},[session,term]);
+  useEffect(()=>{load()},[load]);
+  useEffect(()=>{const first=data?.classes?.[0];if(first&&!data.classes.some(x=>Number(x.class.id)===Number(classId)))setClassId(first.class.id)},[data,classId]);
+  const selectedClass=useMemo(()=>data?.classes?.find(x=>Number(x.class.id)===Number(classId))||null,[data,classId]);
+  useEffect(()=>{const first=selectedClass?.subjects?.[0];if(first&&!selectedClass.subjects.some(x=>Number(x.breakdownId)===Number(breakdownId)))setBreakdownId(first.breakdownId)},[selectedClass,breakdownId]);
+  const group=useMemo(()=>data?.groups?.find(x=>Number(x.id)===Number(breakdownId))||null,[data,breakdownId]);
+  useEffect(()=>{const first=group?.topics?.find(x=>["NEEDS_REINFORCEMENT","AWAITING_EVALUATION"].includes(x.status))||group?.topics?.[0];if(first&&!group.topics.some(x=>Number(x.id)===Number(topicId)))setTopicId(first.id)},[group,topicId]);
+  const topic=useMemo(()=>group?.topics?.find(x=>Number(x.id)===Number(topicId))||null,[group,topicId]);
+  if(loading&&!data)return <main className="pai-page"><div className="pai-loading"><div className="spinner-border"/><strong>Building Academic Intelligence…</strong></div></main>;
+  const metrics=[
+    ["bi-journal-check","Syllabus Complete",pct(data?.summary?.completionPercent),`${data?.summary?.completedTopics||0}/${data?.summary?.totalTopics||0} topics`],
+    ["bi-graph-up-arrow","Class Performance",pct(data?.summary?.averagePerformance),"Evaluated linked assessments"],
+    ["bi-exclamation-diamond","Needs Reinforcement",data?.summary?.reinforcementTopics||0,"Below mastery target"],
+    ["bi-hourglass-split","Awaiting Evaluation",data?.summary?.awaitingEvaluationTopics||0,"Evidence pending"],
+    ["bi-person-heart","Students to Support",data?.summary?.studentsNeedingSupport||0,"Below mastery"],
+  ];
+  return <main className="pai-page">
+    <section className="pai-hero"><div><span>Principal Academic Intelligence</span><h1>Syllabus to student support — in one view</h1><p>Track teaching evidence, assessment performance, weak topics and students who need support.</p><small><i className="bi bi-building me-1"/>{institution?.name||terms?.institution||"Institution"}<i className="bi bi-diagram-3 ms-3 me-1"/>{allBranches?"All Branches":activeBranch?.name||"Active Branch"}<i className="bi bi-bullseye ms-3 me-1"/>Mastery {data?.masteryTarget||60}%</small></div><button onClick={()=>navigate("/syllabus-breakdown")}><i className="bi bi-list-check me-2"/>Syllabus Tracker</button></section>
+    <section className="pai-toolbar"><select value={session} onChange={e=>setSession(e.target.value)}><option value="">All Sessions</option>{(data?.filters?.sessions||[]).map(x=><option key={x}>{x}</option>)}</select><select value={term} onChange={e=>setTerm(e.target.value)}><option value="">All Terms</option>{(data?.filters?.terms||[]).map(x=><option key={x}>{x}</option>)}</select><button onClick={load} disabled={loading}><i className="bi bi-arrow-clockwise me-2"/>Refresh</button>{error&&<span className="pai-error">{error}</span>}</section>
+    <section className="pai-metrics">{metrics.map(([icon,title,value,meta])=><div className="pai-metric" key={title}><i className={`bi ${icon}`}/><strong>{value}</strong><span>{title}</span><small>{meta}</small></div>)}</section>
+    <section className="pai-card"><div className="pai-head"><div><span>{terms?.classes||"Classes"}</span><h2>Academic Pulse</h2></div><small>Class → Subject → Topic</small></div><div className="pai-classes">{(data?.classes||[]).map(row=><button key={row.class.id} className={Number(classId)===Number(row.class.id)?"active":""} onClick={()=>setClassId(row.class.id)}><strong>{row.class.name}</strong><b>{pct(row.completionPercent)}</b><div className="pai-progress"><b style={{width:`${row.completionPercent||0}%`}}/></div><small>{pct(row.averagePerformance)} avg · {row.reinforcementTopics} reinforce</small></button>)}</div></section>
+    <section className="pai-grid"><div className="pai-card"><div className="pai-subjects">{(selectedClass?.subjects||[]).map(row=><button key={row.breakdownId} className={Number(breakdownId)===Number(row.breakdownId)?"active":""} onClick={()=>setBreakdownId(row.breakdownId)}><strong>{row.subject.name}</strong><small>{pct(row.completionPercent)} complete</small></button>)}</div><div className="pai-table"><div className="pai-row pai-row-head"><span>Topic</span><span>Evidence</span><span>Performance</span><span>Status</span></div>{(group?.topics||[]).map(row=><button key={row.id} className={`pai-row ${Number(topicId)===Number(row.id)?"active":""}`} onClick={()=>setTopicId(row.id)}><span><strong>{row.topic}</strong><small>{row.unitTitle||row.subtopics||"Syllabus topic"}</small></span><span><b>{row.completedLessonPlanCount}</b> lesson · <b>{row.worksheetCount}</b> worksheet · <b>{row.assessmentCount}</b> test</span><span><strong>{pct(row.averagePerformance)}</strong><small>{row.evaluatedStudents} evaluated</small></span><span><Status value={row.status}/></span></button>)}</div>{topic&&<div className="pai-detail"><div className="pai-head"><div><span>Selected Topic</span><h2>{topic.topic}</h2></div><Status value={topic.status}/></div><div className="pai-detail-metrics"><div><strong>{pct(topic.averagePerformance)}</strong><small>Class Average</small></div><div><strong>{topic.evaluatedStudents}</strong><small>Evaluated</small></div><div><strong>{topic.supportStudents}</strong><small>Need Support</small></div></div><h3>Weak Concepts</h3><div className="pai-concepts">{(topic.weakConcepts||[]).length?topic.weakConcepts.map(x=><span key={x.concept}>{x.concept}<b>{x.count}</b></span>):<small>No recurring weak concepts yet.</small>}</div></div>}</div>
+    <aside><div className="pai-card"><div className="pai-head"><div><span>Attention</span><h2>Topics to Act On</h2></div></div><div className="pai-list">{(data?.attentionTopics||[]).slice(0,8).map(row=><button key={`${row.breakdownId}-${row.id}`} onClick={()=>{setClassId(row.class.id);setBreakdownId(row.breakdownId);setTopicId(row.id)}}><span><strong>{row.topic}</strong><small>{row.class.name} · {row.subject.name}</small></span><span><Status value={row.status}/><b>{pct(row.averagePerformance)}</b></span></button>)}</div></div><div className="pai-card"><div className="pai-head"><div><span>Student Support</span><h2>Who Needs Help</h2></div></div><div className="pai-list">{(data?.supportStudents||[]).slice(0,10).map(s=><button key={s.id} onClick={()=>navigate(`/student-360/${s.id}`)}><span><strong>{s.name}</strong><small>{s.admissionNumber||s.rollNumber||`#${s.id}`} · {s.weakTopicCount} weak topic(s)</small></span><b>{pct(s.averagePerformance)}</b></button>)}</div></div></aside></section>
+  </main>
+}

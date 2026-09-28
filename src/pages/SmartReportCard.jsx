@@ -31,7 +31,7 @@ const SmartReportCard = () => {
     <div className="container my-4">
       <h2 className="text-center mb-4">📝 Smart Report Card Generator</h2>
 
-      <div ref={reportRef} className="p-4" style={{ background: "#fff", color: "#000" }}>
+      <div ref={reportRef} className="p-4" style={{ background: "var(--edb-surface)", color: "var(--edb-text)" }}>
         <h4 className="text-center mb-3">Term Report</h4>
         <table className="table table-bordered">
           <thead>

@@ -802,23 +802,23 @@ export default function Dashboard() {
 
       <style>{`
         .dashboard-pro{
-          --soft-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
-          --lift-shadow: 0 18px 34px rgba(15, 23, 42, 0.12);
+          --soft-shadow: 0 12px 28px color-mix(in srgb, var(--edb-primary-dark) 8%, transparent);
+          --lift-shadow: 0 18px 34px color-mix(in srgb, var(--edb-primary-dark) 12%, transparent);
           background:
-            radial-gradient(700px 260px at 0% 0%, rgba(59,130,246,.08), transparent 55%),
-            radial-gradient(700px 260px at 100% 0%, rgba(124,58,237,.07), transparent 55%);
+            radial-gradient(700px 260px at 0% 0%, color-mix(in srgb, var(--edb-primary) 8%, transparent), transparent 55%),
+            radial-gradient(700px 260px at 100% 0%, color-mix(in srgb, var(--edb-primary) 7%, transparent), transparent 55%);
           min-height: 100%;
         }
 
         .hero-pro{
           background:
-            radial-gradient(1000px 400px at 10% 10%, rgba(255,255,255,.18), transparent 60%),
-            linear-gradient(135deg, #1e3a8a, #2563eb, #7c3aed);
+            radial-gradient(1000px 400px at 10% 10%, color-mix(in srgb, var(--edb-surface) 18%, transparent), transparent 60%),
+            linear-gradient(135deg, var(--edb-primary), var(--edb-primary), var(--edb-primary));
           border-radius: 1.25rem;
         }
 
         .hero-overlay{
-          border: 1px solid rgba(255,255,255,.16);
+          border: 1px solid color-mix(in srgb, var(--edb-border) 16%, transparent);
           backdrop-filter: blur(8px);
         }
 
@@ -826,15 +826,15 @@ export default function Dashboard() {
           width: 58px;
           height: 58px;
           border-radius: 18px;
-          background: rgba(255,255,255,.18);
-          color: #fff;
+          background: color-mix(in srgb, var(--edb-surface) 18%, transparent);
+          color: var(--edb-on-primary);
           display:flex;
           align-items:center;
           justify-content:center;
           font-weight: 800;
           font-size: 1.05rem;
-          border: 1px solid rgba(255,255,255,.24);
-          box-shadow: 0 10px 24px rgba(0,0,0,.14);
+          border: 1px solid color-mix(in srgb, var(--edb-border) 24%, transparent);
+          box-shadow: 0 10px 24px color-mix(in srgb, var(--edb-primary-dark) 14.000000000000002%, transparent);
           flex: 0 0 auto;
         }
 
@@ -848,14 +848,14 @@ export default function Dashboard() {
           height: 42px;
           padding: 0 13px;
           border-radius: 10px;
-          background: #fff;
-          color: #172033;
+          background: var(--edb-surface);
+          color: var(--edb-text);
           display: flex;
           align-items: center;
           justify-content: space-between;
           gap: 14px;
           font-weight: 650;
-          box-shadow: 0 8px 22px rgba(15,23,42,.14);
+          box-shadow: 0 8px 22px color-mix(in srgb, var(--edb-primary-dark) 14.000000000000002%, transparent);
           cursor: pointer;
         }
 
@@ -871,8 +871,8 @@ export default function Dashboard() {
         .operations-strip{
           display: grid;
           grid-template-columns: repeat(5, minmax(0, 1fr));
-          background: rgba(255,255,255,.92);
-          border: 1px solid #e5eaf2;
+          background: color-mix(in srgb, var(--edb-surface) 92%, transparent);
+          border: 1px solid var(--edb-border);
           border-radius: 18px;
           padding: 12px;
           box-shadow: var(--soft-shadow);
@@ -884,34 +884,34 @@ export default function Dashboard() {
           align-items: center;
           gap: 11px;
           padding: 9px 14px;
-          border-right: 1px solid #e9edf4;
+          border-right: 1px solid var(--edb-border);
         }
 
         .operation-item:last-child{ border-right: 0; }
-        .operation-item small{ display:block; color:#718096; font-size:.72rem; }
-        .operation-item strong{ display:block; color:#13213c; font-size:1.15rem; line-height:1.25; }
+        .operation-item small{ display:block; color:var(--edb-muted-text); font-size:.72rem; }
+        .operation-item strong{ display:block; color:var(--edb-text); font-size:1.15rem; line-height:1.25; }
         .operation-icon{
           width: 38px; height: 38px; border-radius: 12px; flex: 0 0 auto;
           display:grid; place-items:center; font-size:1rem;
         }
-        .op-blue{background:#e8f1ff;color:#2463b5}.op-green{background:#e8f8ef;color:#17844b}
-        .op-red{background:#fdecec;color:#c12f3a}.op-amber{background:#fff4da;color:#a76600}
-        .op-purple{background:#f1ebff;color:#7243c8}
+        .op-blue{background:var(--edb-primary-soft);color:var(--edb-primary-text)}.op-green{background:var(--edb-primary-soft);color:#17844b}
+        .op-red{background:var(--edb-primary-soft);color:#c12f3a}.op-amber{background:var(--edb-primary-soft);color:var(--edb-accent-text)}
+        .op-purple{background:var(--edb-surface);color:var(--edb-primary-text)}
 
         .section-heading h5{
-          color: #0f172a;
+          color: var(--edb-text);
         }
 
         .coordinator-activity-panel{
-          background:linear-gradient(135deg,#ffffff 0%,#f8fbff 100%);
-          border:1px solid #e7edf6;border-radius:20px;padding:18px;
-          box-shadow:0 10px 30px rgba(31,45,61,.05);
+          background:linear-gradient(135deg,var(--edb-surface) 0%,var(--edb-surface) 100%);
+          border:1px solid var(--edb-border);border-radius:20px;padding:18px;
+          box-shadow:0 10px 30px color-mix(in srgb, var(--edb-primary-dark) 5%, transparent);
         }
         .activity-live-dot{width:9px;height:9px;border-radius:50%;background:#22c55e;box-shadow:0 0 0 5px rgba(34,197,94,.12);}
-        .activity-tile{width:100%;height:100%;min-height:118px;border:1px solid #e8edf5;border-radius:16px;background:#fff;padding:14px;display:grid;grid-template-columns:42px 1fr 16px;gap:11px;text-align:left;align-items:start;color:#1f2937;transition:.18s ease;}
-        .activity-tile:hover{transform:translateY(-2px);box-shadow:0 12px 24px rgba(31,45,61,.08);}
-        .activity-icon{width:42px;height:42px;border-radius:13px;display:grid;place-items:center;background:#eff6ff;color:#2563eb;font-size:1.05rem;}
-        .activity-copy{display:flex;flex-direction:column;min-width:0}.activity-copy strong{font-size:.88rem}.activity-copy small{font-size:.76rem;color:#6b7280;margin-top:4px;line-height:1.35}.activity-copy em{font-size:.68rem;color:#94a3b8;font-style:normal;margin-top:8px;text-transform:uppercase;letter-spacing:.04em}.activity-arrow{color:#a3afbf;margin-top:12px}.activity-amber .activity-icon{background:#fff7ed;color:#d97706}.activity-green .activity-icon{background:#ecfdf5;color:#059669}.activity-purple .activity-icon{background:#f5f3ff;color:#7c3aed}.activity-red .activity-icon{background:#fef2f2;color:#dc2626}
+        .activity-tile{width:100%;height:100%;min-height:118px;border:1px solid var(--edb-border);border-radius:16px;background:var(--edb-surface);padding:14px;display:grid;grid-template-columns:42px 1fr 16px;gap:11px;text-align:left;align-items:start;color:var(--edb-text);transition:.18s ease;}
+        .activity-tile:hover{transform:translateY(-2px);box-shadow:0 12px 24px color-mix(in srgb, var(--edb-primary-dark) 8%, transparent);}
+        .activity-icon{width:42px;height:42px;border-radius:13px;display:grid;place-items:center;background:var(--edb-surface);color:var(--edb-primary-text);font-size:1.05rem;}
+        .activity-copy{display:flex;flex-direction:column;min-width:0}.activity-copy strong{font-size:.88rem}.activity-copy small{font-size:.76rem;color:var(--edb-muted-text);margin-top:4px;line-height:1.35}.activity-copy em{font-size:.68rem;color:var(--edb-muted-text);font-style:normal;margin-top:8px;text-transform:uppercase;letter-spacing:.04em}.activity-arrow{color:var(--edb-muted-text);margin-top:12px}.activity-amber .activity-icon{background:var(--edb-surface);color:var(--edb-accent-text)}.activity-green .activity-icon{background:var(--edb-primary-soft);color:#059669}.activity-purple .activity-icon{background:var(--edb-surface);color:var(--edb-primary-text)}.activity-red .activity-icon{background:var(--edb-surface);color:#dc2626}
 
         .quick-action-card,
         .metric-card,
@@ -960,8 +960,8 @@ export default function Dashboard() {
         }
 
         .quick-blue{
-          background: linear-gradient(135deg, #dbeafe, #bfdbfe);
-          color: #1d4ed8;
+          background: linear-gradient(135deg, var(--edb-primary-soft), var(--edb-primary-soft));
+          color: var(--edb-primary-text);
         }
 
         .quick-sky{
@@ -970,7 +970,7 @@ export default function Dashboard() {
         }
 
         .quick-amber{
-          background: linear-gradient(135deg, #fef3c7, #fde68a);
+          background: linear-gradient(135deg, var(--edb-primary-soft), var(--edb-accent-soft));
           color: #b45309;
         }
 
@@ -980,13 +980,13 @@ export default function Dashboard() {
         }
 
         .quick-purple{
-          background: linear-gradient(135deg, #ede9fe, #ddd6fe);
-          color: #6d28d9;
+          background: linear-gradient(135deg, var(--edb-primary-soft), var(--edb-primary-soft));
+          color: var(--edb-primary-text);
         }
 
         .quick-indigo{
-          background: linear-gradient(135deg, #dbeafe, #ddd6fe);
-          color: #4f46e5;
+          background: linear-gradient(135deg, var(--edb-primary-soft), var(--edb-primary-soft));
+          color: var(--edb-primary-text);
         }
 
         .metric-icon{
@@ -1019,7 +1019,7 @@ export default function Dashboard() {
         }
         @media (max-width: 767.98px){
           .operations-strip{ grid-template-columns: repeat(2, 1fr); }
-          .operation-item{ border-right: 0; border-bottom: 1px solid #e9edf4; }
+          .operation-item{ border-right: 0; border-bottom: 1px solid var(--edb-border); }
           .operation-item:last-child{ border-bottom: 0; }
         }
       `}</style>
@@ -1055,21 +1055,21 @@ function QuickActionCard({
   featured = false,
 }) {
   const bgMap = {
-    blue: "linear-gradient(135deg, #ffffff, #eef2ff)",
-    sky: "linear-gradient(135deg, #ecfeff, #f0f9ff)",
-    indigo: "linear-gradient(135deg, #eff6ff, #f5f3ff)",
-    amber: "linear-gradient(135deg, #fff7ed, #fffbeb)",
-    green: "linear-gradient(135deg, #ecfeff, #f0fdfa)",
-    purple: "linear-gradient(135deg, #f5f3ff, #eef2ff)",
+    blue: "linear-gradient(135deg, var(--edb-surface), var(--edb-primary-soft))",
+    sky: "linear-gradient(135deg, var(--edb-surface), var(--edb-primary-soft))",
+    indigo: "linear-gradient(135deg, var(--edb-surface), var(--edb-primary-soft))",
+    amber: "linear-gradient(135deg, var(--edb-surface), var(--edb-primary-soft))",
+    green: "linear-gradient(135deg, var(--edb-surface), var(--edb-primary-soft))",
+    purple: "linear-gradient(135deg, var(--edb-surface), var(--edb-primary-soft))",
   };
 
   const borderMap = {
-    blue: "#dbe4ff",
-    sky: "#bae6fd",
-    indigo: "#bfdbfe",
-    amber: "#fde68a",
-    green: "#99f6e4",
-    purple: "#c4b5fd",
+    blue: "var(--edb-border)",
+    sky: "var(--edb-border)",
+    indigo: "var(--edb-border)",
+    amber: "var(--edb-border)",
+    green: "var(--edb-border)",
+    purple: "var(--edb-border)",
   };
 
   return (
@@ -1234,7 +1234,7 @@ function AttendanceDetailModal({ detail, date, onClose }) {
       className="modal d-block"
       tabIndex="-1"
       role="dialog"
-      style={{ background: "rgba(15, 23, 42, 0.55)" }}
+      style={{ background: "color-mix(in srgb, var(--edb-primary-dark) 55%, transparent)" }}
     >
       <div className="modal-dialog modal-xl modal-dialog-scrollable" role="document">
         <div className="modal-content border-0 shadow-lg rounded-4 overflow-hidden">

@@ -434,8 +434,8 @@ export default function HRDashboard() {
                           style={{
                             width: 48,
                             height: 48,
-                            background: "#eef2ff",
-                            color: "#3730a3",
+                            background: "var(--edb-surface)",
+                            color: "var(--edb-primary-text)",
                             fontWeight: 800,
                           }}
                         >
@@ -533,8 +533,8 @@ export default function HRDashboard() {
                         style={{
                           width: 36,
                           height: 36,
-                          background: "#fef9c3",
-                          color: "#a16207",
+                          background: "var(--edb-primary-soft)",
+                          color: "var(--edb-accent-text)",
                           fontWeight: 800,
                         }}
                       >
@@ -568,7 +568,7 @@ export default function HRDashboard() {
         <div className="col-lg-4">
           <div
             className="card shadow-sm rounded-4 border-0 h-100"
-            style={{ background: "linear-gradient(135deg, #f8fafc, #eef2ff)" }}
+            style={{ background: "linear-gradient(135deg, var(--edb-surface), var(--edb-surface))" }}
           >
             <div className="card-body">
               <div className="text-uppercase small text-muted mb-2">Attendance on {date}</div>
@@ -596,7 +596,7 @@ export default function HRDashboard() {
                     {kpis.shortLeave ? `${kpis.shortLeave} short leave` : "Leave entries on selected date"}
                   </div>
                 </div>
-                <div className="display-6 fw-semibold mb-0" style={{ color: "#a16207" }}>
+                <div className="display-6 fw-semibold mb-0" style={{ color: "var(--edb-accent-text)" }}>
                   {loading || error ? "—" : kpis.leave}
                 </div>
               </div>
@@ -680,14 +680,14 @@ export default function HRDashboard() {
                         <li
                           key={e.id}
                           className="list-group-item d-flex align-items-center gap-3"
-                          style={{ background: "#fff7f7" }}
+                          style={{ background: "var(--edb-surface)" }}
                         >
                           <div
                             className="rounded-circle d-inline-flex justify-content-center align-items-center"
                             style={{
                               width: 36,
                               height: 36,
-                              background: "#fee2e2",
+                              background: "var(--edb-primary-soft)",
                               color: "#b91c1c",
                               fontWeight: 700,
                             }}
@@ -727,15 +727,15 @@ export default function HRDashboard() {
                           <li
                             key={e.id}
                             className="list-group-item d-flex align-items-center gap-3"
-                            style={{ background: "#fffdf0" }}
+                            style={{ background: "var(--edb-surface)" }}
                           >
                             <div
                               className="rounded-circle d-inline-flex justify-content-center align-items-center"
                               style={{
                                 width: 36,
                                 height: 36,
-                                background: "#fef3c7",
-                                color: "#a16207",
+                                background: "var(--edb-primary-soft)",
+                                color: "var(--edb-accent-text)",
                                 fontWeight: 700,
                               }}
                             >
@@ -775,8 +775,8 @@ export default function HRDashboard() {
                       <div
                         className="border rounded-4 p-3 h-100 d-flex align-items-center gap-3 shadow-sm"
                         style={{
-                          borderColor: "#fee2e2",
-                          background: "#fff7f7",
+                          borderColor: "var(--edb-border)",
+                          background: "var(--edb-surface)",
                         }}
                       >
                         <div
@@ -784,7 +784,7 @@ export default function HRDashboard() {
                           style={{
                             width: 44,
                             height: 44,
-                            background: "#fee2e2",
+                            background: "var(--edb-primary-soft)",
                             color: "#b91c1c",
                             fontWeight: 700,
                           }}
@@ -830,8 +830,8 @@ export default function HRDashboard() {
                         <div
                           className="border rounded-4 p-3 h-100 d-flex align-items-center gap-3 shadow-sm"
                           style={{
-                            borderColor: "#fde68a",
-                            background: "#fffdf0",
+                            borderColor: "var(--edb-border)",
+                            background: "var(--edb-surface)",
                           }}
                         >
                           <div
@@ -839,8 +839,8 @@ export default function HRDashboard() {
                             style={{
                               width: 44,
                               height: 44,
-                              background: "#fef3c7",
-                              color: "#a16207",
+                              background: "var(--edb-primary-soft)",
+                              color: "var(--edb-accent-text)",
                               fontWeight: 700,
                             }}
                           >
@@ -911,8 +911,8 @@ export default function HRDashboard() {
                                 style={{
                                   width: 30,
                                   height: 30,
-                                  background: "#eef2ff",
-                                  color: "#3730a3",
+                                  background: "var(--edb-surface)",
+                                  color: "var(--edb-primary-text)",
                                   fontWeight: 700,
                                   fontSize: 12,
                                 }}

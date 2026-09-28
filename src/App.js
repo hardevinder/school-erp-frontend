@@ -135,6 +135,7 @@ import DailyReadiness from "./pages/DailyReadiness";
 import LostFound from "./pages/LostFound";
 import TeacherPerformance from "./pages/TeacherPerformance";
 import SchoolCommandCenter from "./pages/SchoolCommandCenter";
+import PrincipalAcademicIntelligence from "./pages/PrincipalAcademicIntelligence"; // PATCH5_ACADEMIC_INTELLIGENCE
 import ParentConsents from "./pages/ParentConsents";
 import UnifiedActionInbox from "./pages/UnifiedActionInbox";
 import SchoolAiAssistant from "./pages/SchoolAiAssistant"; // SCHOOL_AI_IMPORT_V12
@@ -251,6 +252,7 @@ import AIChatBox from "./components/AIChatBox";
 
 import SyllabusTeacherAssignment from "./pages/SyllabusTeacherAssignment";
 import SyllabusBreakdownCRUD from "./pages/SyllabusBreakdownCRUD";
+import SyllabusTracker from "./pages/SyllabusTracker";
 import AdmissionSyllabusAssignee from "./pages/AdmissionSyllabusAssignee";
 import AdmissionSyllabusCRUD from "./pages/AdmissionSyllabusCRUD";
 
@@ -534,6 +536,14 @@ function App() {
             element={
               <RequireRole roles={["principal", "admin", "superadmin", "super_admin", "academic_coordinator", "coordinator", "hr"]}>
                 <SchoolCommandCenter />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="/academic-intelligence"
+            element={
+              <RequireRole roles={["principal", "admin", "superadmin", "super_admin", "academic_coordinator", "coordinator"]}>
+                <PrincipalAcademicIntelligence />
               </RequireRole>
             }
           />
@@ -2006,6 +2016,15 @@ function App() {
                 roles={["teacher", "academic_coordinator", "admin", "superadmin", "principal", "coordinator"]}
               >
                 <SyllabusBreakdownCRUD />
+              </RequireRole>
+            }
+          />
+
+          <Route
+            path="/syllabus-tracker"
+            element={
+              <RequireRole roles={["academic_coordinator", "coordinator", "admin", "superadmin", "principal"]}>
+                <SyllabusTracker />
               </RequireRole>
             }
           />

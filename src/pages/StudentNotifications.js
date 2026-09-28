@@ -18,7 +18,7 @@ const StudentNotifications = ({ notifications, removeNotification }) => {
                 right: "10px",
                 cursor: "pointer",
                 fontWeight: "bold",
-                color: "#888",
+                color: "var(--edb-muted-text)",
                 fontSize: "1.2rem",
               }}
               onClick={() => removeNotification(notif.id)}

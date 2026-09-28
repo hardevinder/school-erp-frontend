@@ -328,6 +328,7 @@ export default function Sidebar({ headerHeight = 56 }) {
         heading: "Main",
         items: [
           { key: "command-center", label: "School Command Center", icon: "bi-command", path: "/command-center" },
+          { key: "principal-academic-intelligence", label: "Academic Intelligence", icon: "bi-activity", path: "/academic-intelligence" }, // PATCH5_AI_NAV
           { key: "school-ai-principal", label: "Ask EduBridge", icon: "bi-stars", path: "/school-ai" }, // PRINCIPAL_LIVE_AI
           { key: "principal-action-inbox", label: "My Actions & Approvals", icon: "bi-inboxes-fill", path: "/action-inbox" },
           { key: "principal-parent-consents", label: "Parent Consent & Acknowledgement", icon: "bi-pen", path: "/parent-consents" },
@@ -358,10 +359,12 @@ export default function Sidebar({ headerHeight = 56 }) {
         heading: "Academic",
         items: [
           { key: "principal-assessments", label: "Assessments & Tests", icon: "bi-clipboard2-check", path: "/assessments" },
+          { key: "principal-worksheets", label: "Worksheets", icon: "bi-file-earmark-text", path: "/assessments?assessment_type=worksheet" },
           { key: "principal-online-classes", label: "Online Classes", icon: "bi-camera-video", path: "/online-classes" },
           { key: "principal-diary-monitor", label: "Digital Diary Monitor", icon: "bi-journal-richtext", path: "/coordinator-digital-diaries" },
           { key: "principal-ptm", label: "PTM Management", icon: "bi-people-fill", path: "/ptm-management" },
           { key: "principal-syllabus", label: "Syllabus Progress", icon: "bi-list-check", path: "/syllabus-breakdown" },
+          { key: "principal-syllabus-tracker", label: "Syllabus Tracker", icon: "bi-bar-chart-steps", path: "/syllabus-tracker" },
           { key: "principal-syllabus-approval", label: "Syllabus Approval", icon: "bi-check2-square", path: "/syllabus-approval" },
         ],
       });
@@ -1080,6 +1083,7 @@ export default function Sidebar({ headerHeight = 56 }) {
         items: [
           { key: "dashboard", label: "Dashboard", icon: "bi-speedometer2", path: "/dashboard" },
           { key: "command-center-admin", label: "School Command Center", icon: "bi-command", path: "/command-center" },
+          { key: "admin-academic-intelligence", label: "Academic Intelligence", icon: "bi-activity", path: "/academic-intelligence" },
           { key: "action-inbox-admin", label: "My Actions & Approvals", icon: "bi-inboxes-fill", path: "/action-inbox", roles: ["admin", "superadmin"] },
           { key: "parent-consents-admin", label: "Parent Consent & Acknowledgement", icon: "bi-pen", path: "/parent-consents", roles: ["admin", "superadmin"] },
           { key: "combined-circulars", label: "Circulars", icon: "bi-megaphone", path: "/combined-circulars" },
@@ -1111,6 +1115,7 @@ export default function Sidebar({ headerHeight = 56 }) {
           { key: "ptm-management-admin", label: "PTM Management", icon: "bi-people-fill", path: "/ptm-management", roles: ["admin", "superadmin"] },
           { key: "online-classes-admin", label: "Online Classes", icon: "bi-camera-video", path: "/online-classes" },
           { key: "assessments-admin", label: "Assessments & Tests", icon: "bi-clipboard2-check", path: "/assessments" },
+          { key: "worksheets-admin", label: "Worksheets", icon: "bi-file-earmark-text", path: "/assessments?assessment_type=worksheet" },
           { key: "lms-assignments-admin", label: "LMS Assignments", icon: "bi-journal-check", path: "/assessments?assessment_type=assignment" },
           { key: "bulk-promotion", label: "Bulk Promotion", icon: "bi-arrow-up-square", path: "/students/bulk-promotion", roles: ["admin", "superadmin", "accounts"] },
           { key: "promotion-history", label: "Promotion History", icon: "bi-clock-history", path: "/students/promotion-history", roles: ["admin", "superadmin", "accounts"] },
@@ -1252,6 +1257,7 @@ export default function Sidebar({ headerHeight = 56 }) {
         items: [
           { key: "dashboard", label: "Dashboard", icon: "bi-speedometer2", path: "/dashboard" },
           { key: "command-center-academic", label: "School Command Center", icon: "bi-command", path: "/command-center" },
+          { key: "coordinator-academic-intelligence", label: "Academic Intelligence", icon: "bi-activity", path: "/academic-intelligence" },
           { key: "action-inbox-academic", label: "My Actions & Approvals", icon: "bi-inboxes-fill", path: "/action-inbox", roles: ["academic_coordinator", "coordinator"] },
           { key: "parent-consents-academic", label: "Parent Consent & Acknowledgement", icon: "bi-pen", path: "/parent-consents", roles: ["academic_coordinator", "coordinator"] },
           { key: "circulars", label: "Circulars", icon: "bi-megaphone", path: "/combined-circulars" },
@@ -1278,6 +1284,8 @@ export default function Sidebar({ headerHeight = 56 }) {
           { key: "ptm-management-coordinator", label: "PTM Management", icon: "bi-people-fill", path: "/ptm-management" },
           { key: "online-classes-coordinator", label: "Online Classes", icon: "bi-camera-video", path: "/online-classes" },
           { key: "assessments-coordinator", label: "Assessments & Tests", icon: "bi-clipboard2-check", path: "/assessments" },
+          { key: "worksheets-coordinator", label: "Worksheets", icon: "bi-file-earmark-text", path: "/assessments?assessment_type=worksheet" },
+          { key: "syllabus-tracker-coordinator", label: "Syllabus Tracker", icon: "bi-bar-chart-steps", path: "/syllabus-tracker" },
           { key: "lms-assignments-coordinator", label: "LMS Assignments", icon: "bi-journal-check", path: "/assessments?assessment_type=assignment" },
           { key: "holidayMarking", label: "Holiday Marking", icon: "bi-calendar3", path: "/holiday-marking" },
           { key: "periods", label: "Periods", icon: "bi-clock", path: "/periods" },
@@ -1402,6 +1410,7 @@ export default function Sidebar({ headerHeight = 56 }) {
           { key: "my-house-duty-teacher", label: "My House Duties & Assembly", icon: "bi-flag", path: "/house-duty", roles: ["teacher", "department_hod"] }, // HOUSE_DUTY_V15
           { key: "online-classes", label: "Online Classes", icon: "bi-camera-video", path: "/online-classes" },
           { key: "assessments", label: "Assessments & Tests", icon: "bi-clipboard2-check", path: "/assessments" },
+          { key: "worksheets", label: "Worksheets", icon: "bi-file-earmark-text", path: "/assessments?assessment_type=worksheet" },
           { key: "lms-assignments", label: "LMS Assignments", icon: "bi-journal-check", path: "/assessments?assessment_type=assignment" },
           { key: "my-visitors", label: "My Visitors", icon: "bi-person-badge", path: "/my-visitors" },
         ],

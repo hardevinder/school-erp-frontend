@@ -574,7 +574,7 @@ const DayWiseReport = () => {
               <h2>Collection Report</h2>
               <div style={{ maxHeight: '400px', overflowY: 'auto', position: 'relative' }}>
                 <Table striped bordered hover>
-                  <thead style={{ position: "sticky", top: 0, backgroundColor: "#fff", zIndex: 2 }}>
+                  <thead style={{ position: "sticky", top: 0, backgroundColor: "var(--edb-surface)", zIndex: 2 }}>
                     <tr>
                       <th className="sticky-top bg-white">Sr. No</th>
                       <th className="sticky-top bg-white">Slip ID</th>
@@ -668,7 +668,7 @@ const DayWiseReport = () => {
               <h2>Category Summary</h2>
               <div style={{ maxHeight: '400px', overflowY: 'auto', position: 'relative' }}>
                 <Table striped bordered hover responsive>
-                  <thead style={{ position: "sticky", top: 0, backgroundColor: "#fff", zIndex: 2 }}>
+                  <thead style={{ position: "sticky", top: 0, backgroundColor: "var(--edb-surface)", zIndex: 2 }}>
                     <tr>
                       <th rowSpan="2" className="sticky-top bg-white">Category</th>
                       <th colSpan="3" className="sticky-top bg-white">Total Fee Received</th>

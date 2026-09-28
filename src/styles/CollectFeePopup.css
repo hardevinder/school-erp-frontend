@@ -4,7 +4,7 @@
     left: 0;
     width: 100%;
     height: 100%;
-    background: rgba(0, 0, 0, 0.5);
+    background: color-mix(in srgb, var(--edb-primary-dark) 50%, transparent);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -12,7 +12,7 @@
   }
   
   .popup-container {
-    background: white;
+    background: var(--edb-surface);
     padding: 20px;
     border-radius: 10px;
     width: 600px;
@@ -23,13 +23,13 @@
     padding: 10px;
     margin-right: 5px;
     border: none;
-    background: lightgray;
+    background: var(--edb-border);
     cursor: pointer;
   }
   
   .tabs .active {
-    background: rgb(0, 0, 0);
-    color: white;
+    background: var(--edb-primary-dark);
+    color: var(--edb-on-primary);
   }
   
   .tab-content {
@@ -39,8 +39,8 @@
   .student-details {
     margin-top: 10px;
     padding: 10px;
-    background: #f9f9f9;
-    border: 1px solid #ddd;
+    background: var(--edb-surface);
+    border: 1px solid var(--edb-border);
     border-radius: 5px;
   }
   

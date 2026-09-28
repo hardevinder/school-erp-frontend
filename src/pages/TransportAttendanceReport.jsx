@@ -67,7 +67,7 @@ const modalCss = `
     .attModal .smallMuted{ font-size:12px; opacity:.75; }
     .attModal .chip{
       display:inline-flex; align-items:center; gap:6px;
-      padding:4px 10px; border-radius:999px; border:1px solid rgba(0,0,0,.12);
+      padding:4px 10px; border-radius:999px; border:1px solid color-mix(in srgb, var(--edb-border) 12%, transparent);
       font-size:12px;
     }
     .attModal .grid2{

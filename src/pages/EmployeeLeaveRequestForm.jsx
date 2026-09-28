@@ -357,7 +357,7 @@ export default function EmployeeLeaveRequests() {
 
       {/* Modal */}
       {modalOpen && (
-        <div className="modal fade show d-block" tabIndex="-1" style={{ background: "rgba(0,0,0,0.5)" }}>
+        <div className="modal fade show d-block" tabIndex="-1" style={{ background: "color-mix(in srgb, var(--edb-primary-dark) 50%, transparent)" }}>
           <div className="modal-dialog modal-lg">
             <form className="modal-content" onSubmit={handleSubmit}>
               <div className="modal-header">

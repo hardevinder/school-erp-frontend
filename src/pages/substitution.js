@@ -1033,8 +1033,8 @@ const TeacherTimetableView = () => {
             min-height: 100vh;
             padding: 24px;
             background:
-              radial-gradient(circle at top left, rgba(59, 130, 246, 0.12), transparent 32%),
-              linear-gradient(180deg, #f8fbff 0%, #eef3fb 100%);
+              radial-gradient(circle at top left, color-mix(in srgb, var(--edb-primary) 12%, transparent), transparent 32%),
+              linear-gradient(180deg, var(--edb-surface) 0%, var(--edb-dashboard-bg) 100%);
           }
 
           .ttv-shell {
@@ -1044,11 +1044,11 @@ const TeacherTimetableView = () => {
           }
 
           .ttv-hero {
-            background: linear-gradient(135deg, #0f172a 0%, #1d4ed8 52%, #0891b2 100%);
-            color: #fff;
+            background: linear-gradient(135deg, var(--edb-primary-dark) 0%, var(--edb-primary) 52%, #0891b2 100%);
+            color: var(--edb-on-primary);
             border-radius: 24px;
             padding: 24px;
-            box-shadow: 0 20px 50px rgba(15, 23, 42, 0.18);
+            box-shadow: 0 20px 50px color-mix(in srgb, var(--edb-primary-dark) 18%, transparent);
             overflow: hidden;
             position: relative;
           }
@@ -1061,27 +1061,27 @@ const TeacherTimetableView = () => {
             right: -80px;
             top: -120px;
             border-radius: 999px;
-            background: rgba(255, 255, 255, 0.12);
+            background: color-mix(in srgb, var(--edb-surface) 12%, transparent);
           }
 
           .ttv-glass-card {
-            background: rgba(255, 255, 255, 0.98);
-            border: 1px solid rgba(226, 232, 240, 0.9);
+            background: color-mix(in srgb, var(--edb-surface) 98%, transparent);
+            border: 1px solid color-mix(in srgb, var(--edb-border) 90%, transparent);
             border-radius: 22px;
-            box-shadow: 0 16px 45px rgba(15, 23, 42, 0.08);
+            box-shadow: 0 16px 45px color-mix(in srgb, var(--edb-primary-dark) 8%, transparent);
           }
 
           .ttv-stat-card {
-            background: #fff;
-            border: 1px solid #e2e8f0;
+            background: var(--edb-surface);
+            border: 1px solid var(--edb-border);
             border-radius: 18px;
             padding: 16px;
             height: 100%;
-            box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
+            box-shadow: 0 10px 30px color-mix(in srgb, var(--edb-primary-dark) 6%, transparent);
           }
 
           .ttv-stat-label {
-            color: #64748b;
+            color: var(--edb-muted-text);
             font-size: 0.78rem;
             font-weight: 700;
             text-transform: uppercase;
@@ -1089,31 +1089,31 @@ const TeacherTimetableView = () => {
           }
 
           .ttv-stat-value {
-            color: #0f172a;
+            color: var(--edb-text);
             font-size: 1.45rem;
             font-weight: 800;
             line-height: 1.2;
           }
 
           .ttv-toolbar {
-            background: #fff;
-            border: 1px solid #e2e8f0;
+            background: var(--edb-surface);
+            border: 1px solid var(--edb-border);
             border-radius: 20px;
             padding: 16px;
-            box-shadow: 0 10px 30px rgba(15, 23, 42, 0.05);
+            box-shadow: 0 10px 30px color-mix(in srgb, var(--edb-primary-dark) 5%, transparent);
           }
 
           .ttv-custom-scrollbar::-webkit-scrollbar { width: 8px; height: 9px; }
-          .ttv-custom-scrollbar::-webkit-scrollbar-track { background: #edf2f7; border-radius: 999px; }
-          .ttv-custom-scrollbar::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 999px; }
-          .ttv-custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #64748b; }
+          .ttv-custom-scrollbar::-webkit-scrollbar-track { background: var(--edb-dashboard-bg); border-radius: 999px; }
+          .ttv-custom-scrollbar::-webkit-scrollbar-thumb { background: var(--edb-border); border-radius: 999px; }
+          .ttv-custom-scrollbar::-webkit-scrollbar-thumb:hover { background: var(--edb-muted-text); }
 
           .ttv-table-wrap {
             max-height: 68vh;
             overflow: auto;
             border-radius: 18px;
-            border: 1px solid #e2e8f0;
-            background: #fff;
+            border: 1px solid var(--edb-border);
+            background: var(--edb-surface);
           }
 
           .ttv-table {
@@ -1126,12 +1126,12 @@ const TeacherTimetableView = () => {
             position: sticky;
             top: 0;
             z-index: 4;
-            background: #f8fafc;
-            color: #334155;
+            background: var(--edb-surface);
+            color: var(--edb-text);
             font-size: 0.78rem;
             text-transform: uppercase;
             letter-spacing: 0.04em;
-            border-bottom: 1px solid #e2e8f0 !important;
+            border-bottom: 1px solid var(--edb-border) !important;
           }
 
           .ttv-table .ttv-day-cell,
@@ -1139,17 +1139,17 @@ const TeacherTimetableView = () => {
             position: sticky;
             left: 0;
             z-index: 3;
-            background: #fff;
+            background: var(--edb-surface);
           }
 
           .ttv-table .ttv-day-head {
             z-index: 5;
-            background: #f8fafc;
+            background: var(--edb-surface);
           }
 
           .ttv-table td,
           .ttv-table th {
-            border-color: #e2e8f0 !important;
+            border-color: var(--edb-border) !important;
           }
 
           .ttv-cell {
@@ -1165,44 +1165,44 @@ const TeacherTimetableView = () => {
           }
 
           .ttv-cell:hover {
-            background: #f8fbff;
-            box-shadow: inset 0 0 0 2px rgba(37, 99, 235, 0.12);
+            background: var(--edb-surface);
+            box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--edb-primary-dark) 12%, transparent);
           }
 
           .ttv-selected-cell {
-            background: #fff7ed !important;
-            box-shadow: inset 0 0 0 2px #f59e0b !important;
+            background: var(--edb-surface) !important;
+            box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--edb-primary-dark) 100%, transparent) !important;
           }
 
           .ttv-sub-cell {
-            background: #ecfdf5 !important;
+            background: var(--edb-primary-soft) !important;
             box-shadow: inset 0 0 0 2px #22c55e !important;
           }
 
           .ttv-free-cell {
-            background: #f8fafc;
+            background: var(--edb-surface);
             cursor: not-allowed;
-            color: #94a3b8;
+            color: var(--edb-muted-text);
           }
 
           .ttv-class-pill {
-            background: #ffffff;
-            border: 1px solid #dbeafe;
-            border-left: 4px solid #2563eb;
+            background: var(--edb-surface);
+            border: 1px solid var(--edb-border);
+            border-left: 4px solid var(--edb-primary);
             border-radius: 12px;
             padding: 8px;
             margin-bottom: 7px;
-            box-shadow: 0 6px 16px rgba(37, 99, 235, 0.08);
+            box-shadow: 0 6px 16px color-mix(in srgb, var(--edb-primary-dark) 8%, transparent);
           }
 
           .ttv-class-name {
-            color: #0f172a;
+            color: var(--edb-text);
             font-weight: 800;
             font-size: 0.86rem;
           }
 
           .ttv-subject-name {
-            color: #475569;
+            color: var(--edb-text);
             font-size: 0.79rem;
             margin-top: 2px;
           }
@@ -1217,18 +1217,18 @@ const TeacherTimetableView = () => {
             font-weight: 700;
           }
 
-          .ttv-badge-blue { color: #1d4ed8; background: #dbeafe; }
+          .ttv-badge-blue { color: var(--edb-primary-text); background: var(--edb-primary-soft); }
           .ttv-badge-green { color: #047857; background: #d1fae5; }
-          .ttv-badge-orange { color: #c2410c; background: #ffedd5; }
-          .ttv-badge-gray { color: #475569; background: #f1f5f9; }
-          .ttv-badge-red { color: #b91c1c; background: #fee2e2; }
+          .ttv-badge-orange { color: #c2410c; background: var(--edb-primary-soft); }
+          .ttv-badge-gray { color: var(--edb-text); background: var(--edb-surface); }
+          .ttv-badge-red { color: #b91c1c; background: var(--edb-primary-soft); }
 
           .ttv-sub-badge {
             position: absolute;
             bottom: 7px;
             right: 7px;
             background: #16a34a;
-            color: white;
+            color: var(--edb-on-primary);
             padding: 5px 9px;
             font-size: 0.72rem;
             border-radius: 999px;
@@ -1247,17 +1247,17 @@ const TeacherTimetableView = () => {
           }
 
           .ttv-panel {
-            background: #fff;
-            border: 1px solid #e2e8f0;
+            background: var(--edb-surface);
+            border: 1px solid var(--edb-border);
             border-radius: 20px;
-            box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
+            box-shadow: 0 10px 30px color-mix(in srgb, var(--edb-primary-dark) 6%, transparent);
             overflow: hidden;
           }
 
           .ttv-panel-head {
             padding: 16px 18px;
-            border-bottom: 1px solid #e2e8f0;
-            background: #f8fafc;
+            border-bottom: 1px solid var(--edb-border);
+            background: var(--edb-surface);
           }
 
           .ttv-panel-body {
@@ -1266,8 +1266,8 @@ const TeacherTimetableView = () => {
 
           .ttv-teacher-card {
             width: 100%;
-            border: 1px solid #dbeafe;
-            background: #fff;
+            border: 1px solid var(--edb-border);
+            background: var(--edb-surface);
             border-radius: 16px;
             padding: 12px 14px;
             text-align: left;
@@ -1281,15 +1281,15 @@ const TeacherTimetableView = () => {
 
           .ttv-teacher-card:hover {
             transform: translateY(-1px);
-            border-color: #2563eb;
-            box-shadow: 0 12px 24px rgba(37, 99, 235, 0.12);
+            border-color: var(--edb-primary);
+            box-shadow: 0 12px 24px color-mix(in srgb, var(--edb-primary-dark) 12%, transparent);
           }
 
           .ttv-teacher-card.active,
           .ttv-teacher-card:disabled {
             cursor: not-allowed;
             border-color: #22c55e;
-            background: #ecfdf5;
+            background: var(--edb-primary-soft);
             transform: none;
           }
 
@@ -1297,21 +1297,21 @@ const TeacherTimetableView = () => {
             position: sticky;
             bottom: 0;
             z-index: 6;
-            background: rgba(255, 255, 255, 0.92);
+            background: color-mix(in srgb, var(--edb-surface) 92%, transparent);
             backdrop-filter: blur(10px);
-            border: 1px solid #e2e8f0;
+            border: 1px solid var(--edb-border);
             border-radius: 18px;
-            box-shadow: 0 -8px 30px rgba(15, 23, 42, 0.07);
+            box-shadow: 0 -8px 30px color-mix(in srgb, var(--edb-primary-dark) 7.000000000000001%, transparent);
             padding: 14px;
           }
 
           .ttv-empty-state {
-            border: 1px dashed #cbd5e1;
+            border: 1px dashed var(--edb-border);
             border-radius: 18px;
             padding: 24px;
-            background: #f8fafc;
+            background: var(--edb-surface);
             text-align: center;
-            color: #64748b;
+            color: var(--edb-muted-text);
           }
 
           .ttv-step-chip {
@@ -1320,40 +1320,40 @@ const TeacherTimetableView = () => {
             gap: 7px;
             padding: 7px 11px;
             border-radius: 999px;
-            background: #f1f5f9;
-            color: #64748b;
+            background: var(--edb-surface);
+            color: var(--edb-muted-text);
             font-size: .78rem;
             font-weight: 700;
-            border: 1px solid #e2e8f0;
+            border: 1px solid var(--edb-border);
           }
           .ttv-step-chip strong {
             width: 20px; height: 20px; border-radius: 50%; display: inline-grid; place-items: center;
-            background: #cbd5e1; color: #fff; font-size: .7rem;
+            background: var(--edb-border); color: var(--edb-on-primary); font-size: .7rem;
           }
-          .ttv-step-chip.active { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
-          .ttv-step-chip.active strong { background: #2563eb; }
+          .ttv-step-chip.active { background: var(--edb-surface); color: var(--edb-primary-text); border-color: var(--edb-border); }
+          .ttv-step-chip.active strong { background: var(--edb-primary); }
 
           .ttv-day-summary {
             display: flex; justify-content: space-between; align-items: center; gap: 12px;
-            padding: 14px 16px; border: 1px solid #e2e8f0; border-radius: 16px; background: #f8fafc;
+            padding: 14px 16px; border: 1px solid var(--edb-border); border-radius: 16px; background: var(--edb-surface);
           }
           .ttv-period-grid {
             display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px;
           }
           .ttv-period-card {
-            min-height: 150px; padding: 14px; border-radius: 16px; border: 1px solid #dbe3ee;
-            background: #fff; text-align: left; transition: .18s ease; cursor: pointer;
+            min-height: 150px; padding: 14px; border-radius: 16px; border: 1px solid var(--edb-border);
+            background: var(--edb-surface); text-align: left; transition: .18s ease; cursor: pointer;
           }
           .ttv-period-card:hover:not(.disabled) {
-            transform: translateY(-2px); border-color: #93c5fd; box-shadow: 0 10px 22px rgba(37,99,235,.09);
+            transform: translateY(-2px); border-color: var(--edb-border); box-shadow: 0 10px 22px color-mix(in srgb, var(--edb-primary-dark) 9%, transparent);
           }
-          .ttv-period-card.selected { border: 2px solid #2563eb; background: #eff6ff; }
+          .ttv-period-card.selected { border: 2px solid var(--edb-primary); background: var(--edb-surface); }
           .ttv-period-card.assigned { box-shadow: inset 0 0 0 1px #86efac; }
-          .ttv-period-card.disabled { cursor: default; background: #f8fafc; opacity: .72; }
-          .ttv-period-label { font-size: .78rem; font-weight: 800; color: #475569; text-transform: uppercase; letter-spacing: .04em; }
-          .ttv-period-empty { margin-top: 26px; text-align: center; color: #94a3b8; font-size: .85rem; font-weight: 600; }
-          .ttv-assigned-teacher { padding: 7px 9px; border-radius: 10px; background: #ecfdf5; color: #047857; font-size: .78rem; font-weight: 800; }
-          .ttv-recommended { padding: 3px 7px; border-radius: 999px; background: #fef3c7; color: #92400e; font-size: .66rem; font-weight: 800; flex-shrink: 0; }
+          .ttv-period-card.disabled { cursor: default; background: var(--edb-surface); opacity: .72; }
+          .ttv-period-label { font-size: .78rem; font-weight: 800; color: var(--edb-text); text-transform: uppercase; letter-spacing: .04em; }
+          .ttv-period-empty { margin-top: 26px; text-align: center; color: var(--edb-muted-text); font-size: .85rem; font-weight: 600; }
+          .ttv-assigned-teacher { padding: 7px 9px; border-radius: 10px; background: var(--edb-primary-soft); color: #047857; font-size: .78rem; font-weight: 800; }
+          .ttv-recommended { padding: 3px 7px; border-radius: 999px; background: var(--edb-primary-soft); color: #92400e; font-size: .66rem; font-weight: 800; flex-shrink: 0; }
 
           @media (max-width: 991px) {
             .ttv-page { padding: 14px; }
@@ -1368,17 +1368,17 @@ const TeacherTimetableView = () => {
           <div className="row align-items-center g-3 position-relative" style={{ zIndex: 1 }}>
             <div className="col-lg-7">
               <div className="d-flex flex-wrap align-items-center gap-2 mb-2">
-                <span className="ttv-badge-soft" style={{ background: 'rgba(255,255,255,0.16)', color: '#fff' }}>
+                <span className="ttv-badge-soft" style={{ background: "color-mix(in srgb, var(--edb-surface) 16%, transparent)", color: "var(--edb-text)" }}>
                   Weekly View
                 </span>
                 {hasPendingChanges && (
-                  <span className="ttv-badge-soft" style={{ background: 'rgba(251,191,36,0.2)', color: '#fde68a' }}>
+                  <span className="ttv-badge-soft" style={{ background: "color-mix(in srgb, var(--edb-accent) 20%, transparent)", color: "var(--edb-accent-text)" }}>
                     Unsaved Changes
                   </span>
                 )}
               </div>
               <h2 className="mb-2 fw-bold">Substitution & Period Arrangement</h2>
-              <p className="mb-0" style={{ color: 'rgba(255,255,255,0.82)', maxWidth: 760 }}>
+              <p className="mb-0" style={{ color: "color-mix(in srgb, var(--edb-on-primary) 82%, transparent)", maxWidth: 760 }}>
                 Arrange periods for absence, leave, official duties, meetings and temporary unavailability with smart workload-aware recommendations.
               </p>
             </div>
@@ -1386,14 +1386,14 @@ const TeacherTimetableView = () => {
             <div className="col-lg-5">
               <div className="row g-2">
                 <div className="col-6">
-                  <div className="p-3 rounded-4" style={{ background: 'rgba(255,255,255,0.14)' }}>
-                    <div className="small" style={{ color: 'rgba(255,255,255,0.72)' }}>Selected Teacher</div>
+                  <div className="p-3 rounded-4" style={{ background: "color-mix(in srgb, var(--edb-surface) 14%, transparent)" }}>
+                    <div className="small" style={{ color: "color-mix(in srgb, var(--edb-on-primary) 72%, transparent)" }}>Selected Teacher</div>
                     <div className="fw-bold text-truncate">{selectedTeacher?.name || '—'}</div>
                   </div>
                 </div>
                 <div className="col-6">
-                  <div className="p-3 rounded-4" style={{ background: 'rgba(255,255,255,0.14)' }}>
-                    <div className="small" style={{ color: 'rgba(255,255,255,0.72)' }}>Week</div>
+                  <div className="p-3 rounded-4" style={{ background: "color-mix(in srgb, var(--edb-surface) 14%, transparent)" }}>
+                    <div className="small" style={{ color: "color-mix(in srgb, var(--edb-on-primary) 72%, transparent)" }}>Week</div>
                     <div className="fw-bold">{weekLabel}</div>
                   </div>
                 </div>
@@ -1749,13 +1749,13 @@ const TeacherTimetableView = () => {
                     </tbody>
                     <tfoot>
                       <tr>
-                        <th className="ttv-day-cell" style={{ background: '#f8fafc' }}>Total</th>
+                        <th className="ttv-day-cell" style={{ background: "var(--edb-surface)" }}>Total</th>
                         {periods.map((p) => (
-                          <th key={p.id} style={{ background: '#f8fafc' }}>
+                          <th key={p.id} style={{ background: "var(--edb-surface)" }}>
                             <span className="ttv-badge-soft ttv-badge-gray">{columnWorkloads[p.id] || 0}</span>
                           </th>
                         ))}
-                        <th style={{ background: '#f8fafc' }}>
+                        <th style={{ background: "var(--edb-surface)" }}>
                           <span className="ttv-badge-soft ttv-badge-blue">{overallWorkload}</span>
                         </th>
                       </tr>
@@ -1792,7 +1792,7 @@ const TeacherTimetableView = () => {
 
                     {selectedCellRecords.length ? (
                       selectedCellRecords.map((rec, idx) => (
-                        <div key={idx} className="p-3 rounded-4 mb-2" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+                        <div key={idx} className="p-3 rounded-4 mb-2" style={{ background: "var(--edb-surface)", border: "1px solid var(--edb-border)" }}>
                           <div className="small text-muted">Class</div>
                           <div className="fw-bold text-dark">{safeGetClassName(rec) || '—'}</div>
                           <div className="small text-muted mt-2">Subject</div>
