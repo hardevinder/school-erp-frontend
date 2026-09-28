@@ -1,7 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import api from "../api";
+import AcademicTopicProgressCard from "../components/academic/AcademicTopicProgressCard";
 import "./Assessments.css";
+import AcademicBrandStrip from "../components/academic/AcademicBrandStrip"; // PATCH3_ACADEMIC_BRAND
 
 const unwrap = (response) => response?.data?.data ?? response?.data ?? [];
 const asList = (value) => Array.isArray(value) ? value : value?.rows || [];
@@ -22,10 +24,10 @@ const studentPhotoSrc = (student) => {
 };
 const emptyQuestion = (index = 0) => ({ question_type: "mcq", question_text: "", options: ["", "", "", ""], correct_answer: 0, marks: 1, difficulty: "medium", explanation: "", topic: "", sort_order: index });
 const emptyForm = {
-  online_class_id: "", class_id: "", section_id: "", subject_id: "", title: "", description: "", instructions: "Attempt all questions.",
+  online_class_id: "", class_id: "", section_id: "", subject_id: "", breakdown_id: "", breakdown_item_id: "", title: "", description: "", instructions: "Attempt all questions.",
   assessment_type: "test", mode: "online", total_marks: 20, duration_minutes: 30, starts_at: "", ends_at: "", publish_trigger: "manual", publish_at: "",
-  max_attempts: 1, result_release: "manual", randomize_questions: false, randomize_options: false, questions: [emptyQuestion(0)], question_paper: null, supporting_files: [],
-};
+  max_attempts: 1, result_release: "manual", randomize_questions: false, randomize_options: false, questions: [emptyQuestion(0)], question_paper: null, supporting_files: [], source_materials: [],
+}; // PATCH3_EMPTY_FORM
 const fmt = (value) => value ? new Date(value).toLocaleString() : "—";
 const toLocalInput = (value) => { if (!value) return ""; const d = new Date(value); const z = new Date(d.getTime() - d.getTimezoneOffset() * 60000); return z.toISOString().slice(0, 16); };
 const uniqueOptions = (rows, id, label) => [...new Map(rows.filter((r) => r[id] != null).map((r) => [Number(r[id]), { id: Number(r[id]), label: r[label] || `#${r[id]}` }])).values()];
@@ -46,20 +48,37 @@ export default function Assessments() {
   const assessmentTypeFilter = query.get("assessment_type") || "";
   const assignmentOnly = assessmentTypeFilter === "assignment";
   const worksheetOnly = assessmentTypeFilter === "worksheet";
-  const focusedLearningMaterial = assignmentOnly || worksheetOnly;
   const pageTitle = assignmentOnly ? "Assignments" : worksheetOnly ? "Worksheets" : "Assessments & Tests";
   const pageSubtitle = assignmentOnly
-    ? "Write and publish assignments in a clean teacher notebook, then collect and evaluate student work."
+    ? "Create, publish, collect scanned work, evaluate and publish assignment results."
     : worksheetOnly
-      ? "Create classroom worksheets in a notebook-style workspace, publish them and review student work."
+      ? "Create AI worksheets from the same syllabus topic and share a branded practice sheet with students."
       : isManagementViewer
         ? "School-wide assessment intelligence, student results, scanned papers and AI review visibility."
-        : "Online quizzes, worksheets, scanned answer sheets, AI papers and published results.";
-  const newAssessmentData = useCallback(() => ({
-    ...emptyForm,
-    assessment_type: assessmentTypeFilter || "test",
-    online_class_id: query.get("online_class_id") || "",
-  }), [assessmentTypeFilter, query]);
+        : "Online quizzes, scanned answer sheets, AI papers and published results."; // PATCH3_WORKSHEET_PAGE
+  const newAssessmentData = useCallback(() => {
+    const assessmentType = assessmentTypeFilter || "test";
+    const topic = query.get("topic") || "";
+    const isWorksheet = assessmentType === "worksheet";
+    return {
+      ...emptyForm,
+      assessment_type: assessmentType,
+      mode: isWorksheet ? "offline" : "online",
+      instructions: isWorksheet ? "Complete all questions neatly." : emptyForm.instructions,
+      duration_minutes: isWorksheet ? "" : emptyForm.duration_minutes,
+      online_class_id: query.get("online_class_id") || "",
+      class_id: query.get("class_id") || "",
+      section_id: query.get("section_id") || "",
+      subject_id: query.get("subject_id") || "",
+      breakdown_id: query.get("breakdown_id") || "",
+      breakdown_item_id: query.get("breakdown_item_id") || "",
+      lesson_plan_id: query.get("lesson_plan_id") || "",
+      source_resource_id: query.get("source_resource_id") || "",
+      source_file_name: query.get("source_file_name") || "", // PATCH_REUSE_DEEP_LINK_SOURCE
+      description: topic,
+      title: query.get("title") || (topic ? `${isWorksheet ? "Worksheet" : "Assessment"} – ${topic}` : ""),
+    };
+  }, [assessmentTypeFilter, query]); // PATCH3_DEEP_LINK_PREFILL
   const [rows, setRows] = useState([]); const [options, setOptions] = useState([]); const [loading, setLoading] = useState(true); const [notice, setNotice] = useState(null);
   const [builder, setBuilder] = useState(null); const [attempt, setAttempt] = useState(null); const [offline, setOffline] = useState(null); const [submissions, setSubmissions] = useState(null);
   const flash = useCallback((type, text) => { setNotice({ type, text }); window.scrollTo({ top: 0, behavior: "smooth" }); }, []);
@@ -86,7 +105,7 @@ export default function Assessments() {
       setBuilder({ mode: "edit", id: row.id, data: {
         ...emptyForm, ...full, online_class_id: full.online_class_id || "", section_id: full.section_id || "", duration_minutes: full.duration_minutes || 30,
         starts_at: toLocalInput(full.starts_at), ends_at: toLocalInput(full.ends_at), publish_at: toLocalInput(full.publish_at),
-        questions: (full.questions || []).length ? full.questions.map((q, i) => ({ ...q, options: Array.isArray(q.options) ? q.options : [], sort_order: i })) : [emptyQuestion(0)], question_paper: null, supporting_files: [],
+        questions: (full.questions || []).length ? full.questions.map((q, i) => ({ ...q, options: Array.isArray(q.options) ? q.options : [], sort_order: i })) : [emptyQuestion(0)], question_paper: null, supporting_files: [], source_materials: [],
       } });
     } catch (error) { flash("danger", error.response?.data?.message || "Could not open assessment."); }
   };
@@ -113,10 +132,10 @@ export default function Assessments() {
   return <div className="assessment-page container-fluid py-3">
     <div className="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
       <div><h2 className="mb-1">{pageTitle}</h2><div className="text-muted">{pageSubtitle}</div></div>
-      <div className="d-flex flex-wrap gap-2 assessment-page-switcher">
+      <div className="d-flex gap-2">
         {(query.get("online_class_id") || assessmentTypeFilter) && <button className="btn btn-outline-secondary" onClick={() => navigate("/assessments")}>Show all</button>}
-        {!assignmentOnly && <button className="btn btn-outline-primary" onClick={() => navigate("/assessments?assessment_type=assignment")}><i className="bi bi-journal-check me-2" />Assignments</button>}
         {!worksheetOnly && <button className="btn btn-outline-primary" onClick={() => navigate("/assessments?assessment_type=worksheet")}><i className="bi bi-file-earmark-text me-2" />Worksheets</button>}
+        {!assignmentOnly && <button className="btn btn-outline-primary" onClick={() => navigate("/assessments?assessment_type=assignment")}><i className="bi bi-journal-check me-2" />Assignments</button>}
         {canCreate && <button className="btn btn-primary" onClick={() => setBuilder({ mode: "create", data: newAssessmentData() })}><i className="bi bi-plus-lg me-2" />{assignmentOnly ? "Create Assignment" : worksheetOnly ? "Create Worksheet" : "Create Assessment"}</button>}
       </div>
     </div>
@@ -127,8 +146,8 @@ export default function Assessments() {
       <Summary icon="bi-broadcast" label="Published" value={rows.filter((r) => r.status === "published").length} />
       <Summary icon="bi-laptop" label="Online" value={rows.filter((r) => r.mode === "online").length} />
       <Summary icon="bi-file-earmark-arrow-up" label="Offline" value={rows.filter((r) => r.mode === "offline").length} />
-      {!focusedLearningMaterial && <Summary icon="bi-journal-check" label="Assignments" value={rows.filter((r) => r.assessment_type === "assignment").length} />}
-      {!focusedLearningMaterial && <Summary icon="bi-file-earmark-text" label="Worksheets" value={rows.filter((r) => r.assessment_type === "worksheet").length} />}
+      {!assignmentOnly && <Summary icon="bi-journal-check" label="Assignments" value={rows.filter((r) => r.assessment_type === "assignment").length} />}
+      {!worksheetOnly && <Summary icon="bi-file-earmark-richtext" label="Worksheets" value={rows.filter((r) => r.assessment_type === "worksheet").length} />}
     </div>
 
     {loading ? <div className="card border-0 shadow-sm p-5 text-center">Loading assessments…</div> : rows.length === 0 ? <div className="assessment-empty card border-0 shadow-sm p-5 text-center"><i className="bi bi-clipboard2-check" /><h4>No assessments yet</h4><p className="text-muted mb-0">Teachers can create an online quiz or publish an offline written paper.</p></div> :
@@ -149,8 +168,8 @@ export default function Assessments() {
           {row.can_view_submissions && !["draft", "scheduled", "cancelled"].includes(row.status) && <button className="btn btn-sm btn-outline-success" onClick={() => openSubmissions(row)}><i className="bi bi-people me-1" />{row.can_manage ? "Submissions" : "Student Results"}</button>}
           {row.can_manage && ["closed", "evaluated", "result_published"].includes(row.status) && <button className="btn btn-sm btn-success" onClick={() => mutate(row, "results/publish", "Publish all evaluated results to students and parents?")}>Publish Results</button>}
           {row.can_manage && !["cancelled", "result_published"].includes(row.status) && <button className="btn btn-sm btn-link text-danger" onClick={() => cancel(row)}>Cancel</button>}
-          {isStudent && row.status === "published" && row.mode === "online" && !["submitted", "evaluated"].includes(row.enrollment?.status) && <button className="btn btn-sm btn-primary" onClick={() => startAttempt(row)}>{row.assessment_type === "assignment" ? "Open Assignment" : row.assessment_type === "worksheet" ? "Open Worksheet" : "Attempt Test"}</button>}
-          {isStudent && row.status === "published" && row.mode === "offline" && !["submitted", "evaluated"].includes(row.enrollment?.status) && <button className="btn btn-sm btn-primary" onClick={() => setOffline(row)}><i className="bi bi-camera me-1" />{["assignment", "worksheet"].includes(row.assessment_type) ? "Upload Work" : "Upload Answer Sheets"}</button>}
+          {isStudent && row.status === "published" && row.mode === "online" && !["submitted", "evaluated"].includes(row.enrollment?.status) && <button className="btn btn-sm btn-primary" onClick={() => startAttempt(row)}>{row.assessment_type === "assignment" ? "Open Assignment" : "Attempt Test"}</button>}
+          {isStudent && row.status === "published" && row.mode === "offline" && !["submitted", "evaluated"].includes(row.enrollment?.status) && <button className="btn btn-sm btn-primary" onClick={() => setOffline(row)}><i className="bi bi-camera me-1" />{row.assessment_type === "assignment" ? "Upload Work" : "Upload Answer Sheets"}</button>}
           {(row.files || []).filter((f) => ["question_paper", "supporting_material"].includes(f.kind)).map((file) => <button key={file.id} className="btn btn-sm btn-outline-secondary" onClick={() => openBlob(`/api/assessments/${row.id}/files/${file.id}`, file.original_name)}><i className="bi bi-download me-1" />{file.original_name}</button>)}
         </div></div>
       </article></div>)}</div>}
@@ -171,23 +190,172 @@ function ResultStrip({ enrollment, total, visible }) {
 function AssessmentBuilder({ options, state, onClose, onSaved, onError }) {
   const [form, setForm] = useState(state.data); const [busy, setBusy] = useState(false); const [aiBusy, setAiBusy] = useState(false);
   const [importBusy, setImportBusy] = useState(false); const [importNotice, setImportNotice] = useState("");
+  const [materialNotice, setMaterialNotice] = useState("");
+  const [syllabusOptions, setSyllabusOptions] = useState([]);
+  const [syllabusLoading, setSyllabusLoading] = useState(false);
+  const [materialBusy, setMaterialBusy] = useState(false);
+  const [syllabusBusy, setSyllabusBusy] = useState(false);
+  const [syllabusLinks, setSyllabusLinks] = useState([]);
   const questionImportRef = useRef(null);
+  const materialInputRef = useRef(null); // PATCH3_BUILDER_STATE
+  const materialImportRef = useRef(null);
   const classRows = options.filter((o) => !form.class_id || Number(o.class_id) === Number(form.class_id));
   const sectionRows = classRows.filter((o) => !form.section_id || Number(o.section_id) === Number(form.section_id));
   const classes = uniqueOptions(options, "class_id", "class_name"); const sections = uniqueOptions(classRows, "section_id", "section_name"); const subjects = uniqueOptions(sectionRows, "subject_id", "subject_name");
+  useEffect(() => {
+    let active = true;
+    if (!form.class_id || !form.subject_id) { setSyllabusOptions([]); return undefined; }
+    setSyllabusLoading(true);
+    api.get("/syllabus-breakdowns/link-options", { params: { classId: form.class_id, subjectId: form.subject_id } })
+      .then((response) => {
+        if (!active) return;
+        const breakdowns = asList(unwrap(response));
+        const flat = breakdowns.flatMap((breakdown) => (breakdown.items || []).map((item) => ({
+          id: Number(item.id),
+          breakdown_id: Number(breakdown.id),
+          label: `${breakdown.academicSession || "Session"} · ${String(breakdown.term || "FULL_YEAR").replaceAll("_", " ")} · ${item.unitNumber ? `${item.unitNumber}. ` : ""}${item.unitTitle || `Item ${item.id}`}`,
+          item,
+          workflowStatus: breakdown.status,
+        })));
+        setSyllabusOptions(flat);
+      })
+      .catch(() => { if (active) setSyllabusOptions([]); })
+      .finally(() => { if (active) setSyllabusLoading(false); });
+    return () => { active = false; };
+  }, [form.class_id, form.subject_id]);
+
+  const selectSyllabusItem = (value) => {
+    const selected = syllabusOptions.find((option) => Number(option.id) === Number(value));
+    setForm((current) => ({
+      ...current,
+      breakdown_id: selected?.breakdown_id || "",
+      breakdown_item_id: selected?.id || "",
+      description: current.description || (selected ? [selected.item.unitTitle, selected.item.topics, selected.item.subtopics].filter(Boolean).join(" · ") : ""),
+    }));
+  };
+  const syllabusItems = useMemo(() => syllabusLinks.flatMap((breakdown) => (breakdown.items || []).map((item) => ({
+    id: item.id,
+    breakdown_id: breakdown.id,
+    label: `${item.unitNumber ? `Unit ${item.unitNumber} – ` : ""}${item.unitTitle || "Syllabus Topic"}${item.topics ? ` · ${item.topics}` : ""}`,
+    topic: item.topics || item.unitTitle || "",
+  }))), [syllabusLinks]);
+  const selectedClassName = classes.find((x) => Number(x.id) === Number(form.class_id))?.label || "";
+  const selectedSubjectName = subjects.find((x) => Number(x.id) === Number(form.subject_id))?.label || "";
+  const selectedSyllabus = syllabusItems.find((x) => Number(x.id) === Number(form.breakdown_item_id));
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!form.class_id || !form.subject_id) { setSyllabusLinks([]); return undefined; }
+    setSyllabusBusy(true);
+    api.get("/syllabus-breakdowns/link-options", { params: { classId: form.class_id, subjectId: form.subject_id } })
+      .then((response) => { if (!cancelled) setSyllabusLinks(asList(unwrap(response))); })
+      .catch(() => { if (!cancelled) setSyllabusLinks([]); })
+      .finally(() => { if (!cancelled) setSyllabusBusy(false); });
+    return () => { cancelled = true; };
+  }, [form.class_id, form.subject_id]);
+
   const updateQuestion = (index, patch) => setForm((f) => ({ ...f, questions: f.questions.map((q, i) => i === index ? { ...q, ...patch } : q) }));
   const addQuestion = () => setForm((f) => ({ ...f, questions: [...f.questions, emptyQuestion(f.questions.length)] }));
   const removeQuestion = (index) => setForm((f) => ({ ...f, questions: f.questions.filter((_, i) => i !== index).map((q, i) => ({ ...q, sort_order: i })) }));
-  const materialName = form.assessment_type === "worksheet" ? "Worksheet" : form.assessment_type === "assignment" ? "Assignment" : "Assessment";
   const generateAi = async () => {
     if (!form.class_id || !form.subject_id || !form.title) return onError("Select class, subject and enter a title before AI generation.");
     setAiBusy(true);
     try {
-      const result = unwrap(await api.post("/api/assessments/ai/generate", { class_id: form.class_id, section_id: form.section_id || null, subject_id: form.subject_id, title: form.title, topic: form.description, total_marks: Number(form.total_marks), duration_minutes: Number(form.duration_minutes), question_count: Math.max(1, form.questions.length || 10), question_types: ["mcq", "true_false", "fill_blank", "short", "long"], language: "English", assessment_type: form.assessment_type }));
+      const result = unwrap(await api.post("/api/assessments/ai/generate", { class_id: form.class_id, section_id: form.section_id || null, subject_id: form.subject_id, breakdown_id: form.breakdown_id || null, breakdown_item_id: form.breakdown_item_id || null, assessment_type: form.assessment_type, title: form.title, topic: form.description, total_marks: Number(form.total_marks), duration_minutes: Number(form.duration_minutes || 0), question_count: Math.max(1, form.questions.filter((q) => q.question_text?.trim()).length || 10), question_types: ["mcq", "true_false", "fill_blank", "short", "long"], language: "English" })); // PATCH3_AI_SYLLABUS_LINK
       setForm((f) => ({ ...f, title: result.title || f.title, description: result.description || f.description, instructions: result.instructions || f.instructions, questions: result.questions || f.questions, ai_meta: result.ai_meta }));
-    } catch (error) { onError(error.response?.data?.message || `AI could not generate the ${materialName.toLowerCase()}.`); }
+    } catch (error) { onError(error.response?.data?.message || "AI could not generate the test."); }
     finally { setAiBusy(false); }
   };
+const generateFromMaterial = async () => {
+    const files = form.source_materials || [];
+    if (!form.class_id || !form.subject_id) return onError("Select class and subject first.");
+    if (!form.breakdown_item_id) return onError("Select the syllabus topic first so this work is tracked correctly.");
+    if (!files.length) return onError("Upload at least one lesson PDF or image.");
+    setMaterialBusy(true); setImportNotice("");
+    try {
+      const fd = new FormData();
+      files.forEach((file) => fd.append("source_materials", file));
+      fd.append("class_id", form.class_id);
+      if (form.section_id) fd.append("section_id", form.section_id);
+      fd.append("subject_id", form.subject_id);
+      fd.append("breakdown_id", form.breakdown_id || "");
+      fd.append("breakdown_item_id", form.breakdown_item_id || "");
+      fd.append("assessment_type", form.assessment_type || "test");
+      fd.append("title", form.title || "");
+      fd.append("topic", form.description || selectedSyllabus?.topic || "");
+      fd.append("total_marks", String(form.total_marks || 20));
+      if (form.duration_minutes) fd.append("duration_minutes", String(form.duration_minutes));
+      fd.append("question_count", String(Math.max(1, form.questions.filter((q) => q.question_text?.trim()).length || 10)));
+      fd.append("question_types", JSON.stringify(["mcq", "true_false", "fill_blank", "short", "long"]));
+      const result = unwrap(await api.post("/api/assessments/ai/generate-from-material", fd));
+      setForm((current) => ({
+        ...current,
+        title: result.title || current.title,
+        description: result.description || current.description || selectedSyllabus?.topic || "",
+        instructions: result.instructions || current.instructions,
+        questions: Array.isArray(result.questions) && result.questions.length ? result.questions.map((q, i) => ({ ...q, sort_order: i })) : current.questions,
+        ai_meta: result.ai_meta || current.ai_meta,
+      }));
+      setImportNotice(`${form.assessment_type === "worksheet" ? "Worksheet" : "Assessment"} generated from lesson material and linked to the syllabus topic. Review before saving.`);
+    } catch (error) {
+      onError(error.response?.data?.message || error.message || "AI could not create questions from this lesson material.");
+    } finally { setMaterialBusy(false); }
+  }; // PATCH3_MATERIAL_AI
+  const generateFromCurrentLessonMaterial = async () => {
+    if (!form.class_id || !form.subject_id) return onError("Select class and subject first.");
+    if (!form.breakdown_item_id) return onError("Select the syllabus topic first so this work is tracked correctly.");
+    if (!form.lesson_plan_id && !form.source_resource_id) {
+      return onError("No reusable lesson source is linked. Upload lesson material once or use Syllabus Topic Only.");
+    }
+
+    setMaterialBusy(true);
+    setImportNotice("");
+    try {
+      const result = unwrap(await api.post("/api/assessments/ai/generate-from-current-lesson-material", {
+        class_id: form.class_id,
+        section_id: form.section_id || null,
+        subject_id: form.subject_id,
+        breakdown_id: form.breakdown_id || null,
+        breakdown_item_id: form.breakdown_item_id || null,
+        lesson_plan_id: form.lesson_plan_id || null,
+        source_resource_id: form.source_resource_id || null,
+        assessment_type: form.assessment_type || "test",
+        title: form.title || "",
+        topic: form.description || selectedSyllabus?.topic || "",
+        total_marks: Number(form.total_marks || 20),
+        duration_minutes: Number(form.duration_minutes || 0),
+        question_count: Math.max(1, form.questions.filter((q) => q.question_text?.trim()).length || 10),
+        question_types: ["mcq", "true_false", "fill_blank", "short", "long"],
+        language: "English",
+      }));
+
+      setForm((current) => ({
+        ...current,
+        title: result.title || current.title,
+        description: result.description || current.description || selectedSyllabus?.topic || "",
+        instructions: result.instructions || current.instructions,
+        questions:
+          Array.isArray(result.questions) && result.questions.length
+            ? result.questions.map((q, i) => ({ ...q, sort_order: i }))
+            : current.questions,
+        ai_meta: result.ai_meta || current.ai_meta,
+      }));
+
+      setImportNotice(
+        `${form.assessment_type === "worksheet" ? "Worksheet" : "Assessment"} generated from the current Lesson Plan material. Review before saving.`
+      );
+    } catch (error) {
+      onError(
+        error.response?.data?.message ||
+          error.message ||
+          "AI could not create questions from the current Lesson Plan material."
+      );
+    } finally {
+      setMaterialBusy(false);
+    }
+  }; // PATCH_REUSE_CURRENT_SOURCE_HANDLER
+
+
   const importQuestionDocument = async (file) => {
     if (!file) return;
     if (!form.class_id || !form.subject_id) {
@@ -201,7 +369,6 @@ function AssessmentBuilder({ options, state, onClose, onSaved, onError }) {
       fd.append("class_id", form.class_id);
       if (form.section_id) fd.append("section_id", form.section_id);
       fd.append("subject_id", form.subject_id);
-      fd.append("assessment_type", form.assessment_type);
       if (form.title) fd.append("title", form.title);
       if (form.description) fd.append("topic", form.description);
       const result = unwrap(await api.post("/api/assessments/ai/import-document", fd));
@@ -232,99 +399,135 @@ function AssessmentBuilder({ options, state, onClose, onSaved, onError }) {
     try {
       const fd = new FormData();
       const data = { ...form, questions: form.mode === "online" ? form.questions : form.questions.filter((q) => q.question_text?.trim()), starts_at: form.starts_at ? new Date(form.starts_at).toISOString() : "", ends_at: form.ends_at ? new Date(form.ends_at).toISOString() : "", publish_at: form.publish_at ? new Date(form.publish_at).toISOString() : "" };
-      delete data.question_paper; delete data.supporting_files;
+      delete data.question_paper; delete data.supporting_files; delete data.source_materials; delete data.lesson_plan_id; delete data.source_resource_id; delete data.source_file_name; // PATCH_REUSE_HELPER_FIELDS_NOT_PERSISTED // PATCH3_SOURCE_FILES_NOT_PERSISTED delete data.source_materials;
       for (const [key, value] of Object.entries(data)) {
         if (value === undefined || value === null) continue;
         if (["questions", "ai_meta", "settings"].includes(key)) fd.append(key, JSON.stringify(value || (key === "questions" ? [] : {})));
         else fd.append(key, typeof value === "boolean" ? String(value) : value);
       }
       if (form.question_paper) fd.append("question_paper", form.question_paper);
-      for (const file of form.supporting_files || []) fd.append("supporting_files", file);
+      const sourceAndSupporting = [...(form.supporting_files || []), ...(form.source_materials || [])];
+      const seenFiles = new Set();
+      for (const file of sourceAndSupporting) {
+        const key = `${file.name}:${file.size}:${file.lastModified}`;
+        if (seenFiles.has(key)) continue;
+        seenFiles.add(key);
+        fd.append("supporting_files", file);
+      }
       if (state.mode === "edit") await api.patch(`/api/assessments/${state.id}`, fd); else await api.post("/api/assessments", fd);
-      onSaved(state.mode === "edit" ? `${materialName} updated.` : `${materialName} created.`);
-    } catch (error) { onError(error.response?.data?.errors?.join(". ") || error.response?.data?.message || `Could not save ${materialName.toLowerCase()}.`); }
+      onSaved(state.mode === "edit" ? "Assessment updated." : "Assessment created.");
+    } catch (error) { onError(error.response?.data?.errors?.join(". ") || error.response?.data?.message || "Could not save assessment."); }
     finally { setBusy(false); }
   };
-  return <Modal title={`${state.mode === "edit" ? "Edit" : "Create"} ${materialName}`} large onClose={onClose}><form onSubmit={submit}>
-    <div className="assessment-builder-body assessment-notebook-builder">
-      <section className="assessment-notebook-sheet">
-        <div className="assessment-notebook-kicker"><i className="bi bi-journal-text" /> Choose where this work belongs</div>
-        <ChoiceField label="Class" required value={form.class_id} options={classes} onChange={(v) => setForm({ ...form, class_id: v, section_id: "", subject_id: "" })} />
-        <ChoiceField label="Section" value={form.section_id} options={sections} onChange={(v) => setForm({ ...form, section_id: v, subject_id: "" })} allowEmpty empty="All sections" />
-        <ChoiceField label="Subject" required value={form.subject_id} options={subjects} onChange={(v) => setForm({ ...form, subject_id: v })} />
-      </section>
-
-      <section className="assessment-notebook-sheet mt-3">
-        <div className="assessment-notebook-kicker"><i className="bi bi-pencil-square" /> Write the learning work</div>
-        <ChoiceField label="Type" value={form.assessment_type} options={[{ id: "assignment", label: "Assignment" }, { id: "worksheet", label: "Worksheet" }, { id: "quiz", label: "Quiz" }, { id: "test", label: "Test" }, { id: "practice", label: "Practice" }]} onChange={(v) => setForm({ ...form, assessment_type: v })} />
-        <NotebookLine label="Title" required value={form.title} onChange={(v) => setForm({ ...form, title: v })} placeholder={form.assessment_type === "worksheet" ? "e.g. Fractions Practice Worksheet" : "e.g. Chapter 4 Home Assignment"} />
-        <NotebookArea label="Chapter / Topic / What students should work on" value={form.description || ""} onChange={(v) => setForm({ ...form, description: v })} placeholder="Write the chapter, topic, learning focus or task in your own words…" />
-        <NotebookArea label="Teacher Instructions" value={form.instructions || ""} onChange={(v) => setForm({ ...form, instructions: v })} placeholder="Write clear instructions for students…" compact />
-      </section>
-
-      <section className="assessment-notebook-sheet mt-3">
-        <div className="assessment-notebook-kicker"><i className="bi bi-sliders" /> Delivery & planning</div>
-        <ChoiceField label="Mode" value={form.mode} options={[{ id: "offline", label: "Written / scanned upload" }, { id: "online", label: "Online attempt" }]} onChange={(v) => setForm({ ...form, mode: v })} />
-        <div className="assessment-planning-grid">
-          <CompactField label="Total Marks" type="number" min="0" step="0.5" value={form.total_marks} onChange={(v) => setForm({ ...form, total_marks: v })} />
-          <CompactField label="Duration (minutes)" type="number" min="1" value={form.duration_minutes} onChange={(v) => setForm({ ...form, duration_minutes: v })} />
-          <CompactField label="Maximum Attempts" type="number" min="1" max="10" value={form.max_attempts} onChange={(v) => setForm({ ...form, max_attempts: v })} />
-          <CompactField label="Available From" type="datetime-local" value={form.starts_at} onChange={(v) => setForm({ ...form, starts_at: v })} />
-          <CompactField label="Deadline" type="datetime-local" value={form.ends_at} onChange={(v) => setForm({ ...form, ends_at: v })} />
-          <CompactField label="Linked Online Class ID" value={form.online_class_id} onChange={(v) => setForm({ ...form, online_class_id: v })} placeholder="Optional" />
+  const documentTypeLabel = form.assessment_type === "worksheet" ? "AI WORKSHEET" : form.assessment_type === "assignment" ? "ASSIGNMENT" : "AI ASSESSMENT";
+  return <Modal title={`${state.mode === "edit" ? "Edit" : "Create"} ${form.assessment_type === "worksheet" ? "Worksheet" : "Assessment"}`} large onClose={onClose}><form onSubmit={submit}>
+    <div className="assessment-builder-body">
+      <AcademicBrandStrip documentType={documentTypeLabel} title={form.title} className={selectedClassName} subjectName={selectedSubjectName} topic={selectedSyllabus?.topic || form.description} />
+      <div className="row g-3">
+        <SelectField label="Class" required value={form.class_id} options={classes} onChange={(v) => setForm({ ...form, class_id: v, section_id: "", subject_id: "", breakdown_id: "", breakdown_item_id: "" })} />
+        <SelectField label="Section" value={form.section_id} options={sections} onChange={(v) => setForm({ ...form, section_id: v, subject_id: "", breakdown_id: "", breakdown_item_id: "" })} empty="All sections" />
+        <SelectField label="Subject" required value={form.subject_id} options={subjects} onChange={(v) => setForm({ ...form, subject_id: v, breakdown_id: "", breakdown_item_id: "" })} />
+        <div className="col-12 syllabus-link-card">
+          <label className="form-label fw-semibold">Link with Syllabus Breakup <span className="text-muted fw-normal">(optional)</span></label>
+          <select className="form-select" value={form.breakdown_item_id || ""} onChange={(e) => selectSyllabusItem(e.target.value)} disabled={!form.class_id || !form.subject_id || syllabusLoading}>
+            <option value="">{syllabusLoading ? "Loading syllabus breakup…" : "No syllabus item linked"}</option>
+            {syllabusOptions.map((option) => <option key={`${option.breakdown_id}-${option.id}`} value={option.id}>{option.label}</option>)}
+          </select>
+          <small className="text-muted">Linking lets Principal/Coordinator see the lesson, worksheet/test and performance against the exact chapter/unit.</small>
         </div>
-        <ChoiceField label="Publish" value={form.publish_trigger} options={[{ id: "manual", label: "Save as draft" }, { id: "immediate", label: "Publish now" }, { id: "scheduled", label: "Scheduled" }, { id: "after_class", label: "After linked class" }]} onChange={(v) => setForm({ ...form, publish_trigger: v })} />
-        {form.publish_trigger === "scheduled" && <div className="assessment-planning-grid"><CompactField label="Publish At" required type="datetime-local" value={form.publish_at} onChange={(v) => setForm({ ...form, publish_at: v })} /></div>}
-        <ChoiceField label="Result Release" value={form.result_release} options={[{ id: "manual", label: "Teacher publishes results" }, { id: "immediate", label: "Immediate when auto-checked" }]} onChange={(v) => setForm({ ...form, result_release: v })} />
-        <div className="assessment-inline-checks"><Check label="Randomize questions" checked={form.randomize_questions} onChange={(v) => setForm({ ...form, randomize_questions: v })} /><Check label="Randomize options" checked={form.randomize_options} onChange={(v) => setForm({ ...form, randomize_options: v })} /></div>
-      </section>
+        <Input label="Linked Online Class ID" value={form.online_class_id} onChange={(v) => setForm({ ...form, online_class_id: v })} placeholder="Optional" />
+        <Input label="Title" required value={form.title} onChange={(v) => setForm({ ...form, title: v })} />
+        <SelectField label="Type" value={form.assessment_type} options={[{ id: "quiz", label: "Quiz" }, { id: "test", label: "Test" }, { id: "worksheet", label: "Worksheet" }, { id: "assignment", label: "Assignment" }, { id: "practice", label: "Practice" }]} onChange={(v) => setForm({ ...form, assessment_type: v })} />
+        <SelectField label="Mode" value={form.mode} options={[{ id: "online", label: "Online attempt" }, { id: "offline", label: "Written / scanned upload" }]} onChange={(v) => setForm({ ...form, mode: v })} />
+        <Input label="Total Marks" type="number" min="0" step="0.5" value={form.total_marks} onChange={(v) => setForm({ ...form, total_marks: v })} />
+        <Input label="Duration (minutes)" type="number" min="1" value={form.duration_minutes} onChange={(v) => setForm({ ...form, duration_minutes: v })} />
+        <Input label="Maximum Attempts" type="number" min="1" max="10" value={form.max_attempts} onChange={(v) => setForm({ ...form, max_attempts: v })} />
+        <Input label="Available From" type="datetime-local" value={form.starts_at} onChange={(v) => setForm({ ...form, starts_at: v })} />
+        <Input label="Deadline" type="datetime-local" value={form.ends_at} onChange={(v) => setForm({ ...form, ends_at: v })} />
+        <SelectField label="Publish" value={form.publish_trigger} options={[{ id: "manual", label: "Save as draft" }, { id: "immediate", label: "Publish immediately" }, { id: "scheduled", label: "At scheduled time" }, { id: "after_class", label: "When linked Zoom class ends" }]} onChange={(v) => setForm({ ...form, publish_trigger: v })} />
+        {form.publish_trigger === "scheduled" && <Input label="Publish At" required type="datetime-local" value={form.publish_at} onChange={(v) => setForm({ ...form, publish_at: v })} />}
+        <SelectField label="Result Release" value={form.result_release} options={[{ id: "manual", label: "Teacher publishes results" }, { id: "immediate", label: "Immediately for auto-checked tests" }]} onChange={(v) => setForm({ ...form, result_release: v })} />
+        <div className="col-12"><label className="form-label">Description / chapters / topic</label><textarea className="form-control" rows="2" value={form.description || ""} onChange={(e) => setForm({ ...form, description: e.target.value })} /></div>
+        <div className="col-12"><label className="form-label">Instructions</label><textarea className="form-control" rows="2" value={form.instructions || ""} onChange={(e) => setForm({ ...form, instructions: e.target.value })} /></div>
+        <div className="col-12 d-flex flex-wrap gap-4"><Check label="Randomize questions" checked={form.randomize_questions} onChange={(v) => setForm({ ...form, randomize_questions: v })} /><Check label="Randomize options" checked={form.randomize_options} onChange={(v) => setForm({ ...form, randomize_options: v })} /></div>
+      </div>
 
-      {form.mode === "offline" && <div className="assessment-upload-box mt-3"><h6><i className="bi bi-file-earmark-pdf me-2" />Question Paper / Printable Work</h6><p className="text-muted small">Upload PDF/Word/image, or keep the questions below to generate the branded PDF.</p><input className="form-control" type="file" accept=".pdf,.doc,.docx,image/*" onChange={(e) => setForm({ ...form, question_paper: e.target.files?.[0] || null })} /></div>}
+      <div className="assessment-upload-box assessment-ai-source mt-4">
+        <div className="d-flex flex-wrap justify-content-between align-items-start gap-2">
+          <div><h6 className="mb-1"><i className="bi bi-stars me-2" />Create from Lesson PDF / Images</h6><p className="text-muted small mb-0">Upload lesson notes, textbook pages, teacher handout or screenshots. AI will create a fresh {form.assessment_type === "worksheet" ? "worksheet" : "test"} from that material.</p></div>
+          <button type="button" className="btn btn-primary" disabled={aiBusy || !(form.source_materials || []).length} onClick={generateFromMaterial}><i className="bi bi-magic me-1" />{aiBusy ? "Creating…" : `Create ${form.assessment_type === "worksheet" ? "Worksheet" : "Test"} with AI`}</button>
+        </div>
+        <input ref={materialImportRef} className="form-control mt-3" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" multiple onChange={(e) => { setForm({ ...form, source_materials: Array.from(e.target.files || []) }); setMaterialNotice(""); }} />
+        {(form.source_materials || []).length > 0 && <div className="small mt-2 text-muted">{(form.source_materials || []).map((file) => file.name).join(" · ")}</div>}
+        {materialNotice && <div className="alert alert-success py-2 small mt-3 mb-0"><i className="bi bi-check2-circle me-1" />{materialNotice}</div>}
+      </div>
 
-      <div className="assessment-question-heading mt-4 mb-2"><div><h5 className="mb-0">Questions / Tasks</h5><small className="text-muted">Write naturally like a worksheet notebook. Long text areas expand while you type.</small></div><div className="d-flex flex-wrap gap-2"><button type="button" className="btn btn-outline-primary" disabled={aiBusy || importBusy} onClick={generateAi}><i className="bi bi-stars me-1" />{aiBusy ? "Generating…" : "AI Generate"}</button><button type="button" className="btn btn-primary" disabled={importBusy || aiBusy} onClick={() => questionImportRef.current?.click()}><i className="bi bi-file-earmark-scan me-1" />{importBusy ? "Reading…" : "AI Import Questions"}</button><input ref={questionImportRef} hidden type="file" accept="application/pdf,image/jpeg,image/png,image/webp" onChange={(e) => importQuestionDocument(e.target.files?.[0])} /><button type="button" className="btn btn-outline-secondary" onClick={addQuestion}><i className="bi bi-plus-lg me-1" />Add Question</button></div></div>
+      <div className="assessment-syllabus-link mt-4">
+        <div className="d-flex justify-content-between gap-2 flex-wrap align-items-center">
+          <div><div className="fw-semibold"><i className="bi bi-diagram-3 me-2" />Linked Syllabus Topic</div><div className="small text-muted">Worksheet and assessment evidence will update the same syllabus tracker topic.</div></div>
+          {form.breakdown_item_id && <span className="badge rounded-pill text-bg-success"><i className="bi bi-link-45deg me-1" />Linked</span>}
+        </div>
+        <select className="form-select mt-3" value={form.breakdown_item_id || ""} disabled={!form.class_id || !form.subject_id || syllabusBusy} onChange={(e) => { const item = syllabusItems.find((x) => Number(x.id) === Number(e.target.value)); setForm((current) => ({ ...current, breakdown_item_id: e.target.value, breakdown_id: item?.breakdown_id || "", description: current.description || item?.topic || "" })); }}>
+          <option value="">{syllabusBusy ? "Loading syllabus…" : syllabusItems.length ? "-- Select syllabus topic --" : "No linked syllabus topics found"}</option>
+          {syllabusItems.map((item) => <option value={item.id} key={`${item.breakdown_id}-${item.id}`}>{item.label}</option>)}
+        </select>
+      </div>
+
+      {(form.lesson_plan_id || form.source_resource_id) && (
+        <div className="assessment-current-source mt-3">
+          <div>
+            <div className="fw-semibold">
+              <i className="bi bi-link-45deg me-1" />
+              Current Lesson Material
+            </div>
+            <div className="small text-muted">
+              {form.source_file_name || "The lesson/chapter file already used for this Lesson Plan."}
+            </div>
+          </div>
+          <button
+            type="button"
+            className="btn btn-primary text-nowrap"
+            disabled={materialBusy || aiBusy || importBusy || !form.breakdown_item_id}
+            onClick={generateFromCurrentLessonMaterial}
+          >
+            <i className={`bi ${materialBusy ? "bi-hourglass-split" : "bi-recycle"} me-1`} />
+            {materialBusy ? "Generating…" : "Use Current Lesson Material"}
+          </button>
+        </div>
+      )} {/* PATCH_REUSE_CURRENT_SOURCE_UI */}
+
+      <div className="assessment-ai-material mt-3">
+        <div className="assessment-ai-material__copy"><div className="assessment-ai-material__icon"><i className="bi bi-stars" /></div><div><div className="fw-semibold">Upload Different Material</div>{/* PATCH_REUSE_UPLOAD_DIFFERENT_LABEL */}<div className="small text-muted">Choose another lesson PDF/image if you do not want to use the current lesson source.</div></div></div>
+        <div className="assessment-ai-material__actions">
+          <input ref={materialInputRef} className="form-control" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" multiple onChange={(e) => setForm((current) => ({ ...current, source_materials: Array.from(e.target.files || []) }))} />
+          <button type="button" className="btn btn-primary text-nowrap" disabled={materialBusy || aiBusy || importBusy || !(form.source_materials || []).length || !form.breakdown_item_id} onClick={generateFromMaterial}><i className={`bi ${materialBusy ? "bi-hourglass-split" : "bi-magic"} me-1`} />{materialBusy ? "Generating…" : form.assessment_type === "worksheet" ? "Generate Worksheet" : "Generate Assessment"}</button>
+        </div>
+        {(form.source_materials || []).length > 0 && <div className="small mt-2 text-muted"><i className="bi bi-paperclip me-1" />{form.source_materials.length} lesson source file(s) selected.</div>}
+      </div>
+
+      {form.mode === "offline" && <div className="assessment-upload-box mt-4"><h6><i className="bi bi-file-earmark-pdf me-2" />Offline Question Paper</h6><p className="text-muted small">Upload PDF/Word/image, or keep questions below to generate a branded PDF.</p><input className="form-control" type="file" accept=".pdf,.doc,.docx,image/*" onChange={(e) => setForm({ ...form, question_paper: e.target.files?.[0] || null })} /></div>}
+
+      <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-4 mb-2"><div><h5 className="mb-0">Questions</h5><small className="text-muted">Generate from topic, generate from lesson material, or import an existing question paper. Teacher review is required.</small></div><div className="d-flex flex-wrap gap-2"><button type="button" className="btn btn-outline-primary" disabled={aiBusy || importBusy || materialBusy || !form.breakdown_item_id} onClick={generateAi}><i className="bi bi-stars me-1" />{aiBusy ? "Generating…" : form.assessment_type === "worksheet" ? "AI Worksheet from Topic" : "AI Assessment from Topic"}</button><button type="button" className="btn btn-primary" disabled={importBusy || aiBusy} onClick={() => questionImportRef.current?.click()}><i className="bi bi-file-earmark-scan me-1" />{importBusy ? "Reading…" : "AI Import Questions"}</button><input ref={questionImportRef} hidden type="file" accept="application/pdf,image/jpeg,image/png,image/webp" onChange={(e) => importQuestionDocument(e.target.files?.[0])} /><button type="button" className="btn btn-outline-secondary" onClick={addQuestion}>Add Question</button></div></div>
       {importNotice && <div className="alert alert-info py-2 small"><i className="bi bi-check2-circle me-1" />{importNotice}</div>}
       {form.questions.map((q, index) => <QuestionEditor key={`${q.id || "new"}-${index}`} index={index} value={q} onChange={(patch) => updateQuestion(index, patch)} onRemove={() => removeQuestion(index)} />)}
       <div className="assessment-upload-box mt-3"><label className="form-label fw-semibold">Supporting materials</label><input className="form-control" type="file" multiple onChange={(e) => setForm({ ...form, supporting_files: Array.from(e.target.files || []) })} /></div>
     </div>
-    <div className="modal-action-bar"><button type="button" className="btn btn-light" onClick={onClose}>Close</button><button className="btn btn-primary" disabled={busy}>{busy ? "Saving…" : `Save ${materialName}`}</button></div>
+    <div className="modal-action-bar"><button type="button" className="btn btn-light" onClick={onClose}>Close</button><button className="btn btn-primary" disabled={busy}>{busy ? "Saving…" : `Save ${form.assessment_type === "worksheet" ? "Worksheet" : "Assessment"}`}</button></div>
   </form></Modal>;
 }
 
 function QuestionEditor({ index, value, onChange, onRemove }) {
   const objective = ["mcq", "true_false"].includes(value.question_type); const options = value.question_type === "true_false" ? ["True", "False"] : (value.options || ["", "", "", ""]);
-  return <section className="assessment-question-sheet mt-3">
-    <div className="assessment-question-sheet-head"><div><span>Question {index + 1}</span>{value.source_number ? <small>Source {value.source_number}</small> : null}</div><button type="button" className="btn btn-sm btn-link text-danger" onClick={onRemove}>Remove</button></div>
-    {value.needs_review && <div className="alert alert-warning py-2 small mb-2">{Array.isArray(value.warnings) && value.warnings.length ? value.warnings.join(" · ") : "Please verify this scanned question."}</div>}
-    <ChoiceField compact label="Question Type" value={value.question_type} options={[{ id: "mcq", label: "MCQ" }, { id: "true_false", label: "True / False" }, { id: "fill_blank", label: "Fill Blank" }, { id: "short", label: "Short" }, { id: "long", label: "Long" }]} onChange={(v) => onChange({ question_type: v, options: v === "true_false" ? ["True", "False"] : v === "mcq" ? (value.options?.length ? value.options : ["", "", "", ""]) : [] })} />
-    <div className="assessment-planning-grid assessment-question-meta">
-      <CompactField label="Marks" type="number" min="0.5" step="0.5" value={value.marks} onChange={(v) => onChange({ marks: v })} />
-      <CompactField label="Topic" value={value.topic || ""} onChange={(v) => onChange({ topic: v })} />
-    </div>
-    <ChoiceField compact label="Difficulty" value={value.difficulty || "medium"} options={[{ id: "easy", label: "Easy" }, { id: "medium", label: "Medium" }, { id: "hard", label: "Hard" }]} onChange={(v) => onChange({ difficulty: v })} />
-    <NotebookArea label="Question / Task" required value={value.question_text} onChange={(v) => onChange({ question_text: v })} placeholder="Write the question or task here…" compact />
-    {objective && <div className="assessment-options-block"><label>Options and correct answer</label><div className="assessment-options-grid">{options.map((option, oi) => <div className={`assessment-option-line ${value.correct_answer != null && Number(value.correct_answer) === oi ? "is-correct" : ""}`} key={oi}><input type="radio" name={`correct-${index}`} checked={value.correct_answer != null && Number(value.correct_answer) === oi} onChange={() => onChange({ correct_answer: oi })} /><input required value={option} disabled={value.question_type === "true_false"} placeholder={`Option ${oi + 1}`} onChange={(e) => { const next = [...options]; next[oi] = e.target.value; onChange({ options: next }); }} /></div>)}</div></div>}
-    {value.question_type === "fill_blank" && <NotebookLine label="Accepted answer(s), comma separated" value={Array.isArray(value.correct_answer) ? value.correct_answer.join(", ") : value.correct_answer || ""} onChange={(v) => onChange({ correct_answer: v.split(",").map((x) => x.trim()).filter(Boolean) })} />}
-    {["short", "long"].includes(value.question_type) && <NotebookArea label="Answer key / marking guidance" value={value.explanation || ""} onChange={(v) => onChange({ explanation: v })} placeholder="Write the expected answer or marking guidance…" compact />}
-  </section>;
-}
-
-function ChoiceField({ label, options = [], value, onChange, allowEmpty = false, empty = "All", required = false, compact = false }) {
-  return <div className={`assessment-choice-field ${compact ? "is-compact" : ""}`}><div className="assessment-choice-label">{label}{required ? <span>*</span> : null}</div><div className="assessment-choice-list">{allowEmpty && <button type="button" className={`assessment-choice ${String(value || "") === "" ? "active" : ""}`} onClick={() => onChange("")}>{empty}</button>}{options.map((option) => <button type="button" key={option.id} className={`assessment-choice ${String(value) === String(option.id) ? "active" : ""}`} onClick={() => onChange(String(option.id))}>{option.label}</button>)}{!options.length && !allowEmpty && <span className="assessment-choice-empty">Choose the previous option first</span>}</div></div>;
-}
-
-function NotebookLine({ label, value, onChange, required = false, placeholder = "" }) {
-  return <label className="assessment-notebook-line"><span>{label}{required ? <b>*</b> : null}</span><input required={required} value={value ?? ""} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} /></label>;
-}
-
-function NotebookArea({ label, value, onChange, required = false, placeholder = "", compact = false }) {
-  const ref = useRef(null);
-  const resize = useCallback(() => { const el = ref.current; if (!el) return; el.style.height = "auto"; el.style.height = `${Math.max(compact ? 78 : 112, el.scrollHeight)}px`; }, [compact]);
-  useEffect(() => { resize(); }, [resize, value]);
-  return <label className={`assessment-notebook-area ${compact ? "is-compact" : ""}`}><span>{label}{required ? <b>*</b> : null}</span><textarea ref={ref} required={required} value={value ?? ""} placeholder={placeholder} onChange={(e) => { onChange(e.target.value); requestAnimationFrame(resize); }} /></label>;
-}
-
-function CompactField({ label, onChange, ...props }) {
-  return <label className="assessment-compact-field"><span>{label}</span><input onChange={(e) => onChange(e.target.value)} {...props} /></label>;
+  return <div className="question-editor card border-0 mt-3"><div className="card-body"><div className="d-flex justify-content-between"><strong>Question {index + 1}{value.source_number ? ` · Source ${value.source_number}` : ""}</strong><button type="button" className="btn btn-sm btn-link text-danger" onClick={onRemove}>Remove</button></div>{value.needs_review && <div className="alert alert-warning py-2 small mb-2">{Array.isArray(value.warnings) && value.warnings.length ? value.warnings.join(" · ") : "Please verify this scanned question."}</div>}<div className="row g-2 mt-1">
+    <SelectField label="Question Type" value={value.question_type} options={[{ id: "mcq", label: "MCQ" }, { id: "true_false", label: "True / False" }, { id: "fill_blank", label: "Fill in the blank" }, { id: "short", label: "Short answer" }, { id: "long", label: "Long answer" }]} onChange={(v) => onChange({ question_type: v, options: v === "true_false" ? ["True", "False"] : v === "mcq" ? (value.options?.length ? value.options : ["", "", "", ""]) : [] })} />
+    <Input label="Marks" type="number" min="0.5" step="0.5" value={value.marks} onChange={(v) => onChange({ marks: v })} />
+    <SelectField label="Difficulty" value={value.difficulty || "medium"} options={[{ id: "easy", label: "Easy" }, { id: "medium", label: "Medium" }, { id: "hard", label: "Hard" }]} onChange={(v) => onChange({ difficulty: v })} />
+    <Input label="Topic" value={value.topic || ""} onChange={(v) => onChange({ topic: v })} />
+    <div className="col-12"><label className="form-label">Question</label><textarea required className="form-control" rows="2" value={value.question_text} onChange={(e) => onChange({ question_text: e.target.value })} /></div>
+    {objective && <div className="col-12"><label className="form-label">Options and correct answer</label><div className="row g-2">{options.map((option, oi) => <div className="col-md-6" key={oi}><div className="input-group"><span className="input-group-text"><input type="radio" name={`correct-${index}`} checked={value.correct_answer != null && Number(value.correct_answer) === oi} onChange={() => onChange({ correct_answer: oi })} /></span><input className="form-control" required value={option} disabled={value.question_type === "true_false"} onChange={(e) => { const next = [...options]; next[oi] = e.target.value; onChange({ options: next }); }} /></div></div>)}</div></div>}
+    {value.question_type === "fill_blank" && <Input label="Accepted answer(s), comma separated" value={Array.isArray(value.correct_answer) ? value.correct_answer.join(", ") : value.correct_answer || ""} onChange={(v) => onChange({ correct_answer: v.split(",").map((x) => x.trim()).filter(Boolean) })} />}
+    {["short", "long"].includes(value.question_type) && <div className="col-12"><label className="form-label">Answer key / marking guidance</label><textarea className="form-control" rows="2" value={value.explanation || ""} onChange={(e) => onChange({ explanation: e.target.value })} /></div>}
+  </div></div></div>;
 }
 
 function AttemptModal({ payload, onClose, onSubmitted, onError }) {
@@ -434,6 +637,7 @@ function GradePanel({ assessment, enrollment, readOnly = false, onClose, onSaved
     {(attempt?.answers || []).map((answer, index) => { const grade = answerGrades.find((g) => g.answer_id === answer.id) || {}; return <div className={`answer-grade mt-3 ${answer.ai_review_required ? "ai-review-needed" : ""}`} key={answer.id}><div className="d-flex justify-content-between gap-2"><strong>Q{index + 1}. {answer.question?.question_text}</strong>{answer.ai_review_required && <span className="badge text-bg-warning">Manual review</span>}</div>{answer.ai_detected_text && <p className="mb-1 mt-2"><span className="text-muted">AI read:</span> {answer.ai_detected_text}</p>}{answer.ai_remark && <p className="mb-2 small text-muted"><strong>Why:</strong> {answer.ai_remark}{answer.ai_confidence != null ? ` · confidence ${Number(answer.ai_confidence).toFixed(0)}%` : ""}</p>}{readOnly ? <div className="assessment-readonly-answer"><span><strong>Marks:</strong> {grade.awarded_marks ?? 0}/{answer.question?.marks ?? "—"}</span><span><strong>Teacher remark:</strong> {grade.teacher_remark || "—"}</span></div> : <div className="row g-2"><Input label={`Marks / ${answer.question?.marks}`} type="number" min="0" max={answer.question?.marks} step="0.5" value={grade.awarded_marks} onChange={(v) => updateAnswer(answer.id, { awarded_marks: v })} /><Input label="Teacher remark / why marks cut" value={grade.teacher_remark} onChange={(v) => updateAnswer(answer.id, { teacher_remark: v })} /></div>}</div>; })}
     {Array.isArray(attempt?.remedials) && attempt.remedials.length > 0 && <div className="smart-remedials mt-3"><h6><i className="bi bi-stars me-1" />Small remedials</h6>{attempt.remedials.map((r, i) => <div key={i}><strong>{r.topic || "Practice"}:</strong> {r.action}</div>)}</div>}
     {readOnly ? <div className="assessment-readonly-final mt-3"><div><span>Final Marks</span><strong>{marks}/{assessment.total_marks}</strong></div><div><span>Overall Feedback</span><strong>{feedback || "—"}</strong></div></div> : <div className="row g-3 mt-2"><Input label={`Final Marks / ${assessment.total_marks}`} type="number" min="0" max={assessment.total_marks} step="0.5" value={marks} onChange={setMarks} /><div className="col-12"><label className="form-label">Overall feedback</label><textarea className="form-control" rows="3" value={feedback} onChange={(e) => setFeedback(e.target.value)} /></div><div className="col-12"><label className="form-label">Corrected sheet / feedback file</label><input className="form-control" type="file" multiple onChange={(e) => setFiles(Array.from(e.target.files || []))} /></div></div>}
+    {assessment?.breakdown_item_id && <AcademicTopicProgressCard itemId={assessment.breakdown_item_id} compact />}
     <div className={`d-flex mt-3 ${readOnly ? "justify-content-end" : "justify-content-between"}`}>{readOnly ? <button className="btn btn-primary" onClick={onClose}>Close</button> : <><button className="btn btn-outline-primary" disabled={aiBusy || attempt?.submission_source === "online"} onClick={rerunAi}><i className="bi bi-stars me-1" />{aiBusy ? "Analysing…" : "Re-run AI"}</button><div><button className="btn btn-light me-2" onClick={onClose}>Cancel</button><button className="btn btn-success" disabled={busy} onClick={submit}>{busy ? "Saving…" : "Approve & Save"}</button></div></>}</div>
   </div>;
 }

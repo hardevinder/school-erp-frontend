@@ -244,96 +244,6 @@ const TimetableAssignment = () => {
     return Array.from(uniqueMap.values());
   };
 
-  const getTeacherName = (teacherId) =>
-    associations.find(
-      (assoc) => assoc.Teacher && String(assoc.Teacher.id) === String(teacherId)
-    )?.Teacher?.name || `Teacher #${teacherId}`;
-
-  const getPlannedTeacherSlots = () => {
-    const slots = [];
-
-    days.forEach((day) => {
-      periods.forEach((period) => {
-        const cell = assignments?.[day]?.[period.id] || [];
-        cell.forEach((assignment, index) => {
-          const { subjectKey, teacherKey } = getAssignmentKeys(index);
-          const teacherId = Number(assignment?.[teacherKey] || 0);
-          const subjectId = Number(assignment?.[subjectKey] || 0);
-          if (teacherId && subjectId) {
-            slots.push({
-              day,
-              periodId: Number(period.id),
-              periodName: period.period_name,
-              teacherId,
-              subjectId,
-            });
-          }
-        });
-      });
-    });
-
-    return slots;
-  };
-
-  const getExistingTeacherIds = (row) =>
-    [row.teacherId, row.teacherId_2, row.teacherId_3, row.teacherId_4, row.teacherId_5]
-      .map((id) => Number(id || 0))
-      .filter(Boolean);
-
-  const checkTeacherConflictsBeforeSave = async () => {
-    try {
-      const plannedSlots = getPlannedTeacherSlots();
-      if (!plannedSlots.length) return [];
-
-      const response = await fetch(`${API_URL}/period-class-teacher-subject`, {
-        headers: getAuthHeaders(),
-      });
-
-      if (!response.ok) {
-        console.warn('Could not pre-check timetable conflicts. Saving will use existing server behaviour.');
-        return [];
-      }
-
-      const existingRows = await response.json();
-      if (!Array.isArray(existingRows)) return [];
-
-      const conflicts = [];
-      const seen = new Set();
-
-      plannedSlots.forEach((slot) => {
-        existingRows.forEach((row) => {
-          const sameSlot =
-            String(row.day) === String(slot.day) &&
-            Number(row.periodId) === Number(slot.periodId);
-
-          const sameClassSection =
-            Number(row.classId) === Number(selectedClass) &&
-            Number(row.sectionId || 0) === Number(selectedSection || 0);
-
-          if (!sameSlot || sameClassSection) return;
-          if (!getExistingTeacherIds(row).includes(Number(slot.teacherId))) return;
-
-          const className = row.Class?.class_name || `Class ${row.classId}`;
-          const sectionLabel = sections.find(
-            (section) => Number(section.id) === Number(row.sectionId)
-          )?.section_name;
-          const sectionName = sectionLabel ? `-${sectionLabel}` : '';
-          const label = `${slot.day} • ${slot.periodName}: ${getTeacherName(slot.teacherId)} is already assigned to ${className}${sectionName}`;
-
-          if (!seen.has(label)) {
-            seen.add(label);
-            conflicts.push(label);
-          }
-        });
-      });
-
-      return conflicts;
-    } catch (error) {
-      console.warn('Timetable conflict pre-check failed:', error);
-      return [];
-    }
-  };
-
   const handleCellAssignmentChange = (day, periodId, index, fieldBase, value) => {
     const cell = assignments[day][periodId] || [];
     const { subjectKey, teacherKey } = getAssignmentKeys(index);
@@ -381,34 +291,11 @@ const TimetableAssignment = () => {
 
     if (day === 'Monday' && updatedAssignment[subjectKey] && updatedAssignment[teacherKey]) {
       setTimeout(() => {
-        const overwriteDays = days.slice(1).filter((d) => {
-          const otherCell = assignments?.[d]?.[periodId] || [];
-          const otherAssignment = otherCell[index];
-          if (!otherAssignment) return false;
-
-          const { subjectKey: otherSubjectKey, teacherKey: otherTeacherKey } =
-            getAssignmentKeys(index);
-          const otherSubject = Number(otherAssignment?.[otherSubjectKey] || 0);
-          const otherTeacher = Number(otherAssignment?.[otherTeacherKey] || 0);
-
-          if (!otherSubject && !otherTeacher) return false;
-
-          return (
-            otherSubject !== Number(updatedAssignment[subjectKey] || 0) ||
-            otherTeacher !== Number(updatedAssignment[teacherKey] || 0)
-          );
-        });
-
-        const hasOverrides = overwriteDays.length > 0;
-
         swal({
-          title: hasOverrides ? 'Override existing week entries?' : 'Fill for whole week?',
-          text: hasOverrides
-            ? `This will replace the current assignment on ${overwriteDays.join(', ')} for this period. Continue?`
-            : 'Do you want to apply this assignment to every day for this period?',
-          icon: hasOverrides ? 'warning' : 'info',
-          buttons: hasOverrides ? ['Cancel', 'Override Whole Week'] : ['No', 'Yes'],
-          dangerMode: hasOverrides,
+          title: 'Fill for whole week?',
+          text: 'Do you want to apply this assignment to every day for this period?',
+          icon: 'info',
+          buttons: ['No', 'Yes'],
         }).then((willFill) => {
           if (willFill) {
             setAssignments((prev) => {
@@ -600,25 +487,6 @@ const TimetableAssignment = () => {
   const handleSave = async () => {
     try {
       setSaving(true);
-
-      const teacherConflicts = await checkTeacherConflictsBeforeSave();
-      if (teacherConflicts.length > 0) {
-        const preview = teacherConflicts.slice(0, 6).join('\n');
-        const more = teacherConflicts.length > 6 ? `\n...and ${teacherConflicts.length - 6} more conflict(s).` : '';
-
-        const allowOverride = await swal({
-          title: 'Teacher timetable conflict',
-          text: `${preview}${more}\n\nSaving can override the teacher's existing slot. Do you want to continue?`,
-          icon: 'warning',
-          buttons: ['Cancel', 'Override & Save'],
-          dangerMode: true,
-        });
-
-        if (!allowOverride) {
-          setSaving(false);
-          return;
-        }
-      }
 
       for (const day of days) {
         for (const period of periods) {
@@ -904,37 +772,17 @@ const TimetableAssignment = () => {
 
   const getCellStatusStyle = (statuses = []) => {
     if (statuses.length > 0 && statuses.every((status) => status === 'saved')) {
-      return { background: 'var(--edb-primary-soft, #ecfdf3)', borderColor: 'var(--edb-primary, #86efac)' };
+      return { background: '#ecfdf3', borderColor: '#86efac' };
     }
     if (statuses.some((status) => status === 'pending')) {
-      return { background: 'var(--edb-accent-soft, #fffbeb)', borderColor: 'var(--edb-accent, #fcd34d)' };
+      return { background: '#fffbeb', borderColor: '#fcd34d' };
     }
-    return { background: 'var(--edb-surface, #ffffff)', borderColor: 'var(--edb-border, #e2e8f0)' };
+    return { background: '#ffffff', borderColor: '#e2e8f0' };
   };
 
   return (
     <div className="container-fluid px-2 px-md-3 py-3 class-timetable-page">
       <style>{`
-        .class-timetable-page {
-          color: var(--edb-text, #1f2937);
-        }
-
-        .class-timetable-page .bg-white {
-          background-color: var(--edb-surface, #fff) !important;
-        }
-
-        .class-timetable-page .text-dark {
-          color: var(--edb-text, #1f2937) !important;
-        }
-
-        .class-timetable-page .text-muted {
-          color: var(--edb-muted, #64748b) !important;
-        }
-
-        .class-timetable-page .border {
-          border-color: var(--edb-border, #e2e8f0) !important;
-        }
-
         .class-timetable-page .top-card {
           border-radius: 16px;
           overflow: hidden;
@@ -949,31 +797,31 @@ const TimetableAssignment = () => {
           position: sticky;
           top: 0;
           z-index: 3;
-          background: var(--edb-primary-soft-2, #f8fafc);
+          background: var(--edb-surface);
         }
 
         .class-timetable-page .day-sticky {
           position: sticky;
           left: 0;
           z-index: 2;
-          background: var(--edb-surface, #fff);
+          background: var(--edb-surface);
         }
 
         .class-timetable-page .day-sticky.header-sticky {
           z-index: 4;
-          background: var(--edb-primary-soft-2, #f8fafc);
+          background: var(--edb-surface);
         }
 
         .class-timetable-page .workload-sticky {
           position: sticky;
           right: 0;
           z-index: 2;
-          background: var(--edb-surface, #fff);
+          background: var(--edb-surface);
         }
 
         .class-timetable-page .workload-sticky.header-sticky {
           z-index: 4;
-          background: var(--edb-primary-soft-2, #f8fafc);
+          background: var(--edb-surface);
         }
 
         .class-timetable-page .period-header {
@@ -990,10 +838,10 @@ const TimetableAssignment = () => {
 
         .class-timetable-page .assignment-box {
           position: relative;
-          border: 1px solid var(--edb-border, #dbe3ee);
+          border: 1px solid var(--edb-border);
           border-radius: 10px;
           padding: 6px;
-          background: var(--edb-surface, rgba(255,255,255,0.7));
+          background: color-mix(in srgb, var(--edb-surface) 70%, transparent);
         }
 
         .class-timetable-page .compact-select {
@@ -1018,65 +866,22 @@ const TimetableAssignment = () => {
         .class-timetable-page .remove-btn {
           top: 5px;
           right: 5px;
-          background: #fee2e2;
+          background: var(--edb-primary-soft);
           color: #b91c1c;
         }
 
         .class-timetable-page .clear-btn {
           top: 6px;
           right: 6px;
-          background: #fee2e2;
+          background: var(--edb-primary-soft);
           color: #b91c1c;
         }
 
         .class-timetable-page .add-btn {
           bottom: 6px;
           right: 6px;
-          background: var(--edb-primary-soft, #dbeafe);
-          color: var(--edb-primary, #1d4ed8);
-        }
-
-        .class-timetable-page .form-select {
-          border-color: var(--edb-border, #dbe3ee);
-          background-color: var(--edb-surface, #fff);
-          color: var(--edb-text, #1f2937);
-        }
-
-        .class-timetable-page .form-select:focus {
-          border-color: var(--edb-primary, #2563eb);
-          box-shadow: 0 0 0 0.18rem var(--edb-primary-soft, rgba(37,99,235,0.12));
-        }
-
-        .class-timetable-page .theme-primary-btn {
-          background: var(--edb-primary, #2563eb);
-          border-color: var(--edb-primary, #2563eb);
-          color: #fff;
-        }
-
-        .class-timetable-page .theme-primary-btn:hover,
-        .class-timetable-page .theme-primary-btn:focus {
-          background: var(--edb-primary-dark, #1d4ed8);
-          border-color: var(--edb-primary-dark, #1d4ed8);
-          color: #fff;
-        }
-
-        .class-timetable-page .theme-outline-btn {
-          background: var(--edb-surface, #fff);
-          border: 1px solid var(--edb-primary, #2563eb);
-          color: var(--edb-primary, #2563eb);
-        }
-
-        .class-timetable-page .theme-outline-btn:hover {
-          background: var(--edb-primary-soft, #eef2ff);
-          color: var(--edb-primary-dark, #1d4ed8);
-        }
-
-        .class-timetable-page .workflow-note {
-          border: 1px solid var(--edb-border, #e2e8f0);
-          background: var(--edb-surface, #fff);
-          border-radius: 12px;
-          padding: 8px 10px;
-          color: var(--edb-muted, #64748b);
+          background: var(--edb-primary-soft);
+          color: var(--edb-primary-text);
         }
 
         @media (max-width: 1400px) {
@@ -1113,7 +918,7 @@ const TimetableAssignment = () => {
       <div className="card border-0 shadow-sm mb-3 top-card">
         <div
           className="card-body py-3"
-          style={{ background: 'linear-gradient(135deg, var(--edb-dashboard-bg, #f8fafc) 0%, var(--edb-primary-soft, #eef2ff) 100%)' }}
+          style={{ background: "linear-gradient(135deg, var(--edb-surface) 0%, var(--edb-surface) 100%)" }}
         >
           <div className="d-flex flex-column flex-xl-row justify-content-between align-items-xl-center gap-3">
             <div>
@@ -1132,7 +937,7 @@ const TimetableAssignment = () => {
               </div>
 
               <button
-                className="btn theme-outline-btn fw-semibold px-4"
+                className="btn btn-outline-dark fw-semibold px-4"
                 onClick={handlePrintPdf}
                 disabled={printing || !selectedClass || !selectedSection}
                 style={{ borderRadius: '10px', minWidth: '140px' }}
@@ -1141,7 +946,7 @@ const TimetableAssignment = () => {
               </button>
 
               <button
-                className="btn theme-primary-btn fw-semibold px-4"
+                className="btn btn-primary fw-semibold px-4"
                 onClick={handleSave}
                 disabled={saving || !selectedClass || !selectedSection}
                 style={{ borderRadius: '10px', minWidth: '150px' }}
@@ -1199,7 +1004,7 @@ const TimetableAssignment = () => {
             <div className="col-4 col-lg-2">
               <div className="bg-white border shadow-sm p-2 summary-chip text-center d-flex flex-column justify-content-center">
                 <div className="small text-muted">Weekly</div>
-                <div className="fs-5 fw-bold" style={{ color: 'var(--edb-primary, #2563eb)' }}>{weeklyWorkload}</div>
+                <div className="fs-5 fw-bold text-primary">{weeklyWorkload}</div>
               </div>
             </div>
 
@@ -1225,8 +1030,8 @@ const TimetableAssignment = () => {
                       width: 12,
                       height: 12,
                       borderRadius: 99,
-                      background: 'var(--edb-primary-soft, #ecfdf3)',
-                      border: '1px solid var(--edb-primary, #86efac)',
+                      background: "var(--edb-primary-soft)",
+                      border: '1px solid #86efac',
                       display: 'inline-block',
                     }}
                   />
@@ -1238,8 +1043,8 @@ const TimetableAssignment = () => {
                       width: 12,
                       height: 12,
                       borderRadius: 99,
-                      background: 'var(--edb-accent-soft, #fffbeb)',
-                      border: '1px solid var(--edb-accent, #fcd34d)',
+                      background: "var(--edb-surface)",
+                      border: "1px solid var(--edb-primary)",
                       display: 'inline-block',
                     }}
                   />
@@ -1248,15 +1053,10 @@ const TimetableAssignment = () => {
               </div>
             </div>
           </div>
-
-          <div className="workflow-note small mt-2 d-flex flex-wrap gap-3 align-items-center">
-            <span><strong style={{ color: 'var(--edb-text, #1f2937)' }}>Monday:</strong> completing Subject + Teacher keeps the existing <strong>Fill Whole Week</strong> option.</span>
-            <span><strong style={{ color: 'var(--edb-text, #1f2937)' }}>Safety:</strong> existing week entries and teacher-slot conflicts show an override warning before replacement.</span>
-          </div>
         </div>
       </div>
 
-      <div className="card border-0 shadow-sm" style={{ borderRadius: '16px', background: 'var(--edb-surface, #fff)' }}>
+      <div className="card border-0 shadow-sm" style={{ borderRadius: '16px' }}>
         <div className="card-body p-0">
           <div className="table-responsive">
             <table className="table align-middle mb-0 timetable-table">
@@ -1303,7 +1103,7 @@ const TimetableAssignment = () => {
                       onMouseEnter={() => setHovered({ day, period: null })}
                       onMouseLeave={() => setHovered({ day: null, period: null })}
                       style={{
-                        background: hovered.day === day ? 'var(--edb-primary-soft-2, #f8fafc)' : 'var(--edb-surface, #fff)',
+                        background: hovered.day === day ? '#f8fafc' : '#fff',
                         verticalAlign: 'top',
                         fontSize: '0.9rem',
                       }}
@@ -1330,8 +1130,8 @@ const TimetableAssignment = () => {
                           style={{
                             background:
                               hovered.day === day || hovered.period === period.id
-                                ? 'var(--edb-primary-soft-2, #f8fafc)'
-                                : 'var(--edb-surface, #fff)',
+                                ? '#f8fafc'
+                                : '#fff',
                           }}
                         >
                           <div className="border cell-box" style={cellStyle}>
@@ -1431,7 +1231,7 @@ const TimetableAssignment = () => {
                     })}
 
                     <td className="text-center px-2 py-2 workload-sticky">
-                      <span className="badge mini-badge" style={{ background: 'var(--edb-primary, #2563eb)' }}>{dailyWorkload[day] || 0}</span>
+                      <span className="badge bg-primary mini-badge">{dailyWorkload[day] || 0}</span>
                     </td>
                   </tr>
                 ))}
@@ -1442,7 +1242,7 @@ const TimetableAssignment = () => {
                   <td
                     colSpan={periods.length + 2}
                     className="text-center fw-bold py-2"
-                    style={{ background: 'var(--edb-primary-soft-2, #f8fafc)', fontSize: '0.95rem', color: 'var(--edb-text, #1f2937)' }}
+                    style={{ background: "var(--edb-surface)", fontSize: '0.95rem' }}
                   >
                     Weekly Workload: {weeklyWorkload}
                   </td>

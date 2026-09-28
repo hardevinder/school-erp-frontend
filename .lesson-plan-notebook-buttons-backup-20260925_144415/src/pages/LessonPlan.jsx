@@ -91,60 +91,6 @@ const growNotebookTextarea = (event) => {
   el.style.height = `${el.scrollHeight}px`;
 };
 
-const ChoiceButtons = ({
-  label,
-  options = [],
-  value,
-  onChange,
-  disabled = false,
-  emptyText = "No options available",
-  dense = false,
-  scroll = false,
-}) => {
-  const normalized = (options || [])
-    .map((option) => {
-      if (option && typeof option === "object" && Object.prototype.hasOwnProperty.call(option, "value")) {
-        return { value: option.value, label: option.label ?? option.value };
-      }
-      return { value: option, label: option };
-    })
-    .filter((option) => option.value !== undefined && option.value !== null && safeStr(option.label).trim());
-
-  const current = safeStr(value);
-  const hasCurrent = normalized.some((option) => safeStr(option.value) === current);
-  const shown = current && !hasCurrent
-    ? [{ value, label: current, retained: true }, ...normalized]
-    : normalized;
-
-  return (
-    <div className={`lp-choice-group ${dense ? "dense" : ""}`}>
-      {label ? <div className="lp-choice-label">{label}</div> : null}
-      <div className={`lp-choice-list ${scroll ? "scroll" : ""}`}>
-        {shown.length ? (
-          shown.map((option, index) => {
-            const selected = safeStr(option.value) === current;
-            return (
-              <button
-                key={`${safeStr(option.value)}_${index}`}
-                type="button"
-                className={`lp-choice-btn ${selected ? "active" : ""} ${option.retained ? "retained" : ""}`}
-                aria-pressed={selected}
-                disabled={disabled}
-                onClick={() => onChange?.(option.value)}
-                title={safeStr(option.label)}
-              >
-                {safeStr(option.label)}
-              </button>
-            );
-          })
-        ) : (
-          <span className="lp-empty-note">{emptyText}</span>
-        )}
-      </div>
-    </div>
-  );
-};
-
 /* ---------------- component ---------------- */
 
 const LessonPlanCRUD = () => {
@@ -1695,36 +1641,53 @@ const LessonPlanCRUD = () => {
                   </div>
                 </div>
 
-                <div className="lp-primary-choice-stack mt-3">
-                  <ChoiceButtons
-                    label="Class *"
-                    options={classes.map((c) => ({ value: c.id, label: c.class_name }))}
-                    value={formData.classId}
-                    onChange={(value) => onField("classId", value)}
-                    emptyText="No assigned classes found"
-                    scroll
-                  />
+                <Row className="g-3 mt-1">
+                  <Col xs={12} md={6} xl={3}>
+                    <Form.Group>
+                      <Form.Label className="lp-compact-label">Class *</Form.Label>
+                      <Form.Select
+                        className="lp-compact-control"
+                        value={formData.classId}
+                        onChange={(e) => onField("classId", e.target.value)}
+                        required
+                      >
+                        <option value="">Select Class</option>
+                        {classes.map((c) => (
+                          <option key={c.id} value={c.id}>{c.class_name}</option>
+                        ))}
+                      </Form.Select>
+                    </Form.Group>
+                  </Col>
 
-                  <ChoiceButtons
-                    label="Subject *"
-                    options={subjects.map((subject) => ({ value: subject.id, label: subject.name }))}
-                    value={formData.subjectId}
-                    onChange={(value) => onField("subjectId", value)}
-                    emptyText="No assigned subjects found"
-                    scroll
-                  />
+                  <Col xs={12} md={6} xl={3}>
+                    <Form.Group>
+                      <Form.Label className="lp-compact-label">Subject *</Form.Label>
+                      <Form.Select
+                        className="lp-compact-control"
+                        value={formData.subjectId}
+                        onChange={(e) => onField("subjectId", e.target.value)}
+                        required
+                      >
+                        <option value="">Select Subject</option>
+                        {subjects.map((subject) => (
+                          <option key={subject.id} value={subject.id}>{subject.name}</option>
+                        ))}
+                      </Form.Select>
+                    </Form.Group>
+                  </Col>
 
-                  <ChoiceButtons
-                    label="Term"
-                    options={termOptions}
-                    value={formData.term}
-                    onChange={(value) => onField("term", value)}
-                    dense
-                  />
-                </div>
+                  <Col xs={6} md={3} xl={2}>
+                    <Form.Group>
+                      <Form.Label className="lp-compact-label">Term</Form.Label>
+                      <Form.Select className="lp-compact-control" value={formData.term} onChange={(e) => onField("term", e.target.value)}>
+                        {termOptions.map((term) => (
+                          <option key={term.value} value={term.value}>{term.label}</option>
+                        ))}
+                      </Form.Select>
+                    </Form.Group>
+                  </Col>
 
-                <Row className="g-3 mt-1 lp-context-fields">
-                  <Col xs={12} md={4}>
+                  <Col xs={6} md={3} xl={2}>
                     <Form.Group>
                       <Form.Label className="lp-compact-label">Week Start *</Form.Label>
                       <Form.Control
@@ -1737,7 +1700,7 @@ const LessonPlanCRUD = () => {
                     </Form.Group>
                   </Col>
 
-                  <Col xs={12} md={4}>
+                  <Col xs={6} md={3} xl={2}>
                     <Form.Group>
                       <Form.Label className="lp-compact-label">Week End *</Form.Label>
                       <Form.Control
@@ -1750,7 +1713,7 @@ const LessonPlanCRUD = () => {
                     </Form.Group>
                   </Col>
 
-                  <Col xs={12} md={4}>
+                  <Col xs={6} md={3} xl={2}>
                     <Form.Group>
                       <Form.Label className="lp-compact-label">Academic Session</Form.Label>
                       <Form.Control
@@ -1818,47 +1781,55 @@ const LessonPlanCRUD = () => {
                     </div>
                   </div>
 
-                  <div className="lp-syllabus-choice-stack mt-1">
-                    <ChoiceButtons
-                      label="Unit / Breakdown Item"
-                      options={breakdownItems.map((item) => ({
-                        value: item.id,
-                        label: `${item.unitNumber ? `${item.unitNumber} - ` : ""}${item.unitTitle || `Unit #${item.id}`}`,
-                      }))}
-                      value={formData.breakdownItemId}
-                      onChange={(value) => onField("breakdownItemId", value)}
-                      disabled={!formData.classId || !formData.subjectId}
-                      emptyText={
-                        formData.classId && formData.subjectId
-                          ? "No breakdown items found"
-                          : "Select Class & Subject first"
-                      }
-                      scroll
-                    />
-                    {breakdown ? (
-                      <div className="lp-inline-hint">Breakdown #{breakdown.id}{breakdown.status ? ` • ${breakdown.status}` : ""}</div>
-                    ) : null}
-
-                    <ChoiceButtons
-                      label="Topic"
-                      options={topicOptions.map((topic) => ({ value: topic, label: topic }))}
-                      value={formData.topic}
-                      onChange={(value) => onField("topic", value)}
-                      disabled={!topicOptions.length}
-                      emptyText="Select a unit to load topics"
-                      scroll
-                    />
-
-                    <ChoiceButtons
-                      label="Subtopic"
-                      options={subtopicOptions.map((subtopic) => ({ value: subtopic, label: subtopic }))}
-                      value={formData.subtopic}
-                      onChange={(value) => onField("subtopic", value)}
-                      disabled={!subtopicOptions.length}
-                      emptyText="Select a unit to load subtopics"
-                      scroll
-                    />
-                  </div>
+                  <Row className="g-3 mt-1">
+                    <Col xs={12} lg={5}>
+                      <Form.Label className="lp-compact-label">Unit / Breakdown Item</Form.Label>
+                      <Form.Select
+                        className="lp-compact-control"
+                        value={formData.breakdownItemId}
+                        onChange={(e) => onField("breakdownItemId", e.target.value)}
+                        disabled={!formData.classId || !formData.subjectId}
+                      >
+                        <option value="">
+                          {formData.classId && formData.subjectId
+                            ? breakdownItems.length ? "Select Unit" : "No breakdown items found"
+                            : "Select Class & Subject first"}
+                        </option>
+                        {breakdownItems.map((item) => (
+                          <option key={item.id} value={item.id}>
+                            {item.unitNumber ? `${item.unitNumber} - ` : ""}{item.unitTitle || `Unit #${item.id}`}
+                          </option>
+                        ))}
+                      </Form.Select>
+                      {breakdown ? (
+                        <div className="lp-inline-hint">Breakdown #{breakdown.id}{breakdown.status ? ` • ${breakdown.status}` : ""}</div>
+                      ) : null}
+                    </Col>
+                    <Col xs={12} md={6} lg={3}>
+                      <Form.Label className="lp-compact-label">Topic</Form.Label>
+                      <Form.Select
+                        className="lp-compact-control"
+                        value={formData.topic}
+                        onChange={(e) => onField("topic", e.target.value)}
+                        disabled={!topicOptions.length}
+                      >
+                        <option value="">{topicOptions.length ? "Select Topic" : "Select unit first"}</option>
+                        {topicOptions.map((topic, idx) => <option key={`${topic}_${idx}`} value={topic}>{topic}</option>)}
+                      </Form.Select>
+                    </Col>
+                    <Col xs={12} md={6} lg={4}>
+                      <Form.Label className="lp-compact-label">Subtopic</Form.Label>
+                      <Form.Select
+                        className="lp-compact-control"
+                        value={formData.subtopic}
+                        onChange={(e) => onField("subtopic", e.target.value)}
+                        disabled={!subtopicOptions.length}
+                      >
+                        <option value="">{subtopicOptions.length ? "Select Subtopic" : "Select unit first"}</option>
+                        {subtopicOptions.map((subtopic, idx) => <option key={`${subtopic}_${idx}`} value={subtopic}>{subtopic}</option>)}
+                      </Form.Select>
+                    </Col>
+                  </Row>
                 </div>
 
                 <div className="lp-notebook-section">
@@ -2052,52 +2023,42 @@ const LessonPlanCRUD = () => {
                   <strong>Plan & Workflow</strong>
                   <span>Compact controls only — your writing stays above.</span>
                 </div>
-                <div className="lp-planning-controls lp-planning-controls-buttons">
-                  <ChoiceButtons
-                    label="Status"
-                    options={[
-                      { value: "Draft", label: "Draft" },
-                      { value: "Submitted", label: "Submitted" },
-                      { value: "Approved", label: "Approved" },
-                      { value: "Returned", label: "Returned" },
-                    ]}
-                    value={formData.status}
-                    onChange={(value) => onField("status", value)}
-                    dense
-                  />
-
-                  <ChoiceButtons
-                    label="Completion"
-                    options={[
-                      { value: "Planned", label: "Planned" },
-                      { value: "Completed", label: "Completed" },
-                      { value: "Partial", label: "Partial" },
-                    ]}
-                    value={formData.completionStatus}
-                    onChange={(value) => onField("completionStatus", value)}
-                    dense
-                  />
-
-                  <div className="lp-planning-inline">
-                    <div>
-                      <label>Planned Periods</label>
-                      <Form.Control
-                        className="lp-compact-control"
-                        type="number"
-                        min={0}
-                        value={formData.plannedPeriods}
-                        onChange={(e) => onField("plannedPeriods", e.target.value)}
-                      />
-                    </div>
-                    <div className="lp-publish-toggle">
-                      <Form.Check
-                        type="switch"
-                        id="publishSwitch"
-                        label="Publish"
-                        checked={!!formData.publish}
-                        onChange={(e) => onField("publish", e.target.checked)}
-                      />
-                    </div>
+                <div className="lp-planning-controls">
+                  <div>
+                    <label>Status</label>
+                    <Form.Select className="lp-compact-control" value={formData.status} onChange={(e) => onField("status", e.target.value)}>
+                      <option value="Draft">Draft</option>
+                      <option value="Submitted">Submitted</option>
+                      <option value="Approved">Approved</option>
+                      <option value="Returned">Returned</option>
+                    </Form.Select>
+                  </div>
+                  <div>
+                    <label>Completion</label>
+                    <Form.Select className="lp-compact-control" value={formData.completionStatus} onChange={(e) => onField("completionStatus", e.target.value)}>
+                      <option value="Planned">Planned</option>
+                      <option value="Completed">Completed</option>
+                      <option value="Partial">Partial</option>
+                    </Form.Select>
+                  </div>
+                  <div>
+                    <label>Planned Periods</label>
+                    <Form.Control
+                      className="lp-compact-control"
+                      type="number"
+                      min={0}
+                      value={formData.plannedPeriods}
+                      onChange={(e) => onField("plannedPeriods", e.target.value)}
+                    />
+                  </div>
+                  <div className="lp-publish-toggle">
+                    <Form.Check
+                      type="switch"
+                      id="publishSwitch"
+                      label="Publish"
+                      checked={!!formData.publish}
+                      onChange={(e) => onField("publish", e.target.checked)}
+                    />
                   </div>
                 </div>
               </section>
