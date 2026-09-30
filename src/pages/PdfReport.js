@@ -23,7 +23,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   dateRange: {
-    fontSize: 12,
+    fontSize: 10,
     marginTop: 5,
     textAlign: 'center',
     marginBottom: 10,
@@ -118,20 +118,23 @@ const TableHeader = () => (
   <View style={styles.tableHeaderRow} fixed>
     <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Sr. No</Text>
     <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Slip ID</Text>
+    <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Session</Text>
     <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Admission No.</Text>
     <Text style={[styles.tableHeaderCell, { flex: 2 }]}>Student Name</Text>
     <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Class</Text>
     <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Payment Mode</Text>
     <Text style={[styles.tableHeaderCell, { flex: 2 }]}>Fee Heading</Text>
-    <Text style={[styles.tableHeaderCell, { flex: 2 }]}>Created At</Text>
+    <Text style={[styles.tableHeaderCell, { flex: 2 }]}>Transaction date</Text>
     <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Fee Received</Text>
     <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Concession</Text>
     <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Van Fee</Text>
+    <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Fine</Text>
     <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Total Received</Text>
+    <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Status</Text>
   </View>
 );
 
-const PdfReport = ({ school, startDate, endDate, aggregatedData = [] }) => {
+const PdfReport = ({ school, startDate, endDate, sessionLabel = "All sessions", searchLabel = "", aggregatedData = [] }) => {
   // Paginate aggregated data
   const pagesData = paginateData(aggregatedData);
 
@@ -139,14 +142,14 @@ const PdfReport = ({ school, startDate, endDate, aggregatedData = [] }) => {
     <Document>
       {pagesData.map((pageData, pageIndex) => (
         <Page key={pageIndex} size="A4" orientation="landscape" style={styles.page}>
-          {pageIndex === 0 && (
+          {(
             <>
               <View style={styles.headerContainer}>
-                <Text style={styles.schoolName}>{school?.name}</Text>
+                <Text style={styles.schoolName}>{school?.name || school?.school_name || "Fee collection"}</Text>
                 {/* <Text style={styles.schoolDesc}>{school?.description}</Text> */}
               </View>
               <Text style={styles.dateRange}>
-                Date Range: {formatToDDMMYYYY(startDate)} to {formatToDDMMYYYY(endDate)}
+                Session: {sessionLabel} | {formatToDDMMYYYY(startDate)} to {formatToDDMMYYYY(endDate)}{searchLabel ? ` | Search: ${searchLabel}` : ""}
               </Text>
               <Text style={styles.sectionTitle}>Collection Report</Text>
             </>
@@ -161,12 +164,13 @@ const PdfReport = ({ school, startDate, endDate, aggregatedData = [] }) => {
               const serialNumber = pageIndex * 20 + index + 1;
               // Horizontal total: Fee Received + Van Fee
               const horizontalTotal =
-                Number(item.totalFeeReceived) + Number(item.totalVanFee);
+                (Number(item.totalFeeReceived) || 0) + (Number(item.totalVanFee) || 0) + (Number(item.totalFine ?? item.Fine_Amount) || 0);
 
               return (
-                <View style={styles.tableRow} key={serialNumber}>
+                <View style={styles.tableRow} key={serialNumber} wrap={false}>
                   <Text style={[styles.tableCell, { flex: 1 }]}>{serialNumber}</Text>
                   <Text style={[styles.tableCell, { flex: 1 }]}>{item.Slip_ID}</Text>
+                  <Text style={[styles.tableCell, { flex: 1 }]}>{item.Session?.name || (item.session_id ? `Session ${item.session_id}` : "Unassigned")}</Text>
                   <Text style={[styles.tableCell, { flex: 1 }]}>{item.Student?.admission_number}</Text>
                   <Text style={[styles.tableCell, { flex: 2 }]}>{item.Student?.name}</Text>
                   <Text style={[styles.tableCell, { flex: 1 }]}>{item.Student?.Class?.class_name}</Text>
@@ -177,12 +181,15 @@ const PdfReport = ({ school, startDate, endDate, aggregatedData = [] }) => {
                   <Text style={[styles.tableCell, { flex: 1 }]}>{formatIndianNumber(item.totalFeeReceived)}</Text>
                   <Text style={[styles.tableCell, { flex: 1 }]}>{formatIndianNumber(item.totalConcession)}</Text>
                   <Text style={[styles.tableCell, { flex: 1 }]}>{formatIndianNumber(item.totalVanFee)}</Text>
+                  <Text style={[styles.tableCell, { flex: 1 }]}>{formatIndianNumber(Number(item.totalFine ?? item.Fine_Amount) || 0)}</Text>
                   <Text style={[styles.tableCell, { flex: 1 }]}>{formatIndianNumber(horizontalTotal)}</Text>
+                  <Text style={[styles.tableCell, { flex: 1 }]}>{item.status || "—"}</Text>
                 </View>
               );
             })}
           </View>
 
+          {pageIndex === pagesData.length - 1 && <Text style={styles.sectionTitle}>Total collected (INR): {formatIndianNumber(aggregatedData.reduce((sum, item) => sum + (Number(item.totalFeeReceived) || 0) + (Number(item.totalVanFee) || 0) + (Number(item.totalFine ?? item.Fine_Amount) || 0), 0))}</Text>}
           <Text
             style={styles.pageFooter}
             render={({ pageNumber, totalPages }) => `${pageNumber} / ${totalPages}`}

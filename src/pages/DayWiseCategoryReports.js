@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Container, Row, Col, Form, Button, Table, Alert, Pagination, Spinner } from 'react-bootstrap';
-import DatePicker from 'react-datepicker';
-import 'react-datepicker/dist/react-datepicker.css';
+import { Container, Row, Col, Button, Table, Alert, Pagination } from 'react-bootstrap';
+import FeeReportFilters, { useFeeReportFilters, sessionOf, receiptKey, downloadReport } from "../components/reports/FeeReportFilters";
 import api from '../api';
 import Swal from 'sweetalert2';
 import { pdf } from '@react-pdf/renderer';
@@ -15,12 +14,6 @@ import { saveAs } from 'file-saver';
 -------------------------------------------------- */
 
 // Keep this as is for API calls (backend expects yyyy-MM-dd)
-const formatDate = (date) => {
-  const d = new Date(date);
-  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
-  return d.toISOString().slice(0, 10);
-};
-
 // UI formatter → dd/MM/yyyy hh:mm AM/PM
 const formatToDisplayDateTime = (date) => {
   if (!date) return '';
@@ -60,13 +53,17 @@ const normalizeSchool = (raw) => {
 // Pivot data by Slip_ID
 const pivotReportData = (data) => {
   const grouped = data.reduce((acc, curr) => {
-    const slipId = curr.Slip_ID;
+    const slipId = receiptKey(curr);
 
     if (!acc[slipId]) {
       acc[slipId] = {
         Slip_ID: curr.Slip_ID,
+        receiptKey: slipId,
+        session_id: curr.session_id,
+        Session: curr.Session,
         DateOfTransaction: curr.DateOfTransaction || curr.createdAt || null,
         Student_ID: curr.Student_ID,
+        Transaction_ID: curr.Transaction_ID,
         PaymentMode: curr.PaymentMode,
         Student: curr.Student,
         feeCategories: {},
@@ -96,7 +93,7 @@ const pivotReportData = (data) => {
       acc[slipId].feeCategories[category].totalReceived += Number(curr.totalFeeReceived) || 0;
 
       acc[slipId].vanFeeTotal += Number(curr.totalVanFee) || 0;
-      acc[slipId].fineAmount += Number(curr.totalFine || curr.Fine_Amount || 0);
+
     } else {
       acc[slipId].feeCategories[category].totalFeeReceived += Number(curr.totalFeeReceived) || 0;
       acc[slipId].feeCategories[category].totalConcession += Number(curr.totalConcession) || 0;
@@ -106,6 +103,7 @@ const pivotReportData = (data) => {
         (Number(curr.totalFeeReceived) || 0) + (Number(curr.totalVanFee) || 0);
     }
 
+    acc[slipId].fineAmount += Number(curr.totalFine || curr.Fine_Amount || 0);
     return acc;
   }, {});
 
@@ -125,7 +123,7 @@ const getUniqueCategories = (pivotedData) => {
 const calculateCategorySummary = (data) => {
   const norm = (v) => String(v ?? "").trim().toLowerCase();
   const isCash = (m) => norm(m) === "cash";
-  const isOnline = (m) => ["online", "hdfc"].includes(norm(m));
+  const isOnline = (m) => !isCash(m);
 
   const groups = data.reduce((acc, curr) => {
     const category = curr.feeCategoryName || "Unknown";
@@ -189,8 +187,7 @@ const calculateCategorySummary = (data) => {
 };
 
 const DayWiseReport = () => {
-  const [startDate, setStartDate] = useState(null);
-  const [endDate, setEndDate] = useState(null);
+  const filters = useFeeReportFilters();
   const [reportData, setReportData] = useState([]);
   const [school, setSchool] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -219,19 +216,19 @@ const DayWiseReport = () => {
   }, []);
 
   const handleGenerateReport = async () => {
-    if (!startDate || !endDate) {
-      alert('Please select both start and end dates.');
+    if (!filters.valid) {
+      setError('Choose a valid start and end date.');
       return;
     }
 
     setLoading(true);
     setError('');
+    const requestedFilters = filters.snapshot();
 
     try {
-      const start = formatDate(startDate);
-      const end = formatDate(endDate);
-      const response = await api.get(`/reports/day-wise?startDate=${start}&endDate=${end}`);
+      const response = await api.get("/reports/day-wise", { params: filters.params });
       setReportData(response.data || []);
+      filters.setApplied(requestedFilters);
       setCurrentPage(1);
     } catch (err) {
       if (err.response && err.response.status === 401) {
@@ -293,6 +290,7 @@ const DayWiseReport = () => {
   const overallFineTotal = pivotedData.reduce((sum, row) => sum + (row.fineAmount || 0), 0);
 
   const openPdfInNewTab = async () => {
+    if (filters.dirty || loading || pdfLoading) return;
     if (!reportData || reportData.length === 0) {
       alert('No report data to print. Please generate the report first.');
       return;
@@ -331,8 +329,9 @@ const DayWiseReport = () => {
 
       const docProps = {
         school: schoolData,
-        startDate: startDate ? formatDate(startDate) : null,
-        endDate: endDate ? formatDate(endDate) : null,
+        startDate: filters.applied.startDate,
+        endDate: filters.applied.endDate,
+        sessionLabel: filters.applied.sessionLabel,
         aggregatedData: reportDataForPdf,
         pivotedData: pivotedDataForPdf,
         feeCategories: uniqueCategories,
@@ -348,9 +347,7 @@ const DayWiseReport = () => {
       const doc = <PdfReports {...docProps} />;
       const asPdf = pdf(doc);
       const blob = await asPdf.toBlob();
-      const url = URL.createObjectURL(blob);
-      window.open(url, '_blank');
-      setTimeout(() => URL.revokeObjectURL(url), 60 * 1000);
+      downloadReport(blob, `CategoryReport_${filters.fileTag}_${filters.applied.startDate}_to_${filters.applied.endDate}.pdf`);
     } catch (err) {
       console.error('Error generating PDF:', err);
       alert('Error generating PDF. Check console for details.');
@@ -367,6 +364,7 @@ const DayWiseReport = () => {
     const header = [
       'Sr No',
       'Slip_ID',
+      'Session',
       'Admission Number',
       'Student Name',
       'Class',
@@ -393,6 +391,7 @@ const DayWiseReport = () => {
       return {
         'Sr No': idx + 1,
         Slip_ID: row.Slip_ID,
+        Session: sessionOf(row),
         'Admission Number': row.Student?.admission_number || '',
         'Student Name': row.Student?.name || '',
         Class: row.Student?.Class?.class_name || '',
@@ -416,21 +415,22 @@ const DayWiseReport = () => {
     return categorySummaryList.map((item) => ({
       Category: item.category,
       'Cash - FeeReceived': item.cash.totalFeeReceived || 0,
-      'Online - FeeReceived': item.online.totalFeeReceived || 0,
+      'Non-cash - FeeReceived': item.online.totalFeeReceived || 0,
       'Overall - FeeReceived': (item.cash.totalFeeReceived || 0) + (item.online.totalFeeReceived || 0),
       'Cash - Concession': item.cash.totalConcession || 0,
-      'Online - Concession': item.online.totalConcession || 0,
+      'Non-cash - Concession': item.online.totalConcession || 0,
       'Overall - Concession': (item.cash.totalConcession || 0) + (item.online.totalConcession || 0),
       'Cash - VanFee': item.cash.totalVanFee || 0,
-      'Online - VanFee': item.online.totalVanFee || 0,
+      'Non-cash - VanFee': item.online.totalVanFee || 0,
       'Overall - VanFee': (item.cash.totalVanFee || 0) + (item.online.totalVanFee || 0),
       'Cash - TotalReceived': item.cash.totalReceived || 0,
-      'Online - TotalReceived': item.online.totalReceived || 0,
+      'Non-cash - TotalReceived': item.online.totalReceived || 0,
       'Overall - TotalReceived': (item.cash.totalReceived || 0) + (item.online.totalReceived || 0),
     }));
   };
 
   const exportToExcel = () => {
+    if (filters.dirty || loading) return;
     if (!reportData || reportData.length === 0) {
       alert('No data to export.');
       return;
@@ -458,103 +458,23 @@ const DayWiseReport = () => {
 
     const wsTotals = XLSX.utils.json_to_sheet(totalsSheetData);
     XLSX.utils.book_append_sheet(wb, wsTotals, 'Totals');
+    const filterSheet = XLSX.utils.aoa_to_sheet([["Report", "Category-wise fee collection"], ["Session", filters.applied.sessionLabel], ["From", filters.applied.startDate], ["To", filters.applied.endDate], ["Receipts", pivotedData.length], ["Cancelled transactions", "Excluded"]]);
+    filterSheet['!cols'] = [{ wch: 24 }, { wch: 40 }];
+    XLSX.utils.book_append_sheet(wb, filterSheet, 'Report Filters');
 
     const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
     const blob = new Blob([wbout], { type: 'application/octet-stream' });
-    const fileName = `DayWiseReport_${formatDate(startDate)}_to_${formatDate(endDate)}.xlsx`;
+    const fileName = `CategoryReport_${filters.fileTag}_${filters.applied.startDate}_to_${filters.applied.endDate}.xlsx`;
     saveAs(blob, fileName);
   };
 
   return (
-    <Container className="mt-4">
-      <h1 className="text-center">Day Wise Report</h1>
-
-      <Row className="justify-content-center mt-4">
-        <Col md={3}>
-          <Form.Group controlId="startDate">
-            <Form.Label>Start Date</Form.Label>
-            <DatePicker
-              selected={startDate}
-              onChange={(date) => setStartDate(date)}
-              dateFormat="dd/MM/yyyy"
-              className="form-control"
-              placeholderText="Select Start Date"
-              showMonthDropdown
-              showYearDropdown
-              scrollableYearDropdown
-              yearDropdownItemNumber={15}
-              required
-              popperClassName="datepicker-popper"
-            />
-          </Form.Group>
-        </Col>
-
-        <Col md={3}>
-          <Form.Group controlId="endDate">
-            <Form.Label>End Date</Form.Label>
-            <DatePicker
-              selected={endDate}
-              onChange={(date) => setEndDate(date)}
-              dateFormat="dd/MM/yyyy"
-              className="form-control"
-              placeholderText="Select End Date"
-              minDate={startDate}
-              showMonthDropdown
-              showYearDropdown
-              scrollableYearDropdown
-              yearDropdownItemNumber={15}
-              required
-              popperClassName="datepicker-popper"
-            />
-          </Form.Group>
-        </Col>
-
-        <Col md={4} className="d-flex align-items-end">
-          <div className="w-100 d-flex">
-            <Button
-              variant="primary"
-              onClick={handleGenerateReport}
-              disabled={loading || pdfLoading}
-              className="me-2 flex-fill"
-            >
-              {loading ? (
-                <>
-                  <Spinner animation="border" size="sm" className="me-2" />
-                  Generating...
-                </>
-              ) : 'Generate Report'}
-            </Button>
-
-            <Button
-              variant="secondary"
-              onClick={openPdfInNewTab}
-              disabled={!reportData || reportData.length === 0 || pdfLoading}
-              className="me-2 flex-fill"
-              title={(!reportData || reportData.length === 0) ? 'No report data' : 'Print as PDF'}
-            >
-              {pdfLoading ? (
-                <>
-                  <Spinner animation="border" size="sm" className="me-2" />
-                  Generating PDF...
-                </>
-              ) : (
-                'Print As PDF'
-              )}
-            </Button>
-
-            <Button
-              variant="success"
-              onClick={exportToExcel}
-              disabled={!reportData || reportData.length === 0 || pdfLoading}
-              className="flex-fill"
-              title={(!reportData || reportData.length === 0) ? 'No data to export' : 'Export as Excel'}
-            >
-              Export As Excel
-            </Button>
-          </div>
-        </Col>
-      </Row>
-
+    <Container fluid className="fee-report-page">
+      <header className="fee-report-header"><div><span className="fee-report-eyebrow">Fee collection · Reports</span><h1>Category-wise collection</h1><p>Compare fee categories across sessions, with a receipt breakdown and collection summary.</p></div>
+        <div className="d-flex gap-2 flex-wrap"><Button variant="outline-success" onClick={exportToExcel} disabled={!reportData.length || loading || pdfLoading || filters.dirty}><i className="bi bi-file-earmark-excel me-2" />Download Excel</Button><Button variant="outline-secondary" onClick={openPdfInNewTab} disabled={!reportData.length || loading || pdfLoading || filters.dirty}>{pdfLoading ? "Preparing PDF…" : "Download PDF"}</Button></div>
+      </header>
+      <FeeReportFilters filters={filters} loading={loading || pdfLoading} onGenerate={handleGenerateReport} />
+      {reportData.length > 0 && <><div className="fee-report-stats"><div><span>Receipts</span><strong>{pivotedData.length}</strong></div><div><span>Total collected</span><strong>{formatTotalValue(grandTotal + overallVanFeeTotal + overallFineTotal)}</strong></div><div><span>Fee categories</span><strong>{uniqueCategories.length}</strong></div><div><span>Fine collected</span><strong>{formatTotalValue(overallFineTotal)}</strong></div></div><p className="small text-muted">Downloads include every receipt and the category summary for the generated filters. Cancelled transactions are excluded. Non-cash includes online, UPI, card, cheque and other payment modes.</p></>}
       {error && (
         <Row className="mt-3">
           <Col>
@@ -567,17 +487,18 @@ const DayWiseReport = () => {
         <Col>
           {pivotedData.length === 0 && !loading ? (
             <Alert variant="info" className="text-center">
-              No data available for the selected date range.
+              {filters.applied ? "No collections found for this session and date range." : "Generate a report to view collections."}
             </Alert>
           ) : (
             <>
               <h2>Collection Report</h2>
-              <div style={{ maxHeight: '400px', overflowY: 'auto', position: 'relative' }}>
+              <div style={{ maxHeight: '400px', overflow: 'auto', position: 'relative' }}>
                 <Table striped bordered hover>
                   <thead style={{ position: "sticky", top: 0, backgroundColor: "var(--edb-surface)", zIndex: 2 }}>
                     <tr>
                       <th className="sticky-top bg-white">Sr. No</th>
                       <th className="sticky-top bg-white">Slip ID</th>
+                      <th className="sticky-top bg-white">Session</th>
                       <th className="sticky-top bg-white">Admission Number</th>
                       <th className="sticky-top bg-white">Student Name</th>
                       <th className="sticky-top bg-white">Class</th>
@@ -601,9 +522,10 @@ const DayWiseReport = () => {
                       const overallTotal = categoryTotal + (row.vanFeeTotal || 0);
 
                       return (
-                        <tr key={row.Slip_ID}>
+                        <tr key={row.receiptKey}>
                           <td>{indexOfFirstRecord + idx + 1}</td>
                           <td>{row.Slip_ID}</td>
+                          <td>{sessionOf(row)}</td>
                           <td>{row.Student?.admission_number}</td>
                           <td>{row.Student?.name}</td>
                           <td>{row.Student?.Class?.class_name}</td>
@@ -629,7 +551,7 @@ const DayWiseReport = () => {
                   {pivotedData.length > 0 && (
                     <tfoot>
                       <tr>
-                        <td colSpan={7}><strong>Overall Totals</strong></td>
+                        <td colSpan={8}><strong>Overall Totals</strong></td>
                         {uniqueCategories.map((cat, i) => (
                           <td key={i}><strong>{formatTotalValue(overallTotals[cat])}</strong></td>
                         ))}
@@ -666,7 +588,7 @@ const DayWiseReport = () => {
           {categorySummary.length > 0 && (
             <>
               <h2>Category Summary</h2>
-              <div style={{ maxHeight: '400px', overflowY: 'auto', position: 'relative' }}>
+              <div style={{ maxHeight: '400px', overflow: 'auto', position: 'relative' }}>
                 <Table striped bordered hover responsive>
                   <thead style={{ position: "sticky", top: 0, backgroundColor: "var(--edb-surface)", zIndex: 2 }}>
                     <tr>
@@ -679,19 +601,19 @@ const DayWiseReport = () => {
                     </tr>
                     <tr>
                       <th className="sticky-top bg-white">Cash</th>
-                      <th className="sticky-top bg-white">Online</th>
+                      <th className="sticky-top bg-white">Non-cash</th>
                       <th className="sticky-top bg-white">Overall</th>
                       <th className="sticky-top bg-white">Cash</th>
-                      <th className="sticky-top bg-white">Online</th>
+                      <th className="sticky-top bg-white">Non-cash</th>
                       <th className="sticky-top bg-white">Overall</th>
                       <th className="sticky-top bg-white">Cash</th>
-                      <th className="sticky-top bg-white">Online</th>
+                      <th className="sticky-top bg-white">Non-cash</th>
                       <th className="sticky-top bg-white">Overall</th>
                       <th className="sticky-top bg-white">Cash</th>
-                      <th className="sticky-top bg-white">Online</th>
+                      <th className="sticky-top bg-white">Non-cash</th>
                       <th className="sticky-top bg-white">Overall</th>
                       <th className="sticky-top bg-white">Cash</th>
-                      <th className="sticky-top bg-white">Online</th>
+                      <th className="sticky-top bg-white">Non-cash</th>
                       <th className="sticky-top bg-white">Overall</th>
                     </tr>
                   </thead>
