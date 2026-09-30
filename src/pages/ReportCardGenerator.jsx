@@ -4302,7 +4302,8 @@ const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
         }
         .school-brand { display:flex; align-items:center; gap:7px; min-width:0; }
         .school-logo { width: 24mm; height: 21mm; object-fit: contain; flex:0 0 auto; }
-        .school-brand-html { min-width:0; font-size:8px; line-height:1.05; color:#123a70; }
+        
+.dynamic-school-brand-html { text-align:center!important; }.school-brand-html { min-width:0; font-size:8px; line-height:1.05; color:#123a70; }
         .school-brand-html h1, .school-brand-html h2, .school-brand-html h3,
         .school-brand-html p { margin:0; }
         .school-brand-html img { max-height:20mm !important; max-width:100% !important; object-fit:contain; }
@@ -4863,7 +4864,7 @@ const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
           color:#103a70 !important;
           margin:0 0 2.2px !important;
           text-wrap:balance;
-        }
+         margin-left:auto!important; margin-right:auto!important; text-align:center!important;}
         .dynamic-school-meta {
           display:flex !important;
           align-items:center !important;
@@ -4876,7 +4877,7 @@ const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
           line-height:1.18 !important;
           font-weight:800 !important;
           color:#315b86 !important;
-        }
+         margin-left:auto!important; margin-right:auto!important; justify-content:center!important; text-align:center!important;}
         .school-meta-item { white-space:normal !important; }
         .school-meta-sep {
           color:#f05a9c !important;
@@ -4942,26 +4943,28 @@ const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
 @page { size:A4 portrait; margin:0; }
 .preprimary-report { width:210mm!important; min-height:297mm!important; height:auto!important; padding:4mm 6.5mm 13mm!important; border:2.5mm solid #e7f3fc!important; border-radius:0!important; overflow:visible!important; background:#fff!important; position:relative; }
 .report-inner { min-height:277mm!important; height:auto!important; display:flex!important; flex-direction:column!important; position:relative; }
-.hero-row { display:grid!important; grid-template-columns:1.5fr 1fr!important; grid-template-areas:"brand motto" "heading heading"!important; gap:0 4mm!important; min-height:27mm!important; padding:0 1mm 1mm!important; }
-.school-brand { grid-area:brand; display:flex; gap:3mm!important; align-items:center; }
-.school-logo { width:24mm!important; height:23mm!important; object-fit:contain; }
+.hero-row { display:grid!important; grid-template-columns:1.5fr 1fr!important; grid-template-areas:"brand motto" "heading heading"!important; grid-template-rows:minmax(31mm,auto) 9mm!important; column-gap:4mm!important; row-gap:0!important; min-height:42mm!important; padding:0 1mm 1mm!important; overflow:visible!important; }
+.school-brand { grid-area:brand; display:flex; gap:3mm!important; align-items:center; justify-content:center!important; }
+.school-logo { width:31mm!important; height:29mm!important; object-fit:contain; flex:0 0 auto!important; }
 .dynamic-school-name { font-family:Georgia,serif!important; font-size:23px!important; line-height:1.02!important; color:#103e60; max-width:85mm!important; }
-.dynamic-school-meta { font-size:6.5px!important; line-height:1.3!important; max-width:82mm!important; }
-.report-heading { grid-area:heading; text-align:center!important; margin-top:-1mm!important; }
-.report-title { display:inline-block; font-size:15px!important; padding:2px 13px!important; background:linear-gradient(#ffe2f1,#f6a3cd)!important; border:1px solid #ee9cc4; border-radius:5px!important; }
-.report-subtitle { font-size:11px!important; margin:3px 0!important; }
+.dynamic-school-meta { font-size:6.5px!important; line-height:1.2!important; max-width:90mm!important; }
+.dynamic-school-meta .school-meta-item { font-size:6.5px!important; line-height:1.2!important; white-space:nowrap!important; }
+.dynamic-school-meta .school-meta-sep { font-size:6.5px!important; margin:0 1mm!important; }
+.report-heading { grid-area:heading; text-align:center!important; margin:0!important; padding:0!important; align-self:start!important; position:relative!important; z-index:3!important; transform:translateY(-4.5mm)!important; }
+.report-title { display:inline-block; font-size:10.5px!important; line-height:1!important; padding:1px 9px!important; background:linear-gradient(#ffe2f1,#f6a3cd)!important; border:1px solid #ee9cc4!important; border-radius:5px!important; }
+.report-subtitle { font-size:7.5px!important; line-height:1!important; margin:.7mm 0 0!important; white-space:nowrap!important; }
 .hero-motto { grid-area:motto; width:auto!important; min-width:0!important; display:flex!important; align-items:center!important; gap:1mm!important; }
 .hero-motto-top { display:flex; align-items:center; }
 .motto-main { font:italic 21px 'Segoe Print','Comic Sans MS',cursive!important; color:#174778; transform:rotate(-10deg); white-space:nowrap; }
 .motto-heart { color:#f164a5; font-size:27px!important; }
 .hero-rainbow-svg { width:34mm!important; height:23mm!important; }
 .motto-values,.quote-box { display:none!important; }
-.profile-band { display:grid!important; grid-template-columns:1fr 1fr 25mm!important; grid-template-areas:"left right photo"!important; gap:3mm!important; min-height:27mm!important; padding:1.3mm 3mm!important; margin:0 0 2mm!important; background:#fff!important; border:1px solid #c9ced6!important; border-radius:6px!important; }
+.profile-band { display:grid!important; grid-template-columns:1fr 1fr 25mm!important; grid-template-areas:"left right photo"!important; gap:3mm!important; min-height:27mm!important; padding:1.3mm 3mm!important; margin:1mm 0 2mm!important; background:#fff!important; border:1px solid #c9ced6!important; border-radius:6px!important; position:relative!important; z-index:1!important; }
 .student-photo { grid-area:photo; width:24mm!important; height:25mm!important; object-fit:cover; border:1px solid #aeb8c4; border-radius:6px!important; }
 .info-col-left { grid-area:left; border-right:1px solid #d7dce1; }
 .info-col-right { grid-area:right; }
 .info-col { display:flex; flex-direction:column; justify-content:space-around!important; gap:.7mm!important; }
-.info-line { display:grid; grid-template-columns:25mm 2mm 1fr!important; gap:.8mm!important; font-size:10.3px!important; line-height:1.15!important; }
+.info-line { display:grid; grid-template-columns:25mm 2mm 1fr!important; gap:.8mm!important; font-size:11.2px!important; line-height:1.15!important; }
 .info-label,.info-col strong { font-weight:400!important; }
 .report-main-grid { display:grid!important; grid-template-columns:repeat(2,minmax(0,1fr))!important; gap:2.2mm 4mm!important; align-items:start!important; }
 .academic-card,.development-card,.attendance-card { width:100%; min-height:0!important; height:auto!important; align-self:start!important; border-radius:6px!important; }
@@ -5017,9 +5020,15 @@ const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
 .reference-garden { position:absolute; bottom:0; left:0; width:100%; height:15mm; pointer-events:none; }
 
 .preprimary-report .school-brand-html > .dynamic-school-name { font-size:23px!important; font-weight:700!important; }
+
 .preprimary-report .report-inner { min-height:273mm!important; padding:0!important; }
 .preprimary-report .academic-title-wrap > span,.preprimary-report .development-title-wrap > span { font-size:10.5px!important; }
 .preprimary-report .info-line,.preprimary-report .remarks-body,.preprimary-report .remarks-text { font-weight:400!important; }
+/* SMCIS_PRIMARY_PROFILE_FONT_V12 */
+.preprimary-report .info-line { font-size:10.8px!important; line-height:1.15!important; }
+.preprimary-report .info-label { font-size:10.8px!important; }
+.preprimary-report .info-col strong { font-size:10.8px!important; }
+
 .preprimary-report .health-label { font-size:8px!important; font-weight:400!important; }
 .preprimary-report .grade-chip span { font-size:8px!important; }
 .preprimary-report .signature-line { font-size:8px!important; }
@@ -5558,6 +5567,8 @@ html,body { width:210mm!important; margin:0!important; padding:0!important; }
   overflow:visible!important;
   position:relative!important;
   z-index:8!important;
+
+  transform:translateY(-7mm)!important;
 }
 .report-title,
 .preprimary-report .report-title {
@@ -5765,13 +5776,20 @@ html,body { width:210mm!important; margin:0!important; padding:0!important; }
    Keep the existing A4 one-page portrait geometry unchanged. */
 .preprimary-report .school-brand {
   gap:2.6mm!important;
-  align-items:center!important;
-}
+  align-items:center!important; overflow:visible!important; }
 .preprimary-report .school-logo {
-  width:24mm!important;
-  height:23mm!important;
+  width:38mm!important;
+  height:31mm!important;
+  max-width:none!important;
+  max-height:none!important;
   object-fit:contain!important;
-  flex:0 0 24mm!important;
+  flex:0 0 38mm!important;
+  transform:scale(1.42)!important;
+  transform-origin:center center!important;
+  margin-left:-5mm!important;
+  margin-right:-4mm!important;
+  position:relative!important;
+  z-index:2!important;
 }
 .preprimary-report .dynamic-school-name,
 .preprimary-report .school-brand-html > .dynamic-school-name {
@@ -5807,6 +5825,424 @@ html,body { width:210mm!important; margin:0!important; padding:0!important; }
   overflow:visible!important;
   min-width:0!important;
 }
+
+/* SMCIS V10 FINAL HEADER OVERRIDE */
+.preprimary-report { padding-top:2.5mm!important; }
+.hero-row {
+  position:relative!important;
+  display:grid!important;
+  grid-template-columns:1.5fr 1fr!important;
+  grid-template-areas:"brand motto"!important;
+  grid-template-rows:minmax(31mm,auto)!important;
+  min-height:40mm!important;
+  padding:0 1mm 8mm!important;
+  margin:0!important;
+  row-gap:0!important;
+  overflow:visible!important;
+}
+.school-brand { grid-area:brand!important; }
+.hero-motto { grid-area:motto!important; }
+.report-heading {
+  position:absolute!important;
+  left:0!important;
+  right:0!important;
+  bottom:0.8mm!important;
+  transform:none!important;
+  margin:0!important;
+  padding:0!important;
+  text-align:center!important;
+  z-index:4!important;
+}
+.report-title {
+  font-size:10px!important;
+  line-height:1!important;
+  padding:1px 8px!important;
+}
+.report-subtitle {
+  font-size:7.3px!important;
+  line-height:1!important;
+  margin:.6mm 0 0!important;
+  white-space:nowrap!important;
+}
+.profile-band {
+  margin:1.6mm 0 2mm!important;
+  position:relative!important;
+  z-index:1!important;
+}
+.dynamic-school-meta,
+.dynamic-school-meta .school-meta-item,
+.single-contact-meta,
+.single-contact-meta .school-meta-item {
+  font-size:6.5px!important;
+  line-height:1.1!important;
+  white-space:nowrap!important;
+  font-weight:700!important;
+}
+.single-contact-meta .school-meta-sep { display:none!important; }
+
+
+/* SMCIS V11 CENTERED HEADER FINAL OVERRIDE */
+.preprimary-report {
+  padding-top:2mm!important;
+}
+.hero-row {
+  position:relative!important;
+  display:grid!important;
+  grid-template-columns:1.55fr .95fr!important;
+  grid-template-areas:
+    "brand motto"
+    "heading heading"!important;
+  grid-template-rows:minmax(31mm,auto) auto!important;
+  min-height:38mm!important;
+  column-gap:3mm!important;
+  row-gap:.8mm!important;
+  padding:0 1mm 1mm!important;
+  margin:0!important;
+  overflow:visible!important;
+}
+.school-brand {
+  grid-area:brand!important;
+  justify-content:center!important;
+  align-items:center!important;
+  min-width:0!important;
+}
+.hero-motto {
+  grid-area:motto!important;
+  justify-self:center!important;
+  align-self:center!important;
+  min-width:0!important;
+}
+.report-heading {
+  grid-area:heading!important;
+  grid-column:1 / -1!important;
+  position:static!important;
+  left:auto!important;
+  right:auto!important;
+  bottom:auto!important;
+  top:auto!important;
+  transform:none!important;
+  width:100%!important;
+  margin:0!important;
+  padding:0!important;
+  text-align:center!important;
+  justify-self:stretch!important;
+  align-self:start!important;
+  z-index:4!important;
+}
+.report-title {
+  display:inline-block!important;
+  font-size:9.5px!important;
+  line-height:1!important;
+  padding:1px 7px!important;
+  margin:0!important;
+}
+.report-subtitle {
+  display:block!important;
+  font-size:7.1px!important;
+  line-height:1.05!important;
+  margin:.7mm 0 0!important;
+  white-space:nowrap!important;
+  text-align:center!important;
+}
+.profile-band {
+  margin:1.8mm 0 2mm!important;
+  position:relative!important;
+  z-index:1!important;
+}
+.dynamic-school-brand-html {
+  text-align:center!important;
+  margin-left:auto!important;
+  margin-right:auto!important;
+}
+.dynamic-school-name {
+  text-align:center!important;
+  margin-left:auto!important;
+  margin-right:auto!important;
+}
+.single-contact-meta {
+  display:flex!important;
+  justify-content:center!important;
+  text-align:center!important;
+  font-size:6.4px!important;
+  line-height:1.08!important;
+  font-weight:400!important;
+  white-space:nowrap!important;
+  margin:1px auto 0!important;
+}
+.single-contact-meta .school-meta-item,
+.single-contact-meta strong {
+  font-size:6.4px!important;
+  line-height:1.08!important;
+  font-weight:400!important;
+  white-space:nowrap!important;
+}
+/* Any stale extra metadata row immediately following the intended line stays hidden. */
+.dynamic-school-brand-html > .single-contact-meta ~ .dynamic-school-meta {
+  display:none!important;
+}
+
+
+/* SMCIS V12 HEADER POLISH FINAL OVERRIDE */
+.hero-row {
+  grid-template-rows:minmax(30mm,auto) auto!important;
+  row-gap:.6mm!important;
+  padding-bottom:1.2mm!important;
+}
+.report-heading {
+  margin-top:1.4mm!important;
+}
+.report-title {
+  font-size:12px!important;
+  line-height:1.05!important;
+  padding:2px 10px!important;
+  border-radius:6px!important;
+}
+.report-subtitle {
+  font-size:8.4px!important;
+  line-height:1.1!important;
+  margin:1mm 0 0!important;
+  font-weight:800!important;
+}
+.profile-band {
+  margin:2.4mm 0 2mm!important;
+}
+.single-contact-meta {
+  display:flex!important;
+  justify-content:center!important;
+  text-align:center!important;
+  font-size:5.9px!important;
+  line-height:1.08!important;
+  font-weight:400!important;
+  white-space:nowrap!important;
+  margin:1px auto 0!important;
+}
+.single-contact-meta .address-meta {
+  font-size:5.9px!important;
+  line-height:1.08!important;
+  font-weight:400!important;
+  white-space:nowrap!important;
+}
+.single-contact-meta .address-meta strong {
+  font-size:5.9px!important;
+  line-height:1.08!important;
+  font-weight:800!important;
+}
+.single-contact-meta .meta-sep {
+  margin:0 2px!important;
+  font-weight:400!important;
+}
+/* Prevent any legacy duplicate metadata/email row from printing. */
+.dynamic-school-brand-html > .single-contact-meta ~ .dynamic-school-meta {
+  display:none!important;
+}
+
+
+/* SMCIS V13 HEADER POLISH FINAL OVERRIDE */
+.hero-row {
+  grid-template-rows:minmax(30mm,auto) auto!important;
+  row-gap:.8mm!important;
+  padding-bottom:1.4mm!important;
+}
+.report-heading {
+  margin-top:2.4mm!important;
+}
+.report-title {
+  font-size:13.5px!important;
+  line-height:1.05!important;
+  padding:2.5px 12px!important;
+  border-radius:6px!important;
+}
+.report-subtitle {
+  font-size:9.2px!important;
+  line-height:1.08!important;
+  margin:1.15mm 0 0!important;
+  font-weight:850!important;
+}
+.profile-band {
+  margin:3.1mm 0 2mm!important;
+}
+.single-contact-meta,
+.single-contact-meta .address-meta,
+.single-contact-meta .school-meta-item {
+  display:flex!important;
+  justify-content:center!important;
+  text-align:center!important;
+  font-size:6.1px!important;
+  line-height:1.08!important;
+  font-weight:800!important;
+  white-space:nowrap!important;
+  margin:1px auto 0!important;
+}
+.single-contact-meta .meta-sep {
+  margin:0 2px!important;
+  font-weight:800!important;
+}
+/* If an old/legacy metadata row still exists after the intended line, never print it. */
+.dynamic-school-brand-html > .single-contact-meta ~ * {
+  display:none!important;
+}
+
+
+/* SMCIS V14 DYNAMIC EMAIL FINAL OVERRIDE */
+.single-contact-meta,
+.single-contact-meta .address-meta,
+.single-contact-meta .school-meta-item,
+.single-contact-meta .meta-sep {
+  font-weight:800!important;
+}
+
+/* SMCIS V15 META CLEANUP + BOLD CONTACT/EMAIL */
+.single-contact-meta,
+.single-contact-meta .address-meta,
+.single-contact-meta .school-meta-item,
+.single-contact-meta .meta-sep {
+  font-weight:800!important;
+}
+
+/* SMCIS V16 FINAL POLISH */
+.single-contact-meta,
+.single-contact-meta .address-meta,
+.single-contact-meta .school-meta-item,
+.single-contact-meta .meta-sep {
+  font-weight: 800 !important;
+  font-size: 8.4px !important;
+  line-height: 1.15 !important;
+}
+
+.primary-title-stack {
+  transform: translateY(2.4mm) !important;
+}
+
+.primary-title-stack .report-title,
+.primary-title-stack .report-card-title {
+  font-size: 16px !important;
+  line-height: 1.05 !important;
+}
+
+.primary-title-stack .report-session,
+.primary-title-stack .session-line,
+.primary-title-stack .academic-session-line {
+  font-size: 8.7px !important;
+  line-height: 1.1 !important;
+  margin-top: 1.1mm !important;
+}
+
+        /* SMCIS_PRIMARY_HEADER_LOGO_TAGLINE_V15 */
+        .preprimary-report .school-brand {
+          display:grid !important;
+          grid-template-columns:20mm minmax(0,1fr) !important;
+          grid-template-rows:auto auto !important;
+          column-gap:2.2mm !important;
+          row-gap:.4mm !important;
+          align-items:start !important;
+          align-self:center !important;
+          min-width:0 !important;
+        }
+
+        .preprimary-report .school-logo {
+          grid-column:1 !important;
+          grid-row:1 !important;
+          width:20mm !important;
+          height:18.5mm !important;
+          object-fit:contain !important;
+          justify-self:center !important;
+          align-self:start !important;
+          margin:0 !important;
+        }
+
+        .preprimary-report .school-brand::after {
+          content:"Learning Today, Leading Tomorrow";
+          grid-column:1 !important;
+          grid-row:2 !important;
+          display:block !important;
+          width:20mm !important;
+          margin:0 auto !important;
+          text-align:center !important;
+          font-family:Arial,Helvetica,sans-serif !important;
+          font-size:5.2px !important;
+          line-height:1.08 !important;
+          font-weight:800 !important;
+          color:#174778 !important;
+          letter-spacing:0 !important;
+        }
+
+        .preprimary-report .dynamic-school-brand-html {
+          grid-column:2 !important;
+          grid-row:1 / span 2 !important;
+          min-width:0 !important;
+          max-width:none !important;
+          padding-top:.6mm !important;
+          align-self:start !important;
+          text-align:left !important;
+        }
+
+        .preprimary-report .school-brand-html > .dynamic-school-name,
+        .preprimary-report .dynamic-school-name {
+          max-width:none !important;
+          text-align:left !important;
+          font-size:20px !important;
+          line-height:1.01 !important;
+          margin:0 0 2px !important;
+        }
+
+        .preprimary-report .dynamic-school-meta {
+          max-width:none !important;
+          justify-content:flex-start !important;
+          text-align:left !important;
+          font-size:6.35px !important;
+          line-height:1.16 !important;
+        }
+
+        /* SMCIS_PRIMARY_HEADER_REFINE_V16 */
+        .preprimary-report .school-brand {
+          grid-template-columns:26mm minmax(0,1fr) !important;
+          column-gap:2.4mm !important;
+        }
+        .preprimary-report .school-logo {
+          width:26mm !important;
+          height:24mm !important;
+        }
+        .preprimary-report .school-brand::after {
+          content:"Learning Today,\\A Leading Tomorrow";
+          white-space:pre !important;
+          width:26mm !important;
+          font-size:7.2px !important;
+          line-height:1.15 !important;
+        }
+        .preprimary-report .dynamic-school-brand-html {
+          padding-top:5mm !important;
+          text-align:left !important;
+          justify-self:stretch !important;
+          width:100% !important;
+        }
+        .preprimary-report .school-brand-html > .dynamic-school-name,
+        .preprimary-report .dynamic-school-name {
+          font-size:25px !important;
+          line-height:.98 !important;
+          font-weight:800 !important;
+          text-align:left !important;
+          max-width:68mm !important;
+          width:68mm !important;
+          margin:0 0 2.2px !important;
+          white-space:normal !important;
+        }
+        .preprimary-report .dynamic-school-meta {
+          display:block !important;
+          width:100% !important;
+          max-width:70mm !important;
+          text-align:left !important;
+          font-size:6.25px !important;
+          line-height:1.18 !important;
+          margin:0 !important;
+        }
+        .preprimary-report .dynamic-school-meta .school-meta-item {
+          display:inline !important;
+          text-align:left !important;
+        }
+        .preprimary-report .dynamic-school-meta .school-meta-sep {
+          display:inline !important;
+          margin:0 1.5px !important;
+        }
 </style>
     `;
 
@@ -5829,19 +6265,32 @@ html,body { width:210mm!important; margin:0!important; padding:0!important; }
         selectedReportTemplate?.school_name ||
         "School Name";
       /* PREPRIMARY_VISIBLE_BRANDING_V17C */
-      const primarySchoolTaglineV17C = "Learning Today, Leading Tomorrow";
       const primaryPrincipalEmailV17C = "principal@smcis.in";
-      const primarySchoolAddress = String(schoolInfo?.address_line || schoolInfo?.address || "").trim();
+      const primarySchoolAddressRaw = String(schoolInfo?.address_line || schoolInfo?.address || "").trim();
+      const primarySchoolAddress = /^(?:-|n\/?a|na|null|undefined)$/i.test(primarySchoolAddressRaw)
+        ? ""
+        : primarySchoolAddressRaw;
       const primarySchoolWebsite = String(schoolInfo?.website || "")
         .trim()
         .replace(/^https?:\/\//i, "")
         .replace(/\/+$/, "");
-      const primarySchoolPhone = String(schoolInfo?.phone || "").trim();
+      const primarySchoolPhoneRaw = String(schoolInfo?.phone || "").trim();
+      const primarySchoolPhoneDigits = primarySchoolPhoneRaw.replace(/\D/g, "");
+      const primarySchoolPhone =
+        primarySchoolPhoneDigits.length === 10
+          ? `+91-${primarySchoolPhoneDigits}`
+          : primarySchoolPhoneRaw;
+      const primarySchoolEmail = String(schoolInfo?.email || "").trim();
       const primarySchoolMeta = [
-        primarySchoolAddress,
-        primarySchoolWebsite ? `Website: ${primarySchoolWebsite}` : "",
-        primarySchoolPhone ? `Contact: ${primarySchoolPhone}` : "",
-      ].filter(Boolean);
+        [
+          primarySchoolPhone ? `Contact: ${primarySchoolPhone}` : "",
+          `Email: ${primarySchoolEmail}`,
+        ].filter(Boolean).join(" • "),
+      ].filter(
+        (item) =>
+          Boolean(item) &&
+          !/^learning\s+today\s*,?\s*leading\s+tomorrow$/i.test(String(item).trim())
+      );
 
       const dobValRaw = info?.Date_Of_Birth || info?.date_of_birth || info?.dob || "";
       const dobVal = formatDOB(dobValRaw);
@@ -5865,19 +6314,19 @@ html,body { width:210mm!important; margin:0!important; padding:0!important; }
                     : ""
                 }
                 <div class="school-brand-html dynamic-school-brand-html">
-                  <div class="dynamic-school-name">${escapePrimaryHtml(primarySchoolName)}</div>
-                  <div class="dynamic-school-tagline-v17c">${escapePrimaryHtml(primarySchoolTaglineV17C)}</div>
-                  <div class="dynamic-school-meta">
-                    ${primarySchoolMeta
-                      .map((item, index) => `<span class="school-meta-item">${escapePrimaryHtml(item)}</span>${index < primarySchoolMeta.length - 1 ? '<span class="school-meta-sep">•</span>' : ''}`)
-                      .join("")}
+                  <div class="dynamic-school-name">${
+                    /^seth\s+malook\s+chand\s+international\s+school$/i.test(String(primarySchoolName || "").trim())
+                      ? "Seth Malook Chand<br/>International School"
+                      : escapePrimaryHtml(primarySchoolName)
+                  }</div>
+                  <div class="dynamic-school-meta single-contact-meta">
+                    <span class="school-meta-item address-meta">${primarySchoolAddress ? `${escapePrimaryHtml(primarySchoolAddress)}${(primarySchoolPhone || primarySchoolEmail) ? ` <span class="meta-sep">•</span> ` : ""}` : ""}${primarySchoolPhone ? `Contact: ${escapePrimaryHtml(primarySchoolPhone)}` : ""}${primarySchoolPhone && primarySchoolEmail ? ` <span class="meta-sep">•</span> ` : ""}${primarySchoolEmail ? `Email: ${escapePrimaryHtml(primarySchoolEmail)}` : ""}</span>
                   </div>
-                  <div class="dynamic-school-email-v17c">Email: ${escapePrimaryHtml(primaryPrincipalEmailV17C)}</div>
                 </div>
               </div>
 
-              <div class="report-heading">
-                <div class="report-title">Pre-Primary Report Card</div>
+              <div class="primary-title-stack report-heading">
+                <div class="report-title">Report Card</div>
                 <div class="report-subtitle">Academic Session ${escapePrimaryHtml(sessionName)} <span class="sep">|</span> ${escapePrimaryHtml(selectedTermText)}</div>
               </div>
 

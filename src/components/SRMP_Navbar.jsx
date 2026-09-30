@@ -530,7 +530,7 @@ const Navbar = ({ notificationsCount = 0, onBellClick = () => {} }) => {
                               to="/reports/student-total-due"
                               onClick={() => setPendingOpen(false)}
                             >
-                              Student Wise Pending Till Date
+                              Student Wise Pending Dues
                             </Link>
                           </li>
                         </ul>

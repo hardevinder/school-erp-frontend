@@ -47,6 +47,13 @@ const primaryTiles = [
     gradient: "linear-gradient(135deg, var(--edb-primary), var(--edb-primary-dark))",
     tag: "NEW",
   },
+  {
+    label: "Student Wise Pending",
+    sub: "Pending dues by student",
+    icon: "bi-person-lines-fill",
+    href: "/reports/student-total-due",
+    gradient: "linear-gradient(135deg, #f97316, #ea580c)",
+  },
 ];
 
 const reportsTiles = [

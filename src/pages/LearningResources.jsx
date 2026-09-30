@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import Swal from "sweetalert2";
 import { Modal } from "react-bootstrap";
 import api from "../api";
+import { learningResourceUrl } from "../utils/learningResourceUrl";
 import { useInstitution } from "../institution/InstitutionContext";
 import "./LearningResources.css";
 
@@ -56,7 +57,7 @@ export default function LearningResources() {
     setPreview({ file, loading: true });
     try {
       if (Number(file.file_size) > 5 * 1024 * 1024) throw new Error("Preview supports files up to 5 MB. Download this file to read it.");
-      const response = await fetch(file.file_url);
+      const response = await fetch(learningResourceUrl(file));
       if (!response.ok) throw new Error("Unable to load this file. Please try again or download it.");
       const content = await response.text();
       if (content.length > 5 * 1024 * 1024) throw new Error("This file is too large to preview. Please download it.");
@@ -348,7 +349,7 @@ export default function LearningResources() {
                     <div className="lr-section-label"><i className="bi bi-files me-2" />Files ({resource.files.length})</div>
                     <div className="lr-item-list">
                       {resource.files.map((file) => (
-                        <a className="lr-file-item" key={file.id} href={file.file_url} target="_blank" rel="noreferrer"
+                        <a className="lr-file-item" key={file.id} href={learningResourceUrl(file)} target="_blank" rel="noreferrer"
                           onClick={(event) => {
                             if (/\.(txt|md|markdown|html|htm|csv|sql|json|xml|yaml|yml|py|java|c|cpp|h|css|js|ts)$/i.test(file.file_name || "")) {
                               event.preventDefault(); openPreview(file);
@@ -484,7 +485,7 @@ export default function LearningResources() {
               <pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", maxHeight: "65vh", overflow: "auto", padding: "1rem", background: "var(--edb-surface)" }}>{preview?.content}</pre>}
         </Modal.Body>
         <Modal.Footer>
-          <a className="btn btn-primary" href={preview?.file.file_url} target="_blank" rel="noreferrer">Download original</a>
+          <a className="btn btn-primary" href={learningResourceUrl(preview?.file)} target="_blank" rel="noreferrer">Download original</a>
           <button className="btn btn-secondary" onClick={closePreview}>Close</button>
         </Modal.Footer>
       </Modal>

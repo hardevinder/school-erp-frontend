@@ -1086,7 +1086,15 @@ const Dashboard = () => {
       href: "/reports/van-fee",
       gradient: "linear-gradient(135deg, var(--edb-primary), var(--edb-primary-dark))",
     },
-  ];
+  
+    {
+      label: "Student Wise Pending",
+      sub: "Pending dues by student",
+      icon: "bi-person-lines-fill",
+      href: "/reports/student-total-due",
+      gradient: "linear-gradient(135deg, #f97316, #ea580c)",
+    },
+];
 
   const studentLinks = [
     {

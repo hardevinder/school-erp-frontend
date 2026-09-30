@@ -6,6 +6,7 @@ import { useRoles } from "../hooks/useRoles";
 import { useInstitution } from "../institution/InstitutionContext"; // GLOBAL_INSTITUTION_UI_V2
 import { defaultWorkspaceForRole, useWorkspace } from "../hooks/useWorkspace";
 import "./Sidebar.css";
+import { searchMenuItems } from "./menuSearch";
 import { WorkspaceTabs } from "./dashboard/DashboardInsights";
 import { filterWorkspaceGroups, workspaceForPath } from "./dashboard/dashboardModel";
 
@@ -991,7 +992,7 @@ export default function Sidebar({ headerHeight = 56 }) {
           },
           {
             key: "student-total-due",
-            label: "Total Due Report",
+            label: "Student Wise Pending Dues",
             icon: "bi-cash-stack",
             path: "/reports/student-total-due",
             roles: ["accounts", "admin", "superadmin"],
@@ -1129,7 +1130,7 @@ export default function Sidebar({ headerHeight = 56 }) {
           { key: "cancelledTransactions", label: "Cancelled Transactions", icon: "bi-trash3", path: "/cancelled-transactions" },
           { key: "studentDue", label: "Fee Due Report", icon: "bi-file-earmark-text", path: "/student-due" },
           { key: "opening-balances", label: "Opening Balances", icon: "bi-clipboard-data", path: "/opening-balances", roles: ["admin", "superadmin"] },
-          { key: "student-total-due", label: "Total Due Report", icon: "bi-cash-stack", path: "/reports/student-total-due", roles: ["accounts", "admin", "superadmin"] },
+          { key: "student-total-due", label: "Student Wise Pending Dues", icon: "bi-cash-stack", path: "/reports/student-total-due", roles: ["accounts", "admin", "superadmin"] },
         ],
       });
 
@@ -1879,8 +1880,12 @@ export default function Sidebar({ headerHeight = 56 }) {
     return out;
   }, [q, menuGroups, workspace]);
 
-  const isPathActive = (path) =>
-    location.pathname === path || location.pathname.startsWith(path + "/");
+  const isPathActive = (path) => {
+    const [pathname, search] = path.split("?");
+    if (location.pathname !== pathname && !location.pathname.startsWith(pathname + "/")) return false;
+    const current = new URLSearchParams(location.search);
+    return !search || [...new URLSearchParams(search)].every(([key, value]) => current.get(key) === value);
+  };
 
   // Route changes may also come from dashboard cards or quick-access links.
   // Keep the secondary panel closed unless a sidebar category is clicked explicitly.
@@ -1910,37 +1915,11 @@ export default function Sidebar({ headerHeight = 56 }) {
     );
   }, [selectedGroup, submenuQuery]);
 
-  // GLOBAL_MENU_SEARCH_V1: search every accessible submenu across ERP + LMS.
-  const globalSearchResults = useMemo(() => {
-    const search = q.trim().toLowerCase();
-    if (!search) return [];
-
-    const tokens = search.split(/\s+/).filter(Boolean);
-    const rows = [];
-    menuGroups.forEach((group) => {
-      group.items.forEach((item) => {
-        const haystack = `${item.label || ""} ${group.heading || ""} ${item.path || ""}`.toLowerCase();
-        if (!tokens.every((token) => haystack.includes(token))) return;
-        const label = (item.label || "").toLowerCase();
-        const groupName = (group.heading || "").toLowerCase();
-        let score = 0;
-        if (label === search) score += 100;
-        if (label.startsWith(search)) score += 50;
-        if (label.includes(search)) score += 25;
-        if (groupName.includes(search)) score += 10;
-        rows.push({
-          ...item,
-          group: group.heading,
-          workspace: workspaceForPath(item.path),
-          _searchScore: score,
-        });
-      });
-    });
-
-    return rows
-      .sort((x, y) => y._searchScore - x._searchScore || x.label.localeCompare(y.label))
-      .slice(0, 60);
-  }, [q, menuGroups]);
+  const globalSearchResults = useMemo(() => searchMenuItems(
+    menuGroups.flatMap((group) => group.items.map((item) => ({
+      ...item, group: group.heading, workspace: workspaceForPath(item.path),
+    }))), q
+  ), [q, menuGroups]);
 
   const handleWorkspaceChange = (nextWorkspace) => {
     if (nextWorkspace === workspace) return;
@@ -2082,7 +2061,21 @@ export default function Sidebar({ headerHeight = 56 }) {
           </div>
         </div>
 
-        {workspace === "LMS" && isExpanded ? (
+        {q.trim() ? (
+          <nav className="sidebar-search-results" aria-label="Global menu search results">
+            <div className="sidebar-search-results-heading" role="status">{globalSearchResults.length} results across ERP & LMS</div>
+            {globalSearchResults.map((item) => (
+              <button key={item.path} type="button"
+                className={`sidebar-search-result ${isPathActive(item.path) ? "active" : ""}`}
+                onClick={() => handleGlobalSearchClick(item)}>
+                <i className={`bi ${item.icon || "bi-circle"}`} aria-hidden="true" />
+                <span><strong>{item.label}</strong><small>{item.workspace} · {item.group}</small></span>
+                <i className="bi bi-arrow-up-right" aria-hidden="true" />
+              </button>
+            ))}
+            {!globalSearchResults.length && <p className="sidebar-search-no-results">No menus match “{q}”. Try a page name, such as fees or worksheets.</p>}
+          </nav>
+        ) : workspace === "LMS" && isExpanded ? (
           <nav className="sidebar-lms-direct-nav" aria-label="LMS navigation">
             <div className="sidebar-lms-direct-head">
               <span><i className="bi bi-mortarboard-fill" aria-hidden="true" /> LMS Menu</span>
@@ -2193,64 +2186,6 @@ export default function Sidebar({ headerHeight = 56 }) {
         )}
       </aside>
 
-      {q.trim() && (
-        <section
-          id="sidebar-global-search-panel"
-          className="sidebar-submenu-panel"
-          style={asideStyle}
-          aria-label="Global menu search results"
-        >
-          <div className="sidebar-submenu-header">
-            <div>
-              <div className="sidebar-submenu-eyebrow">Global Search</div>
-              <h2>All Menus</h2>
-              <p>{globalSearchResults.length} matching options across ERP & LMS</p>
-            </div>
-            <button
-              type="button"
-              className="sidebar-submenu-close"
-              onClick={() => setQ("")}
-              aria-label="Close global search"
-            >
-              <i className="bi bi-x-lg" />
-            </button>
-          </div>
-
-          <div className="sidebar-submenu-list">
-            {globalSearchResults.map((item, ii) => {
-              const active = isPathActive(item.path);
-              return (
-                <button
-                  key={`${item.group}-${item.key}-${item.path}`}
-                  type="button"
-                  className={`sidebar-submenu-item ${active ? "active" : ""}`}
-                  onClick={() => handleGlobalSearchClick(item)}
-                >
-                  <span
-                    className="sidebar-submenu-icon"
-                    style={{ color: palette[ii % palette.length] }}
-                  >
-                    <i className={`bi ${item.icon || "bi-circle"}`} aria-hidden="true" />
-                  </span>
-                  <span className="sidebar-submenu-copy">
-                    <span className="sidebar-submenu-label">{item.label}</span>
-                    <span className="sidebar-submenu-path">
-                      {item.group} · {item.workspace}
-                    </span>
-                  </span>
-                  <i className="bi bi-arrow-right-short sidebar-submenu-arrow" aria-hidden="true" />
-                </button>
-              );
-            })}
-            {globalSearchResults.length === 0 && (
-              <div className="sidebar-submenu-empty">
-                No menu options match “{q}”.
-              </div>
-            )}
-          </div>
-        </section>
-      )}
-
       {selectedGroup && (
         <section
           id="sidebar-submenu-panel"
@@ -2346,16 +2281,8 @@ function BottomNav({ items, moreItems, globalItems = [], isActive, onClick, onGl
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
 
-  const filtered = useMemo(() => {
-    const s = q.trim().toLowerCase();
-    if (!s) return moreItems;
-    const tokens = s.split(/\s+/).filter(Boolean);
-    return globalItems.filter((i) =>
-      tokens.every((token) =>
-        `${i.label || ""} ${i.group || ""} ${i.path || ""}`.toLowerCase().includes(token)
-      )
-    );
-  }, [q, moreItems, globalItems]);
+  const filtered = useMemo(() => q.trim() ? searchMenuItems(globalItems, q) : moreItems,
+    [q, moreItems, globalItems]);
 
   return (
     <>
@@ -2402,7 +2329,8 @@ function BottomNav({ items, moreItems, globalItems = [], isActive, onClick, onGl
             <div className="bn-sheet-header">
               <input
                 className="form-control bn-search"
-                placeholder="Search all menus…"
+                placeholder="Search ERP & LMS menus…"
+                aria-label="Search all ERP and LMS menus"
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
               />
@@ -2427,7 +2355,7 @@ function BottomNav({ items, moreItems, globalItems = [], isActive, onClick, onGl
                   <i className={`bi ${it.icon}`} style={{ color: palette[i % palette.length] }} />
                   <div className="bn-li-text">
                     <div className="bn-li-title">{it.label}</div>
-                    {it.group && <div className="bn-li-sub">{it.group}</div>}
+                    {it.group && <div className="bn-li-sub">{q.trim() ? `${it.workspace} · ` : ""}{it.group}</div>}
                   </div>
                 </button>
               ))}
