@@ -2,6 +2,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import api from "../api";
 import Swal from "sweetalert2";
+import Select from "react-select";
 import "bootstrap/dist/css/bootstrap.min.css";
 
 /* =========================
@@ -47,7 +48,6 @@ const escapeHtml = (value) =>
     .replaceAll("'", "&#039;");
 
 const attendanceOptions = ["P", "A", "L", "ACT", "LA", "ML", "X"];
-const defaultGradeOptions = ["G", "B", "Y", "R"];
 const CLASS_LEVEL_SECTION = "__class__";
 const sectionMatches = (rowSectionId, selectedSectionId) =>
   selectedSectionId === CLASS_LEVEL_SECTION
@@ -874,10 +874,66 @@ const MarksEntry = () => {
     }
   };
 
-  const gradeOptionLabels = useMemo(() => {
-    const labels = gradeOptions.map((g) => getGradeLabel(g)).filter(Boolean);
-    return labels.length > 0 ? labels : defaultGradeOptions;
+  const gradeSelectOptions = useMemo(() => {
+    const normalized = gradeOptions
+      .map((g, idx) => {
+        if (typeof g === "string") {
+          return { value: g, label: g, description: "", order: idx + 1, id: idx + 1 };
+        }
+        const label = getGradeLabel(g);
+        if (!label) return null;
+        return {
+          value: label,
+          label,
+          description: String(g?.description || "").trim(),
+          order: Number.isFinite(Number(g?.order)) ? Number(g.order) : 999999,
+          id: Number.isFinite(Number(g?.id)) ? Number(g.id) : idx + 1,
+          active: g?.is_active !== false,
+        };
+      })
+      .filter((g) => g && g.active !== false)
+      .sort((a, b) => (a.order - b.order) || (a.id - b.id));
+
+    // Dynamic only: the Grade Master is the source of truth.
+    return normalized;
   }, [gradeOptions]);
+
+  const gradeOptionLabels = useMemo(
+    () => gradeSelectOptions.map((option) => option.value),
+    [gradeSelectOptions]
+  );
+
+  const renderGradeOption = (option, { context }) => (
+    <div style={{ lineHeight: 1.15, padding: context === "menu" ? "2px 0" : 0 }}>
+      <div style={{ fontWeight: 700 }}>{option.label}</div>
+      {option.description ? (
+        <div
+          style={{
+            fontSize: context === "menu" ? 11 : 10,
+            color: "#6c757d",
+            marginTop: 2,
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+          }}
+        >
+          {option.description}
+        </div>
+      ) : null}
+    </div>
+  );
+
+  const gradeSelectStyles = {
+    control: (base, state) => ({
+      ...base,
+      minHeight: 38,
+      borderColor: state.isFocused ? "var(--theme-primary, #0d6efd)" : "#dee2e6",
+      boxShadow: state.isFocused ? "0 0 0 .2rem rgba(var(--theme-primary-rgb, 13,110,253), .12)" : "none",
+      "&:hover": { borderColor: "var(--theme-primary, #0d6efd)" },
+    }),
+    valueContainer: (base) => ({ ...base, paddingTop: 3, paddingBottom: 3 }),
+    menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+  };
 
   const selectedComponents = useMemo(
     () =>
@@ -1182,9 +1238,25 @@ const MarksEntry = () => {
             </div>
           )}
 
-          {evaluationMode === "GRADE" && gradeOptionLabels.length > 0 && (
+          {evaluationMode === "GRADE" && gradeSelectOptions.length > 0 && (
             <div className="alert alert-info py-2">
-              <strong>Allowed Grades:</strong> {gradeOptionLabels.join(", ")}
+              <div className="d-flex flex-wrap align-items-center gap-2">
+                <strong className="me-1">Allowed Grades:</strong>
+                {gradeSelectOptions.map((option) => (
+                  <span
+                    key={`${option.value}-${option.id}`}
+                    className="bg-white border rounded-3 px-2 py-1 d-inline-flex align-items-baseline gap-1"
+                    title={option.description || option.label}
+                  >
+                    <span className="fw-bold">{option.label}</span>
+                    {option.description ? (
+                      <small className="text-muted" style={{ fontSize: 10 }}>
+                        {option.description}
+                      </small>
+                    ) : null}
+                  </span>
+                ))}
+              </div>
             </div>
           )}
 
@@ -1264,25 +1336,30 @@ const MarksEntry = () => {
                             </td>
 
                             <td>
-                              <select
-                                className="form-select"
-                                value={gradeValues[key] || ""}
-                                onChange={(e) =>
+                              <Select
+                                classNamePrefix="marks-grade-select"
+                                options={gradeSelectOptions}
+                                value={
+                                  gradeSelectOptions.find(
+                                    (option) => option.value === (gradeValues[key] || "")
+                                  ) || null
+                                }
+                                onChange={(option) =>
                                   handleGradeChange(
                                     student.id,
                                     component.component_id,
-                                    e.target.value
+                                    option?.value || ""
                                   )
                                 }
-                                disabled={component.is_locked || att !== "P"}
-                              >
-                                <option value="">Select Grade</option>
-                                {gradeOptionLabels.map((label, idx) => (
-                                  <option key={idx} value={label}>
-                                    {label}
-                                  </option>
-                                ))}
-                              </select>
+                                isDisabled={component.is_locked || att !== "P"}
+                                isClearable
+                                isSearchable={false}
+                                placeholder="Select Grade"
+                                formatOptionLabel={renderGradeOption}
+                                styles={gradeSelectStyles}
+                                menuPortalTarget={typeof document !== "undefined" ? document.body : null}
+                                menuPosition="fixed"
+                              />
                             </td>
                           </React.Fragment>
                         );

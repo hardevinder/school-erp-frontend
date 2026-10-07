@@ -5,7 +5,7 @@ import api from "../api";
 import Swal from "sweetalert2";
 import "./Attendance.css";
 
-const statuses = ["present", "absent", "late", "leave", "halfday"]; // ✅ added halfday
+const statuses = ["present", "absent", "late", "leave", "halfday", "preparatory_off"];
 
 // --- URL helpers ---
 const getApiBase = () =>
@@ -27,6 +27,7 @@ const MarkAttendance = () => {
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split("T")[0]);
   const [mode, setMode] = useState("create"); // "create" or "edit"
   const [loading, setLoading] = useState(false);
+  const [poTreatment, setPoTreatment] = useState("excluded");
 
   const [teacherClassId, setTeacherClassId] = useState(null);
   const [holidays, setHolidays] = useState([]);
@@ -70,6 +71,15 @@ const MarkAttendance = () => {
       setHolidays(data);
     } catch (error) {
       console.error("Error fetching holidays:", error);
+    }
+  };
+
+  const fetchAttendanceSettings = async () => {
+    try {
+      const { data } = await api.get("/attendance/settings");
+      setPoTreatment(data?.preparatory_off_treatment || "excluded");
+    } catch (error) {
+      console.error("Error fetching attendance settings:", error);
     }
   };
 
@@ -120,6 +130,7 @@ const MarkAttendance = () => {
   useEffect(() => {
     fetchStudents();
     fetchHolidays();
+    fetchAttendanceSettings();
   }, []);
 
   useEffect(() => {
@@ -141,7 +152,7 @@ const MarkAttendance = () => {
   };
 
   const summaryCounts = useMemo(() => {
-    const acc = { present: 0, absent: 0, late: 0, leave: 0, halfday: 0 }; // ✅ include halfday
+    const acc = { present: 0, absent: 0, late: 0, leave: 0, halfday: 0, preparatory_off: 0 };
     students.forEach((student) => {
       const status = attendance[student.id];
       if (status && Object.prototype.hasOwnProperty.call(acc, status)) {
@@ -181,12 +192,24 @@ const MarkAttendance = () => {
         return "table-warning";
       case "leave":
         return "table-info";
-      case "halfday": // ✅ visual hint for halfday
+      case "halfday":
         return "table-primary";
+      case "preparatory_off":
+        return "table-secondary";
       default:
         return "";
     }
   };
+
+  const statusLabel = (status) =>
+    status === "preparatory_off" ? "PO" : status === "halfday" ? "Half Day" : status;
+
+  const poTreatmentLabel =
+    poTreatment === "present"
+      ? "PO counts as Present"
+      : poTreatment === "holiday"
+      ? "PO is treated as Holiday / non-working day"
+      : "PO is excluded from Present, Absent and working-day percentage";
 
   const classLabel = useMemo(() => {
     const first = students[0];
@@ -222,6 +245,48 @@ const MarkAttendance = () => {
     } catch (err) {
       console.error("Save attendance failed:", err);
       Swal.fire("Error", err?.response?.data?.message || "Failed to save attendance.", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUnmarkAttendance = async () => {
+    if (mode !== "edit" || !students.length) return;
+
+    const result = await Swal.fire({
+      title: "Unmark attendance?",
+      html: `This will remove the marked attendance for <strong>${moment(selectedDate).format("LL")}</strong> for this class.`,
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "Yes, Unmark",
+      cancelButtonText: "Cancel",
+      confirmButtonColor: "#dc3545",
+      reverseButtons: true,
+    });
+
+    if (!result.isConfirmed) return;
+
+    setLoading(true);
+    try {
+      const { data } = await api.post("/attendance/unmark", {
+        date: selectedDate,
+        studentIds: students.map((student) => student.id),
+      });
+
+      await Swal.fire(
+        "Unmarked",
+        `${data?.deleted ?? 0} attendance record${Number(data?.deleted ?? 0) === 1 ? "" : "s"} removed. You can mark attendance again now.`,
+        "success"
+      );
+
+      await fetchAttendanceForDate(selectedDate);
+    } catch (err) {
+      console.error("Unmark attendance failed:", err);
+      Swal.fire(
+        "Error",
+        err?.response?.data?.message || "Failed to unmark attendance.",
+        "error"
+      );
     } finally {
       setLoading(false);
     }
@@ -339,13 +404,14 @@ const MarkAttendance = () => {
             <div className="card shadow-sm border-0">
               <div className="card-body">
                 <div className="d-flex align-items-center justify-content-between">
-                  <div className="text-muted small text-capitalize">{status}</div>
+                  <div className="text-muted small text-capitalize">{statusLabel(status)}</div>
                   <span
                     className={`badge rounded-pill ${
                       status === "absent" ? "bg-danger" :
                       status === "late" ? "bg-warning" :
                       status === "leave" ? "bg-info" :
                       status === "halfday" ? "bg-primary" :
+                      status === "preparatory_off" ? "bg-secondary" :
                       "bg-success"
                     }`}
                   >
@@ -356,6 +422,14 @@ const MarkAttendance = () => {
             </div>
           </div>
         ))}
+      </div>
+
+      <div className="alert alert-light border d-flex align-items-center justify-content-between flex-wrap gap-2 py-2 mb-3">
+        <div>
+          <strong>PO = Preparatory Off</strong>
+          <span className="text-muted ms-2">{poTreatmentLabel}</span>
+        </div>
+        <span className="badge text-bg-secondary">Controlled by Admin / Coordinator</span>
       </div>
 
       {/* Compact Actions near cards */}
@@ -370,6 +444,9 @@ const MarkAttendance = () => {
           <button className="btn btn-outline-primary" onClick={() => handleMarkAll("halfday")}>
             All Halfday
           </button>
+          <button className="btn btn-outline-secondary" onClick={() => handleMarkAll("preparatory_off")}>
+            All PO
+          </button>
         </div>
 
         <div className="d-flex align-items-center gap-2">
@@ -378,13 +455,23 @@ const MarkAttendance = () => {
               {hasUnsavedChanges ? "Changes not saved" : "Attendance already marked ✓"}
             </span>
           )}
+          {mode === "edit" && (
+            <button
+              className="btn btn-outline-danger btn-sm"
+              onClick={handleUnmarkAttendance}
+              disabled={loading}
+              title="Remove the marked attendance for this class and date"
+            >
+              Unmark Attendance
+            </button>
+          )}
           <button
             className="btn btn-primary btn-sm"
             onClick={handleSubmit}
             disabled={loading || (mode === "edit" && !hasUnsavedChanges)}
           >
             {loading
-              ? "Submitting..."
+              ? "Working..."
               : mode === "create"
               ? "Submit"
               : hasUnsavedChanges
@@ -454,7 +541,7 @@ const MarkAttendance = () => {
                             onChange={(e) => handleAttendanceChange(s.id, e.target.value)}
                             className="form-check-input"
                           />
-                          <span className="form-check-label text-capitalize">{status}</span>
+                          <span className="form-check-label text-capitalize">{statusLabel(status)}</span>
                         </label>
                       ))}
                     </div>
@@ -489,19 +576,31 @@ const MarkAttendance = () => {
               All Halfday
             </button>
           </div>
-          <button
-            className="btn btn-primary btn-sm"
-            onClick={handleSubmit}
-            disabled={loading || (mode === "edit" && !hasUnsavedChanges)}
-          >
-            {loading
-              ? "Submitting..."
-              : mode === "create"
-              ? "Submit"
-              : hasUnsavedChanges
-              ? "Update"
-              : "Marked ✓"}
-          </button>
+          <div className="d-flex align-items-center gap-1">
+            {mode === "edit" && (
+              <button
+                className="btn btn-outline-danger btn-sm"
+                onClick={handleUnmarkAttendance}
+                disabled={loading}
+                title="Unmark attendance"
+              >
+                Unmark
+              </button>
+            )}
+            <button
+              className="btn btn-primary btn-sm"
+              onClick={handleSubmit}
+              disabled={loading || (mode === "edit" && !hasUnsavedChanges)}
+            >
+              {loading
+                ? "Working..."
+                : mode === "create"
+                ? "Submit"
+                : hasUnsavedChanges
+                ? "Update"
+                : "Marked ✓"}
+            </button>
+          </div>
         </div>
       </div>
     </div>

@@ -6,6 +6,9 @@ import { Simulate } from "react-dom/test-utils";
 import { MemoryRouter } from "react-router-dom";
 import Assessments from "./Assessments";
 import api from "../api";
+import Swal from "sweetalert2";
+
+jest.mock("sweetalert2", () => ({ __esModule: true, default: { fire: jest.fn().mockResolvedValue({}) } }));
 
 jest.mock("../api", () => ({ __esModule: true, default: { get: jest.fn(), post: jest.fn(), patch: jest.fn() } }));
 let container, root;
@@ -20,6 +23,7 @@ const setup = async () => {
   await next();
 };
 beforeEach(async () => {
+  Swal.fire.mockResolvedValue({});
   global.IS_REACT_ACT_ENVIRONMENT = true;
   window.scrollTo = jest.fn(); Element.prototype.scrollIntoView = jest.fn();
   localStorage.setItem("roles", JSON.stringify(["teacher"]));
@@ -36,7 +40,8 @@ test("validates setup and uses a normal page with only the active step", async (
   expect(button("Create Worksheet")).toBeUndefined();
   expect(container.querySelector(".assessment-question-sheet")).toBeNull();
   await next();
-  expect(container.querySelector('[role="alert"]').textContent).toContain("Choose a class and subject");
+  expect(container.querySelector('[role="alert"]').textContent).toContain("Please complete: Class, Subject, Title.");
+  expect(Swal.fire).toHaveBeenCalledWith(expect.objectContaining({ icon: "warning", text: "Please complete: Class, Subject, Title." }));
   expect(api.post).not.toHaveBeenCalled();
 });
 
@@ -68,4 +73,30 @@ test("requires a scheduled publish time and allows returning to questions", asyn
   await click("Back");
   expect(container.querySelector(".worksheet-step-heading h2").textContent).toBe("Write questions");
   expect(api.post).not.toHaveBeenCalled();
+});
+
+test("selects syllabus topics and subtopics without replacing handwritten focus", async () => {
+  api.get.mockImplementation(async (url) => ({ data: url === "/syllabus-breakdowns/link-options" ? { data: [{ id: 1, academicSession: "2026-27", term: "FULL_YEAR", items: [{ id: 2, unitTitle: "Numbers", topics: "Fractions; Decimals", subtopics: "Equivalent fractions" }, { id: 3, unitTitle: "Geometry", topics: "Shapes", subtopics: "Triangles" }] }] } : [] }));
+  await click("Create Worksheet");
+  await click("Class 5"); await click("Maths");
+  expect(api.get).toHaveBeenCalledWith("/syllabus-breakdowns/link-options", { params: { classId: "5", subjectId: "2" } });
+  const focus = container.querySelector('textarea[placeholder="Write the chapter, topic, learning focus or task in your own words…"]');
+  await change(focus, "Revise examples");
+  await click("Numbers");
+  expect(button("Numbers").getAttribute("aria-pressed")).toBe("true");
+  expect(button("Shapes")).toBeUndefined();
+  expect(button("Triangles")).toBeUndefined();
+  await click("Fractions"); await click("Equivalent fractions");
+  await click("Geometry");
+  expect(button("Fractions")).toBeUndefined();
+  expect(button("Triangles")).toBeTruthy();
+  expect(focus.value).toBe("Revise examples\nFractions\nEquivalent fractions");
+  await click("All units");
+  expect(focus.value).toBe("Revise examples\nFractions\nEquivalent fractions");
+  expect(button("Fractions").getAttribute("aria-pressed")).toBe("true");
+  await click("Fractions");
+  expect(focus.value).toBe("Revise examples\nEquivalent fractions");
+  await change(container.querySelector('input[placeholder="e.g. Fractions Practice Worksheet"]'), "Revision");
+  await next(); await click("Write on paper / upload"); await next(); await next(); await next();
+  expect(api.post.mock.calls[0][1].get("description")).toBe("Revise examples\nEquivalent fractions");
 });

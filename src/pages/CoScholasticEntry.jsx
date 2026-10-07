@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import api from "../api";
 import Swal from "sweetalert2";
+import Select from "react-select";
 import "bootstrap/dist/css/bootstrap.min.css";
 
 /* ---------------- Role Helpers ---------------- */
@@ -23,6 +24,45 @@ const getRoleFlags = () => {
     isGlobal: isAdmin || isSuperadmin || isExamination,
   };
 };
+
+const gradeSelectStyles = {
+  control: (base, state) => ({
+    ...base,
+    minHeight: 42,
+    borderRadius: 10,
+    borderColor: state.isFocused ? "var(--theme-primary, #8a1538)" : "#d9dee7",
+    boxShadow: state.isFocused ? "0 0 0 2px color-mix(in srgb, var(--theme-primary, #8a1538) 12%, transparent)" : "none",
+    cursor: "pointer",
+    backgroundColor: state.isDisabled ? "#f5f6f8" : "#fff",
+    "&:hover": { borderColor: "var(--theme-primary, #8a1538)" },
+  }),
+  valueContainer: (base) => ({ ...base, padding: "3px 10px" }),
+  indicatorsContainer: (base) => ({ ...base, minHeight: 40 }),
+  menu: (base) => ({ ...base, zIndex: 30, borderRadius: 10, overflow: "hidden" }),
+  menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+  option: (base, state) => ({
+    ...base,
+    cursor: "pointer",
+    padding: "8px 12px",
+    backgroundColor: state.isSelected
+      ? "color-mix(in srgb, var(--theme-primary, #8a1538) 12%, white)"
+      : state.isFocused
+        ? "#f6f7f9"
+        : "white",
+    color: "#1f2937",
+  }),
+};
+
+const gradeOptionLabel = (option) => (
+  <div style={{ lineHeight: 1.15 }}>
+    <div style={{ fontWeight: 700, fontSize: 14 }}>{option.label}</div>
+    {option.description ? (
+      <div style={{ fontSize: 11, color: "#7b8493", marginTop: 2 }}>
+        {option.description}
+      </div>
+    ) : null}
+  </div>
+);
 
 const CoScholasticEntry = () => {
   const { roles, isGlobal } = useMemo(getRoleFlags, []);
@@ -192,9 +232,15 @@ const CoScholasticEntry = () => {
 
   const loadGrades = async () => {
     try {
-      const res = await api.get("/co-scholastic-grades");
+      const res = await api.get("/co-scholastic-grades", { params: { active: true } });
       const list = Array.isArray(res.data) ? res.data : res?.data?.grades || [];
-      setGrades(Array.isArray(list) ? list : []);
+      const ordered = (Array.isArray(list) ? list : [])
+        .filter((grade) => grade?.is_active !== false)
+        .sort((a, b) => {
+          const orderDiff = Number(a?.order ?? 0) - Number(b?.order ?? 0);
+          return orderDiff || Number(a?.id ?? 0) - Number(b?.id ?? 0);
+        });
+      setGrades(ordered);
     } catch (err) {
       console.error("Failed to load grades", err);
       Swal.fire("Error", "Failed to load grades", "error");
@@ -672,21 +718,36 @@ const CoScholasticEntry = () => {
 
                         return (
                           <td key={key}>
-                            <select
+                            <Select
                               ref={(el) => (inputRefs.current[key] = el)}
-                              className="form-select"
-                              value={String(evalData.grade_id || "")}
-                              onChange={(e) => handleChange(s.id, area.id, "grade_id", e.target.value)}
+                              classNamePrefix="co-grade-select"
+                              value={
+                                grades
+                                  .map((g) => ({
+                                    value: String(g.id),
+                                    label: g.grade || g.name || "-",
+                                    description: g.description || "",
+                                  }))
+                                  .find((option) => option.value === String(evalData.grade_id || "")) || null
+                              }
+                              options={grades.map((g) => ({
+                                value: String(g.id),
+                                label: g.grade || g.name || "-",
+                                description: g.description || "",
+                              }))}
+                              onChange={(option) =>
+                                handleChange(s.id, area.id, "grade_id", option?.value || "")
+                              }
                               onKeyDown={(e) => handleKeyDown(e, studentIndex, areaIndex)}
-                              disabled={locked}
-                            >
-                              <option value="">-</option>
-                              {grades.map((g) => (
-                                <option key={g.id} value={String(g.id)}>
-                                  {g.grade || g.name}
-                                </option>
-                              ))}
-                            </select>
+                              isDisabled={locked}
+                              isClearable
+                              isSearchable={false}
+                              placeholder="-"
+                              formatOptionLabel={gradeOptionLabel}
+                              styles={gradeSelectStyles}
+                              menuPortalTarget={typeof document !== "undefined" ? document.body : null}
+                              menuPosition="fixed"
+                            />
                           </td>
                         );
                       })}
@@ -697,7 +758,7 @@ const CoScholasticEntry = () => {
             </div>
 
             <div className="small text-muted mt-3">
-              Tip: Keyboard navigation works (↑ ↓ ← → / Enter). Type grade letter (A/B/C...) to quick fill.
+              Tip: Use mouse or keyboard to choose a grade. Grade descriptions are shown below each grade in the dropdown.
             </div>
           </div>
         </div>

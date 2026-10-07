@@ -19,6 +19,9 @@ import { CSS } from "@dnd-kit/utilities";
  * Helpers
  * ========================================= */
 const strId = (v) => (v === null || v === undefined ? "" : String(v));
+const componentLabel = (component) => component.abbreviation
+  ? `${component.abbreviation} - ${component.name}`
+  : String(component.name || "");
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const safeMode = (m) => {
@@ -212,6 +215,10 @@ const ExamSchemeManagement = () => {
   const [subjects, setSubjects] = useState([]);
   const [terms, setTerms] = useState([]);
   const [components, setComponents] = useState([]);
+  const sortedFilterComponents = useMemo(
+    () => [...components].sort((a, b) => componentLabel(a).localeCompare(componentLabel(b), "en", { sensitivity: "base", numeric: true })),
+    [components]
+  );
 
   // Excel import/export for Exam Schemes
   const schemeImportInputRef = useRef(null);
@@ -322,7 +329,7 @@ const ExamSchemeManagement = () => {
         api.get("/classes"),
         api.get("/subjects"),
         api.get("/terms"),
-        api.get("/assessment-components"),
+        api.get("/assessment-components", { params: { include_inactive: true } }),
       ]);
 
       setSessions(sessRes.data || []);
@@ -1532,11 +1539,9 @@ const ExamSchemeManagement = () => {
             className="form-control"
           >
             <option value="">All Components</option>
-            {components.map((component) => (
+            {sortedFilterComponents.map((component) => (
               <option key={component.id} value={String(component.id)}>
-                {component.abbreviation
-                  ? `${component.abbreviation} - ${component.name}`
-                  : component.name}
+                {componentLabel(component)}{!component.is_active ? " (Inactive)" : ""}
               </option>
             ))}
           </select>
@@ -1776,7 +1781,7 @@ const ExamSchemeManagement = () => {
                 className="form-control"
               >
                 <option value="">Select Component</option>
-                {components.map((c) => (
+                {components.filter((c) => c.is_active || String(c.id) === String(formData.component_id)).map((c) => (
                   <option key={c.id} value={String(c.id)}>
                     {c.abbreviation ? `${c.abbreviation} - ${c.name}` : c.name}
                     {` (${c.component_type || "MARKS"}${

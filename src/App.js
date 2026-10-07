@@ -198,6 +198,7 @@ import CoordinatorDigitalDiaryMonitor from "./pages/CoordinatorDigitalDiaryMonit
 import PTMManagement from "./pages/PTMManagement";
 import AccountsDashboard from "./components/AccountsDashboard";
 import TransportSummary from "./pages/TransportSummary";
+import TransportFeeCollection from "./pages/TransportFeeCollection";
 import UserTracking from "./pages/UserTracking";
 import Houses from "./pages/Houses";
 import StudentFeeReport from "./pages/StudentFeeReport";
@@ -1112,7 +1113,28 @@ function App() {
           <Route path="/reports/school-fee-summary" element={<SchoolFeeSummary />} />
           <Route path="/reports/concession" element={<ConcessionReport />} />
           <Route path="/reports/van-fee" element={<VanFeeDetailedReport />} />
-          <Route path="/reports/transport-summary" element={<TransportSummary />} />
+          <Route
+            path="/reports/transport-summary"
+            element={
+              <RequirePermission
+                permissions={["transport_fee_view"]}
+                fallbackRoles={["admin", "superadmin", "accounts", "account", "accountant"]}
+              >
+                <TransportSummary />
+              </RequirePermission>
+            }
+          />
+          <Route
+            path="/transport-fee-collection"
+            element={
+              <RequirePermission
+                permissions={["transport_fee_collect"]}
+                fallbackRoles={["admin", "superadmin", "accounts", "account", "accountant"]}
+              >
+                <TransportFeeCollection />
+              </RequirePermission>
+            }
+          />
 
           {/* ✅ Student Total Due Report */}
           <Route

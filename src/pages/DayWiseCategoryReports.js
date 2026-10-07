@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Container, Row, Col, Button, Table, Alert, Pagination } from 'react-bootstrap';
+import { Container, Row, Col, Button, Table, Alert, Pagination, Card, Badge } from 'react-bootstrap';
 import FeeReportFilters, { useFeeReportFilters, sessionOf, receiptKey, downloadReport } from "../components/reports/FeeReportFilters";
 import api from '../api';
 import Swal from 'sweetalert2';
@@ -38,6 +38,10 @@ const formatToDisplayDateTime = (date) => {
 const formatTotalValue = (value) => {
   return Number(value) === 0 ? "0" : `₹${Number(value).toLocaleString('en-IN')}`;
 };
+
+const normalizeStatus = (value) => String(value ?? '').trim().toLowerCase();
+const isCancelled = (item) => normalizeStatus(item?.status) === 'cancelled';
+
 
 // Normalize /schools API into a single school object
 const normalizeSchool = (raw) => {
@@ -247,9 +251,13 @@ const DayWiseReport = () => {
     }
   };
 
-  const pivotedData = pivotReportData(reportData);
+  // Cancelled transactions stay available for audit/export, but never affect collection totals.
+  const activeReportData = reportData.filter((item) => !isCancelled(item));
+  const cancelledReportData = reportData.filter((item) => isCancelled(item));
+
+  const pivotedData = pivotReportData(activeReportData);
   const uniqueCategories = getUniqueCategories(pivotedData);
-  const categorySummary = calculateCategorySummary(reportData);
+  const categorySummary = calculateCategorySummary(activeReportData);
 
   const overallCategoryTotals = categorySummary.reduce((acc, item) => {
     acc.cash.totalFeeReceived += item.cash.totalFeeReceived;
@@ -317,7 +325,7 @@ const DayWiseReport = () => {
         }
       }
 
-      const reportDataForPdf = reportData.map((item) => ({
+      const reportDataForPdf = activeReportData.map((item) => ({
         ...item,
         createdAt: item.DateOfTransaction || item.createdAt || null,
       }));
@@ -341,7 +349,7 @@ const DayWiseReport = () => {
           overallVanFeeTotal,
           overallFineTotal,
         },
-        transactionIds: reportData.map(item => item.Transaction_ID || item.Slip_ID)
+        transactionIds: activeReportData.map(item => item.Transaction_ID || item.Slip_ID)
       };
 
       const doc = <PdfReports {...docProps} />;
@@ -429,6 +437,34 @@ const DayWiseReport = () => {
     }));
   };
 
+  const buildCancelledSheetRows = (rows) => rows.map((item, idx) => {
+    const feeReceived = Number(item.totalFeeReceived ?? item.Fee_Recieved) || 0;
+    const vanFee = Number(item.totalVanFee ?? item.VanFee) || 0;
+    const fine = Number(item.totalFine ?? item.Fine_Amount) || 0;
+
+    return {
+      'Sr No': idx + 1,
+      'Serial': item.Serial || '',
+      'Slip ID': item.Slip_ID || '',
+      'Admission Number': item.Student?.admission_number || item.AdmissionNumber || '',
+      'Student Name': item.Student?.name || '',
+      'Class': item.Student?.Class?.class_name || '',
+      'Fee Heading': item.feeHeadingName || '',
+      'Fee Category': item.feeCategoryName || '',
+      'Payment Mode': item.PaymentMode || '',
+      'Transaction Date & Time': formatToDisplayDateTime(item.DateOfTransaction || item.createdAt),
+      'Fee Received': feeReceived,
+      'Concession': Number(item.totalConcession ?? item.Concession) || 0,
+      'Van Fee': vanFee,
+      'Fine': fine,
+      'Total': feeReceived + vanFee + fine,
+      'Status': item.status || 'cancelled',
+      'Cancelled By': item.cancelledByName || item.cancelled_by_name || item.cancelled_by || '',
+      'Cancelled At': formatToDisplayDateTime(item.cancelledAt || item.cancelled_at),
+      'Remarks': item.Remarks || item.remarks || ''
+    };
+  });
+
   const exportToExcel = () => {
     if (filters.dirty || loading) return;
     if (!reportData || reportData.length === 0) {
@@ -458,6 +494,20 @@ const DayWiseReport = () => {
 
     const wsTotals = XLSX.utils.json_to_sheet(totalsSheetData);
     XLSX.utils.book_append_sheet(wb, wsTotals, 'Totals');
+
+    const cancelledRows = buildCancelledSheetRows(cancelledReportData);
+    const wsCancelled = XLSX.utils.json_to_sheet(
+      cancelledRows.length ? cancelledRows : [{ Message: 'No cancelled transactions for selected date range.' }]
+    );
+    XLSX.utils.book_append_sheet(wb, wsCancelled, 'Cancelled Transactions');
+
+    const filterRows = [
+      { Filter: 'Active Records', Value: activeReportData.length },
+      { Filter: 'Cancelled Records', Value: cancelledReportData.length },
+      { Filter: 'All Records', Value: reportData.length }
+    ];
+    const wsFilters = XLSX.utils.json_to_sheet(filterRows);
+    XLSX.utils.book_append_sheet(wb, wsFilters, 'Report Filters');
     const filterSheet = XLSX.utils.aoa_to_sheet([["Report", "Category-wise fee collection"], ["Session", filters.applied.sessionLabel], ["From", filters.applied.startDate], ["To", filters.applied.endDate], ["Receipts", pivotedData.length], ["Cancelled transactions", "Excluded"]]);
     filterSheet['!cols'] = [{ wch: 24 }, { wch: 40 }];
     XLSX.utils.book_append_sheet(wb, filterSheet, 'Report Filters');

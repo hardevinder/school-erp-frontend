@@ -1033,7 +1033,7 @@ const CollegeNavbar = ({
               </strong>
 
               <small>
-                College Management
+                Institution Management
               </small>
             </div>
           </Link>

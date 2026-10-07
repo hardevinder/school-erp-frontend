@@ -6,7 +6,7 @@ import "./MonthlyAttendanceColors.css";
 const list = (value) => (Array.isArray(value) ? value : value?.data || value?.classes || value?.sections || value?.sessions || []);
 const current = new Date();
 const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-const codeClass = (code) => ({ P: "is-present", A: "is-absent", L: "is-leave", LT: "is-late", HD: "is-halfday", H: "is-holiday", WO: "is-off", "—": "is-unmarked" }[code] || "");
+const codeClass = (code) => ({ P: "is-present", A: "is-absent", L: "is-leave", LT: "is-late", HD: "is-halfday", PO: "is-holiday", H: "is-holiday", WO: "is-off", "—": "is-unmarked" }[code] || "");
 const sectionClassId = (section) => section?.class_id ?? section?.classId ?? section?.ClassId ?? section?.class?.id ?? section?.Class?.id;
 const rowId = (item, alternate) => item?.id ?? item?.[alternate];
 const hasSelection = (value) => value !== "" && value !== null && value !== undefined;

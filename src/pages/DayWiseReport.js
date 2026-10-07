@@ -304,7 +304,7 @@ const groupByFeeHeading = (data) => {
 
 // Calculate fee heading summary with payment mode breakdown
 const calculateFeeHeadingSummary = (data) => {
-  const groups = groupByFeeHeading(data);
+  const groups = groupByFeeHeading(data.filter((item) => !isCancelled(item)));
 
   return Object.keys(groups).map((feeHeading) => {
     const items = groups[feeHeading];
@@ -988,9 +988,21 @@ const DayWiseReport = () => {
     return items;
   }, [currentPage, totalPages]);
 
+  // Financial summaries must never include cancelled transactions.
+  // Keep cancelled rows visible in the management table so they can still be reviewed/deleted.
+  const activeFilteredData = useMemo(
+    () => filteredData.filter((item) => !isCancelled(item)),
+    [filteredData]
+  );
+
+  const cancelledFilteredCount = useMemo(
+    () => filteredData.filter((item) => isCancelled(item)).length,
+    [filteredData]
+  );
+
   // Totals
   const totalSummary = useMemo(() => {
-    return filteredData.reduce(
+    return activeFilteredData.reduce(
       (acc, item) => {
         const fee = Number(item.totalFeeReceived) || 0;
         const con = Number(item.totalConcession) || 0;
@@ -1015,10 +1027,10 @@ const DayWiseReport = () => {
         totalReceived: 0,
       }
     );
-  }, [filteredData]);
+  }, [activeFilteredData]);
 
   const paymentModeSummary = useMemo(() => {
-    return filteredData.reduce((acc, item) => {
+    return activeFilteredData.reduce((acc, item) => {
       const key = isOnline(item.PaymentMode)
         ? "Online"
         : isCash(item.PaymentMode)
@@ -1053,11 +1065,11 @@ const DayWiseReport = () => {
 
       return acc;
     }, {});
-  }, [filteredData]);
+  }, [activeFilteredData]);
 
   const feeHeadingSummary = useMemo(() => {
-    return filteredData.length ? calculateFeeHeadingSummary(filteredData) : [];
-  }, [filteredData]);
+    return activeFilteredData.length ? calculateFeeHeadingSummary(activeFilteredData) : [];
+  }, [activeFilteredData]);
 
   const totalFeeHeadingSummary = useMemo(() => {
     return feeHeadingSummary.reduce(
@@ -1192,12 +1204,17 @@ const DayWiseReport = () => {
           <Col md={3}>
             <Card className="shadow-sm border-0">
               <Card.Body>
-                <div className="text-muted">Records</div>
+                <div className="text-muted small text-uppercase fw-semibold">Active Records</div>
                 <div className="d-flex align-items-baseline gap-2">
-                  <h4 className="mb-0">{filteredData.length}</h4>
+                  <h4 className="mb-0">{activeFilteredData.length}</h4>
                   <Badge bg="secondary">
                     Page {currentPage}/{totalPages}
                   </Badge>
+                  {cancelledFilteredCount > 0 && (
+                    <Badge bg="danger" className="ms-1">
+                      {cancelledFilteredCount} cancelled excluded
+                    </Badge>
+                  )}
                 </div>
               </Card.Body>
             </Card>
@@ -1206,7 +1223,8 @@ const DayWiseReport = () => {
           <Col md={3}>
             <Card className="shadow-sm border-0">
               <Card.Body>
-                <div className="text-muted">Total Received (incl. Fine)</div>
+                <div className="text-muted small text-uppercase fw-semibold">Total Received</div>
+                <div className="text-muted" style={{ fontSize: 11 }}>Including fine</div>
                 <h4 className="mb-0">{formatTotalValue(totalSummary.totalReceived)}</h4>
               </Card.Body>
             </Card>
@@ -1215,7 +1233,7 @@ const DayWiseReport = () => {
           <Col md={3}>
             <Card className="shadow-sm border-0">
               <Card.Body>
-                <div className="text-muted">Fee + Van</div>
+                <div className="text-muted small text-uppercase fw-semibold">Fee + Van</div>
                 <h4 className="mb-0">
                   {formatTotalValue(
                     (totalSummary.totalFeeReceived || 0) + (totalSummary.totalVanFee || 0)
@@ -1231,7 +1249,7 @@ const DayWiseReport = () => {
           <Col md={3}>
             <Card className="shadow-sm border-0">
               <Card.Body>
-                <div className="text-muted">Concession</div>
+                <div className="text-muted small text-uppercase fw-semibold">Concession</div>
                 <h4 className="mb-0">{formatTotalValue(totalSummary.totalConcession)}</h4>
               </Card.Body>
             </Card>

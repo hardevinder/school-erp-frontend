@@ -102,8 +102,8 @@
   border-color: rgba(var(--theme-accent-rgb), .48) !important;
   box-shadow: 0 14px 36px rgba(var(--theme-primary-rgb), .15) !important;
 }
-.premium-portal__eyebrow,
-.premium-portal__meta i { color: var(--theme-accent) !important; background-color: var(--theme-accent) !important; }
+.premium-portal__eyebrow { color: var(--theme-accent) !important; background: transparent !important; }
+.premium-portal__meta i { background-color: var(--theme-accent) !important; }
 .premium-workspace-card.is-active { border-color: var(--theme-accent) !important; box-shadow: inset 0 3px 0 var(--theme-accent), 0 10px 24px rgba(var(--theme-primary-rgb), .14) !important; }
 .premium-workspace-card__icon,
 .premium-workspace-card__action { color: var(--theme-primary) !important; }

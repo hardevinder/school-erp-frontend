@@ -12,7 +12,7 @@ import {
   Badge,
 } from "react-bootstrap";
 import api from "../api";
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
 import Swal from "sweetalert2";
 import "./SchoolFeeSummary.css"; // reuse same styles
@@ -77,7 +77,10 @@ const TransportSummary = () => {
     setLoading(true);
     setError("");
     try {
-      const params = { includeZeroPending: true };
+      const params = {
+        includeZeroPending: true,
+        onlyWithRoute: true,
+      };
       if (sessionId) params.session_id = sessionId;
       const resp = await api.get("/transport/pending-per-head", { params });
       const payload = resp.data;
@@ -118,14 +121,24 @@ const TransportSummary = () => {
             students: [],
           };
         }
-        map[hid].totalDue += Number(h.due || 0);
-        map[hid].totalReceived += Number(h.received || 0);
-        map[hid].totalPending += Number(h.pending || 0);
+        const due = Number(h.due || 0);
+        const received = Number(h.paid ?? h.received ?? 0);
+        const pending = Number(h.pending || 0);
+        const concession = Number(h.concession || 0);
+
+        // Ignore non-applicable zero-value transport rows.
+        if (due <= 0 && received <= 0 && pending <= 0 && concession <= 0) {
+          return;
+        }
+
+        map[hid].totalDue += due;
+        map[hid].totalReceived += received;
+        map[hid].totalPending += pending;
         map[hid].students.push({
           ...stu,
-          due: Number(h.due || 0),
-          received: Number(h.received || 0),
-          pending: Number(h.pending || 0),
+          due,
+          received,
+          pending,
           phone: stu.phone || stu.fatherPhone || stu.motherPhone || null,
         });
       });
@@ -203,7 +216,7 @@ const TransportSummary = () => {
         (h) => Number(h.fee_heading_id) === Number(feeHeadingId)
       );
       if (!headData) return false;
-      const received = Number(headData.received || 0);
+      const received = Number(headData.paid ?? headData.received ?? 0);
       const pending = Number(headData.pending || 0);
       let matches = false;
       if (status === "full") {
@@ -294,50 +307,347 @@ const TransportSummary = () => {
   }, [columnTotals, selectedHeads]);
 
   /* -------------------- Export Excel -------------------- */
-  const exportToExcel = () => {
-    // Export ONLY selected heads + an Overall Total
-    const baseCols = ["#", "Name", "Admission No", "Class", "Route"];
-    const excelRows = filteredDetails.map((stu, idx) => {
-      const row = {
-        "#": idx + 1,
-        Name: stu.name,
-        "Admission No": stu.admissionNumber,
-        Class: stu.className,
-        Route: stu.routeName || "—",
-      };
-      let overall = 0;
-      headNames.forEach((head) => {
-        if (!selectedHeads.has(head)) return;
-        const amt = Number(stu[`${head} - Pending`] || 0);
-        overall += amt;
-        row[`${head} Amount`] = amt;
+  const exportToExcel = async () => {
+    try {
+      const selectedHeadList = headNames.filter((head) =>
+        selectedHeads.has(head)
+      );
+
+      if (!selectedHeadList.length) {
+        await Swal.fire({
+          icon: "info",
+          title: "Select Fee Heads",
+          text: "Please select at least one transport fee head before exporting.",
+        });
+        return;
+      }
+
+      const workbook = new ExcelJS.Workbook();
+      workbook.creator = "EduBridge ERP";
+      workbook.created = new Date();
+
+      const worksheet = workbook.addWorksheet("Transport Students", {
+        views: [
+          {
+            state: "frozen",
+            xSplit: 4,
+            ySplit: 4,
+            topLeftCell: "E5",
+            activeCell: "A5",
+          },
+        ],
+        pageSetup: {
+          orientation: "landscape",
+          fitToPage: true,
+          fitToWidth: 1,
+          fitToHeight: 0,
+          paperSize: 9,
+          margins: {
+            left: 0.25,
+            right: 0.25,
+            top: 0.5,
+            bottom: 0.5,
+            header: 0.2,
+            footer: 0.2,
+          },
+        },
       });
-      row["Overall Total"] = overall;
-      return row;
-    });
 
-    const headerCols = [
-      ...baseCols,
-      ...headNames.flatMap((h) => (selectedHeads.has(h) ? [`${h} Amount`] : [])),
-      "Overall Total",
-    ];
+      const columns = [
+        { header: "#", key: "sr", width: 7 },
+        { header: "Name", key: "name", width: 28 },
+        { header: "Admission No", key: "admissionNo", width: 18 },
+        { header: "Class", key: "className", width: 15 },
+        { header: "Route", key: "routeName", width: 22 },
+        ...selectedHeadList.map((head, index) => ({
+          header: head,
+          key: `head_${index}`,
+          width: 16,
+        })),
+        { header: "Overall Total", key: "overallTotal", width: 18 },
+      ];
 
-    const worksheet = XLSX.utils.json_to_sheet(excelRows, {
-      header: headerCols,
-    });
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Students");
-    const excelBuffer = XLSX.write(workbook, {
-      bookType: "xlsx",
-      type: "array",
-    });
-    const blob = new Blob([excelBuffer], {
-      type: "application/octet-stream",
-    });
-    saveAs(
-      blob,
-      `${selectedHeadingName}_${selectedStatus}_Students.xlsx`.replace(/\s+/g, "_")
-    );
+      worksheet.columns = columns;
+      const lastCol = columns.length;
+
+      worksheet.mergeCells(1, 1, 1, lastCol);
+      const titleCell = worksheet.getCell(1, 1);
+      titleCell.value = school?.name
+        ? `${school.name} - Transport Fee Students`
+        : "Transport Fee Students";
+      titleCell.font = {
+        bold: true,
+        size: 16,
+        color: { argb: "FFFFFFFF" },
+      };
+      titleCell.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FF0B4F6C" },
+      };
+      titleCell.alignment = {
+        horizontal: "center",
+        vertical: "middle",
+      };
+      worksheet.getRow(1).height = 28;
+
+      worksheet.mergeCells(2, 1, 2, lastCol);
+      const session = sessions.find(
+        (s) => String(s.id) === String(activeSessionId)
+      );
+      const infoCell = worksheet.getCell(2, 1);
+      infoCell.value = `Session: ${session?.name || "N/A"}   |   Status: ${
+        selectedStatus || "ALL"
+      }   |   Head: ${selectedHeadingName || "All"}`;
+      infoCell.font = {
+        bold: true,
+        size: 11,
+        color: { argb: "FF0B4F6C" },
+      };
+      infoCell.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FFD9EDF7" },
+      };
+      infoCell.alignment = {
+        horizontal: "center",
+        vertical: "middle",
+      };
+      worksheet.getRow(2).height = 22;
+
+      worksheet.mergeCells(3, 1, 3, lastCol);
+      const generatedCell = worksheet.getCell(3, 1);
+      generatedCell.value = `Generated: ${new Date().toLocaleString(
+        "en-IN"
+      )}   |   Students: ${filteredDetails.length}`;
+      generatedCell.font = {
+        italic: true,
+        size: 10,
+        color: { argb: "FF5A6772" },
+      };
+      generatedCell.alignment = {
+        horizontal: "center",
+        vertical: "middle",
+      };
+      worksheet.getRow(3).height = 20;
+
+      columns.forEach((col, index) => {
+        const cell = worksheet.getCell(4, index + 1);
+        cell.value = col.header;
+        cell.font = {
+          bold: true,
+          color: { argb: "FFFFFFFF" },
+          size: 11,
+        };
+        cell.fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: {
+            argb:
+              index <= 3
+                ? "FF1D4E89"
+                : index === lastCol - 1
+                ? "FFB45309"
+                : "FF2563A6",
+          },
+        };
+        cell.alignment = {
+          horizontal: index === 1 ? "left" : "center",
+          vertical: "middle",
+          wrapText: true,
+        };
+        cell.border = {
+          top: { style: "thin", color: { argb: "FFFFFFFF" } },
+          left: { style: "thin", color: { argb: "FFFFFFFF" } },
+          bottom: { style: "thin", color: { argb: "FFFFFFFF" } },
+          right: { style: "thin", color: { argb: "FFFFFFFF" } },
+        };
+      });
+      worksheet.getRow(4).height = 28;
+
+      filteredDetails.forEach((stu, index) => {
+        const values = [
+          index + 1,
+          stu.name || "",
+          stu.admissionNumber || "",
+          stu.className || "",
+          stu.routeName || "-",
+        ];
+
+        let overall = 0;
+        selectedHeadList.forEach((head) => {
+          const amount = Number(stu[`${head} - Pending`] || 0);
+          overall += amount;
+          values.push(amount);
+        });
+        values.push(overall);
+
+        const row = worksheet.addRow(values);
+        row.height = 22;
+
+        row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+          cell.border = {
+            top: { style: "thin", color: { argb: "FFD9E2EC" } },
+            left: { style: "thin", color: { argb: "FFD9E2EC" } },
+            bottom: { style: "thin", color: { argb: "FFD9E2EC" } },
+            right: { style: "thin", color: { argb: "FFD9E2EC" } },
+          };
+
+          cell.alignment = {
+            vertical: "middle",
+            horizontal:
+              colNumber === 2
+                ? "left"
+                : colNumber >= 6
+                ? "right"
+                : "center",
+          };
+
+          if (index % 2 === 1) {
+            cell.fill = {
+              type: "pattern",
+              pattern: "solid",
+              fgColor: { argb: "FFF5F9FC" },
+            };
+          }
+        });
+
+        for (let col = 1; col <= 4; col += 1) {
+          const cell = row.getCell(col);
+          cell.font = {
+            ...cell.font,
+            bold: col === 2 || col === 3,
+            color: { argb: "FF15324A" },
+          };
+          cell.fill = {
+            type: "pattern",
+            pattern: "solid",
+            fgColor: { argb: index % 2 === 1 ? "FFEAF2F8" : "FFF2F7FB" },
+          };
+        }
+
+        for (let col = 6; col <= lastCol; col += 1) {
+          const cell = row.getCell(col);
+          cell.numFmt = '"₹"#,##0';
+          const amount = Number(cell.value || 0);
+
+          if (col === lastCol) {
+            cell.font = {
+              bold: true,
+              color: { argb: amount > 0 ? "FFC62828" : "FF15803D" },
+            };
+            cell.fill = {
+              type: "pattern",
+              pattern: "solid",
+              fgColor: { argb: amount > 0 ? "FFFFE4E6" : "FFDCFCE7" },
+            };
+          } else if (amount > 0) {
+            cell.font = {
+              color: { argb: "FF991B1B" },
+              bold: true,
+            };
+            cell.fill = {
+              type: "pattern",
+              pattern: "solid",
+              fgColor: { argb: "FFFFF1F2" },
+            };
+          } else {
+            cell.font = {
+              color: { argb: "FF15803D" },
+            };
+          }
+        }
+      });
+
+      const totalRowNumber = worksheet.rowCount + 1;
+      const totalRow = worksheet.getRow(totalRowNumber);
+      totalRow.getCell(1).value = "GRAND TOTAL";
+      worksheet.mergeCells(totalRowNumber, 1, totalRowNumber, 5);
+
+      totalRow.getCell(1).font = {
+        bold: true,
+        color: { argb: "FFFFFFFF" },
+        size: 11,
+      };
+      totalRow.getCell(1).fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FF0B4F6C" },
+      };
+      totalRow.getCell(1).alignment = {
+        horizontal: "right",
+        vertical: "middle",
+      };
+
+      let totalOverall = 0;
+      selectedHeadList.forEach((head, index) => {
+        const total = filteredDetails.reduce(
+          (sum, stu) => sum + Number(stu[`${head} - Pending`] || 0),
+          0
+        );
+        totalOverall += total;
+        const cell = totalRow.getCell(6 + index);
+        cell.value = total;
+        cell.numFmt = '"₹"#,##0';
+        cell.font = {
+          bold: true,
+          color: { argb: "FFFFFFFF" },
+        };
+        cell.fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: "FF2563A6" },
+        };
+        cell.alignment = { horizontal: "right" };
+      });
+
+      const overallCell = totalRow.getCell(lastCol);
+      overallCell.value = totalOverall;
+      overallCell.numFmt = '"₹"#,##0';
+      overallCell.font = {
+        bold: true,
+        color: { argb: "FFFFFFFF" },
+      };
+      overallCell.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FFB45309" },
+      };
+      overallCell.alignment = { horizontal: "right" };
+      totalRow.height = 24;
+
+      worksheet.autoFilter = {
+        from: { row: 4, column: 1 },
+        to: { row: 4, column: lastCol },
+      };
+
+      worksheet.properties.defaultRowHeight = 20;
+      worksheet.headerFooter.oddHeader =
+        '&C&BTransport Fee Students - ' + (session?.name || "");
+      worksheet.headerFooter.oddFooter =
+        '&LGenerated by EduBridge ERP&CPage &P of &N&R' +
+        new Date().toLocaleDateString("en-IN");
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
+
+      const sessLabel = session?.name ? `_${session.name}` : "";
+      saveAs(
+        blob,
+        `${selectedHeadingName || "Transport"}_${
+          selectedStatus || "ALL"
+        }_Students${sessLabel}.xlsx`.replace(/\s+/g, "_")
+      );
+    } catch (error) {
+      console.error("Transport Excel export error:", error);
+      Swal.fire({
+        icon: "error",
+        title: "Excel Export Error",
+        text: "Unable to generate the formatted Excel file.",
+      });
+    }
   };
 
   /* -------------------- WhatsApp Batch -------------------- */

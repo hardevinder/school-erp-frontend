@@ -21,14 +21,48 @@ const studentPhotoSrc = (student) => {
   return `${API_BASE}/uploads/photoes/students/${encodeURIComponent(value)}`;
 };
 const emptyQuestion = (index = 0) => ({ question_type: "mcq", question_text: "", options: ["", "", "", ""], correct_answer: 0, marks: 1, difficulty: "medium", explanation: "", topic: "", sort_order: index });
+const AI_PROGRESS_STAGES = [
+  { max: 15, label: "Preparing syllabus & blueprint" },
+  { max: 35, label: "Analyzing Unit & Topics" },
+  { max: 70, label: "Generating questions" },
+  { max: 88, label: "Balancing marks & difficulty" },
+  { max: 95, label: "Preparing answers/explanations" },
+  { max: 99, label: "Finalizing" },
+  { max: 100, label: "Complete" },
+];
+const aiProgressLabel = (value) => AI_PROGRESS_STAGES.find((row) => value <= row.max)?.label || "Finalizing";
+
+const QUESTION_BLUEPRINT_TYPES = [
+  { id: "mcq", label: "MCQ", icon: "bi-ui-radios", defaultMarks: 1 },
+  { id: "true_false", label: "True / False", icon: "bi-check2-circle", defaultMarks: 1 },
+  { id: "fill_blank", label: "Fill in the Blank", icon: "bi-pencil-square", defaultMarks: 1 },
+  { id: "short", label: "Short Answer", icon: "bi-card-text", defaultMarks: 2 },
+  { id: "long", label: "Long Answer", icon: "bi-journal-text", defaultMarks: 5 },
+];
+const defaultQuestionBlueprint = () => [
+  { type: "mcq", count: 10, marks: 1 },
+  { type: "short", count: 5, marks: 2 },
+];
+const normalizeQuestionBlueprint = (rows) => {
+  const allowed = new Set(QUESTION_BLUEPRINT_TYPES.map((row) => row.id));
+  const list = Array.isArray(rows) ? rows : [];
+  return list.map((row) => ({
+    type: String(row?.type || row?.question_type || "").toLowerCase(),
+    count: Math.max(0, Math.min(100, Number(row?.count || 0) || 0)),
+    marks: Math.max(0.5, Number(row?.marks || row?.marks_each || 1) || 1),
+  })).filter((row) => allowed.has(row.type) && row.count > 0);
+};
+const blueprintQuestionCount = (rows) => normalizeQuestionBlueprint(rows).reduce((sum, row) => sum + row.count, 0);
+const blueprintMarksTotal = (rows) => normalizeQuestionBlueprint(rows).reduce((sum, row) => sum + (row.count * row.marks), 0);
 const emptyForm = {
   online_class_id: "", class_id: "", section_id: "", subject_id: "", title: "", description: "", instructions: "Attempt all questions.",
   assessment_type: "test", mode: "online", total_marks: 20, duration_minutes: 30, starts_at: "", ends_at: "", publish_trigger: "manual", publish_at: "",
-  max_attempts: 1, result_release: "manual", randomize_questions: false, randomize_options: false, questions: [emptyQuestion(0)], question_paper: null, supporting_files: [],
+  max_attempts: 1, result_release: "manual", randomize_questions: false, randomize_options: false, question_blueprint: defaultQuestionBlueprint(), questions: [emptyQuestion(0)], question_paper: null, supporting_files: [],
 };
 const fmt = (value) => value ? new Date(value).toLocaleString() : "—";
 const toLocalInput = (value) => { if (!value) return ""; const d = new Date(value); const z = new Date(d.getTime() - d.getTimezoneOffset() * 60000); return z.toISOString().slice(0, 16); };
-const uniqueOptions = (rows, id, label) => [...new Map(rows.filter((r) => r[id] != null).map((r) => [Number(r[id]), { id: Number(r[id]), label: r[label] || `#${r[id]}` }])).values()];
+const validId = (value) => Number.isFinite(Number(value)) && Number(value) > 0;
+const uniqueOptions = (rows, id, label) => [...new Map(rows.filter((r) => validId(r[id])).map((r) => [Number(r[id]), { id: Number(r[id]), label: r[label] || `#${r[id]}` }])).values()];
 
 async function openBlob(url, filename) {
   const response = await api.get(url, { responseType: "blob" });
@@ -45,16 +79,12 @@ export default function Assessments() {
   const query = useMemo(() => new URLSearchParams(location.search), [location.search]);
   const assessmentTypeFilter = query.get("assessment_type") || "";
   const assignmentOnly = assessmentTypeFilter === "assignment";
-  const worksheetOnly = assessmentTypeFilter === "worksheet";
-  const focusedLearningMaterial = assignmentOnly || worksheetOnly;
-  const pageTitle = assignmentOnly ? "Assignments" : worksheetOnly ? "Worksheets" : "Assessments & Tests";
+  const pageTitle = assignmentOnly ? "Assignments" : "Assessments & Tests";
   const pageSubtitle = assignmentOnly
-    ? "Write and publish assignments in a clean teacher notebook, then collect and evaluate student work."
-    : worksheetOnly
-      ? "Create classroom worksheets in a notebook-style workspace, publish them and review student work."
-      : isManagementViewer
-        ? "School-wide assessment intelligence, student results, scanned papers and AI review visibility."
-        : "Online quizzes, worksheets, scanned answer sheets, AI papers and published results.";
+    ? "Create, publish, collect scanned work, evaluate and publish assignment results."
+    : isManagementViewer
+      ? "School-wide assessment intelligence, student results, scanned papers and AI review visibility."
+      : "Online quizzes, scanned answer sheets, AI papers and published results.";
   const newAssessmentData = useCallback(() => ({
     ...emptyForm,
     assessment_type: assessmentTypeFilter || "test",
@@ -111,25 +141,23 @@ export default function Assessments() {
   const resultVisible = (row) => Boolean(row.enrollment?.result_published_at);
 
   return <div className="assessment-page container-fluid py-3">
-    {!(builder || attempt || offline || submissions) && <>
     <div className="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
       <div><h2 className="mb-1">{pageTitle}</h2><div className="text-muted">{pageSubtitle}</div></div>
-      <div className="d-flex flex-wrap gap-2 assessment-page-switcher">
+      <div className="d-flex gap-2">
         {(query.get("online_class_id") || assessmentTypeFilter) && <button className="btn btn-outline-secondary" onClick={() => navigate("/assessments")}>Show all</button>}
         {!assignmentOnly && <button className="btn btn-outline-primary" onClick={() => navigate("/assessments?assessment_type=assignment")}><i className="bi bi-journal-check me-2" />Assignments</button>}
-        {!worksheetOnly && <button className="btn btn-outline-primary" onClick={() => navigate("/assessments?assessment_type=worksheet")}><i className="bi bi-file-earmark-text me-2" />Worksheets</button>}
-        {canCreate && <button className="btn btn-primary" onClick={() => setBuilder({ mode: "create", data: newAssessmentData() })}><i className="bi bi-plus-lg me-2" />{assignmentOnly ? "Create Assignment" : worksheetOnly ? "Create Worksheet" : "Create Assessment"}</button>}
+        {canCreate && <button className="btn btn-primary" onClick={() => setBuilder({ mode: "create", data: newAssessmentData() })}><i className="bi bi-plus-lg me-2" />{assignmentOnly ? "Create Assignment" : "Create Assessment"}</button>}
       </div>
     </div>
     {notice && <div className={`alert alert-${notice.type} alert-dismissible`}>{notice.text}<button className="btn-close" onClick={() => setNotice(null)} /></div>}
+    {builder && <AssessmentBuilder options={options} state={builder} onClose={() => setBuilder(null)} onSaved={async (message) => { setBuilder(null); flash("success", message); await load(); }} onError={(m) => flash("danger", m)} />}
     {isManagementViewer && <div className="assessment-management-banner mb-4"><div><i className="bi bi-bar-chart-line-fill" /><div><strong>Management Assessment View</strong><span>View school-wide tests, student pictures, scores, AI findings and scanned answer sheets. Teacher marks remain read-only unless your role has assessment management permission.</span></div></div></div>}
     <div className="assessment-summary-grid mb-4">
       <Summary icon="bi-files" label="Total" value={rows.length} />
       <Summary icon="bi-broadcast" label="Published" value={rows.filter((r) => r.status === "published").length} />
       <Summary icon="bi-laptop" label="Online" value={rows.filter((r) => r.mode === "online").length} />
       <Summary icon="bi-file-earmark-arrow-up" label="Offline" value={rows.filter((r) => r.mode === "offline").length} />
-      {!focusedLearningMaterial && <Summary icon="bi-journal-check" label="Assignments" value={rows.filter((r) => r.assessment_type === "assignment").length} />}
-      {!focusedLearningMaterial && <Summary icon="bi-file-earmark-text" label="Worksheets" value={rows.filter((r) => r.assessment_type === "worksheet").length} />}
+      {!assignmentOnly && <Summary icon="bi-journal-check" label="Assignments" value={rows.filter((r) => r.assessment_type === "assignment").length} />}
     </div>
 
     {loading ? <div className="card border-0 shadow-sm p-5 text-center">Loading assessments…</div> : rows.length === 0 ? <div className="assessment-empty card border-0 shadow-sm p-5 text-center"><i className="bi bi-clipboard2-check" /><h4>No assessments yet</h4><p className="text-muted mb-0">Teachers can create an online quiz or publish an offline written paper.</p></div> :
@@ -150,15 +178,12 @@ export default function Assessments() {
           {row.can_view_submissions && !["draft", "scheduled", "cancelled"].includes(row.status) && <button className="btn btn-sm btn-outline-success" onClick={() => openSubmissions(row)}><i className="bi bi-people me-1" />{row.can_manage ? "Submissions" : "Student Results"}</button>}
           {row.can_manage && ["closed", "evaluated", "result_published"].includes(row.status) && <button className="btn btn-sm btn-success" onClick={() => mutate(row, "results/publish", "Publish all evaluated results to students and parents?")}>Publish Results</button>}
           {row.can_manage && !["cancelled", "result_published"].includes(row.status) && <button className="btn btn-sm btn-link text-danger" onClick={() => cancel(row)}>Cancel</button>}
-          {isStudent && row.status === "published" && row.mode === "online" && !["submitted", "evaluated"].includes(row.enrollment?.status) && <button className="btn btn-sm btn-primary" onClick={() => startAttempt(row)}>{row.assessment_type === "assignment" ? "Open Assignment" : row.assessment_type === "worksheet" ? "Open Worksheet" : "Attempt Test"}</button>}
-          {isStudent && row.status === "published" && row.mode === "offline" && !["submitted", "evaluated"].includes(row.enrollment?.status) && <button className="btn btn-sm btn-primary" onClick={() => setOffline(row)}><i className="bi bi-camera me-1" />{["assignment", "worksheet"].includes(row.assessment_type) ? "Upload Work" : "Upload Answer Sheets"}</button>}
+          {isStudent && row.status === "published" && row.mode === "online" && !["submitted", "evaluated"].includes(row.enrollment?.status) && <button className="btn btn-sm btn-primary" onClick={() => startAttempt(row)}>{row.assessment_type === "assignment" ? "Open Assignment" : "Attempt Test"}</button>}
+          {isStudent && row.status === "published" && row.mode === "offline" && !["submitted", "evaluated"].includes(row.enrollment?.status) && <button className="btn btn-sm btn-primary" onClick={() => setOffline(row)}><i className="bi bi-camera me-1" />{row.assessment_type === "assignment" ? "Upload Work" : "Upload Answer Sheets"}</button>}
           {(row.files || []).filter((f) => ["question_paper", "supporting_material"].includes(f.kind)).map((file) => <button key={file.id} className="btn btn-sm btn-outline-secondary" onClick={() => openBlob(`/api/assessments/${row.id}/files/${file.id}`, file.original_name)}><i className="bi bi-download me-1" />{file.original_name}</button>)}
         </div></div>
       </article></div>)}</div>}
 
-    </>}
-    {(builder || attempt || offline || submissions) && notice && <div role="alert" className={`alert alert-${notice.type}`}>{notice.text}</div>}
-    {builder && <AssessmentBuilder options={options} state={builder} onClose={() => setBuilder(null)} onSaved={async (message) => { setBuilder(null); flash("success", message); await load(); }} onError={(m) => flash("danger", m)} />}
     {attempt && <AttemptModal payload={attempt} onClose={() => setAttempt(null)} onSubmitted={async () => { setAttempt(null); flash("success", "Assessment submitted successfully."); await load(); }} onError={(m) => flash("danger", m)} />}
     {offline && <OfflineSubmit assessment={offline} onClose={() => setOffline(null)} onSubmitted={async () => { setOffline(null); flash("success", "Scanned answer sheets submitted."); await load(); }} onError={(m) => flash("danger", m)} />}
     {submissions && <SubmissionsModal state={submissions} onClose={() => setSubmissions(null)} onChanged={async () => { await openSubmissions(submissions.assessment); await load(); }} onError={(m) => flash("danger", m)} />}
@@ -171,61 +196,146 @@ function ResultStrip({ enrollment, total, visible }) {
   return <div className="student-result published mt-3"><span>Result</span><strong>{enrollment.obtained_marks ?? 0}/{total} · {enrollment.grade || "—"}</strong>{enrollment.teacher_feedback && <small>{enrollment.teacher_feedback}</small>}</div>;
 }
 
-function AssessmentBuilder({ options, state, onClose, onSaved, onError }) {
-  const [form, setForm] = useState(state.data); const [busy, setBusy] = useState(false); const [aiBusy, setAiBusy] = useState(false);
-  const [importBusy, setImportBusy] = useState(false); const [importNotice, setImportNotice] = useState("");
+function AssessmentBuilder({ options = [], state, onClose, onSaved, onError }) {
+  const initial = state?.data || emptyForm;
+  const [form, setForm] = useState({
+    ...initial,
+    breakdown_id: initial.breakdown_id || "",
+    breakdown_item_id: initial.breakdown_item_id || "",
+    syllabus_topics: Array.isArray(initial?.settings?.syllabus_topics) ? initial.settings.syllabus_topics : [],
+    question_blueprint: normalizeQuestionBlueprint(initial.question_blueprint || initial?.settings?.question_blueprint || defaultQuestionBlueprint()),
+  });
+  const [step, setStep] = useState(1);
+  const [busy, setBusy] = useState(false);
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiProgress, setAiProgress] = useState(0);
+  const [aiProgressStage, setAiProgressStage] = useState("");
+  const [importBusy, setImportBusy] = useState(false);
+  const [importNotice, setImportNotice] = useState("");
+  const [syllabusRows, setSyllabusRows] = useState([]);
+  const [syllabusBusy, setSyllabusBusy] = useState(false);
+  const [syllabusError, setSyllabusError] = useState("");
   const questionImportRef = useRef(null);
-  const [step, setStep] = useState(0);
-  const [validation, setValidation] = useState("");
-  const headingRef = useRef(null);
-  const steps = ["Class & topic", "Write questions", "Delivery", "Review & save"];
-  const working = busy || aiBusy || importBusy;
-  useEffect(() => { headingRef.current?.focus(); headingRef.current?.scrollIntoView({ block: "start", behavior: "smooth" }); }, [step]);
-  const validateStep = (current) => {
-    if (current === 0 && (!form.class_id || !form.subject_id || !form.title.trim())) return "Choose a class and subject, then write a title.";
-    if (current === 1) {
-      if (form.mode === "online" && !form.questions.length) return "Add at least one question for an online worksheet.";
-      for (const [i, q] of form.questions.entries()) {
-        if (form.mode === "offline" && !q.question_text?.trim()) continue;
-        if (!q.question_text?.trim()) return `Write question ${i + 1}, or remove the empty question.`;
-        if (!(Number(q.marks) > 0)) return `Choose marks greater than zero for question ${i + 1}.`;
-        if (["mcq", "true_false"].includes(q.question_type) && (!(q.options?.length >= 2) || q.options.some((o) => !String(o).trim()) || q.correct_answer == null || !Number.isInteger(Number(q.correct_answer)) || Number(q.correct_answer) < 0 || Number(q.correct_answer) >= q.options.length)) return `Complete the options and select a correct answer for question ${i + 1}.`;
-      }
-    }
-    if (current === 2) {
-      if (!(Number(form.total_marks) > 0)) return "Total marks must be greater than zero.";
-      if (form.mode === "online" && (!(Number(form.duration_minutes) >= 1) || !Number.isInteger(Number(form.max_attempts)) || Number(form.max_attempts) < 1 || Number(form.max_attempts) > 10)) return "Set a duration of at least one minute and between 1 and 10 attempts.";
-      if (form.starts_at && form.ends_at && new Date(form.ends_at) <= new Date(form.starts_at)) return "The deadline must be after the available-from date.";
-      if (form.publish_trigger === "scheduled" && (!form.publish_at || new Date(form.publish_at) <= new Date())) return "Choose a future publishing date and time.";
-      if (form.publish_trigger === "after_class" && !form.online_class_id) return "Enter a linked online class for publishing after class.";
-      if (form.mode === "online" && !form.questions.length) return "Online work needs questions. Return to Write questions to add one.";
-    }
-    return "";
-  };
-  const goToStep = (next) => {
-    if (working) return;
-    for (let i = 0; i < next; i++) {
-      const error = validateStep(i);
-      if (error) { setValidation(error); setStep(i); return; }
-    }
-    setValidation(""); setStep(next);
-  };
+
   const classRows = options.filter((o) => !form.class_id || Number(o.class_id) === Number(form.class_id));
   const sectionRows = classRows.filter((o) => !form.section_id || Number(o.section_id) === Number(form.section_id));
-  const classes = uniqueOptions(options, "class_id", "class_name"); const sections = uniqueOptions(classRows, "section_id", "section_name"); const subjects = uniqueOptions(sectionRows, "subject_id", "subject_name");
+  const classes = uniqueOptions(options, "class_id", "class_name");
+  const sections = uniqueOptions(classRows, "section_id", "section_name");
+  const subjects = uniqueOptions(sectionRows, "subject_id", "subject_name");
+  const selectedUnit = syllabusRows.find((row) => Number(row.id) === Number(form.breakdown_item_id)) || null;
+  const unitTopics = selectedUnit ? [...new Set([...(selectedUnit.topics || []), ...(selectedUnit.subtopics || [])].map((v) => String(v || "").trim()).filter(Boolean))] : [];
+  const questionBlueprint = normalizeQuestionBlueprint(form.question_blueprint);
+  const plannedQuestions = blueprintQuestionCount(questionBlueprint);
+  const plannedMarks = blueprintMarksTotal(questionBlueprint);
+  const blueprintType = (type) => QUESTION_BLUEPRINT_TYPES.find((row) => row.id === type);
+  const setBlueprint = (rows) => setForm((f) => ({ ...f, question_blueprint: normalizeQuestionBlueprint(rows), total_marks: blueprintMarksTotal(rows) }));
+  const patchBlueprintRow = (type, patch) => {
+    const rows = normalizeQuestionBlueprint(form.question_blueprint);
+    const at = rows.findIndex((row) => row.type === type);
+    if (at < 0) return;
+    const next = rows.map((row, index) => index === at ? { ...row, ...patch } : row);
+    setBlueprint(next);
+  };
+  const addBlueprintType = (type) => {
+    if (questionBlueprint.some((row) => row.type === type)) return;
+    const meta = blueprintType(type);
+    setBlueprint([...questionBlueprint, { type, count: 5, marks: meta?.defaultMarks || 1 }]);
+  };
+  const removeBlueprintType = (type) => setBlueprint(questionBlueprint.filter((row) => row.type !== type));
+  const applyBlueprintPreset = (name) => {
+    const presets = {
+      quiz: [{ type: "mcq", count: 10, marks: 1 }],
+      balanced: [{ type: "mcq", count: 10, marks: 1 }, { type: "short", count: 5, marks: 2 }],
+      theory: [{ type: "short", count: 5, marks: 3 }, { type: "long", count: 3, marks: 5 }],
+    };
+    setBlueprint(presets[name] || defaultQuestionBlueprint());
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    const classId = Number(form.class_id);
+    const subjectId = Number(form.subject_id);
+    const rawSectionId = form.section_id;
+    const sectionId = rawSectionId === undefined || rawSectionId === null || rawSectionId === "" ? null : Number(rawSectionId);
+    if (!Number.isFinite(classId) || classId <= 0 || !Number.isFinite(subjectId) || subjectId <= 0) {
+      setSyllabusRows([]);
+      setSyllabusError("");
+      return undefined;
+    }
+    if (sectionId !== null && (!Number.isFinite(sectionId) || sectionId <= 0)) {
+      setSyllabusRows([]);
+      setSyllabusError("Please select a valid section.");
+      return undefined;
+    }
+    setSyllabusBusy(true); setSyllabusError("");
+    api.get("/api/assessments/syllabus-options", { params: { class_id: classId, section_id: sectionId || undefined, subject_id: subjectId } })
+      .then((response) => { if (!cancelled) setSyllabusRows(asList(unwrap(response))); })
+      .catch((error) => { if (!cancelled) { setSyllabusRows([]); setSyllabusError(error.response?.data?.message || "Could not load syllabus units."); } })
+      .finally(() => { if (!cancelled) setSyllabusBusy(false); });
+    return () => { cancelled = true; };
+  }, [form.class_id, form.section_id, form.subject_id]);
+
+  const chooseClass = (id) => setForm((f) => ({ ...f, class_id: id, section_id: "", subject_id: "", breakdown_id: "", breakdown_item_id: "", syllabus_topics: [] }));
+  const chooseSection = (id) => setForm((f) => ({ ...f, section_id: id, subject_id: "", breakdown_id: "", breakdown_item_id: "", syllabus_topics: [] }));
+  const chooseSubject = (id) => setForm((f) => ({ ...f, subject_id: id, breakdown_id: "", breakdown_item_id: "", syllabus_topics: [] }));
+  const chooseUnit = (row) => setForm((f) => ({ ...f, breakdown_id: row.breakdown_id || "", breakdown_item_id: row.id, syllabus_topics: [] }));
+  const toggleTopic = (topic) => setForm((f) => ({ ...f, syllabus_topics: f.syllabus_topics.includes(topic) ? f.syllabus_topics.filter((t) => t !== topic) : [...f.syllabus_topics, topic] }));
   const updateQuestion = (index, patch) => setForm((f) => ({ ...f, questions: f.questions.map((q, i) => i === index ? { ...q, ...patch } : q) }));
   const addQuestion = () => setForm((f) => ({ ...f, questions: [...f.questions, emptyQuestion(f.questions.length)] }));
   const removeQuestion = (index) => setForm((f) => ({ ...f, questions: f.questions.filter((_, i) => i !== index).map((q, i) => ({ ...q, sort_order: i })) }));
-  const materialName = form.assessment_type === "worksheet" ? "Worksheet" : form.assessment_type === "assignment" ? "Assignment" : "Assessment";
+
+  const nextFromBasics = () => {
+    if (!validId(form.class_id) || !validId(form.subject_id) || !String(form.title || "").trim()) return onError("Select class, subject and enter a title first.");
+    if (form.section_id && !validId(form.section_id)) return onError("Select a valid section.");
+    setStep(2);
+  };
+
   const generateAi = async () => {
     if (!form.class_id || !form.subject_id || !form.title) return onError("Select class, subject and enter a title before AI generation.");
     setAiBusy(true);
+    setAiProgress(4);
+    setAiProgressStage(aiProgressLabel(4));
+    const progressTimer = window.setInterval(() => {
+      setAiProgress((current) => {
+        if (current >= 95) return current;
+        let stepSize = 0.5;
+        if (current < 15) stepSize = 3;
+        else if (current < 35) stepSize = 2;
+        else if (current < 70) stepSize = 1.5;
+        else if (current < 88) stepSize = 1;
+        const next = Math.min(95, Math.round((current + stepSize) * 10) / 10);
+        setAiProgressStage(aiProgressLabel(next));
+        return next;
+      });
+    }, 800);
     try {
-      const result = unwrap(await api.post("/api/assessments/ai/generate", { class_id: form.class_id, section_id: form.section_id || null, subject_id: form.subject_id, title: form.title, topic: form.description, total_marks: Number(form.total_marks), duration_minutes: Number(form.duration_minutes), question_count: Math.max(1, form.questions.length || 10), question_types: ["mcq", "true_false", "fill_blank", "short", "long"], language: "English", assessment_type: form.assessment_type }));
+      const topicText = form.syllabus_topics.length ? form.syllabus_topics.join(", ") : (selectedUnit?.unit_title || form.description || "");
+      const result = unwrap(await api.post("/api/assessments/ai/generate", {
+        class_id: form.class_id, section_id: form.section_id || null, subject_id: form.subject_id,
+        breakdown_id: form.breakdown_id || null, breakdown_item_id: form.breakdown_item_id || null,
+        syllabus_topics: form.syllabus_topics, title: form.title, topic: topicText,
+        total_marks: plannedMarks || Number(form.total_marks), duration_minutes: Number(form.duration_minutes),
+        question_count: Math.max(1, plannedQuestions || form.questions.length || 10),
+        question_types: questionBlueprint.length ? questionBlueprint.map((row) => row.type) : ["mcq", "true_false", "fill_blank", "short", "long"],
+        question_blueprint: questionBlueprint, language: "English",
+      }));
       setForm((f) => ({ ...f, title: result.title || f.title, description: result.description || f.description, instructions: result.instructions || f.instructions, questions: result.questions || f.questions, ai_meta: result.ai_meta }));
-    } catch (error) { onError(error.response?.data?.message || `AI could not generate the ${materialName.toLowerCase()}.`); }
-    finally { setAiBusy(false); }
+      window.clearInterval(progressTimer);
+      setAiProgress(100);
+      setAiProgressStage("Complete");
+      await new Promise((resolve) => window.setTimeout(resolve, 550));
+    } catch (error) {
+      window.clearInterval(progressTimer);
+      setAiProgressStage("Generation stopped");
+      onError(error.response?.data?.message || "AI could not generate the assessment.");
+    }
+    finally {
+      window.clearInterval(progressTimer);
+      setAiBusy(false);
+      window.setTimeout(() => { setAiProgress(0); setAiProgressStage(""); }, 250);
+    }
   };
+
   const importQuestionDocument = async (file) => {
     if (!file) return;
     if (!form.class_id || !form.subject_id) {
@@ -235,168 +345,286 @@ function AssessmentBuilder({ options, state, onClose, onSaved, onError }) {
     setImportBusy(true); setImportNotice("");
     try {
       const fd = new FormData();
-      fd.append("assessment_document", file);
-      fd.append("class_id", form.class_id);
+      fd.append("assessment_document", file); fd.append("class_id", form.class_id);
       if (form.section_id) fd.append("section_id", form.section_id);
-      fd.append("subject_id", form.subject_id);
-      fd.append("assessment_type", form.assessment_type);
-      if (form.title) fd.append("title", form.title);
+      fd.append("subject_id", form.subject_id); if (form.title) fd.append("title", form.title);
+      if (form.breakdown_item_id) fd.append("breakdown_item_id", form.breakdown_item_id);
+      if (form.syllabus_topics.length) fd.append("syllabus_topics", JSON.stringify(form.syllabus_topics));
       if (form.description) fd.append("topic", form.description);
       const result = unwrap(await api.post("/api/assessments/ai/import-document", fd));
       const imported = Array.isArray(result.questions) ? result.questions : [];
       if (!imported.length) throw new Error("No readable questions were detected.");
       setForm((current) => {
         const existing = (current.questions || []).filter((q) => String(q.question_text || "").trim());
-        const questions = [...existing, ...imported].map((q, i) => ({ ...q, sort_order: i }));
-        return {
-          ...current,
-          title: current.title || result.document?.title || "",
-          instructions: current.instructions || result.document?.instructions || "",
-          total_marks: Number(result.total_marks) > 0 ? result.total_marks : current.total_marks,
-          questions,
-          ai_meta: { ...(current.ai_meta || {}), document_import: true, teacher_review_required: true },
-        };
+        return { ...current, title: current.title || result.document?.title || "", instructions: current.instructions || result.document?.instructions || "", total_marks: Number(result.total_marks) > 0 ? result.total_marks : current.total_marks, questions: [...existing, ...imported].map((q, i) => ({ ...q, sort_order: i })), ai_meta: { ...(current.ai_meta || {}), document_import: true, teacher_review_required: true } };
       });
       setImportNotice(`${imported.length} question(s) extracted${result.review_count ? ` · ${result.review_count} need review` : ""}. Review before saving.`);
-    } catch (error) {
-      onError(error.response?.data?.message || error.message || "AI could not read this question document.");
-    } finally {
-      setImportBusy(false);
-      if (questionImportRef.current) questionImportRef.current.value = "";
-    }
+    } catch (error) { onError(error.response?.data?.message || error.message || "AI could not read this question document."); }
+    finally { setImportBusy(false); if (questionImportRef.current) questionImportRef.current.value = ""; }
   };
+
   const submit = async (event) => {
-    event.preventDefault();
-    if (working) return;
-    if (step < 3) { goToStep(step + 1); return; }
-    for (let i = 0; i < 3; i++) {
-      const error = validateStep(i);
-      if (error) { setValidation(error); setStep(i); return; }
-    }
-    setBusy(true);
+    event.preventDefault(); setBusy(true);
     try {
       const fd = new FormData();
-      const data = { ...form, questions: form.mode === "online" ? form.questions : form.questions.filter((q) => q.question_text?.trim()), starts_at: form.starts_at ? new Date(form.starts_at).toISOString() : "", ends_at: form.ends_at ? new Date(form.ends_at).toISOString() : "", publish_at: form.publish_at ? new Date(form.publish_at).toISOString() : "" };
+      const data = {
+        ...form,
+        syllabus_topics: form.syllabus_topics,
+        total_marks: plannedMarks || form.total_marks,
+        question_blueprint: questionBlueprint,
+        settings: { ...(form.settings || {}), syllabus_topics: form.syllabus_topics, question_blueprint: questionBlueprint },
+        questions: form.mode === "online" ? form.questions : form.questions.filter((q) => q.question_text?.trim()),
+        starts_at: form.starts_at ? new Date(form.starts_at).toISOString() : "",
+        ends_at: form.ends_at ? new Date(form.ends_at).toISOString() : "",
+        publish_at: form.publish_at ? new Date(form.publish_at).toISOString() : "",
+      };
       delete data.question_paper; delete data.supporting_files;
       for (const [key, value] of Object.entries(data)) {
         if (value === undefined || value === null) continue;
-        if (["questions", "ai_meta", "settings"].includes(key)) fd.append(key, JSON.stringify(value || (key === "questions" ? [] : {})));
+        if (["questions", "ai_meta", "settings", "syllabus_topics", "question_blueprint"].includes(key)) fd.append(key, JSON.stringify(value || (key === "questions" || key === "syllabus_topics" || key === "question_blueprint" ? [] : {})));
         else fd.append(key, typeof value === "boolean" ? String(value) : value);
       }
       if (form.question_paper) fd.append("question_paper", form.question_paper);
       for (const file of form.supporting_files || []) fd.append("supporting_files", file);
       if (state.mode === "edit") await api.patch(`/api/assessments/${state.id}`, fd); else await api.post("/api/assessments", fd);
-      onSaved(state.mode === "edit" ? `${materialName} updated.` : `${materialName} created.`);
-    } catch (error) { onError(error.response?.data?.errors?.join(". ") || error.response?.data?.message || `Could not save ${materialName.toLowerCase()}.`); }
+      onSaved(state.mode === "edit" ? "Assessment updated." : "Assessment created.");
+    } catch (error) { onError(error.response?.data?.errors?.join(". ") || error.response?.data?.message || "Could not save assessment."); }
     finally { setBusy(false); }
   };
-  return <WorkspacePage title={`${state.mode === "edit" ? "Edit" : "Create"} ${materialName}`} onClose={working ? undefined : onClose}><form onSubmit={submit} noValidate>
-    <nav className="worksheet-steps" aria-label="Worksheet creation steps">{steps.map((label, i) => <button type="button" key={label} disabled={working} aria-current={step === i ? "step" : undefined} className={step === i ? "active" : ""} onClick={() => goToStep(i)}><span>{i + 1}</span>{label}</button>)}</nav>
-    <div className="worksheet-step-heading"><p>Step {step + 1} of {steps.length}</p><h2 ref={headingRef} tabIndex={-1}>{steps[step]}</h2><span>{["Choose your learners and give this work a clear purpose.", "Write on the notebook below, generate questions, or import a paper.", "Choose how students will complete the work and when to share it.", "Read through the worksheet before saving or publishing."][step]}</span></div>
-    {validation && <div role="alert" className="alert alert-warning mx-3">{validation}</div>}
-    <div className="assessment-builder-body assessment-notebook-builder">
-      {step === 0 && <>
-      <section className="assessment-notebook-sheet">
-        <div className="assessment-notebook-kicker"><i className="bi bi-journal-text" /> Choose where this work belongs</div>
-        <ChoiceField label="Class" required value={form.class_id} options={classes} onChange={(v) => setForm({ ...form, class_id: v, section_id: "", subject_id: "" })} />
-        <ChoiceField label="Section" value={form.section_id} options={sections} onChange={(v) => setForm({ ...form, section_id: v, subject_id: "" })} allowEmpty empty="All sections" />
-        <ChoiceField label="Subject" required value={form.subject_id} options={subjects} onChange={(v) => setForm({ ...form, subject_id: v })} />
-      </section>
 
-      <section className="assessment-notebook-sheet mt-3">
-        <div className="assessment-notebook-kicker"><i className="bi bi-pencil-square" /> Write the learning work</div>
-        <ChoiceField label="Type" value={form.assessment_type} options={[{ id: "assignment", label: "Assignment" }, { id: "worksheet", label: "Worksheet" }, { id: "quiz", label: "Quiz" }, { id: "test", label: "Test" }, { id: "practice", label: "Practice" }]} onChange={(v) => setForm({ ...form, assessment_type: v })} />
-        <NotebookLine label="Title" required value={form.title} onChange={(v) => setForm({ ...form, title: v })} placeholder={form.assessment_type === "worksheet" ? "e.g. Fractions Practice Worksheet" : "e.g. Chapter 4 Home Assignment"} />
-        <NotebookArea label="Chapter / Topic / What students should work on" value={form.description || ""} onChange={(v) => setForm({ ...form, description: v })} placeholder="Write the chapter, topic, learning focus or task in your own words…" />
-        <NotebookArea label="Teacher Instructions" value={form.instructions || ""} onChange={(v) => setForm({ ...form, instructions: v })} placeholder="Write clear instructions for students…" compact />
-      </section>
+  const stepNames = ["Basic Details", "Unit & Topics", "Settings", "Questions & Review"];
+  const typeOptions = [
+    { id: "assessment", label: "Assessment", icon: "bi-clipboard-check" },
+    { id: "worksheet", label: "Worksheet", icon: "bi-file-earmark-text" },
+    { id: "quiz", label: "Quiz", icon: "bi-ui-checks" },
+    { id: "test", label: "Test", icon: "bi-journal-text" },
+    { id: "practice", label: "Practice", icon: "bi-lightning-charge" },
+  ];
+  const buttonSet = (rows, selected, onPick, emptyText) => <div className="d-flex flex-wrap gap-2">{rows.length ? rows.map((row) => <button key={row.id} type="button" className={`btn btn-sm ${String(selected) === String(row.id) ? "btn-primary" : "btn-outline-primary"}`} onClick={() => onPick(row.id)}>{row.label}</button>) : <span className="text-muted small">{emptyText}</span>}</div>;
 
-      </>}
-      {step === 2 && <section className="assessment-notebook-sheet mt-3">
-        <div className="assessment-notebook-kicker"><i className="bi bi-sliders" /> Delivery & planning</div>
-        <ChoiceField label="Mode" value={form.mode} options={[{ id: "offline", label: "Written / scanned upload" }, { id: "online", label: "Online attempt" }]} onChange={(v) => setForm({ ...form, mode: v })} />
-        <div className="assessment-planning-grid">
-          <CompactField label="Total Marks" type="number" min="0" step="0.5" value={form.total_marks} onChange={(v) => setForm({ ...form, total_marks: v })} />
-          <CompactField label="Duration (minutes)" type="number" min="1" value={form.duration_minutes} onChange={(v) => setForm({ ...form, duration_minutes: v })} />
-          <ChoiceField compact label="Maximum Attempts" value={form.max_attempts} options={Array.from({ length: 10 }, (_, i) => ({ id: i + 1, label: String(i + 1) }))} onChange={(v) => setForm({ ...form, max_attempts: v })} />
-          <CompactField label="Available From" type="datetime-local" value={form.starts_at} onChange={(v) => setForm({ ...form, starts_at: v })} />
-          <CompactField label="Deadline" type="datetime-local" value={form.ends_at} onChange={(v) => setForm({ ...form, ends_at: v })} />
-
-        </div>
-        <ChoiceField label="Publish" value={form.publish_trigger} options={[{ id: "manual", label: "Save as draft" }, { id: "immediate", label: "Publish now" }, { id: "scheduled", label: "Scheduled" }, { id: "after_class", label: "After linked class" }]} onChange={(v) => setForm({ ...form, publish_trigger: v })} />
-        {form.publish_trigger === "scheduled" && <div className="assessment-planning-grid"><CompactField label="Publish At" required type="datetime-local" value={form.publish_at} onChange={(v) => setForm({ ...form, publish_at: v })} /></div>}
-        <details className="worksheet-advanced"><summary>More settings · results, random order & linked class</summary>
-        <CompactField label="Linked Online Class ID" value={form.online_class_id} onChange={(v) => setForm({ ...form, online_class_id: v })} placeholder="Optional" />
-        <ChoiceField label="Result Release" value={form.result_release} options={[{ id: "manual", label: "Teacher publishes results" }, { id: "immediate", label: "Immediate when auto-checked" }]} onChange={(v) => setForm({ ...form, result_release: v })} />
-        <div className="assessment-inline-checks"><Check label="Randomize questions" checked={form.randomize_questions} onChange={(v) => setForm({ ...form, randomize_questions: v })} /><Check label="Randomize options" checked={form.randomize_options} onChange={(v) => setForm({ ...form, randomize_options: v })} /></div>
-        </details>
-      </section>}
-
-      {step === 1 && <>
-      <ChoiceField label="How will students complete this work?" value={form.mode} options={[{ id: "online", label: "Answer online" }, { id: "offline", label: "Write on paper / upload" }]} onChange={(v) => setForm({ ...form, mode: v })} />
-      {form.mode === "offline" && <div className="assessment-upload-box mt-3"><h6><i className="bi bi-file-earmark-pdf me-2" />Question Paper / Printable Work</h6><p className="text-muted small">Upload PDF/Word/image, or keep the questions below to generate the branded PDF.</p><input className="form-control" type="file" accept=".pdf,.doc,.docx,image/*" onChange={(e) => setForm({ ...form, question_paper: e.target.files?.[0] || null })} />{form.question_paper && <p className="mt-2 mb-0">Selected: {form.question_paper.name}</p>}</div>}
-
-      <div className="assessment-question-heading mt-4 mb-2"><div><h5 className="mb-0">Questions / Tasks</h5><small className="text-muted">Write naturally like a worksheet notebook. Long text areas expand while you type.</small></div><div className="d-flex flex-wrap gap-2"><button type="button" className="btn btn-outline-primary" disabled={aiBusy || importBusy} onClick={generateAi}><i className="bi bi-stars me-1" />{aiBusy ? "Generating…" : "AI Generate"}</button><button type="button" className="btn btn-primary" disabled={importBusy || aiBusy} onClick={() => questionImportRef.current?.click()}><i className="bi bi-file-earmark-scan me-1" />{importBusy ? "Reading…" : "AI Import Questions"}</button><input ref={questionImportRef} hidden type="file" accept="application/pdf,image/jpeg,image/png,image/webp" onChange={(e) => importQuestionDocument(e.target.files?.[0])} /><button type="button" className="btn btn-outline-secondary" onClick={addQuestion}><i className="bi bi-plus-lg me-1" />Add Question</button></div></div>
-      {importNotice && <div className="alert alert-info py-2 small"><i className="bi bi-check2-circle me-1" />{importNotice}</div>}
-      {form.questions.map((q, index) => <QuestionEditor key={`${q.id || "new"}-${index}`} index={index} value={q} onChange={(patch) => updateQuestion(index, patch)} onRemove={() => removeQuestion(index)} />)}
-      <div className="assessment-upload-box mt-3"><label className="form-label fw-semibold">Supporting materials</label><input className="form-control" type="file" multiple onChange={(e) => setForm({ ...form, supporting_files: Array.from(e.target.files || []) })} />{(form.supporting_files || []).map((file, i) => <p className="mt-2 mb-0" key={i}>{file.name}</p>)}</div>
-      </>}
-      {step === 3 && <section className="assessment-notebook-sheet worksheet-preview">
-        <div className="assessment-notebook-kicker"><i className="bi bi-journal-check" /> {materialName} preview</div>
-        <h2>{form.title}</h2>
-        <p className="text-muted">{classes.find((o) => String(o.id) === String(form.class_id))?.label} · {sections.find((o) => String(o.id) === String(form.section_id))?.label || "All sections"} · {subjects.find((o) => String(o.id) === String(form.subject_id))?.label}</p>
-        <p>{form.total_marks} marks · {form.mode === "online" ? `Online · ${form.duration_minutes} minutes` : "Written / scanned upload"}</p>
-        <p className="worksheet-preserve-lines">{form.description}</p><p className="worksheet-preserve-lines">{form.instructions}</p>
-        {form.questions.map((q, i) => <article className="worksheet-preview-question" key={q.id || i}><div><strong>{i + 1}. {q.question_text}</strong><span>{q.marks} marks · {q.difficulty}</span></div>{["mcq", "true_false"].includes(q.question_type) ? <ol type="A">{(q.options || []).map((o, j) => <li key={j}>{o}</li>)}</ol> : <div className="worksheet-answer-lines" />}<details><summary>Teacher answer key</summary><p>{["mcq", "true_false"].includes(q.question_type) ? q.options?.[Number(q.correct_answer)] : q.question_type === "fill_blank" ? (Array.isArray(q.correct_answer) ? q.correct_answer.join(", ") : q.correct_answer) : q.explanation || "No marking guidance added."}</p></details></article>)}
-        {form.question_paper && <p>Question paper: {form.question_paper.name}</p>}
-        {(form.supporting_files || []).map((file, i) => <p key={i}>Supporting material: {file.name}</p>)}
-        <div className="worksheet-review-delivery"><strong>{form.publish_trigger === "immediate" ? "Ready to publish now" : form.publish_trigger === "scheduled" ? `Scheduled for ${fmt(form.publish_at)}` : form.publish_trigger === "after_class" ? "Publish after the linked class" : "Save as draft"}</strong><p className="mb-0">Available: {fmt(form.starts_at)} · Deadline: {fmt(form.ends_at)}</p></div>
-      </section>}
+  return <form onSubmit={submit} className="card border-0 shadow-sm mb-4 assessment-inline-builder">
+    <div className="card-header bg-white d-flex flex-wrap justify-content-between align-items-center gap-2 py-3">
+      <div><h5 className="mb-1">{state.mode === "edit" ? "Edit" : "Create"} Assessment</h5><small className="text-muted">Choose academic context first, then syllabus coverage and paper settings.</small></div>
+      <button type="button" className="btn btn-sm btn-outline-secondary" onClick={onClose}><i className="bi bi-x-lg me-1" />Close</button>
     </div>
-    <div className="modal-action-bar worksheet-actions"><span>{form.questions.length} questions · {form.questions.reduce((sum, q) => sum + Number(q.marks || 0), 0)} question marks</span><button type="button" className="btn btn-outline-secondary" disabled={working} onClick={() => step ? goToStep(step - 1) : onClose()}>{step ? "Back" : "Cancel"}</button><button className="btn btn-primary" disabled={working}>{busy ? "Saving…" : step < 3 ? "Continue" : form.publish_trigger === "immediate" ? `Publish ${materialName}` : form.publish_trigger === "scheduled" ? `Schedule ${materialName}` : `Save ${materialName}`}</button></div>
-  </form></WorkspacePage>;
+    <div className="card-body">
+      <div className="d-flex flex-wrap gap-2 mb-4">{stepNames.map((name, index) => <button key={name} type="button" className={`btn btn-sm ${step === index + 1 ? "btn-primary" : step > index + 1 ? "btn-outline-primary" : "btn-outline-secondary"}`} onClick={() => { if (index + 1 < step) setStep(index + 1); }}>{index + 1}. {name}</button>)}</div>
+
+      {step === 1 && <div>
+        <h6 className="mb-3">Class, Section & Subject</h6>
+        <div className="mb-3"><label className="form-label fw-semibold">Class <span className="text-danger">*</span></label>{buttonSet(classes, form.class_id, chooseClass, "No assigned classes found.")}</div>
+        <div className="mb-3"><label className="form-label fw-semibold">Section</label>{buttonSet(sections, form.section_id, chooseSection, form.class_id ? "No sections found for this class." : "Select a class first.")}</div>
+        <div className="mb-3"><label className="form-label fw-semibold">Subject <span className="text-danger">*</span></label>{buttonSet(subjects, form.subject_id, chooseSubject, form.class_id ? "Select section if required, then choose subject." : "Select a class first.")}</div>
+        <div className="row g-3">
+          <Input label="Title" required value={form.title} onChange={(v) => setForm({ ...form, title: v })} />
+          <Input label="Linked Online Class ID" value={form.online_class_id} onChange={(v) => setForm({ ...form, online_class_id: v })} placeholder="Optional" />
+        </div>
+        <div className="mt-3"><label className="form-label fw-semibold">Type</label><div className="d-flex flex-wrap gap-2">{typeOptions.map((item) => <button key={item.id} type="button" className={`btn ${form.assessment_type === item.id ? "btn-primary" : "btn-outline-primary"}`} onClick={() => setForm({ ...form, assessment_type: item.id })}><i className={`bi ${item.icon} me-2`} />{item.label}</button>)}</div></div>
+        <div className="d-flex justify-content-end mt-4"><button type="button" className="btn btn-primary" onClick={nextFromBasics}>Next: Unit & Topics <i className="bi bi-arrow-right ms-1" /></button></div>
+      </div>}
+
+      {step === 2 && <div>
+        <div className="d-flex justify-content-between align-items-start gap-3 mb-3"><div><h6 className="mb-1">Unit & Topics</h6><small className="text-muted">Loaded from the selected subject's Syllabus Breakup.</small></div>{form.breakdown_item_id && <button type="button" className="btn btn-sm btn-outline-secondary" onClick={() => setForm((f) => ({ ...f, breakdown_id: "", breakdown_item_id: "", syllabus_topics: [] }))}>Clear selection</button>}</div>
+        {syllabusBusy ? <div className="text-muted py-3"><span className="spinner-border spinner-border-sm me-2" />Loading syllabus…</div> : syllabusError ? <div className="alert alert-warning">{syllabusError}</div> : !syllabusRows.length ? <div className="alert alert-light border"><strong>No syllabus breakup found.</strong><div className="small text-muted mt-1">You can continue and create the assessment without a syllabus link.</div></div> : <>
+          <label className="form-label fw-semibold">Select Unit</label>
+          <div className="d-flex flex-wrap gap-2 mb-4">{syllabusRows.map((row) => <button key={`${row.breakdown_id}-${row.id}`} type="button" className={`btn ${Number(form.breakdown_item_id) === Number(row.id) ? "btn-primary" : "btn-outline-primary"}`} onClick={() => chooseUnit(row)}>{row.unit_number ? `Unit ${row.unit_number}: ` : ""}{row.unit_title}</button>)}</div>
+          {selectedUnit && <div className="border rounded p-3">
+            <div className="d-flex flex-wrap justify-content-between gap-2 mb-3"><div><strong>{selectedUnit.unit_number ? `Unit ${selectedUnit.unit_number}: ` : ""}{selectedUnit.unit_title}</strong>{(selectedUnit.term || selectedUnit.academic_session) && <div className="text-muted small">{[selectedUnit.term, selectedUnit.academic_session].filter(Boolean).join(" · ")}</div>}</div>{unitTopics.length > 0 && <button type="button" className="btn btn-sm btn-outline-primary" onClick={() => setForm((f) => ({ ...f, syllabus_topics: f.syllabus_topics.length === unitTopics.length ? [] : unitTopics }))}>{form.syllabus_topics.length === unitTopics.length ? "Clear topics" : "Select all topics"}</button>}</div>
+            {unitTopics.length ? <div className="d-flex flex-wrap gap-2">{unitTopics.map((topic) => <button key={topic} type="button" className={`btn btn-sm ${form.syllabus_topics.includes(topic) ? "btn-primary" : "btn-outline-primary"}`} onClick={() => toggleTopic(topic)}><i className={`bi ${form.syllabus_topics.includes(topic) ? "bi-check-circle-fill" : "bi-circle"} me-1`} />{topic}</button>)}</div> : <div className="text-muted small">No individual topics are stored for this unit. The whole unit will be used.</div>}
+          </div>}
+        </>}
+        <div className="d-flex justify-content-between mt-4"><button type="button" className="btn btn-outline-secondary" onClick={() => setStep(1)}><i className="bi bi-arrow-left me-1" />Back</button><button type="button" className="btn btn-primary" onClick={() => setStep(3)}>Next: Settings <i className="bi bi-arrow-right ms-1" /></button></div>
+      </div>}
+
+      {step === 3 && <div>
+        <div className="blueprint-hero mb-4">
+          <div>
+            <span className="blueprint-eyebrow"><i className="bi bi-grid-3x3-gap-fill me-1" />Question Blueprint</span>
+            <h5 className="mb-1">Build the paper with clicks</h5>
+            <p className="mb-0 text-muted small">Choose question types, count and marks. Total questions and marks update automatically.</p>
+          </div>
+          <div className="blueprint-live-summary">
+            <div><strong>{plannedQuestions}</strong><span>Questions</span></div>
+            <div><strong>{plannedMarks}</strong><span>Total Marks</span></div>
+          </div>
+        </div>
+
+        <div className="blueprint-presets mb-3">
+          <span className="small text-muted me-1">Quick start</span>
+          <button type="button" className="blueprint-preset" onClick={() => applyBlueprintPreset("quiz")}><i className="bi bi-lightning-charge" /> Quick Quiz</button>
+          <button type="button" className="blueprint-preset" onClick={() => applyBlueprintPreset("balanced")}><i className="bi bi-sliders" /> Balanced Test</button>
+          <button type="button" className="blueprint-preset" onClick={() => applyBlueprintPreset("theory")}><i className="bi bi-journal-text" /> Theory Paper</button>
+        </div>
+
+        <div className="blueprint-grid">
+          {questionBlueprint.map((row) => {
+            const meta = blueprintType(row.type) || { label: row.type, icon: "bi-card-text" };
+            const subtotal = row.count * row.marks;
+            return <div className="blueprint-row" key={row.type}>
+              <div className="blueprint-type">
+                <span className="blueprint-type-icon"><i className={`bi ${meta.icon}`} /></span>
+                <div><strong>{meta.label}</strong><small>{subtotal} marks</small></div>
+              </div>
+              <div className="blueprint-control-group">
+                <span className="blueprint-control-label">Questions</span>
+                <div className="blueprint-stepper">
+                  <button type="button" aria-label={`Decrease ${meta.label} questions`} onClick={() => row.count <= 1 ? removeBlueprintType(row.type) : patchBlueprintRow(row.type, { count: row.count - 1 })}><i className="bi bi-dash-lg" /></button>
+                  <strong>{row.count}</strong>
+                  <button type="button" aria-label={`Increase ${meta.label} questions`} onClick={() => patchBlueprintRow(row.type, { count: row.count + 1 })}><i className="bi bi-plus-lg" /></button>
+                </div>
+              </div>
+              <div className="blueprint-control-group blueprint-marks-group">
+                <span className="blueprint-control-label">Marks each</span>
+                <div className="blueprint-mark-chips">
+                  {[1, 2, 3, 4, 5, 8, 10].map((mark) => <button type="button" key={mark} className={Number(row.marks) === mark ? "active" : ""} onClick={() => patchBlueprintRow(row.type, { marks: mark })}>{mark}</button>)}
+                </div>
+              </div>
+              <button type="button" className="blueprint-remove" title={`Remove ${meta.label}`} onClick={() => removeBlueprintType(row.type)}><i className="bi bi-x-lg" /></button>
+            </div>;
+          })}
+        </div>
+
+        <div className="blueprint-add-types mt-3">
+          {QUESTION_BLUEPRINT_TYPES.filter((type) => !questionBlueprint.some((row) => row.type === type.id)).map((type) => <button type="button" key={type.id} onClick={() => addBlueprintType(type.id)}><i className={`bi ${type.icon} me-1`} />+ {type.label}</button>)}
+          {!questionBlueprint.length && <button type="button" onClick={() => setBlueprint(defaultQuestionBlueprint())}><i className="bi bi-plus-circle me-1" />Add Question Types</button>}
+        </div>
+
+        <div className="blueprint-settings-divider"><span>Paper Settings</span></div>
+        <div className="row g-3">
+          <SelectField label="Mode" value={form.mode} options={[{ id: "online", label: "Online attempt" }, { id: "offline", label: "Written / scanned upload" }]} onChange={(v) => setForm({ ...form, mode: v })} />
+          <Input label="Duration (minutes)" type="number" min="1" value={form.duration_minutes} onChange={(v) => setForm({ ...form, duration_minutes: v })} />
+          <Input label="Maximum Attempts" type="number" min="1" max="10" value={form.max_attempts} onChange={(v) => setForm({ ...form, max_attempts: v })} />
+          <SelectField label="Publish" value={form.publish_trigger} options={[{ id: "manual", label: "Save as draft" }, { id: "immediate", label: "Publish immediately" }, { id: "scheduled", label: "At scheduled time" }, { id: "after_class", label: "When linked Zoom class ends" }]} onChange={(v) => setForm({ ...form, publish_trigger: v })} />
+          <Input label="Available From" type="datetime-local" value={form.starts_at} onChange={(v) => setForm({ ...form, starts_at: v })} />
+          <Input label="Deadline" type="datetime-local" value={form.ends_at} onChange={(v) => setForm({ ...form, ends_at: v })} />
+          {form.publish_trigger === "scheduled" && <Input label="Publish At" required type="datetime-local" value={form.publish_at} onChange={(v) => setForm({ ...form, publish_at: v })} />}
+          <SelectField label="Result Release" value={form.result_release} options={[{ id: "manual", label: "Teacher publishes results" }, { id: "immediate", label: "Immediately for auto-checked tests" }]} onChange={(v) => setForm({ ...form, result_release: v })} />
+          <div className="col-12"><label className="form-label">Description / additional coverage</label><textarea className="form-control" rows="2" value={form.description || ""} onChange={(e) => setForm({ ...form, description: e.target.value })} /></div>
+          <div className="col-12"><label className="form-label">Instructions</label><textarea className="form-control" rows="2" value={form.instructions || ""} onChange={(e) => setForm({ ...form, instructions: e.target.value })} /></div>
+          <div className="col-12 d-flex flex-wrap gap-4"><Check label="Randomize questions" checked={form.randomize_questions} onChange={(v) => setForm({ ...form, randomize_questions: v })} /><Check label="Randomize options" checked={form.randomize_options} onChange={(v) => setForm({ ...form, randomize_options: v })} /></div>
+        </div>
+        {form.mode === "offline" && <div className="assessment-upload-box mt-4"><h6><i className="bi bi-file-earmark-pdf me-2" />Offline Question Paper</h6><p className="text-muted small">Upload PDF/Word/image, or keep questions below to generate a branded PDF.</p><input className="form-control" type="file" accept=".pdf,.doc,.docx,image/*" onChange={(e) => setForm({ ...form, question_paper: e.target.files?.[0] || null })} /></div>}
+        <div className="d-flex justify-content-between mt-4"><button type="button" className="btn btn-outline-secondary" onClick={() => setStep(2)}><i className="bi bi-arrow-left me-1" />Back</button><button type="button" className="btn btn-primary" disabled={!plannedQuestions || !plannedMarks} onClick={() => setStep(4)}>Next: Questions <i className="bi bi-arrow-right ms-1" /></button></div>
+      </div>}
+
+      {step === 4 && <div>
+        <div className="alert alert-light border d-flex flex-wrap gap-3 align-items-center"><strong>{form.title || "Untitled assessment"}</strong><span>{classes.find((x) => String(x.id) === String(form.class_id))?.label || "Class"}</span><span>{subjects.find((x) => String(x.id) === String(form.subject_id))?.label || "Subject"}</span>{selectedUnit && <span>{selectedUnit.unit_number ? `Unit ${selectedUnit.unit_number}: ` : ""}{selectedUnit.unit_title}</span>}{form.syllabus_topics.length > 0 && <span>{form.syllabus_topics.length} topic(s)</span>}<span className="badge rounded-pill text-bg-light border">{plannedQuestions} questions · {plannedMarks} marks</span></div>
+        <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2"><div><h5 className="mb-0">Questions</h5><small className="text-muted">AI uses the selected Unit & Topics as context. Teacher review is required.</small></div><div className="d-flex flex-wrap gap-2"><button type="button" className="btn btn-outline-primary" disabled={aiBusy || importBusy} onClick={generateAi}><i className="bi bi-stars me-1" />{aiBusy ? "Generating…" : "AI Generate"}</button><button type="button" className="btn btn-primary" disabled={importBusy || aiBusy} onClick={() => questionImportRef.current?.click()}><i className="bi bi-file-earmark-scan me-1" />{importBusy ? "Reading…" : "AI Import Questions"}</button><input ref={questionImportRef} hidden type="file" accept="application/pdf,image/jpeg,image/png,image/webp" onChange={(e) => importQuestionDocument(e.target.files?.[0])} /><button type="button" className="btn btn-outline-secondary" onClick={addQuestion}>Add Question</button></div></div>
+        {aiBusy && <div className="ai-generation-progress mb-3" role="status" aria-live="polite">
+          <div className="ai-progress-topline">
+            <div className="ai-progress-title"><span className="ai-progress-spark"><i className="bi bi-stars" /></span><div><strong>Generating with AI</strong><small>{aiProgressStage || "Preparing…"}</small></div></div>
+            <div className="ai-progress-percent">{Math.round(aiProgress)}%</div>
+          </div>
+          <div className="ai-progress-track"><span style={{ width: `${Math.max(2, aiProgress)}%` }} /></div>
+          <div className="ai-progress-foot"><span>{plannedQuestions || form.questions.length || 0} questions</span><span>{plannedMarks || Number(form.total_marks) || 0} marks</span>{form.syllabus_topics.length > 0 && <span>{form.syllabus_topics.length} selected topic(s)</span>}</div>
+        </div>}
+        {importNotice && <div className="alert alert-info py-2">{importNotice}</div>}
+        {(form.questions || []).map((q, i) => <QuestionEditor key={i} index={i} value={q} onChange={(patch) => updateQuestion(i, patch)} onRemove={() => removeQuestion(i)} />)}
+        <div className="assessment-upload-box mt-3"><label className="form-label fw-semibold">Supporting materials</label><input className="form-control" type="file" multiple onChange={(e) => setForm({ ...form, supporting_files: Array.from(e.target.files || []) })} /></div>
+        <div className="d-flex flex-wrap justify-content-between gap-2 mt-4"><button type="button" className="btn btn-outline-secondary" onClick={() => setStep(3)}><i className="bi bi-arrow-left me-1" />Back</button><div className="d-flex gap-2"><button type="button" className="btn btn-light" onClick={onClose}>Cancel</button><button className="btn btn-primary" disabled={busy}>{busy ? "Saving…" : state.mode === "edit" ? "Update Assessment" : "Create Assessment"}</button></div></div>
+      </div>}
+    </div>
+  </form>;
 }
 
 function QuestionEditor({ index, value, onChange, onRemove }) {
-  const objective = ["mcq", "true_false"].includes(value.question_type); const options = value.question_type === "true_false" ? ["True", "False"] : (value.options || ["", "", "", ""]);
-  return <section className="assessment-question-sheet mt-3">
-    <div className="assessment-question-sheet-head"><div><span>Question {index + 1}</span>{value.source_number ? <small>Source {value.source_number}</small> : null}</div><button type="button" className="btn btn-sm btn-link text-danger" onClick={onRemove}>Remove</button></div>
-    {value.needs_review && <div className="alert alert-warning py-2 small mb-2">{Array.isArray(value.warnings) && value.warnings.length ? value.warnings.join(" · ") : "Please verify this scanned question."}</div>}
-    <ChoiceField compact label="Question Type" value={value.question_type} options={[{ id: "mcq", label: "MCQ" }, { id: "true_false", label: "True / False" }, { id: "fill_blank", label: "Fill Blank" }, { id: "short", label: "Short" }, { id: "long", label: "Long" }]} onChange={(v) => onChange({ question_type: v, correct_answer: ["mcq", "true_false"].includes(v) ? 0 : "", options: v === "true_false" ? ["True", "False"] : v === "mcq" ? (value.options?.length ? value.options : ["", "", "", ""]) : [] })} />
-    <div className="assessment-planning-grid assessment-question-meta">
-      <CompactField label="Marks" type="number" min="0.5" step="0.5" value={value.marks} onChange={(v) => onChange({ marks: v })} />
-      <CompactField label="Topic" value={value.topic || ""} onChange={(v) => onChange({ topic: v })} />
+  const [editing, setEditing] = useState(() => !String(value.question_text || "").trim());
+  const objective = ["mcq", "true_false"].includes(value.question_type);
+  const options = value.question_type === "true_false" ? ["True", "False"] : (value.options || ["", "", "", ""]);
+  const typeLabel = ({ mcq: "MCQ", true_false: "True / False", fill_blank: "Fill in the blank", short: "Short answer", long: "Long answer" })[value.question_type] || "Question";
+  const answerText = Array.isArray(value.correct_answer) ? value.correct_answer.join(", ") : String(value.correct_answer ?? "");
+
+  if (!editing) {
+    return <article className="question-textbook mt-3">
+      <div className="question-textbook-head">
+        <div className="d-flex flex-wrap align-items-center gap-2">
+          <span className="question-number">Q{index + 1}.</span>
+          <span className="question-meta-pill">{typeLabel}</span>
+          <span className="question-meta-pill">{value.marks || 0} mark{Number(value.marks) === 1 ? "" : "s"}</span>
+          {value.difficulty && <span className="question-meta-pill text-capitalize">{value.difficulty}</span>}
+          {value.topic && <span className="question-meta-pill"><i className="bi bi-bookmark me-1" />{value.topic}</span>}
+          {value.source_number ? <span className="question-source">Source {value.source_number}</span> : null}
+        </div>
+        <div className="d-flex gap-1">
+          <button type="button" className="btn btn-sm btn-link question-edit-btn" onClick={() => setEditing(true)} title="Edit question"><i className="bi bi-pencil-square" /> <span className="d-none d-sm-inline">Edit</span></button>
+          <button type="button" className="btn btn-sm btn-link text-danger" onClick={onRemove} title="Remove question"><i className="bi bi-trash3" /></button>
+        </div>
+      </div>
+
+      {value.needs_review && <div className="alert alert-warning py-2 small mb-3">{Array.isArray(value.warnings) && value.warnings.length ? value.warnings.join(" · ") : "Please verify this scanned question."}</div>}
+
+      <div className="question-textbook-body">
+        <div className="question-printed-text">{value.question_text || <span className="text-muted">Question text not added.</span>}</div>
+
+        {objective && <div className="question-printed-options">
+          {options.map((option, oi) => {
+            const correct = value.correct_answer != null && Number(value.correct_answer) === oi;
+            return <div className={`question-printed-option ${correct ? "is-correct" : ""}`} key={oi}>
+              <span className="option-letter">{String.fromCharCode(65 + oi)}</span>
+              <span className="option-text">{option || <span className="text-muted">Option {oi + 1}</span>}</span>
+              {correct && <span className="correct-answer-mark"><i className="bi bi-check-circle-fill me-1" />Answer</span>}
+            </div>;
+          })}
+        </div>}
+
+        {value.question_type === "fill_blank" && <div className="question-answer-key"><span className="answer-key-label">Accepted answer{Array.isArray(value.correct_answer) && value.correct_answer.length > 1 ? "s" : ""}</span><div>{answerText || <span className="text-muted">Not added</span>}</div></div>}
+
+        {["short", "long"].includes(value.question_type) && <div className="question-answer-key"><span className="answer-key-label">Answer Key / Marking Guidance</span><div className="answer-key-text">{value.explanation || <span className="text-muted">No answer key added.</span>}</div></div>}
+      </div>
+    </article>;
+  }
+
+  return <article className="question-textbook question-textbook-edit mt-3">
+    <div className="question-textbook-head">
+      <div className="d-flex flex-wrap align-items-center gap-2">
+        <span className="question-number">Q{index + 1}.</span>
+        <span className="question-editing-label"><i className="bi bi-pencil me-1" />Editing</span>
+        {value.source_number ? <span className="question-source">Source {value.source_number}</span> : null}
+      </div>
+      <div className="d-flex gap-1 align-items-center">
+        <button type="button" className="btn btn-sm btn-primary px-3" onClick={() => setEditing(false)} disabled={!String(value.question_text || "").trim()}><i className="bi bi-check2 me-1" />Done</button>
+        <button type="button" className="btn btn-sm btn-link text-danger" onClick={onRemove}><i className="bi bi-trash3" /> <span className="d-none d-sm-inline">Remove</span></button>
+      </div>
     </div>
-    <DifficultySlider value={value.difficulty || "medium"} onChange={(difficulty) => onChange({ difficulty })} />
-    <NotebookArea label="Question / Task" required value={value.question_text} onChange={(v) => onChange({ question_text: v })} placeholder="Write the question or task here…" compact />
-    {objective && <div className="assessment-options-block"><label>Options and correct answer</label><div className="assessment-options-grid">{options.map((option, oi) => <div className={`assessment-option-line ${value.correct_answer != null && Number(value.correct_answer) === oi ? "is-correct" : ""}`} key={oi}><input type="radio" aria-label={`Correct answer: option ${oi + 1}`} name={`correct-${index}`} checked={value.correct_answer != null && Number(value.correct_answer) === oi} onChange={() => onChange({ correct_answer: oi })} /><input required aria-label={`Option ${oi + 1}`} value={option} disabled={value.question_type === "true_false"} placeholder={`Option ${oi + 1}`} onChange={(e) => { const next = [...options]; next[oi] = e.target.value; onChange({ options: next }); }} /></div>)}</div></div>}
-    {value.question_type === "fill_blank" && <NotebookLine label="Accepted answer(s), comma separated" value={Array.isArray(value.correct_answer) ? value.correct_answer.join(", ") : value.correct_answer || ""} onChange={(v) => onChange({ correct_answer: v.split(",").map((x) => x.trim()).filter(Boolean) })} />}
-    {["short", "long"].includes(value.question_type) && <NotebookArea label="Answer key / marking guidance" value={value.explanation || ""} onChange={(v) => onChange({ explanation: v })} placeholder="Write the expected answer or marking guidance…" compact />}
-  </section>;
-}
 
-function DifficultySlider({ value, onChange }) {
-  const levels = ["easy", "medium", "hard"];
-  return <div className="worksheet-difficulty"><label><span>Difficulty · <strong>{value}</strong></span><input type="range" min="0" max="2" step="1" value={Math.max(0, levels.indexOf(value))} aria-label="Question difficulty" aria-valuetext={value} onChange={(e) => onChange(levels[Number(e.target.value)])} /></label><div>{levels.map((level) => <button type="button" key={level} aria-pressed={level === value} onClick={() => onChange(level)}>{level}</button>)}</div></div>;
-}
+    {value.needs_review && <div className="alert alert-warning py-2 small m-3 mb-0">{Array.isArray(value.warnings) && value.warnings.length ? value.warnings.join(" · ") : "Please verify this scanned question."}</div>}
 
-function ChoiceField({ label, options = [], value, onChange, allowEmpty = false, empty = "All", required = false, compact = false }) {
-  return <div className={`assessment-choice-field ${compact ? "is-compact" : ""}`}><div className="assessment-choice-label">{label}{required ? <span>*</span> : null}</div><div className="assessment-choice-list">{allowEmpty && <button type="button" aria-pressed={String(value || "") === ""} className={`assessment-choice ${String(value || "") === "" ? "active" : ""}`} onClick={() => onChange("")}>{empty}</button>}{options.map((option) => <button type="button" key={option.id} aria-pressed={String(value) === String(option.id)} className={`assessment-choice ${String(value) === String(option.id) ? "active" : ""}`} onClick={() => onChange(String(option.id))}>{option.label}</button>)}{!options.length && !allowEmpty && <span className="assessment-choice-empty">Choose the previous option first</span>}</div></div>;
-}
+    <div className="question-textbook-body question-edit-sheet">
+      <div className="question-edit-meta">
+        <label className="book-meta-field">
+          <span>Type</span>
+          <select className="book-inline-select" value={value.question_type} onChange={(e) => { const v = e.target.value; onChange({ question_type: v, options: v === "true_false" ? ["True", "False"] : v === "mcq" ? (value.options?.length ? value.options : ["", "", "", ""]) : [] }); }}>
+            <option value="mcq">MCQ</option><option value="true_false">True / False</option><option value="fill_blank">Fill in the blank</option><option value="short">Short answer</option><option value="long">Long answer</option>
+          </select>
+        </label>
+        <label className="book-meta-field book-meta-small"><span>Marks</span><input className="book-inline-input" type="number" min="0.5" step="0.5" value={value.marks} onChange={(e) => onChange({ marks: e.target.value })} /></label>
+        <label className="book-meta-field"><span>Difficulty</span><select className="book-inline-select" value={value.difficulty || "medium"} onChange={(e) => onChange({ difficulty: e.target.value })}><option value="easy">Easy</option><option value="medium">Medium</option><option value="hard">Hard</option></select></label>
+        <label className="book-meta-field book-meta-topic"><span>Topic</span><input className="book-inline-input" value={value.topic || ""} placeholder="Optional topic" onChange={(e) => onChange({ topic: e.target.value })} /></label>
+      </div>
 
-function NotebookLine({ label, value, onChange, required = false, placeholder = "" }) {
-  return <label className="assessment-notebook-line"><span>{label}{required ? <b>*</b> : null}</span><input required={required} value={value ?? ""} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} /></label>;
-}
+      <div className="book-question-edit-row">
+        <span className="book-question-prefix">Q.</span>
+        <textarea className="book-textarea book-question-textarea" rows="2" required value={value.question_text} placeholder="Type the question here…" onChange={(e) => onChange({ question_text: e.target.value })} />
+      </div>
 
-function NotebookArea({ label, value, onChange, required = false, placeholder = "", compact = false }) {
-  const ref = useRef(null);
-  const resize = useCallback(() => { const el = ref.current; if (!el) return; el.style.height = "auto"; el.style.height = `${Math.max(compact ? 78 : 112, el.scrollHeight)}px`; }, [compact]);
-  useEffect(() => { resize(); }, [resize, value]);
-  return <label className={`assessment-notebook-area ${compact ? "is-compact" : ""}`}><span>{label}{required ? <b>*</b> : null}</span><textarea ref={ref} required={required} value={value ?? ""} placeholder={placeholder} onChange={(e) => { onChange(e.target.value); requestAnimationFrame(resize); }} /></label>;
-}
+      {objective && <div className="book-options-edit">
+        <div className="book-section-caption">Options <span>select the correct answer</span></div>
+        {options.map((option, oi) => {
+          const correct = value.correct_answer != null && Number(value.correct_answer) === oi;
+          return <label className={`book-option-edit ${correct ? "is-correct" : ""}`} key={oi}>
+            <input type="radio" name={`correct-${index}`} checked={correct} onChange={() => onChange({ correct_answer: oi })} />
+            <span className="option-letter">{String.fromCharCode(65 + oi)}</span>
+            <input className="book-option-input" required value={option} disabled={value.question_type === "true_false"} placeholder={`Option ${String.fromCharCode(65 + oi)}`} onChange={(e) => { const next = [...options]; next[oi] = e.target.value; onChange({ options: next }); }} />
+            {correct && <span className="correct-answer-mark"><i className="bi bi-check-circle-fill me-1" />Answer</span>}
+          </label>;
+        })}
+      </div>}
 
-function CompactField({ label, onChange, ...props }) {
-  return <label className="assessment-compact-field"><span>{label}</span><input onChange={(e) => onChange(e.target.value)} {...props} /></label>;
+      {value.question_type === "fill_blank" && <label className="book-answer-edit"><span className="answer-key-label">Accepted answer(s)</span><input className="book-answer-input" value={Array.isArray(value.correct_answer) ? value.correct_answer.join(", ") : value.correct_answer || ""} placeholder="Separate multiple answers with commas" onChange={(e) => onChange({ correct_answer: e.target.value.split(",").map((x) => x.trim()).filter(Boolean) })} /></label>}
+
+      {["short", "long"].includes(value.question_type) && <label className="book-answer-edit"><span className="answer-key-label">Answer Key / Marking Guidance</span><textarea className="book-textarea book-answer-textarea" rows={value.question_type === "long" ? 4 : 2} value={value.explanation || ""} placeholder="Type answer key or marking guidance…" onChange={(e) => onChange({ explanation: e.target.value })} /></label>}
+    </div>
+  </article>;
 }
 
 function AttemptModal({ payload, onClose, onSubmitted, onError }) {
@@ -415,17 +643,17 @@ function AttemptModal({ payload, onClose, onSubmitted, onError }) {
     tick(); const id = setInterval(tick, 1000); return () => clearInterval(id);
   }, [assessment.duration_minutes, attempt.started_at, submit]);
   const setAnswer = (question, patch) => setAnswers((old) => ({ ...old, [question.id]: { ...old[question.id], ...patch } }));
-  return <WorkspacePage title={assessment.title} onClose={onClose}><div className="attempt-header"><span>{assessment.total_marks} marks</span><span>{assessment.questions?.length || 0} questions</span>{remaining != null && <strong className={remaining < 60 ? "text-danger" : ""}><i className="bi bi-stopwatch me-1" />{Math.floor(remaining / 60)}:{String(remaining % 60).padStart(2, "0")}</strong>}</div><div className="attempt-body">
+  return <Modal title={assessment.title} large onClose={onClose}><div className="attempt-header"><span>{assessment.total_marks} marks</span><span>{assessment.questions?.length || 0} questions</span>{remaining != null && <strong className={remaining < 60 ? "text-danger" : ""}><i className="bi bi-stopwatch me-1" />{Math.floor(remaining / 60)}:{String(remaining % 60).padStart(2, "0")}</strong>}</div><div className="attempt-body">
     {(assessment.questions || []).map((q, index) => <div className="attempt-question" key={q.id}><div className="d-flex justify-content-between"><strong>Q{index + 1}. {q.question_text}</strong><span>{q.marks} marks</span></div>
       {["mcq", "true_false"].includes(q.question_type) ? <div className="mt-2">{(q.options || []).map((option, oi) => <label className="answer-option" key={oi}><input type="radio" name={`q-${q.id}`} checked={Number(answers[q.id]?.answer_value) === oi} onChange={() => setAnswer(q, { answer_value: oi, answer_text: "" })} /><span>{option}</span></label>)}</div> : <textarea className="form-control mt-2" rows={q.question_type === "long" ? 6 : 3} value={answers[q.id]?.answer_text || ""} onChange={(e) => setAnswer(q, { answer_text: e.target.value, answer_value: q.question_type === "fill_blank" ? e.target.value : null })} />}
     </div>)}
-  </div><div className="modal-action-bar"><button className="btn btn-light" onClick={save}>Save Progress</button><button className="btn btn-primary" disabled={busy} onClick={() => submit(false)}>{busy ? "Submitting…" : "Submit Test"}</button></div></WorkspacePage>;
+  </div><div className="modal-action-bar"><button className="btn btn-light" onClick={save}>Save Progress</button><button className="btn btn-primary" disabled={busy} onClick={() => submit(false)}>{busy ? "Submitting…" : "Submit Test"}</button></div></Modal>;
 }
 
 function OfflineSubmit({ assessment, onClose, onSubmitted, onError }) {
   const [files, setFiles] = useState([]); const [busy, setBusy] = useState(false);
   const submit = async (e) => { e.preventDefault(); if (!files.length) return onError("Select at least one scanned answer-sheet file."); setBusy(true); try { const fd = new FormData(); files.forEach((f) => fd.append("submission_files", f)); fd.append("client_meta", JSON.stringify({ source: "web_upload" })); await api.post(`/api/assessments/${assessment.id}/submit`, fd); onSubmitted(); } catch (error) { onError(error.response?.data?.message || "Could not upload answer sheets."); } finally { setBusy(false); } };
-  return <WorkspacePage title="Upload Answer Sheets" onClose={onClose}><form onSubmit={submit}><div className="p-4"><h5>{assessment.title}</h5><p className="text-muted">Scan clearly, keep pages in order and upload PDF/JPG/PNG files.</p><input className="form-control" required type="file" accept="application/pdf,image/*" multiple onChange={(e) => setFiles(Array.from(e.target.files || []))} />{files.length > 0 && <div className="mt-3 small">{files.map((f, i) => <div key={`${f.name}-${i}`}><i className="bi bi-file-earmark me-1" />{f.name}</div>)}</div>}</div><div className="modal-action-bar"><button type="button" className="btn btn-light" onClick={onClose}>Cancel</button><button className="btn btn-primary" disabled={busy}>{busy ? "Uploading…" : "Submit Answer Sheets"}</button></div></form></WorkspacePage>;
+  return <Modal title="Upload Answer Sheets" onClose={onClose}><form onSubmit={submit}><div className="p-4"><h5>{assessment.title}</h5><p className="text-muted">Scan clearly, keep pages in order and upload PDF/JPG/PNG files.</p><input className="form-control" required type="file" accept="application/pdf,image/*" multiple onChange={(e) => setFiles(Array.from(e.target.files || []))} />{files.length > 0 && <div className="mt-3 small">{files.map((f, i) => <div key={`${f.name}-${i}`}><i className="bi bi-file-earmark me-1" />{f.name}</div>)}</div>}</div><div className="modal-action-bar"><button type="button" className="btn btn-light" onClick={onClose}>Cancel</button><button className="btn btn-primary" disabled={busy}>{busy ? "Uploading…" : "Submit Answer Sheets"}</button></div></form></Modal>;
 }
 
 function TeacherScanButton({ assessment, row, onDone, onError }) {
@@ -466,7 +694,7 @@ function SubmissionsModal({ state, onClose, onChanged, onError }) {
   const aiReview = state.rows.filter((row) => row.latestAttempt?.teacher_review_required).length;
   const below50 = percentages.filter((v) => v < 50).length;
   const average = percentages.length ? percentages.reduce((a, b) => a + b, 0) / percentages.length : null;
-  return <WorkspacePage title={`${readOnly ? "Student Results" : "Submissions"} — ${state.assessment.title}`} onClose={onClose}>
+  return <Modal title={`${readOnly ? "Student Results" : "Submissions"} — ${state.assessment.title}`} large onClose={onClose}>
     <div className="assessment-submission-dashboard p-3 pb-0">
       <div className="assessment-result-metrics">
         <MiniMetric label="Students" value={state.rows.length} icon="bi-people" />
@@ -483,7 +711,7 @@ function SubmissionsModal({ state, onClose, onChanged, onError }) {
       return <tr key={row.id}><td><div className="d-flex align-items-center gap-2"><StudentAvatar student={row.student} /><div><strong>{row.student?.name}</strong><small className="d-block text-muted">{row.student?.admission_number || ""}</small></div></div></td><td><span className={`assessment-status status-${row.status}`}>{row.status}</span></td><td>{row.latestAttempt?.ai_evaluation_status && row.latestAttempt.ai_evaluation_status !== "not_started" ? <span className="badge text-bg-light">{row.latestAttempt.ai_evaluation_status.replaceAll("_", " ")}</span> : "—"}</td><td>{fmt(row.submitted_at)}</td><td>{row.obtained_marks == null ? "—" : `${row.obtained_marks}/${state.assessment.total_marks}`}</td><td>{pct == null ? "—" : <strong>{pct.toFixed(1)}%</strong>}</td><td className="text-end"><div className="d-flex justify-content-end gap-2">{!readOnly && <TeacherScanButton assessment={state.assessment} row={row} onDone={onChanged} onError={onError} />}<button className="btn btn-sm btn-outline-primary" disabled={!row.latestAttempt} onClick={() => setSelected(row)}>{readOnly ? "View Result" : "Review"}</button></div></td></tr>;
     })}</tbody></table></div>
     {selected && <GradePanel assessment={state.assessment} enrollment={selected} readOnly={readOnly} onClose={() => setSelected(null)} onSaved={async () => { setSelected(null); await onChanged(); }} onError={onError} />}
-  </WorkspacePage>;
+  </Modal>;
 }
 
 function MiniMetric({ label, value, icon }) { return <div className="assessment-mini-metric"><i className={`bi ${icon}`} /><div><span>{label}</span><strong>{value}</strong></div></div>; }
@@ -510,10 +738,7 @@ function GradePanel({ assessment, enrollment, readOnly = false, onClose, onSaved
   </div>;
 }
 
-function WorkspacePage({ title, children, onClose }) {
-  useEffect(() => { window.scrollTo({ top: 0 }); }, []);
-  return <section className="assessment-workspace"><header className="assessment-workspace-header"><button type="button" className="btn btn-outline-secondary" disabled={!onClose} onClick={onClose}><i className="bi bi-arrow-left me-2" />Back to list</button><h1>{title}</h1></header>{children}</section>;
-}
+function Modal({ title, children, onClose, large = false }) { return <div className="assessment-modal-backdrop"><div className={`assessment-modal card shadow-lg ${large ? "assessment-modal-lg" : ""}`} role="dialog" aria-modal="true"><div className="card-header d-flex align-items-center justify-content-between"><h5 className="mb-0">{title}</h5><button className="btn-close" onClick={onClose} /></div>{children}</div></div>; }
 function Input({ label, onChange, ...props }) { return <div className="col-md-6"><label className="form-label">{label}</label><input className="form-control" onChange={(e) => onChange(e.target.value)} {...props} /></div>; }
 function SelectField({ label, options, onChange, empty = "Select", ...props }) { return <div className="col-md-6"><label className="form-label">{label}</label><select className="form-select" onChange={(e) => onChange(e.target.value)} {...props}><option value="">{empty}</option>{options.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}</select></div>; }
 function Check({ label, checked, onChange }) { return <label className="form-check"><input className="form-check-input" type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} /><span className="form-check-label">{label}</span></label>; }

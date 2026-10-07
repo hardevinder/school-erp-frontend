@@ -50,6 +50,8 @@ const HolidayMarking = () => {
   const [recordSearch, setRecordSearch] = useState("");
 
   const [loading, setLoading] = useState(false);
+  const [poTreatment, setPoTreatment] = useState("excluded");
+  const [poSaving, setPoSaving] = useState(false);
   const [listLoading, setListLoading] = useState(false);
 
   const isEditing = Boolean(editingGroupKey);
@@ -64,6 +66,34 @@ const HolidayMarking = () => {
 
     return end.diff(start, "days") + 1;
   }, [startDate, endDate]);
+
+  const fetchAttendanceSettings = async () => {
+    try {
+      const { data } = await api.get("/attendance/settings");
+      setPoTreatment(data?.preparatory_off_treatment || "excluded");
+    } catch (error) {
+      console.error("Error fetching attendance settings:", error);
+    }
+  };
+
+  const savePoTreatment = async () => {
+    try {
+      setPoSaving(true);
+      const { data } = await api.put("/attendance/settings", {
+        preparatory_off_treatment: poTreatment,
+      });
+      setPoTreatment(data?.preparatory_off_treatment || poTreatment);
+      Swal.fire("Saved", "Preparatory Off attendance rule updated.", "success");
+    } catch (error) {
+      Swal.fire(
+        "Error",
+        error.response?.data?.message || "Failed to save Preparatory Off setting.",
+        "error"
+      );
+    } finally {
+      setPoSaving(false);
+    }
+  };
 
   const fetchClasses = async () => {
     try {
@@ -107,6 +137,7 @@ const HolidayMarking = () => {
 
   useEffect(() => {
     fetchClasses();
+    fetchAttendanceSettings();
   }, []);
 
   useEffect(() => {
@@ -483,6 +514,50 @@ const HolidayMarking = () => {
                   </div>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="card border-0 shadow-sm mb-4">
+          <div className="card-body p-4">
+            <div className="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-3">
+              <div>
+                <div className="text-uppercase text-secondary fw-bold small mb-1">Preparatory Off</div>
+                <h5 className="fw-bold mb-1">How should PO count in student attendance?</h5>
+                <p className="text-muted mb-0 small">
+                  Teachers will always mark it as <strong>PO</strong>. This setting controls totals, working days and attendance percentage.
+                </p>
+              </div>
+              <button className="btn btn-primary" onClick={savePoTreatment} disabled={poSaving}>
+                {poSaving ? "Saving..." : "Save PO Setting"}
+              </button>
+            </div>
+
+            <div className="row g-3">
+              {[
+                { value: "present", title: "Count as Present", text: "PO remains visible as PO, but adds 1 to Present and counts as a working day." },
+                { value: "excluded", title: "Exclude from Attendance", text: "PO is neither Present nor Absent and is excluded from the attendance percentage denominator." },
+                { value: "holiday", title: "Treat as Holiday", text: "PO is shown separately, but for calculations the day behaves as a non-working holiday." },
+              ].map((option) => (
+                <div className="col-lg-4" key={option.value}>
+                  <label className={`border rounded-3 p-3 d-block h-100 ${poTreatment === option.value ? "border-primary bg-primary-subtle" : "bg-white"}`} style={{ cursor: "pointer" }}>
+                    <div className="d-flex align-items-start gap-2">
+                      <input
+                        type="radio"
+                        className="form-check-input mt-1"
+                        name="poTreatment"
+                        value={option.value}
+                        checked={poTreatment === option.value}
+                        onChange={(e) => setPoTreatment(e.target.value)}
+                      />
+                      <div>
+                        <div className="fw-bold">{option.title}</div>
+                        <div className="small text-muted">{option.text}</div>
+                      </div>
+                    </div>
+                  </label>
+                </div>
+              ))}
             </div>
           </div>
         </div>

@@ -189,7 +189,7 @@ const PdfReport = ({ school, startDate, endDate, sessionLabel = "All sessions", 
             })}
           </View>
 
-          {pageIndex === pagesData.length - 1 && <Text style={styles.sectionTitle}>Total collected (INR): {formatIndianNumber(aggregatedData.reduce((sum, item) => sum + (Number(item.totalFeeReceived) || 0) + (Number(item.totalVanFee) || 0) + (Number(item.totalFine ?? item.Fine_Amount) || 0), 0))}</Text>}
+          {pageIndex === pagesData.length - 1 && <Text style={styles.sectionTitle}>Total collected (INR): {formatIndianNumber(aggregatedData.filter((item) => String(item?.status || "").trim().toLowerCase() !== "cancelled").reduce((sum, item) => sum + (Number(item.totalFeeReceived) || 0) + (Number(item.totalVanFee) || 0) + (Number(item.totalFine ?? item.Fine_Amount) || 0), 0))}</Text>}
           <Text
             style={styles.pageFooter}
             render={({ pageNumber, totalPages }) => `${pageNumber} / ${totalPages}`}
