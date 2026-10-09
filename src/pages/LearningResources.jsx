@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import Swal from "sweetalert2";
 import { Modal } from "react-bootstrap";
 import api from "../api";
-import { learningResourceUrl } from "../utils/learningResourceUrl";
 import { useInstitution } from "../institution/InstitutionContext";
 import "./LearningResources.css";
 
@@ -57,7 +56,7 @@ export default function LearningResources() {
     setPreview({ file, loading: true });
     try {
       if (Number(file.file_size) > 5 * 1024 * 1024) throw new Error("Preview supports files up to 5 MB. Download this file to read it.");
-      const response = await fetch(learningResourceUrl(file));
+      const response = await fetch(file.file_url);
       if (!response.ok) throw new Error("Unable to load this file. Please try again or download it.");
       const content = await response.text();
       if (content.length > 5 * 1024 * 1024) throw new Error("This file is too large to preview. Please download it.");
@@ -72,6 +71,7 @@ export default function LearningResources() {
   const [subjects, setSubjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [wizardStep, setWizardStep] = useState(1);
   const [form, setForm] = useState(emptyForm);
   const [files, setFiles] = useState([]);
   const [links, setLinks] = useState([{ title: "", url: "" }]);
@@ -176,6 +176,7 @@ export default function LearningResources() {
     setTargetClass("");
     setTargetSection("");
     setUploadProgress(0);
+    setWizardStep(1);
   };
 
   const openCreate = () => {
@@ -185,8 +186,22 @@ export default function LearningResources() {
 
   const validLinks = links.map((l) => ({ title: l.title.trim(), url: l.url.trim() })).filter((l) => l.url);
 
+  const nextStep = () => {
+    if (wizardStep === 1) {
+      if (!form.title.trim()) return Swal.fire("Title required", "Enter a title for the study material.", "warning");
+      if (!form.subjectId) return Swal.fire("Subject required", `Please select a ${terms.subjectLower || "subject"}.`, "warning");
+      if (!audiences.length) return Swal.fire("Target required", `Select at least one ${terms.classLower}${isCollege ? "/batch" : "/section"} target.`, "warning");
+    }
+    if (wizardStep === 2) {
+      if (!files.length && !validLinks.length) return Swal.fire("Add material", "Upload a file or add a resource link.", "warning");
+      if (validLinks.some((link) => !/^https?:\/\//i.test(link.url))) return Swal.fire("Invalid link", "Links must begin with http:// or https://", "warning");
+    }
+    setWizardStep((step) => Math.min(3, step + 1));
+  };
+
   const save = async (status) => {
     if (!form.title.trim()) return Swal.fire("Title required", "Please enter a title for the study material.", "warning");
+    if (!form.subjectId) return Swal.fire("Subject required", "Please select a subject.", "warning");
     if (!audiences.length) return Swal.fire("Target required", `Select at least one ${terms.classLower}${isCollege ? "/batch" : "/section"} target.`, "warning");
     if (!files.length && !validLinks.length) return Swal.fire("Add material", "Drop files or add a YouTube/external resource link.", "warning");
     const badLink = validLinks.find((l) => !/^https?:\/\//i.test(l.url));
@@ -349,7 +364,7 @@ export default function LearningResources() {
                     <div className="lr-section-label"><i className="bi bi-files me-2" />Files ({resource.files.length})</div>
                     <div className="lr-item-list">
                       {resource.files.map((file) => (
-                        <a className="lr-file-item" key={file.id} href={learningResourceUrl(file)} target="_blank" rel="noreferrer"
+                        <a className="lr-file-item" key={file.id} href={file.file_url} target="_blank" rel="noreferrer"
                           onClick={(event) => {
                             if (/\.(txt|md|markdown|html|htm|csv|sql|json|xml|yaml|yml|py|java|c|cpp|h|css|js|ts)$/i.test(file.file_name || "")) {
                               event.preventDefault(); openPreview(file);
@@ -396,17 +411,41 @@ export default function LearningResources() {
                 <button type="button" className="btn-close" onClick={() => !saving && setShowModal(false)} disabled={saving} />
               </div>
               <div className="modal-body p-4">
-                <div className="row g-4">
-                  <div className="col-lg-7">
-                    <div className="row g-3">
+                <div className="lr-wizard-steps mb-4" aria-label="Study material upload steps">
+                  {["Details & Audience", "Files & Links", "Review & Publish"].map((label, index) => (
+                    <div className={`lr-wizard-step ${wizardStep === index + 1 ? "active" : ""} ${wizardStep > index + 1 ? "completed" : ""}`} key={label} aria-current={wizardStep === index + 1 ? "step" : undefined}>
+                      <span className="lr-wizard-number">{wizardStep > index + 1 ? "✓" : index + 1}</span><span>{label}</span>
+                    </div>
+                  ))}
+                </div>
+                {wizardStep === 3 ? (
+                  <div className="lr-form-section">
+                    <h5 className="mb-3">Review study material</h5>
+                    <dl className="row mb-3">
+                      <dt className="col-sm-3">Title</dt><dd className="col-sm-9">{form.title}</dd>
+                      <dt className="col-sm-3">Subject</dt><dd className="col-sm-9">{subjects.find((s) => String(s.id) === String(form.subjectId))?.name || subjects.find((s) => String(s.id) === String(form.subjectId))?.subject_name || "—"}</dd>
+                      <dt className="col-sm-3">Material type</dt><dd className="col-sm-9">{form.materialType}</dd>
+                      <dt className="col-sm-3">Chapter / Unit</dt><dd className="col-sm-9">{form.chapterUnit || "—"}</dd>
+                      <dt className="col-sm-3">Students</dt><dd className="col-sm-9">{audiences.map((a) => `${className(a.class_id)} · ${a.section_id ? sectionName(a.section_id) : `All ${terms.sectionsLower}`}`).join(", ")}</dd>
+                      <dt className="col-sm-3">Attachments</dt><dd className="col-sm-9">{files.length} file(s), {validLinks.length} link(s)</dd>
+                    </dl>
+                    <div className="form-check form-switch">
+                      <input className="form-check-input" type="checkbox" id="notifyStudents" checked={form.notifyStudents} onChange={(e) => setForm((f) => ({ ...f, notifyStudents: e.target.checked }))} />
+                      <label className="form-check-label fw-semibold" htmlFor="notifyStudents">Notify students when published</label>
+                    </div>
+                    <div className="small text-muted mt-2">Choose Save Draft to keep this unpublished, or Publish to Students to share immediately.</div>
+                  </div>
+                ) : <div className="row g-4">
+                  <div className={wizardStep === 1 ? "col-12" : "col-lg-6"}>
+                    {wizardStep === 1 && <div className="row g-3">
                       <div className="col-12"><label className="form-label fw-semibold">Title *</label><input className="form-control" value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} placeholder="e.g. DBMS Unit 3 Notes / Class 10 Revision Pack" /></div>
                       <div className="col-md-6"><label className="form-label fw-semibold">Material Type</label><select className="form-select" value={form.materialType} onChange={(e) => setForm((f) => ({ ...f, materialType: e.target.value }))}>{materialTypes.map((v) => <option key={v}>{v}</option>)}</select></div>
-                      <div className="col-md-6"><label className="form-label fw-semibold">{terms.subject}</label><select className="form-select" value={form.subjectId} onChange={(e) => setForm((f) => ({ ...f, subjectId: e.target.value }))}><option value="">General / Not specific</option>{subjects.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
+                      <div className="col-md-6"><label className="form-label fw-semibold">{terms.subject} *</label><select className="form-select" required value={form.subjectId} onChange={(e) => setForm((f) => ({ ...f, subjectId: e.target.value }))}><option value="">Select {terms.subjectLower || "subject"}</option>{subjects.map((s) => <option key={s.id} value={s.id}>{s.name || s.subject_name}</option>)}</select><small className="text-muted">The material will be tagged with this subject.</small></div>
                       <div className="col-12"><label className="form-label fw-semibold">{isCollege ? "Unit / Topic" : "Chapter / Unit"}</label><input className="form-control" value={form.chapterUnit} onChange={(e) => setForm((f) => ({ ...f, chapterUnit: e.target.value }))} placeholder={isCollege ? "e.g. Unit 3 - Normalization" : "e.g. Chapter 5 - Life Processes"} /></div>
                       <div className="col-12"><label className="form-label fw-semibold">Description</label><textarea className="form-control" rows="3" value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} placeholder="Optional instructions or summary for students" /></div>
-                    </div>
+                    </div>}
 
-                    <div className="lr-form-section mt-4">
+                    {wizardStep === 1 && <div className="lr-form-section mt-4">
                       <div className="d-flex justify-content-between align-items-center mb-2"><h6 className="mb-0">Target Students *</h6><small className="text-muted">Add one or more targets</small></div>
                       <div className="row g-2 align-items-end">
                         <div className="col-md-5"><label className="form-label small">{terms.class}</label><select className="form-select" value={targetClass} onChange={(e) => { setTargetClass(e.target.value); setTargetSection(""); }}><option value="">Select {terms.classLower}</option>{classes.map((c) => <option value={c.id} key={c.id}>{c.class_name}</option>)}</select></div>
@@ -417,19 +456,19 @@ export default function LearningResources() {
                         {audiences.map((a, index) => <span className="lr-audience-chip" key={`${a.class_id}-${a.section_id || "all"}`}><span>{className(a.class_id)} · {a.section_id ? sectionName(a.section_id) : `All ${terms.sections}`}</span><button type="button" onClick={() => setAudiences((prev) => prev.filter((_, i) => i !== index))}><i className="bi bi-x" /></button></span>)}
                         {!audiences.length && <small className="text-muted">No target selected yet.</small>}
                       </div>
-                    </div>
+                    </div>}
 
-                    <div className="lr-form-section mt-4">
+                    {wizardStep === 2 && <div className="lr-form-section mt-0">
                       <div className="d-flex justify-content-between align-items-center mb-2"><h6 className="mb-0">YouTube / External Video & Resource Links</h6><button type="button" className="btn btn-sm btn-outline-secondary" onClick={() => setLinks((prev) => [...prev, { title: "", url: "" }])}><i className="bi bi-plus-lg me-1" />Add link</button></div>
                       {links.map((link, index) => <div className="row g-2 mb-2" key={index}>
                         <div className="col-md-4"><input className="form-control" placeholder="Link title (optional)" value={link.title} onChange={(e) => setLinks((prev) => prev.map((l, i) => i === index ? { ...l, title: e.target.value } : l))} /></div>
                         <div className="col-md-7"><input className="form-control" placeholder="https://youtube.com/... or any resource URL" value={link.url} onChange={(e) => setLinks((prev) => prev.map((l, i) => i === index ? { ...l, url: e.target.value } : l))} /></div>
                         <div className="col-md-1 d-grid"><button type="button" className="btn btn-outline-danger" onClick={() => setLinks((prev) => prev.length === 1 ? [{ title: "", url: "" }] : prev.filter((_, i) => i !== index))}><i className="bi bi-trash" /></button></div>
                       </div>)}
-                    </div>
+                    </div>}
                   </div>
 
-                  <div className="col-lg-5">
+                  {wizardStep === 2 && <div className="col-lg-6">
                     <div className="lr-form-section h-100">
                       <h6>Bulk File Upload</h6>
                       <p className="small text-muted">Select or drop up to 50 documents, Access databases, SQL files, source code, notebooks, diagrams or archives together. Each file can be up to 50 MB.</p>
@@ -454,21 +493,20 @@ export default function LearningResources() {
                       </div>
                       {!!files.length && <div className="small text-muted mt-2">{files.length} file{files.length === 1 ? "" : "s"} selected · {prettyBytes(files.reduce((sum, f) => sum + f.size, 0))} total</div>}
                     </div>
-                  </div>
-                </div>
+                  </div>}
+                </div>}
 
-                <div className="form-check form-switch mt-4">
-                  <input className="form-check-input" type="checkbox" id="notifyStudents" checked={form.notifyStudents} onChange={(e) => setForm((f) => ({ ...f, notifyStudents: e.target.checked }))} />
-                  <label className="form-check-label fw-semibold" htmlFor="notifyStudents">Notify students when published</label>
-                  <div className="small text-muted">Students with registered mobile devices receive a push notification. Material remains visible in their Learning Resources either way.</div>
-                </div>
+
 
                 {saving && <div className="mt-4"><div className="d-flex justify-content-between small mb-1"><span>Uploading…</span><span>{uploadProgress}%</span></div><div className="progress" role="progressbar" aria-valuenow={uploadProgress} aria-valuemin="0" aria-valuemax="100"><div className="progress-bar progress-bar-striped progress-bar-animated" style={{ width: `${uploadProgress}%` }} /></div></div>}
               </div>
               <div className="modal-footer">
                 <button className="btn btn-light" onClick={() => setShowModal(false)} disabled={saving}>Cancel</button>
-                <button className="btn btn-outline-primary" onClick={() => save("draft")} disabled={saving}><i className="bi bi-save me-2" />Save Draft</button>
-                <button className="btn btn-primary" onClick={() => save("published")} disabled={saving}><i className="bi bi-send-check me-2" />Publish to Students</button>
+                {wizardStep > 1 && <button className="btn btn-outline-secondary" onClick={() => setWizardStep((step) => step - 1)} disabled={saving}>Back</button>}
+                {wizardStep < 3 ? <button className="btn btn-primary" onClick={nextStep} disabled={saving}>Continue <i className="bi bi-arrow-right ms-2" /></button> : <>
+                  <button className="btn btn-outline-primary" onClick={() => save("draft")} disabled={saving}><i className="bi bi-save me-2" />Save Draft</button>
+                  <button className="btn btn-primary" onClick={() => save("published")} disabled={saving}><i className="bi bi-send-check me-2" />Publish to Students</button>
+                </>}
               </div>
             </div>
           </div>
@@ -481,11 +519,11 @@ export default function LearningResources() {
             /\.html?$/i.test(preview?.file.file_name || "") ?
               <iframe title="Study material preview" sandbox="" referrerPolicy="no-referrer"
                 srcDoc={`<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:;">` + (preview?.content || "")}
-                style={{ width: "100%", height: "65vh", border: "1px solid var(--edb-border)", background: "var(--edb-surface)" }} /> :
-              <pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", maxHeight: "65vh", overflow: "auto", padding: "1rem", background: "var(--edb-surface)" }}>{preview?.content}</pre>}
+                style={{ width: "100%", height: "65vh", border: "1px solid #dee2e6", background: "white" }} /> :
+              <pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", maxHeight: "65vh", overflow: "auto", padding: "1rem", background: "#f8f9fa" }}>{preview?.content}</pre>}
         </Modal.Body>
         <Modal.Footer>
-          <a className="btn btn-primary" href={learningResourceUrl(preview?.file)} target="_blank" rel="noreferrer">Download original</a>
+          <a className="btn btn-primary" href={preview?.file.file_url} target="_blank" rel="noreferrer">Download original</a>
           <button className="btn btn-secondary" onClick={closePreview}>Close</button>
         </Modal.Footer>
       </Modal>
