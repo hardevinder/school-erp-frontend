@@ -4131,7 +4131,7 @@ const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
 
 
     /* PREPRIMARY_PENPAPER_TOTAL_V18
-       One compact Total / Overall row for every visible term.
+       One compact marks-only total row for every visible term.
        AB counts as 0 marks with the subject max included; an un-entered result keeps the total blank. */
     const academicTotalCellsV18 = effectiveTerms
       .map((termId) => {
@@ -4167,12 +4167,11 @@ const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
         });
 
         if (!hasResult || !complete || totalMax <= 0) {
-          return `<td class="academic-mark academic-total-mark-v18">-</td><td class="academic-grade-v17b academic-total-grade-v18">-</td>`;
+          return `<td colspan="2" class="academic-mark academic-total-mark-v18">-</td>`;
         }
 
-        const overallGrade = getPrePrimaryMarksGradeV17B(totalMarks, totalMax);
         const totalDisplay = `${Math.round(Number(totalMarks))} / ${Math.round(Number(totalMax))}`;
-        return `<td class="academic-mark academic-total-mark-v18">${escapePrimaryHtml(totalDisplay)}</td><td class="academic-grade-v17b academic-total-grade-v18">${escapePrimaryHtml(overallGrade)}</td>`;
+        return `<td colspan="2" class="academic-mark academic-total-mark-v18">${escapePrimaryHtml(totalDisplay)}</td>`;
       })
       .join("");
 
@@ -4207,7 +4206,7 @@ const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
               return `<tr><td>${escapePrimaryHtml(subjectName)}</td>${cells}</tr>`;
             })
             .join("")}
-          <tr class="academic-total-row-v18"><td class="academic-total-label-v18">Total / Overall</td>${academicTotalCellsV18}</tr>
+          <tr class="academic-total-row-v18"><td class="academic-total-label-v18">Total</td>${academicTotalCellsV18}</tr>
         </tbody>
       </table>
     `;
@@ -6243,6 +6242,15 @@ html,body { width:210mm!important; margin:0!important; padding:0!important; }
           display:inline !important;
           margin:0 1.5px !important;
         }
+
+/* Primary report: stacked rainbow/tagline and room for about 30 remark words. */
+.preprimary-report .hero-motto { flex-direction:column!important; gap:1.5mm!important; }
+.preprimary-report .motto-main { transform:none!important; font-size:17px!important; }
+.preprimary-report .dynamic-school-meta .school-meta-item { white-space:normal!important; overflow-wrap:anywhere; }
+.preprimary-report .health-grid { grid-template-columns:repeat(4,minmax(0,1fr)); }
+.preprimary-report .remarks-body { min-height:20mm!important; height:auto!important; font-size:10px!important; line-height:1.4!important; }
+.preprimary-report .remarks-text { padding-right:0; white-space:pre-wrap; overflow-wrap:anywhere; }
+.preprimary-report .remarks-star { display:none; }
 </style>
     `;
 
@@ -6276,11 +6284,20 @@ html,body { width:210mm!important; margin:0!important; padding:0!important; }
         .replace(/\/+$/, "");
       const primarySchoolPhoneRaw = String(schoolInfo?.phone || "").trim();
       const primarySchoolPhoneDigits = primarySchoolPhoneRaw.replace(/\D/g, "");
-      const primarySchoolPhone =
+      const formattedPrimarySchoolPhone =
         primarySchoolPhoneDigits.length === 10
           ? `+91-${primarySchoolPhoneDigits}`
           : primarySchoolPhoneRaw;
-      const primarySchoolEmail = String(schoolInfo?.email || "").trim();
+      const isSmcisPrimary = /seth\s+malook\s+chand|smcis/i.test(primarySchoolName);
+      const primarySchoolPhone = isSmcisPrimary
+        ? [formattedPrimarySchoolPhone || "+91-7055000524", ...["7055000522", "7055000521"]
+            .filter((number) => !primarySchoolPhoneDigits.includes(number))
+            .map((number) => `+91-${number}`)].join(", ")
+        : formattedPrimarySchoolPhone;
+      const primarySchoolEmail = [...new Set([
+        String(schoolInfo?.email || "").trim(),
+        ...(isSmcisPrimary ? ["info@smcis.in"] : []),
+      ].filter(Boolean))].join(", ");
       const primarySchoolMeta = [
         [
           primarySchoolPhone ? `Contact: ${primarySchoolPhone}` : "",
@@ -6331,8 +6348,8 @@ html,body { width:210mm!important; margin:0!important; padding:0!important; }
               </div>
 
               <div class="hero-motto">
-                <div class="hero-motto-top"><div class="motto-main">Small Steps<br/>Big Futures</div><div class="motto-heart">♥</div></div>
                 <div class="motto-visual">${primaryHeroRainbowSvg()}<div class="motto-values"><span>Kindness</span><span>Curiosity</span><span>Confidence</span><span>A Brighter Tomorrow</span></div></div>
+                <div class="hero-motto-top"><div class="motto-main">Small Steps<br/>Big Futures</div><div class="motto-heart">♥</div></div>
               </div>
             </div>
 
@@ -6348,7 +6365,7 @@ html,body { width:210mm!important; margin:0!important; padding:0!important; }
               <div class="info-col info-col-right">
                 <div class="info-line"><span class="info-label">Father's Name</span><span>:</span><strong>${escapePrimaryHtml(info?.father_name)}</strong></div>
                 <div class="info-line"><span class="info-label">Mother's Name</span><span>:</span><strong>${escapePrimaryHtml(info?.mother_name)}</strong></div>
-                <div class="info-line"><span class="info-label">Class Teacher</span><span>:</span><strong>${escapePrimaryHtml(info?.class_teacher_name || "-")}</strong></div>
+                <div class="info-line"><span class="info-label">Class Teacher</span><span>:</span><strong>${escapePrimaryHtml(String(info?.class_teacher_name || "-").toUpperCase())}</strong></div>
                 <div class="info-line"><span class="info-label">Section</span><span>:</span><strong>${escapePrimaryHtml(info?.Section?.section_name)}</strong></div>
                 <div class="info-line"><span class="info-label">Roll No.</span><span>:</span><strong>${escapePrimaryHtml(info?.roll_number)}</strong></div>
               </div>
@@ -6374,7 +6391,6 @@ html,body { width:210mm!important; margin:0!important; padding:0!important; }
                   <div class="health-item"><div class="health-label">Weight (kg)</div><div class="health-icon"><svg viewBox="0 0 28 28"><path d="M5 9h18l2 16H3L5 9Z" fill="#8fd3ed" stroke="#3d7899" stroke-width="1.5"/><path d="M9 9a5 5 0 0 1 10 0" fill="none" stroke="#3d7899" stroke-width="1.5"/><path d="M14 12v5l4-3" stroke="#3d7899" stroke-width="1.5" stroke-linecap="round"/></svg></div><div class="health-value">${escapePrimaryHtml(health.weight)}</div></div>
                   <div class="health-item"><div class="health-label">Dental Check-up</div><div class="health-icon"><svg viewBox="0 0 28 28"><path d="M8 4c-4 4-3 10 0 15 2 4 3 5 5 2 1-2 1-5 2-5s1 3 2 5c2 3 3 2 5-2 3-5 4-11 0-15-4-3-6 0-7 0s-3-3-7 0Z" fill="#fff" stroke="#3d7899" stroke-width="1.5"/></svg></div><div class="health-value">${escapePrimaryHtml(health.dental)}</div></div>
                   <div class="health-item"><div class="health-label">Vision</div><div class="health-icon"><svg viewBox="0 0 32 24"><path d="M2 12s5-8 14-8 14 8 14 8-5 8-14 8S2 12 2 12Z" fill="#dff4ff" stroke="#3d7899" stroke-width="1.5"/><circle cx="16" cy="12" r="5" fill="#4ca9dc"/><circle cx="16" cy="12" r="2" fill="#173c63"/></svg></div><div class="health-value">${escapePrimaryHtml(health.vision)}</div></div>
-                  <div class="health-item"><div class="health-label">Blood Group</div><div class="health-icon"><svg viewBox="0 0 24 30"><path d="M12 3C8 9 5 13 5 18a7 7 0 0 0 14 0c0-5-3-9-7-15Z" fill="#ef5b4d" stroke="#b53831" stroke-width="1.2"/></svg></div><div class="health-value">${escapePrimaryHtml(health.blood_group)}</div></div>
                 </div>
               </div>
 

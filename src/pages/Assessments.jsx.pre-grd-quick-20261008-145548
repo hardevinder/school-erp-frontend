@@ -203,11 +203,8 @@ function AssessmentBuilder({ options = [], state, onClose, onSaved, onError }) {
     breakdown_id: initial.breakdown_id || "",
     breakdown_item_id: initial.breakdown_item_id || "",
     syllabus_topics: Array.isArray(initial?.settings?.syllabus_topics) ? initial.settings.syllabus_topics : [],
-    manual_topic: initial?.settings?.manual_topic || "",
     question_blueprint: normalizeQuestionBlueprint(initial.question_blueprint || initial?.settings?.question_blueprint || defaultQuestionBlueprint()),
   });
-  // GRD_QUICK_CREATE_WITHOUT_SYLLABUS_V1
-  const [creationMode, setCreationMode] = useState(initial?.settings?.creation_mode === "quick" ? "quick" : "syllabus");
   const [step, setStep] = useState(1);
   const [busy, setBusy] = useState(false);
   const [aiBusy, setAiBusy] = useState(false);
@@ -312,11 +309,11 @@ function AssessmentBuilder({ options = [], state, onClose, onSaved, onError }) {
       });
     }, 800);
     try {
-      const topicText = creationMode === "quick" ? (form.manual_topic || form.description || form.title || "") : (form.syllabus_topics.length ? form.syllabus_topics.join(", ") : (selectedUnit?.unit_title || form.manual_topic || form.description || form.title || ""));
+      const topicText = form.syllabus_topics.length ? form.syllabus_topics.join(", ") : (selectedUnit?.unit_title || form.description || "");
       const result = unwrap(await api.post("/api/assessments/ai/generate", {
         class_id: form.class_id, section_id: form.section_id || null, subject_id: form.subject_id,
-        breakdown_id: creationMode === "quick" ? null : (form.breakdown_id || null), breakdown_item_id: creationMode === "quick" ? null : (form.breakdown_item_id || null),
-        syllabus_topics: creationMode === "quick" ? [] : form.syllabus_topics, title: form.title, topic: topicText,
+        breakdown_id: form.breakdown_id || null, breakdown_item_id: form.breakdown_item_id || null,
+        syllabus_topics: form.syllabus_topics, title: form.title, topic: topicText,
         total_marks: plannedMarks || Number(form.total_marks), duration_minutes: Number(form.duration_minutes),
         question_count: Math.max(1, plannedQuestions || form.questions.length || 10),
         question_types: questionBlueprint.length ? questionBlueprint.map((row) => row.type) : ["mcq", "true_false", "fill_blank", "short", "long"],
@@ -353,7 +350,7 @@ function AssessmentBuilder({ options = [], state, onClose, onSaved, onError }) {
       fd.append("subject_id", form.subject_id); if (form.title) fd.append("title", form.title);
       if (form.breakdown_item_id) fd.append("breakdown_item_id", form.breakdown_item_id);
       if (form.syllabus_topics.length) fd.append("syllabus_topics", JSON.stringify(form.syllabus_topics));
-      if (form.manual_topic || form.description) fd.append("topic", form.manual_topic || form.description);
+      if (form.description) fd.append("topic", form.description);
       const result = unwrap(await api.post("/api/assessments/ai/import-document", fd));
       const imported = Array.isArray(result.questions) ? result.questions : [];
       if (!imported.length) throw new Error("No readable questions were detected.");
@@ -372,12 +369,10 @@ function AssessmentBuilder({ options = [], state, onClose, onSaved, onError }) {
       const fd = new FormData();
       const data = {
         ...form,
-        syllabus_topics: creationMode === "quick" ? [] : form.syllabus_topics,
-        breakdown_id: creationMode === "quick" ? "" : form.breakdown_id,
-        breakdown_item_id: creationMode === "quick" ? "" : form.breakdown_item_id,
+        syllabus_topics: form.syllabus_topics,
         total_marks: plannedMarks || form.total_marks,
         question_blueprint: questionBlueprint,
-        settings: { ...(form.settings || {}), creation_mode: creationMode, manual_topic: form.manual_topic || "", syllabus_topics: creationMode === "quick" ? [] : form.syllabus_topics, question_blueprint: questionBlueprint },
+        settings: { ...(form.settings || {}), syllabus_topics: form.syllabus_topics, question_blueprint: questionBlueprint },
         questions: form.mode === "online" ? form.questions : form.questions.filter((q) => q.question_text?.trim()),
         starts_at: form.starts_at ? new Date(form.starts_at).toISOString() : "",
         ends_at: form.ends_at ? new Date(form.ends_at).toISOString() : "",
@@ -429,19 +424,7 @@ function AssessmentBuilder({ options = [], state, onClose, onSaved, onError }) {
       </div>}
 
       {step === 2 && <div>
-        <div className="d-flex justify-content-between align-items-start gap-3 mb-3"><div className="card border-0 bg-light p-3 mb-3">
-          <label className="form-label fw-semibold mb-2">Creation method</label>
-          <div className="d-flex flex-wrap gap-2 mb-2">
-            <button type="button" className={`btn btn-sm ${creationMode === "quick" ? "btn-primary" : "btn-outline-primary"}`} onClick={() => { setCreationMode("quick"); setForm((f) => ({ ...f, breakdown_id: "", breakdown_item_id: "", syllabus_topics: [] })); }}>Quick Create (No Syllabus)</button>
-            <button type="button" className={`btn btn-sm ${creationMode === "syllabus" ? "btn-primary" : "btn-outline-primary"}`} onClick={() => setCreationMode("syllabus")}>Create with Syllabus</button>
-          </div>
-          {creationMode === "quick" ? <>
-            <p className="small text-muted mb-2">Syllabus is optional. Enter a topic, or use the assessment title for AI generation. Continue to Settings when ready.</p>
-            <label className="form-label">Topic (optional)</label>
-            <input className="form-control" placeholder="e.g. Cell structure and functions" value={form.manual_topic || ""} onChange={(e) => setForm((f) => ({ ...f, manual_topic: e.target.value }))} />
-          </> : <p className="small text-muted mb-0">Select a syllabus unit below, or leave it blank to continue without one.</p>}
-        </div>
-        <div><h6 className="mb-1">Unit & Topics</h6><small className="text-muted">Loaded from the selected subject's Syllabus Breakup.</small></div>{form.breakdown_item_id && <button type="button" className="btn btn-sm btn-outline-secondary" onClick={() => setForm((f) => ({ ...f, breakdown_id: "", breakdown_item_id: "", syllabus_topics: [] }))}>Clear selection</button>}</div>
+        <div className="d-flex justify-content-between align-items-start gap-3 mb-3"><div><h6 className="mb-1">Unit & Topics</h6><small className="text-muted">Loaded from the selected subject's Syllabus Breakup.</small></div>{form.breakdown_item_id && <button type="button" className="btn btn-sm btn-outline-secondary" onClick={() => setForm((f) => ({ ...f, breakdown_id: "", breakdown_item_id: "", syllabus_topics: [] }))}>Clear selection</button>}</div>
         {syllabusBusy ? <div className="text-muted py-3"><span className="spinner-border spinner-border-sm me-2" />Loading syllabus…</div> : syllabusError ? <div className="alert alert-warning">{syllabusError}</div> : !syllabusRows.length ? <div className="alert alert-light border"><strong>No syllabus breakup found.</strong><div className="small text-muted mt-1">You can continue and create the assessment without a syllabus link.</div></div> : <>
           <label className="form-label fw-semibold">Select Unit</label>
           <div className="d-flex flex-wrap gap-2 mb-4">{syllabusRows.map((row) => <button key={`${row.breakdown_id}-${row.id}`} type="button" className={`btn ${Number(form.breakdown_item_id) === Number(row.id) ? "btn-primary" : "btn-outline-primary"}`} onClick={() => chooseUnit(row)}>{row.unit_number ? `Unit ${row.unit_number}: ` : ""}{row.unit_title}</button>)}</div>
