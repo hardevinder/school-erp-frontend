@@ -19,11 +19,22 @@ import {
   Alert,
 } from "react-bootstrap";
 import ReceiptModal from "./ReceiptModal";
+import TransactionRemarks from "./TransactionRemarks";
+import "./TransactionRemarks.css";
 import "bootstrap/dist/css/bootstrap.min.css";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 
 /* ---------------- Helpers ---------------- */
+const formatRecordedTime = (timestamp) => {
+  if (!timestamp) return "—";
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleTimeString("en-IN", {
+    timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", hour12: true,
+  });
+};
+
 const asArray = (d) => {
   if (Array.isArray(d)) return d;
   if (d == null) return [];
@@ -3684,7 +3695,7 @@ const Transactions = () => {
               <th>Slip ID</th>
               <th>Adm. No.</th>
               <th>Class</th>
-              <th>Date</th>
+              <th>Date / Time <small className="text-muted">(IST)</small></th>
               <th>Head</th>
               <th>Concession</th>
               <th>Fee Received</th>
@@ -3718,7 +3729,12 @@ const Transactions = () => {
                       <td>{t.Slip_ID}</td>
                       <td>{t.AdmissionNumber}</td>
                       <td>{t.Class?.class_name || "—"}</td>
-                      <td>{formatTransactionDateOnly(t.DateOfTransaction)}</td>
+                      <td className="text-nowrap">
+                        <div>{formatTransactionDateOnly(t.DateOfTransaction)}</div>
+                        <small className="text-muted" title="Time this transaction was recorded (IST)">
+                          {formatRecordedTime(t.createdAt)}
+                        </small>
+                      </td>
                       <td>{t.FeeHeading?.fee_heading || "—"}</td>
                       <td>{formatINR(t.Concession)}</td>
                       <td>{formatINR(t.Fee_Recieved)}</td>
@@ -3731,7 +3747,7 @@ const Transactions = () => {
                       <td>
                         <Badge bg="success">Active</Badge>
                       </td>
-                      <td>{t.Remarks || "—"}</td>
+                      <td><TransactionRemarks remarks={t.Remarks} /></td>
 
                       <td className="text-nowrap">
                         <Button

@@ -548,6 +548,7 @@ const ReceiptModal = (props) => {
         <ReceiptContent
           school={school}
           receipt={displayReceipt}
+          recordedAt={receipt?.[0]?.createdAt}
           slipId={slipId}
           student={student}
           formatDate={formatDateForDisplay}

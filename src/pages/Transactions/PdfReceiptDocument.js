@@ -76,11 +76,10 @@ const formatLongDate = (date) => {
 const formatTime12 = (date) => {
   if (!date) return "";
   const d = new Date(date);
-  let hours = d.getHours();
-  const minutes = String(d.getMinutes()).padStart(2, "0");
-  const ampm = hours >= 12 ? "PM" : "AM";
-  hours = hours % 12 || 12;
-  return `${hours}:${minutes} ${ampm}`;
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleTimeString("en-IN", {
+    timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", hour12: true,
+  }) + " IST";
 };
 
 // Example fallback logo URL (replace with your real URL if needed)
@@ -339,7 +338,7 @@ const PdfReceiptDocument = ({ school, receipt, slipId, student }) => {
             </Text>
             <Text style={styles.infoText}>
               <Text style={styles.infoLabel}>Date and Time:</Text>{" "}
-              {formatLongDate(feeCollectionDateTime)} {formatTime12(feeCollectionDateTime)}
+              {formatLongDate(feeCollectionDateTime)} {formatTime12(receipt[0]?.createdAt) || "—"}
             </Text>
           </View>
         </View>

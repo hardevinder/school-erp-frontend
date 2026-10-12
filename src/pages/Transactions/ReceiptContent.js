@@ -98,7 +98,7 @@ const SafeLogo = ({ src, alt, style }) => {
   );
 };
 
-const ReceiptContent = ({ school = {}, receipt = [], slipId = "—", student = {} }) => {
+const ReceiptContent = ({ school = {}, receipt = [], slipId = "—", student = {}, recordedAt }) => {
   const numberToWords = (num) => {
     const ones = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine"];
     const teens = ["Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"];
@@ -196,6 +196,9 @@ const ReceiptContent = ({ school = {}, receipt = [], slipId = "—", student = {
               <p><strong>Class:</strong> {items[0]?.Class?.class_name || "-"}</p>
               <p><strong>Address:</strong> {student?.address || "-"}</p>
               <p><strong>Date:</strong> {formatDateDDMMYYYY(items[0]?.DateOfTransaction || Date.now())}</p>
+              <p><strong>Time (IST):</strong> {recordedAt && !Number.isNaN(new Date(recordedAt).getTime())
+                ? new Date(recordedAt).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", hour12: true })
+                : "—"}</p>
             </td>
           </tr>
         </tbody>

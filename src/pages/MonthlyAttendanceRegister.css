@@ -2,3 +2,30 @@
 
 .monthly-register-table td.merged-holiday { vertical-align: middle; white-space: normal; }
 .monthly-register-table .merged-holiday span { writing-mode: vertical-rl; transform: rotate(180deg); display: inline-block; max-height: 320px; overflow-wrap: anywhere; padding: 12px 0; letter-spacing: .04em; }
+
+/* EduBridge ERP - Compact merged holiday columns */
+.monthly-register-table th.day-column,
+.monthly-register-table td.attendance-code {
+  min-width: 42px;
+}
+
+.monthly-register-table td.merged-holiday {
+  width: 48px !important;
+  min-width: 48px !important;
+  max-width: 48px !important;
+  padding: 6px 2px !important;
+  text-align: center;
+  vertical-align: middle;
+  white-space: normal !important;
+}
+
+.monthly-register-table td.merged-holiday span {
+  display: inline-block;
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  white-space: nowrap;
+  max-width: 100%;
+  overflow-wrap: normal;
+  padding: 8px 0;
+}
+

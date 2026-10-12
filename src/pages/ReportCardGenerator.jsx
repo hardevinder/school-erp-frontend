@@ -1,6 +1,7 @@
 // src/pages/FinalResultSummary.jsx
 import React, { useEffect, useRef, useState, useMemo } from "react";
 import api from "../api";
+import { excludedFromReportTotals, reportLeaveDisplay, reportCountedMaximum } from "../utils/reportCardAttendance";
 import Swal from "sweetalert2";
 import { Modal, Button, ProgressBar } from "react-bootstrap";
 
@@ -497,24 +498,24 @@ const buildAgeAtAssessmentText = (dobRaw, assessmentRaw) => {
 const isNumeric = (v) => v != null && v !== "" && Number.isFinite(Number(v));
 
 const sumMarksOnly = (arr = []) =>
-  (arr || []).reduce((a, x) => a + (isNumeric(x?.marks) ? Number(x.marks) : 0), 0);
+  (arr || []).filter((row) => !excludedFromReportTotals(row)).reduce((a, x) => a + (isNumeric(x?.marks) ? Number(x.marks) : 0), 0);
 
-const hasAnyMarks = (arr = []) => (arr || []).some((x) => isNumeric(x?.marks));
+const hasAnyMarks = (arr = []) => (arr || []).some((x) => !excludedFromReportTotals(x) && isNumeric(x?.marks));
 
 const pickGrade = (arr = []) => {
-  const hit = (arr || []).find((x) => x?.grade != null && String(x.grade).trim() !== "");
+  const hit = (arr || []).filter((row) => !excludedFromReportTotals(row)).find((x) => x?.grade != null && String(x.grade).trim() !== "");
   return hit?.grade || "-";
 };
 
 const sumWeightedOnly = (arr = []) =>
-  (arr || []).reduce(
+  (arr || []).filter((row) => !excludedFromReportTotals(row)).reduce(
     (a, x) => a + (isNumeric(x?.weighted_marks) ? Number(x.weighted_marks) : 0),
     0
   );
 
 const sumMaxWeight = (arr = []) =>
-  (arr || []).reduce(
-    (a, x) => a + (isNumeric(x?.weightage_percent) ? Number(x.weightage_percent) : 0),
+  (arr || []).filter((row) => !excludedFromReportTotals(row)).reduce(
+    (a, x) => a + reportCountedMaximum(x, true),
     0
   );
 
@@ -1624,6 +1625,8 @@ const FinalResultSummary = () => {
     return ["A", "AB", "ABSENT"].includes(att);
   });
 
+  const leaveDisplay = reportLeaveDisplay(items);
+  if (leaveDisplay && items.every(excludedFromReportTotals)) return leaveDisplay;
   if (hasAbsent) return "AB";
 
   if (items.some((x) => isNumeric(x?.marks))) {
@@ -1758,7 +1761,7 @@ const FinalResultSummary = () => {
 
     const marksTotal = hasAnyMarks(items) ? sumMarksOnly(items) : null;
     const marksMaximum = (items || []).reduce(
-      (sum, item) => sum + (isNumeric(item?.max_marks) ? Number(item.max_marks) : 0),
+      (sum, item) => sum + reportCountedMaximum(item),
       0
     );
 
@@ -1930,6 +1933,8 @@ const FinalResultSummary = () => {
           marks: source?.marks,
           max_marks: source?.max_marks,
           weighted_marks: source?.weighted_marks,
+          counted_max_marks: source?.max_marks,
+          counted_weightage: configuredWeightage,
           weightage_percent: configuredWeightage,
           is_result_group: false,
           result_group_code: component?.result_group_code || "PT",
@@ -2030,7 +2035,7 @@ const FinalResultSummary = () => {
         const rows = allComponents.filter((c) => c?.subject_name === combo.subjectName);
         const match = rows.find((c) => smartTemplateAliases(c?.abbreviation || c?.component_name || c?.name).some((x) => combo.componentAliases.includes(x)));
         const att = String(match?.attendance || "").trim().toUpperCase();
-        display = ["A", "AB", "ABSENT"].includes(att) ? "AB" : (match?.marks ?? match?.grade ?? "-");
+        display = reportLeaveDisplay([match]) || (["A", "AB", "ABSENT"].includes(att) ? "AB" : (match?.marks ?? match?.grade ?? "-"));
       }
 
       const matchingRows = allComponents.filter((c) => {
@@ -2043,7 +2048,7 @@ const FinalResultSummary = () => {
       const cell = {
         display,
         marks: hasAnyMarks(matchingRows) ? sumMarksOnly(matchingRows) : (first?.marks ?? ""),
-        max_marks: matchingRows.reduce((sum, row) => sum + (isNumeric(row?.max_marks) ? Number(row.max_marks) : 0), 0) || first?.max_marks || "",
+        max_marks: matchingRows.reduce((sum, row) => sum + reportCountedMaximum(row), 0) || first?.max_marks || "",
         weighted_marks: sumWeightedOnly(matchingRows),
         grade: pickGrade(matchingRows),
         attendance: first?.attendance || "",
@@ -2267,7 +2272,7 @@ const FinalResultSummary = () => {
         const maxWeight = formatSmartNumber(sumMaxWeight(matchingRows));
 
         cells[column.key] = {
-          display: absent ? "AB" : hasWeighted ? weighted : directGrade !== "-" ? directGrade : "",
+          display: matchingRows.every(excludedFromReportTotals) ? reportLeaveDisplay(matchingRows) : absent ? "AB" : hasWeighted ? weighted : directGrade !== "-" ? directGrade : "",
           weighted_marks: weighted,
           weightage_percent: maxWeight,
           grade: directGrade,
@@ -2402,7 +2407,7 @@ const FinalResultSummary = () => {
     const maxWeightTotal = sumMaxWeight(scholasticComponents);
     const overallPct = maxWeightTotal > 0 ? (weightedTotal / maxWeightTotal) * 100 : null;
     const rawTotal = hasAnyMarks(scholasticComponents) ? sumMarksOnly(scholasticComponents) : null;
-    const rawMax = scholasticComponents.reduce((sum, row) => sum + (isNumeric(row?.max_marks) ? Number(row.max_marks) : 0), 0);
+    const rawMax = scholasticComponents.reduce((sum, row) => sum + reportCountedMaximum(row), 0);
     const term1Overall = term1Id ? getStudentTermOverall(student, term1Id) : null;
     const term2Overall = term2Id ? getStudentTermOverall(student, term2Id) : null;
     const r1 = term1Id ? remarksByTerm[String(term1Id)]?.[student.id] : null;
@@ -3853,9 +3858,12 @@ const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
   };
 
   const getPrimaryPenPaperTermValue = (student, subjectName, termId) => {
-    const rows = getPrimaryRawSubjectComponents(student, subjectName, termId)
+    const allRows = getPrimaryRawSubjectComponents(student, subjectName, termId)
       .filter((component) => !isCoScholasticComponent(component))
       .filter(isPrimaryPenPaperComponent);
+    const leaveDisplay = reportLeaveDisplay(allRows);
+    const rows = allRows.filter((row) => !excludedFromReportTotals(row));
+    if (!rows.length && leaveDisplay) return { display: leaveDisplay, marks: null, max: 0, excluded: true };
     if (!rows.length) return { display: "-", marks: null, max: null };
 
     const absent = rows.some((row) => {
@@ -3872,9 +3880,9 @@ const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
     );
     const useWeighted = weightedRows.length > 0;
     const maximum = useWeighted
-      ? weightedRows.reduce((sum, row) => sum + Number(row.weightage_percent || 0), 0)
+      ? weightedRows.reduce((sum, row) => sum + reportCountedMaximum(row, true), 0)
       : rows.reduce(
-          (sum, row) => sum + (isNumeric(row?.max_marks) ? Number(row.max_marks) : 0),
+          (sum, row) => sum + reportCountedMaximum(row),
           0
         );
 
@@ -4142,6 +4150,7 @@ const buildTeacherRemarksPdfHtml_TermWise = (studentId) => {
 
         subjects.forEach((subjectName) => {
           const value = getPrimaryPenPaperTermValue(student, subjectName, termId);
+          if (value?.excluded) return;
           const max = Number(value?.max);
           const hasValidMax = Number.isFinite(max) && max > 0;
 

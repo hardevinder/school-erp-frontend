@@ -96,6 +96,16 @@ const formatIndianNumber = (amount) => {
 };
 
 // Format date to dd/MM/yyyy
+const formatRecordedDateTime = (timestamp) => {
+  if (!timestamp) return "-";
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) return "-";
+  return date.toLocaleString("en-GB", {
+    timeZone: "Asia/Kolkata", day: "2-digit", month: "2-digit", year: "numeric",
+    hour: "2-digit", minute: "2-digit", hour12: true,
+  }) + " IST";
+};
+
 const formatToDDMMYYYY = (date) => {
   if (!date) return '';
   const d = new Date(date);
@@ -177,7 +187,7 @@ const PdfReport = ({ school, startDate, endDate, sessionLabel = "All sessions", 
                   <Text style={[styles.tableCell, { flex: 1 }]}>{item.PaymentMode}</Text>
                   <Text style={[styles.tableCell, { flex: 2 }]}>{item.feeHeadingName}</Text>
                   {/* Created At → dd/MM/yyyy */}
-                  <Text style={[styles.tableCell, { flex: 2 }]}>{formatToDDMMYYYY(item.createdAt)}</Text>
+                  <Text style={[styles.tableCell, { flex: 2 }]}>{formatRecordedDateTime(item.createdAt)}</Text>
                   <Text style={[styles.tableCell, { flex: 1 }]}>{formatIndianNumber(item.totalFeeReceived)}</Text>
                   <Text style={[styles.tableCell, { flex: 1 }]}>{formatIndianNumber(item.totalConcession)}</Text>
                   <Text style={[styles.tableCell, { flex: 1 }]}>{formatIndianNumber(item.totalVanFee)}</Text>

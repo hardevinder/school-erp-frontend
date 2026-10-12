@@ -34,18 +34,10 @@ const formatToDisplayDateTime = (date) => {
   const d = new Date(date);
   if (Number.isNaN(d.getTime())) return "—";
 
-  const day = String(d.getDate()).padStart(2, "0");
-  const month = String(d.getMonth() + 1).padStart(2, "0");
-  const year = d.getFullYear();
-
-  let hours = d.getHours();
-  const minutes = String(d.getMinutes()).padStart(2, "0");
-  const ampm = hours >= 12 ? "PM" : "AM";
-
-  hours = hours % 12;
-  hours = hours || 12;
-
-  return `${day}/${month}/${year} ${String(hours).padStart(2, "0")}:${minutes} ${ampm}`;
+  return d.toLocaleString("en-GB", {
+    timeZone: "Asia/Kolkata", day: "2-digit", month: "2-digit", year: "numeric",
+    hour: "2-digit", minute: "2-digit", hour12: true,
+  }) + " IST";
 };
 
 const toDateTimeLocalInput = (value) => {
@@ -1116,7 +1108,7 @@ const DayWiseReport = () => {
     try {
     const pdfRows = filteredData.map((item) => ({
       ...item,
-      createdAt: item.DateOfTransaction || item.createdAt || null,
+      createdAt: item.createdAt || null,
     }));
 
     const doc = (
@@ -1322,7 +1314,7 @@ const DayWiseReport = () => {
                         "Payment Mode",
                         "Reference / Bank",
                         "Fee Heading",
-                        "Transaction Date & Time",
+                        "Recorded Date & Time (IST)",
                         "Fee Received",
                         "Concession",
                         "Van Fee",
@@ -1383,7 +1375,7 @@ const DayWiseReport = () => {
                           </td>
                           <td style={{ minWidth: 180 }}>{item.feeHeadingName || "—"}</td>
                           <td style={{ whiteSpace: "nowrap" }}>
-                            {formatToDisplayDateTime(item.DateOfTransaction)}
+                            {formatToDisplayDateTime(item.createdAt)}
                           </td>
                           <td style={{ whiteSpace: "nowrap" }}>{formatTotalValue(fee)}</td>
                           <td style={{ whiteSpace: "nowrap" }}>{formatTotalValue(item.totalConcession)}</td>
