@@ -984,7 +984,7 @@ const ExamScheduleManagement = () => {
                         <td>{s.term?.name || "-"}</td>
                         <td>{s.exam?.name || "-"}</td>
                         <td>{s.class?.class_name || "-"}</td>
-                        <td>{s.section?.section_name || "-"}</td>
+                        <td>{s.section?.section_name || "All Sections"}</td>
                         <td>{s.subject?.name || "-"}</td>
 
                         <td>
@@ -1123,7 +1123,7 @@ const ExamScheduleManagement = () => {
 
             <div className="col-12">
               <div className="d-flex justify-content-between align-items-center mb-2">
-                <Form.Label className="m-0 fw-semibold">2. Sections *</Form.Label>
+                <Form.Label className="m-0 fw-semibold">2. Sections (optional)</Form.Label>
                 <span className="badge bg-primary">{bulkData.section_ids.length} selected</span>
               </div>
               <div className="row g-2 border rounded p-2">
@@ -1353,7 +1353,7 @@ const ExamScheduleManagement = () => {
                     disabled={!!formData.id}
                   >
                     <option value="">
-                      {sections.length ? "Select Section (optional)" : "No Section (class-level)"}
+                      {sections.length ? "All Sections" : "All Sections (class-level)"}
                     </option>
                     {sections.map((s) => (
                       <option key={s.id} value={s.id}>

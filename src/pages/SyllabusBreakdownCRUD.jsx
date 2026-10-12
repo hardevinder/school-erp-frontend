@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import api from "../api";
 import Swal from "sweetalert2";
 import { Form, Button, Table, Modal, Row, Col, Badge, Card } from "react-bootstrap";
+import ProgramSyllabusDocuments from "../components/syllabus/ProgramSyllabusDocuments";
 import SyllabusAiImportModal from "../components/syllabus/SyllabusAiImportModal";
 import "./SyllabusBreakdownCRUD.css";
 
@@ -662,6 +663,7 @@ const SyllabusBreakdownCRUD = () => {
 
   return (
     <div className="container-fluid py-3 syllabus-breakdown-page">
+      <ProgramSyllabusDocuments />
       <div className="sb-wrap">
         <section className="sb-workspace-hero">
           <div>

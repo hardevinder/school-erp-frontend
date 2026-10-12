@@ -5,7 +5,7 @@ import api from "../api";
 import Swal from "sweetalert2";
 import "./Attendance.css";
 
-const statuses = ["present", "absent", "late", "leave", "halfday", "preparatory_off"];
+const statuses = ["present", "absent", "late", "leave", "halfday", "preparatory_off", "holiday"];
 
 // --- URL helpers ---
 const getApiBase = () =>
@@ -23,6 +23,9 @@ const buildPhotoURL = (photo) => {
 const MarkAttendance = () => {
   const [students, setStudents] = useState([]);
   const [attendance, setAttendance] = useState({});
+  const [remarks, setRemarks] = useState({});
+  const [savedRemarks, setSavedRemarks] = useState({});
+  const [holidayReason, setHolidayReason] = useState("");
   const [savedAttendance, setSavedAttendance] = useState({});
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split("T")[0]);
   const [mode, setMode] = useState("create"); // "create" or "edit"
@@ -53,11 +56,7 @@ const MarkAttendance = () => {
         setTeacherClassId(fetchedStudents[0].class_id || null);
       }
 
-      const initialAttendance = {};
-      fetchedStudents.forEach((student) => {
-        initialAttendance[student.id] = "present";
-      });
-      setAttendance(initialAttendance);
+      setAttendance({});
     } catch (error) {
       console.error("Error fetching students for attendance:", error);
       Swal.fire("Error", "Failed to fetch students.", "error");
@@ -95,6 +94,10 @@ const MarkAttendance = () => {
             )
           : [];
 
+        const loadedRemarks = Object.fromEntries(scopedRecords.map((record) => [record.studentId ?? record.student_id, record.remarks || ""]));
+        setRemarks(loadedRemarks);
+        setSavedRemarks(loadedRemarks);
+        setHolidayReason(scopedRecords.find((record) => record.status === "holiday")?.remarks || "");
         if (scopedRecords.length > 0) {
           setMode("edit");
           const attendanceMap = {};
@@ -106,21 +109,16 @@ const MarkAttendance = () => {
           setSavedAttendance(attendanceMap);
         } else {
           setMode("create");
-          const initialAttendance = {};
-          students.forEach((student) => {
-            initialAttendance[student.id] = "present";
-          });
-          setAttendance(initialAttendance);
+          setAttendance({});
           setSavedAttendance({});
         }
       } catch (error) {
         console.error("Error fetching attendance for date:", error);
+        setRemarks({});
+        setSavedRemarks({});
+        setHolidayReason("");
         setMode("create");
-        const initialAttendance = {};
-        students.forEach((student) => {
-          initialAttendance[student.id] = "present";
-        });
-        setAttendance(initialAttendance);
+        setAttendance({});
         setSavedAttendance({});
       }
     },
@@ -149,10 +147,11 @@ const MarkAttendance = () => {
       updatedAttendance[student.id] = status;
     });
     setAttendance(updatedAttendance);
+    if (status === "holiday") setRemarks((previous) => ({ ...previous, ...Object.fromEntries(students.map((student) => [student.id, holidayReason.trim()])) }));
   };
 
   const summaryCounts = useMemo(() => {
-    const acc = { present: 0, absent: 0, late: 0, leave: 0, halfday: 0, preparatory_off: 0 };
+    const acc = { present: 0, absent: 0, late: 0, leave: 0, halfday: 0, preparatory_off: 0, holiday: 0 };
     students.forEach((student) => {
       const status = attendance[student.id];
       if (status && Object.prototype.hasOwnProperty.call(acc, status)) {
@@ -165,14 +164,13 @@ const MarkAttendance = () => {
   const totalStudents = students.length;
 
   const hasUnsavedChanges = useMemo(() => {
-    if (mode === "create") return true;
-
     return students.some(
       (student) =>
-        (attendance[student.id] || "present") !==
-        (savedAttendance[student.id] || "present")
+        (attendance[student.id] || "") !==
+        (savedAttendance[student.id] || "") ||
+        (remarks[student.id] || "").trim() !== (savedRemarks[student.id] || "").trim()
     );
-  }, [attendance, savedAttendance, students, mode]);
+  }, [attendance, savedAttendance, remarks, savedRemarks, students]);
 
   const filteredStudents = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -194,6 +192,7 @@ const MarkAttendance = () => {
         return "table-info";
       case "halfday":
         return "table-primary";
+      case "holiday":
       case "preparatory_off":
         return "table-secondary";
       default:
@@ -226,10 +225,13 @@ const MarkAttendance = () => {
   const handleSubmit = async () => {
     setLoading(true);
     try {
-      const records = students.map((s) => ({
+      const records = students.filter((student) => attendance[student.id]).map((s) => ({
         studentId: s.id,
-        status: attendance[s.id] || "present",
+        status: attendance[s.id],
+        remarks: remarks[s.id]?.trim() || null,
       }));
+
+      if (!records.length) return;
 
       const { data } = await api.post("/attendance/bulk", {
         date: selectedDate,
@@ -292,6 +294,38 @@ const MarkAttendance = () => {
     }
   };
 
+  const handleUnmarkStudent = async (student) => {
+    if (loading || !savedAttendance[student.id]) return;
+    setLoading(true);
+    try {
+      const result = await Swal.fire({
+        title: "Unmark student attendance?",
+        text: `Remove attendance for ${student.name} on ${moment(selectedDate).format("LL")}? Other students will remain unchanged.`,
+        icon: "warning",
+        showCancelButton: true,
+        confirmButtonText: "Unmark",
+        confirmButtonColor: "#dc3545",
+      });
+      if (!result.isConfirmed) return;
+      await api.post("/attendance/unmark", { date: selectedDate, studentIds: [student.id] });
+      // Update only this row, preserving unsaved edits for other students.
+      const withoutStudent = (previous) => {
+        const next = { ...previous };
+        delete next[student.id];
+        return next;
+      };
+      setAttendance(withoutStudent);
+      setSavedAttendance(withoutStudent);
+      setRemarks(withoutStudent);
+      setSavedRemarks(withoutStudent);
+      await Swal.fire("Unmarked", `Attendance for ${student.name} has been unmarked.`, "success");
+    } catch (error) {
+      Swal.fire("Error", error?.response?.data?.message || "Failed to unmark student attendance.", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // ---- Early returns for invalid dates/holidays ----
   if (selectedMoment.isAfter(today)) {
     return (
@@ -301,6 +335,7 @@ const MarkAttendance = () => {
           <div>
             <input
               type="date"
+              disabled={loading}
               id="attendanceDate"
               className="form-control"
               value={selectedDate}
@@ -321,6 +356,7 @@ const MarkAttendance = () => {
           <div>
             <input
               type="date"
+              disabled={loading}
               id="attendanceDate"
               className="form-control"
               value={selectedDate}
@@ -348,6 +384,7 @@ const MarkAttendance = () => {
           <div>
             <input
               type="date"
+              disabled={loading}
               id="attendanceDate"
               className="form-control"
               value={selectedDate}
@@ -374,6 +411,7 @@ const MarkAttendance = () => {
         <div className="d-flex gap-2">
           <input
             type="date"
+              disabled={loading}
             id="attendanceDate"
             className="form-control"
             value={selectedDate}
@@ -432,19 +470,34 @@ const MarkAttendance = () => {
         <span className="badge text-bg-secondary">Controlled by Admin / Coordinator</span>
       </div>
 
+      <div className="d-flex flex-wrap align-items-end gap-2 mb-3">
+        <div>
+          <label className="form-label small" htmlFor="class-holiday-reason">Holiday reason (optional)</label>
+          <input id="class-holiday-reason" className="form-control form-control-sm" maxLength={255}
+            placeholder="e.g. Diwali" value={holidayReason} disabled={loading}
+            onChange={(event) => {
+              const value = event.target.value;
+              setHolidayReason(value);
+              setRemarks((previous) => ({ ...previous, ...Object.fromEntries(students.filter((student) => attendance[student.id] === "holiday").map((student) => [student.id, value])) }));
+            }} />
+        </div>
+        <button className="btn btn-outline-secondary btn-sm" disabled={loading || !students.length} onClick={() => handleMarkAll("holiday")}>All Holiday</button>
+        <small className="text-muted">Applies to the whole class. Save attendance to confirm.</small>
+      </div>
+
       {/* Compact Actions near cards */}
       <div className="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
         <div className="btn-group btn-group-sm" role="group" aria-label="Quick actions">
-          <button className="btn btn-outline-success" onClick={() => handleMarkAll("present")}>
+          <button className="btn btn-outline-success" disabled={loading} onClick={() => handleMarkAll("present")}>
             All Present
           </button>
-          <button className="btn btn-outline-danger" onClick={() => handleMarkAll("absent")}>
+          <button className="btn btn-outline-danger" disabled={loading} onClick={() => handleMarkAll("absent")}>
             All Absent
           </button>
-          <button className="btn btn-outline-primary" onClick={() => handleMarkAll("halfday")}>
+          <button className="btn btn-outline-primary" disabled={loading} onClick={() => handleMarkAll("halfday")}>
             All Halfday
           </button>
-          <button className="btn btn-outline-secondary" onClick={() => handleMarkAll("preparatory_off")}>
+          <button className="btn btn-outline-secondary" disabled={loading} onClick={() => handleMarkAll("preparatory_off")}>
             All PO
           </button>
         </div>
@@ -468,7 +521,7 @@ const MarkAttendance = () => {
           <button
             className="btn btn-primary btn-sm"
             onClick={handleSubmit}
-            disabled={loading || (mode === "edit" && !hasUnsavedChanges)}
+            disabled={loading || !hasUnsavedChanges}
           >
             {loading
               ? "Working..."
@@ -535,6 +588,7 @@ const MarkAttendance = () => {
                         <label key={status} className="form-check form-check-inline m-0">
                           <input
                             type="radio"
+                            disabled={loading}
                             name={`attendance-${s.id}`}
                             value={status}
                             checked={attendance[s.id] === status}
@@ -545,6 +599,20 @@ const MarkAttendance = () => {
                         </label>
                       ))}
                     </div>
+                    <div className="d-flex align-items-center gap-2 mt-2">
+                      {!attendance[s.id] && <span className="badge text-bg-light border">Unmarked</span>}
+                      {savedAttendance[s.id] && <button type="button"
+                        className="btn btn-outline-danger btn-sm" disabled={loading}
+                        aria-label={`Unmark attendance for ${s.name}`}
+                        onClick={() => handleUnmarkStudent(s)}>Unmark</button>}
+                    </div>
+                    {attendance[s.id] === "holiday" && <input
+                      disabled={loading}
+                      className="form-control form-control-sm mt-2" maxLength={255}
+                      aria-label={`Holiday reason for ${s.name}`} placeholder="Holiday reason (optional)"
+                      value={remarks[s.id] || ""}
+                      onChange={(event) => setRemarks((previous) => ({ ...previous, [s.id]: event.target.value }))}
+                    />}
                   </td>
                 </tr>
               ))
@@ -566,13 +634,13 @@ const MarkAttendance = () => {
       >
         <div className="d-flex align-items-center justify-content-between gap-2">
           <div className="btn-group btn-group-sm" role="group" aria-label="Quick actions mobile">
-            <button className="btn btn-outline-success" onClick={() => handleMarkAll("present")}>
+            <button className="btn btn-outline-success" disabled={loading} onClick={() => handleMarkAll("present")}>
               All Present
             </button>
-            <button className="btn btn-outline-danger" onClick={() => handleMarkAll("absent")}>
+            <button className="btn btn-outline-danger" disabled={loading} onClick={() => handleMarkAll("absent")}>
               All Absent
             </button>
-            <button className="btn btn-outline-primary" onClick={() => handleMarkAll("halfday")}>
+            <button className="btn btn-outline-primary" disabled={loading} onClick={() => handleMarkAll("halfday")}>
               All Halfday
             </button>
           </div>
@@ -590,7 +658,7 @@ const MarkAttendance = () => {
             <button
               className="btn btn-primary btn-sm"
               onClick={handleSubmit}
-              disabled={loading || (mode === "edit" && !hasUnsavedChanges)}
+              disabled={loading || !hasUnsavedChanges}
             >
               {loading
                 ? "Working..."

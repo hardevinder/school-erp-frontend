@@ -2075,10 +2075,10 @@ export default function Sidebar({ headerHeight = 56 }) {
             ))}
             {!globalSearchResults.length && <p className="sidebar-search-no-results">No menus match “{q}”. Try a page name, such as fees or worksheets.</p>}
           </nav>
-        ) : workspace === "LMS" && isExpanded ? (
+        ) : (workspace === "LMS" || roleLower === "student") && isExpanded ? (
           <nav className="sidebar-lms-direct-nav" aria-label="LMS navigation">
             <div className="sidebar-lms-direct-head">
-              <span><i className="bi bi-mortarboard-fill" aria-hidden="true" /> LMS Menu</span>
+              <span><i className="bi bi-mortarboard-fill" aria-hidden="true" /> {roleLower === "student" ? "My Menu" : "LMS Menu"}</span>
               <small>{allItems.length} tools</small>
             </div>
 
@@ -2086,7 +2086,6 @@ export default function Sidebar({ headerHeight = 56 }) {
               <div className="sidebar-lms-direct-group" key={group.heading}>
                 <div className="sidebar-lms-direct-group-title">
                   <span>{group.heading}</span>
-                  <span>{group.items.length}</span>
                 </div>
                 <div className="sidebar-lms-direct-items">
                   {group.items.map((item) => {

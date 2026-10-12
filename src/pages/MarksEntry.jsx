@@ -125,6 +125,9 @@ const MarksEntry = () => {
 
   const [students, setStudents] = useState([]);
   const [components, setComponents] = useState([]);
+  const [examLocked, setExamLocked] = useState(false);
+  const [canManageLocks, setCanManageLocks] = useState(false);
+  const [lockBusy, setLockBusy] = useState(false);
   const [selectedComponentIds, setSelectedComponentIds] = useState([]);
 
   const [marks, setMarks] = useState({});
@@ -146,6 +149,8 @@ const MarksEntry = () => {
   const resetMarksData = () => {
     setStudents([]);
     setComponents([]);
+    setExamLocked(false);
+    setCanManageLocks(false);
     setSelectedComponentIds([]);
     setMarks({});
     setAttendance({});
@@ -443,6 +448,8 @@ const MarksEntry = () => {
 
       setStudents(fetchedStudents);
       setComponents(fetchedComponents);
+      setExamLocked(res.data.exam_locked === true);
+      setCanManageLocks(res.data.can_manage_locks === true);
       setSelectedComponentIds(
         fetchedComponents.map((component) => String(component.component_id))
       );
@@ -500,6 +507,36 @@ const MarksEntry = () => {
       resetMarksData();
     } finally {
       setLoading(false);
+    }
+  };
+
+  const changeExaminationLock = async (component = null) => {
+    if (!canManageLocks || lockBusy || !examScheduleId) return;
+    const locked = component ? component.class_component_locked : examLocked;
+    const confirmation = await Swal.fire({
+      title: `${locked ? "Unlock" : "Lock"} ${component ? "class component" : "whole examination"}?`,
+      text: component
+        ? `${component.abbreviation || component.name}: this applies to the selected class across ALL sections and subjects in this examination. Unsaved changes will be discarded; save them first if needed.`
+        : "This applies to ALL classes, sections, subjects and components in this examination. While locked, nobody can change marks or exam configuration. An examination manager can explicitly unlock it. Unsaved changes will be discarded; save them first if needed.",
+      icon: "warning", showCancelButton: true,
+      confirmButtonText: locked ? "Unlock" : "Lock",
+    });
+    if (!confirmation.isConfirmed) return;
+    setLockBusy(true);
+    try {
+      if (component) {
+        await api.patch("/marks-entry/component-lock", {
+          exam_schedule_id: examScheduleId, component_id: component.component_id, is_locked: !locked,
+        });
+      } else {
+        await api.post("/exams/lock", { exam_id: filters.exam_id, lock: !locked });
+      }
+      await fetchMarksEntryData();
+    } catch (error) {
+      showApiError("Lock update failed", error, "Unable to change examination lock.");
+      await fetchMarksEntryData();
+    } finally {
+      setLockBusy(false);
     }
   };
 
@@ -665,6 +702,7 @@ const MarksEntry = () => {
       // MARKS_ENTRY_SAVE_RELOAD_FIX_V1
       await api.post("/marks-entry/save", {
         exam_schedule_id: examScheduleId,
+        section_id: filters.section_id,
         marksData,
       });
 
@@ -681,6 +719,7 @@ const MarksEntry = () => {
       );
     } catch (err) {
       showApiError("Error", err, "Failed to save entry");
+      if (err?.response?.status === 423) await fetchMarksEntryData();
     }
   };
 
@@ -767,6 +806,7 @@ const MarksEntry = () => {
       const fd = new FormData();
       fd.append("marks_document", file);
       fd.append("exam_schedule_id", examScheduleId);
+      fd.append("section_id", filters.section_id);
       fd.append("selected_component_ids", JSON.stringify(editable.map((component) => component.component_id)));
       const response = await api.post("/marks-entry/ai-analyze", fd);
       const result = response?.data?.data ?? response?.data ?? {};
@@ -851,6 +891,7 @@ const MarksEntry = () => {
     const formData = new FormData();
     formData.append("file", file);
     formData.append("exam_schedule_id", examScheduleId);
+    formData.append("section_id", filters.section_id);
     formData.append("session_id", filters.session_id);
 
     try {
@@ -869,6 +910,7 @@ const MarksEntry = () => {
       fetchMarksEntryData();
     } catch (err) {
       showApiError("Error", err, "Failed to import Excel");
+      if (err?.response?.status === 423) await fetchMarksEntryData();
     } finally {
       e.target.value = "";
     }
@@ -1106,11 +1148,42 @@ const MarksEntry = () => {
             </div>
           </div>
 
+          {examScheduleId && (
+            <div className={`alert ${examLocked ? "alert-danger" : "alert-light border"}`}>
+              <div className="d-flex flex-wrap justify-content-between align-items-center gap-2">
+                <strong>{examLocked ? "Whole examination locked — all entries are read-only." : "Examination is open for entry."}</strong>
+                {canManageLocks && (
+                  <button className={`btn btn-sm ${examLocked ? "btn-outline-danger" : "btn-danger"}`}
+                    disabled={loading || lockBusy || aiImportBusy} onClick={() => changeExaminationLock()}>
+                    {examLocked ? "Unlock whole examination" : "Lock whole examination"}
+                  </button>
+                )}
+              </div>
+              {canManageLocks && components.length > 0 && (
+                <div className="mt-3">
+                  <div className="small mb-2">Class component locks apply across all sections and subjects of this class in this examination.</div>
+                  {components.some(component => component.scheme_locked) && (
+                    <div className="small text-muted mb-2">Scheme locks also apply. Unlocking a class component does not remove its scheme lock.</div>
+                  )}
+                  <div className="d-flex flex-wrap gap-2">
+                    {components.map(component => (
+                      <button key={component.component_id} className="btn btn-sm btn-outline-secondary"
+                        disabled={examLocked || loading || lockBusy || aiImportBusy}
+                        onClick={() => changeExaminationLock(component)}>
+                        {component.class_component_locked ? "Unlock" : "Lock"} {component.abbreviation || component.name} for class
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="d-flex flex-wrap gap-2 mb-3">
             <button
               className="btn btn-outline-secondary"
               onClick={manageOptionalSubjectStudents}
-              disabled={!filters.subject_id || loading}
+              disabled={!filters.subject_id || loading || examLocked || lockBusy || hasLockedComponents}
             >
               <i className="bi bi-people me-1" aria-hidden="true" />
               Manage optional students
@@ -1122,6 +1195,7 @@ const MarksEntry = () => {
                 !examScheduleId ||
                 loading ||
                 allComponentsLocked ||
+                lockBusy ||
                 !selectedComponents.some((component) => !component.is_locked)
               }
             >
@@ -1153,7 +1227,7 @@ const MarksEntry = () => {
                 accept="application/pdf,image/jpeg,image/png,image/webp"
                 hidden
                 onChange={(e) => handleAiMarksImport(e.target.files?.[0])}
-                disabled={!examScheduleId || loading || aiImportBusy || !selectedComponents.some((component) => !component.is_locked)}
+                disabled={!examScheduleId || loading || lockBusy || aiImportBusy || !selectedComponents.some((component) => !component.is_locked)}
               />
             </label>
 
@@ -1164,7 +1238,7 @@ const MarksEntry = () => {
                 accept=".xlsx,.xls"
                 hidden
                 onChange={handleImportExcel}
-                disabled={!examScheduleId || loading || hasLockedComponents}
+                disabled={!examScheduleId || loading || lockBusy || hasLockedComponents}
               />
             </label>
           </div>
@@ -1318,7 +1392,7 @@ const MarksEntry = () => {
                               <select
                                 className="form-select"
                                 value={att}
-                                disabled={component.is_locked}
+                                disabled={lockBusy || component.is_locked}
                                 onChange={(e) =>
                                   handleGradeAttendanceChange(
                                     student.id,
@@ -1351,7 +1425,7 @@ const MarksEntry = () => {
                                     option?.value || ""
                                   )
                                 }
-                                isDisabled={component.is_locked || att !== "P"}
+                                isDisabled={lockBusy || component.is_locked || att !== "P"}
                                 isClearable
                                 isSearchable={false}
                                 placeholder="Select Grade"
@@ -1420,7 +1494,7 @@ const MarksEntry = () => {
                               <select
                                 className="form-select"
                                 value={att}
-                                disabled={component.is_locked}
+                                disabled={lockBusy || component.is_locked}
                                 onChange={(e) =>
                                   handleAttendanceChange(
                                     student.id,
@@ -1450,7 +1524,7 @@ const MarksEntry = () => {
                                 min="0"
                                 step="0.5"
                                 max={getComponentMaximum(component) ?? undefined}
-                                disabled={component.is_locked || att !== "P"}
+                                disabled={lockBusy || component.is_locked || att !== "P"}
                                 onFocus={() => setActiveStudentId(student.id)}
                                 onChange={(e) =>
                                   handleMarksChange(

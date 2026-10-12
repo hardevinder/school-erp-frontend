@@ -53,6 +53,11 @@ export default function StudentDashboard() {
   const [loading, setLoading] = useState(true);
   const { isCollege, terms } = useInstitution();
   const [dashboardRefresh, setDashboardRefresh] = useState(0);
+  const [lmsFeed, setLmsFeed] = useState([]);
+  const [lmsRead, setLmsRead] = useState(new Set());
+  const [lmsFeedLoading, setLmsFeedLoading] = useState(true);
+  const [lmsFeedError, setLmsFeedError] = useState("");
+
   const [summaryErrors, setSummaryErrors] = useState({});
   const [err, setErr] = useState(null);
 
@@ -144,6 +149,57 @@ export default function StudentDashboard() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [admission]);
+
+  // Student-only, tenant-scoped APIs already filter the content to the logged-in learner.
+  useEffect(() => {
+    if (!canView || !userRoles.includes("student") || !token()) { setLmsFeedLoading(false); return; }
+    const ac = new AbortController();
+    const headers = { Authorization: `Bearer ${token()}` };
+    setLmsFeedLoading(true);
+    setLmsFeedError("");
+    Promise.allSettled([
+      fetch(`${API_URL}/learning-resources/my`, { headers, signal: ac.signal }).then(async (r) => { if (!r.ok) throw new Error("Study material unavailable"); return r.json(); }),
+      fetch(`${API_URL}/api/assessments`, { headers, signal: ac.signal }).then(async (r) => { if (!r.ok) throw new Error("Assessments unavailable"); return r.json(); }),
+      fetch(`${API_URL}/learning-resources/my/views`, { headers, signal: ac.signal }).then(async (r) => { if (!r.ok) throw new Error("Read tracking unavailable"); return r.json(); }),
+    ]).then(([materials, assessments, views]) => {
+      if (ac.signal.aborted) return;
+      const rows = [];
+      if (materials.status === "fulfilled") {
+        (materials.value?.resources || []).forEach((m) => rows.push({
+          key: `material:${m.id}`, id: m.id, kind: "material", category: "Study Material",
+          title: m.title, subject: m.subject?.name || "", date: m.published_at || m.createdAt,
+          description: m.chapter_unit || m.description || "", to: "/learning-resources",
+        }));
+      }
+      if (assessments.status === "fulfilled") {
+        (assessments.value?.data || []).filter((a) => ["published", "closed", "evaluated", "result_published"].includes(a.status)).forEach((a) => {
+          const kind = String(a.assessment_type || "test").toLowerCase();
+          rows.push({ key: `assessment:${a.id}`, id: a.id, kind: "assessment",
+            category: ({ test: "Test", quiz: "Quiz", worksheet: "Worksheet", assignment: "Assignment", practice: "Practice" })[kind] || "Assessment",
+            title: a.title, subject: a.subject?.name || "", date: a.published_at || a.created_at || a.createdAt,
+            deadline: a.ends_at, description: a.description || "", to: `/assessments`,
+          });
+        });
+      }
+      rows.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+      setLmsFeed(rows.slice(0, 18));
+      setLmsRead(new Set(views.status === "fulfilled" ? (views.value?.read || []) : []));
+      if (materials.status === "rejected" && assessments.status === "rejected") setLmsFeedError("Could not load learning updates right now.");
+      else if (views.status === "rejected") setLmsFeedError("Read-status service unavailable; items may continue showing NEW.");
+      else setLmsFeedError("");
+      setLmsFeedLoading(false);
+    }).catch(() => { if (!ac.signal.aborted) { setLmsFeedError("Could not load learning updates."); setLmsFeedLoading(false); } });
+    return () => ac.abort();
+  }, [canView, userRoles, dashboardRefresh, admission]);
+
+  const markLmsViewed = (item) => {
+    if (lmsRead.has(item.key)) return;
+    fetch(`${API_URL}/learning-resources/my/views/${item.kind}/${encodeURIComponent(item.id)}`, {
+      method: "POST", headers: { Authorization: `Bearer ${token()}` },
+    }).then((r) => {
+      if (r.ok) setLmsRead((prev) => new Set([...prev, item.key]));
+    }).catch(() => {});
+  };
 
   useEffect(() => {
     const stored = localStorage.getItem("notifications");
@@ -570,6 +626,84 @@ export default function StudentDashboard() {
           />
         </div>
       </div>
+
+      {userRoles.includes("student") && (
+        <section className="mb-4" aria-label="Latest learning updates">
+          <div className="rounded-4 p-3 p-md-4 shadow-sm" style={{ background: "linear-gradient(135deg,#fff,#f1f5ff)", border: "1px solid #dce5f7" }}>
+            <div className="d-flex justify-content-between flex-wrap align-items-center gap-2 mb-3">
+              <div>
+                <div className="small fw-bold text-primary text-uppercase" style={{ letterSpacing: "0.12em" }}>Your learning feed</div>
+                <h3 className="h4 fw-bold mb-1">Latest for You <span aria-hidden="true">✨</span></h3>
+                <div className="text-muted small">New study material, tests, assessments and worksheets in one place.</div>
+              </div>
+              <div className="d-flex align-items-center gap-2">
+                <span className="badge rounded-pill text-bg-primary">{lmsFeed.filter((x) => !lmsRead.has(x.key)).length} unread</span>
+                <button type="button" className="btn btn-sm btn-outline-primary rounded-pill" onClick={() => setDashboardRefresh((n) => n + 1)}>Refresh</button>
+              </div>
+            </div>
+            {lmsFeedError && <div className="alert alert-warning py-2 small" role="status">{lmsFeedError}</div>}
+            {lmsFeedLoading ? <div className="py-4 text-center text-muted">Loading your learning updates…</div> :
+              lmsFeed.length === 0 ? <div className="rounded-3 bg-white p-4 text-muted text-center">No published learning updates for your program yet.</div> :
+              <div className="row g-2">
+                {lmsFeed.slice(0, 8).map((item) => {
+                  const unread = !lmsRead.has(item.key);
+                  return <div key={item.key} className="col-12 col-xl-6">
+                    <Link to={item.to} onClick={() => markLmsViewed(item)} className="d-flex gap-3 align-items-start text-decoration-none rounded-3 p-3 h-100"
+                      style={{ background: unread ? "#fff9e9" : "#fff", border: unread ? "1px solid #efc96a" : "1px solid #e5e7eb", color: "#253046" }}>
+                      <div className="rounded-3 d-flex align-items-center justify-content-center flex-shrink-0" style={{ width: 43, height: 43, background: unread ? "#ffe7a3" : "#eef2ff", color: "#7e3240" }}>
+                        <i className={`bi ${item.kind === "material" ? "bi-book" : "bi-journal-check"} fs-5`} />
+                      </div>
+                      <div className="flex-grow-1" style={{ minWidth: 0 }}>
+                        <div className="d-flex align-items-center flex-wrap gap-2 mb-1">
+                          <span className="small fw-semibold text-primary">{item.category}</span>
+                          {unread && <span className="badge rounded-pill text-bg-danger">NEW</span>}
+                        </div>
+                        <div className="fw-bold text-truncate">{item.title}</div>
+                        <div className="small text-muted">{[item.subject, item.date && new Date(item.date).toLocaleDateString(), item.deadline && `Due ${new Date(item.deadline).toLocaleDateString()}`].filter(Boolean).join(" · ")}</div>
+                      </div>
+                      <i className="bi bi-arrow-up-right text-muted" aria-hidden="true" />
+                    </Link>
+                  </div>;
+                })}
+              </div>}
+            {lmsFeed.length > 8 && <div className="small text-muted mt-3">Showing 8 of {lmsFeed.length} latest items. Open a learning module to browse more.</div>}
+          </div>
+        </section>
+      )}
+
+      {/* Student learning shortcuts: links use existing application routes; no fake unread counts. */}
+      <section className="mb-4" aria-label="My learning hub">
+        <div className="d-flex flex-wrap justify-content-between align-items-end gap-2 mb-3">
+          <div>
+            <div className="text-uppercase fw-semibold small text-primary mb-1" style={{letterSpacing: "0.1em"}}>My learning hub</div>
+            <h3 className="h4 fw-bold mb-1">Pick up where you left off</h3>
+            <p className="text-muted mb-0">Study resources, worksheets, tests and assignments together in one place.</p>
+          </div>
+          <Link to="/learning-resources" className="btn btn-outline-primary rounded-pill">Browse study material <i className="bi bi-arrow-right ms-1" /></Link>
+        </div>
+        <div className="row g-3">
+          {[
+            { label: "Study Material", desc: "Notes, PDFs, videos and resources", icon: "bi-journal-richtext", to: "/learning-resources", color: "#3454d1", tint: "#eef2ff" },
+            { label: "Assessments", desc: "Your learning activities and results", icon: "bi-clipboard2-check", to: "/assessments", color: "#087e8b", tint: "#e9f9fa" },
+            { label: "Tests", desc: "Open available tests and quizzes", icon: "bi-ui-checks-grid", to: "/assessments?assessment_type=test", color: "#8b4fdb", tint: "#f4edff" },
+            { label: "Worksheets", desc: "Practice and improve your skills", icon: "bi-file-earmark-text", to: "/assessments?assessment_type=worksheet", color: "#c05b14", tint: "#fff3e8" },
+            { label: "Assignments", desc: "Review tasks and submit your work", icon: "bi-journal-check", to: "/assessments?assessment_type=assignment", color: "#17845d", tint: "#e9f8f1" },
+          ].map((item) => (
+            <div className="col-12 col-sm-6 col-xl" key={item.label}>
+              <Link to={item.to} className="card h-100 text-decoration-none border-0 shadow-sm rounded-4" style={{ transition: "transform 160ms ease, box-shadow 160ms ease", color: "inherit" }}>
+                <div className="card-body p-3 p-lg-4">
+                  <div className="d-flex justify-content-between align-items-start mb-3">
+                    <span className="d-inline-flex align-items-center justify-content-center rounded-3" style={{width: 48, height: 48, backgroundColor: item.tint, color: item.color, fontSize: 23}}><i className={`bi ${item.icon}`} /></span>
+                    <i className="bi bi-arrow-up-right text-muted" />
+                  </div>
+                  <h4 className="h6 fw-bold mb-2">{item.label}</h4>
+                  <p className="small text-muted mb-0">{item.desc}</p>
+                </div>
+              </Link>
+            </div>
+          ))}
+        </div>
+      </section>
 
       {err && <div className="alert alert-warning rounded-4 shadow-sm">{String(err)}</div>}
 

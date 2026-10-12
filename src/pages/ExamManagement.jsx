@@ -94,8 +94,8 @@ const ExamManagement = () => {
     const confirm = await Swal.fire({
       title: exam.is_locked ? "Unlock Exam?" : "Lock Exam?",
       text: exam.is_locked
-        ? "You can make changes after unlocking."
-        : "This will prevent any changes to this exam.",
+        ? "Explicitly unlock this examination for all classes, sections and subjects? Any class-component locks will remain in place."
+        : "Lock all classes, sections, subjects and components. Nobody can edit until an examination manager explicitly unlocks this examination.",
       showCancelButton: true,
       confirmButtonText: exam.is_locked ? "Unlock" : "Lock",
     });

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import Swal from "sweetalert2";
 import { Modal } from "react-bootstrap";
+import ProgramSyllabusDocuments from "../components/syllabus/ProgramSyllabusDocuments";
 import api from "../api";
 import { useInstitution } from "../institution/InstitutionContext";
 import "./LearningResources.css";
@@ -266,7 +267,9 @@ export default function LearningResources() {
   const remove = async (resource) => {
     const result = await Swal.fire({
       title: "Delete study material?",
-      text: "Uploaded files and links in this batch will be removed.",
+      text: resource.status === "published"
+        ? "This published material and its uploaded files/links will be permanently removed from students’ access. This cannot be undone."
+        : "This draft and its uploaded files/links will be permanently deleted. This cannot be undone.",
       icon: "warning",
       showCancelButton: true,
       confirmButtonColor: "#dc3545",
@@ -303,6 +306,7 @@ export default function LearningResources() {
         {canManage && <button className="btn btn-primary btn-lg lr-create-btn" onClick={openCreate}><i className="bi bi-cloud-arrow-up me-2" />Share Study Material</button>}
       </div>
 
+      {isStudent && <ProgramSyllabusDocuments student />}
       <div className="card border-0 shadow-sm mb-4 lr-filter-card">
         <div className="card-body">
           <div className="input-group">
@@ -338,12 +342,17 @@ export default function LearningResources() {
                         {resource.chapter_unit ? ` · ${resource.chapter_unit}` : ""}
                       </div>
                     </div>
-                    {!isStudent && <div className="dropdown">
-                      <button className="btn btn-light btn-sm" data-bs-toggle="dropdown" aria-label="Actions"><i className="bi bi-three-dots-vertical" /></button>
-                      <ul className="dropdown-menu dropdown-menu-end">
-                        {resource.status !== "published" && <li><button className="dropdown-item" onClick={() => publish(resource)}><i className="bi bi-send-check me-2" />Publish</button></li>}
-                        <li><button className="dropdown-item text-danger" onClick={() => remove(resource)}><i className="bi bi-trash me-2" />Delete</button></li>
-                      </ul>
+                    {/* EDUBRIDGE_STUDY_MATERIAL_VISIBLE_DELETE_V1: Actions visible for draft and published material. */}
+                    {!isStudent && <div className="d-flex align-items-center gap-2 flex-shrink-0">
+                      {resource.status !== "published" && (
+                        <button type="button" className="btn btn-outline-primary btn-sm" onClick={() => publish(resource)}>
+                          <i className="bi bi-send-check me-1" />Publish
+                        </button>
+                      )}
+                      <button type="button" className="btn btn-outline-danger btn-sm" onClick={() => remove(resource)}
+                        aria-label={`Delete study material: ${resource.title}`} title="Permanently delete study material">
+                        <i className="bi bi-trash me-1" />Delete
+                      </button>
                     </div>}
                   </div>
 
