@@ -5,7 +5,7 @@ import api from "../api";
 import Swal from "sweetalert2";
 import "./Attendance.css";
 
-const statuses = ["present", "absent", "late", "leave", "halfday", "preparatory_off", "holiday"];
+const statuses = ["present", "absent", "late", "leave", "halfday", "preparatory_off", "late_admission", "holiday"];
 
 // --- URL helpers ---
 const getApiBase = () =>
@@ -151,7 +151,7 @@ const MarkAttendance = () => {
   };
 
   const summaryCounts = useMemo(() => {
-    const acc = { present: 0, absent: 0, late: 0, leave: 0, halfday: 0, preparatory_off: 0, holiday: 0 };
+    const acc = { present: 0, absent: 0, late: 0, leave: 0, halfday: 0, preparatory_off: 0, late_admission: 0, holiday: 0 };
     students.forEach((student) => {
       const status = attendance[student.id];
       if (status && Object.prototype.hasOwnProperty.call(acc, status)) {
@@ -193,6 +193,7 @@ const MarkAttendance = () => {
       case "halfday":
         return "table-primary";
       case "holiday":
+      case "late_admission":
       case "preparatory_off":
         return "table-secondary";
       default:
@@ -201,7 +202,7 @@ const MarkAttendance = () => {
   };
 
   const statusLabel = (status) =>
-    status === "preparatory_off" ? "PO" : status === "halfday" ? "Half Day" : status;
+    status === "late_admission" ? "Late Admission" : status === "preparatory_off" ? "PO" : status === "halfday" ? "Half Day" : status;
 
   const poTreatmentLabel =
     poTreatment === "present"
@@ -449,7 +450,7 @@ const MarkAttendance = () => {
                       status === "late" ? "bg-warning" :
                       status === "leave" ? "bg-info" :
                       status === "halfday" ? "bg-primary" :
-                      status === "preparatory_off" ? "bg-secondary" :
+                      ["preparatory_off", "late_admission"].includes(status) ? "bg-secondary" :
                       "bg-success"
                     }`}
                   >
@@ -461,6 +462,8 @@ const MarkAttendance = () => {
           </div>
         ))}
       </div>
+
+      <p className="text-muted small">LA = Late Admission. Mark days before the student joined as Late Admission to exclude them from report-card working days.</p>
 
       <div className="alert alert-light border d-flex align-items-center justify-content-between flex-wrap gap-2 py-2 mb-3">
         <div>
