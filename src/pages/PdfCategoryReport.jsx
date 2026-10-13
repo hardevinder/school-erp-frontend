@@ -1,4 +1,5 @@
 import React from 'react';
+import { receiptKey, sessionOf } from '../utils/feeReport';
 import { Document, Page, Text, View, StyleSheet } from '@react-pdf/renderer';
 
 // Define styles for the PDF layout
@@ -113,7 +114,7 @@ const chunkArray = (array, chunkSize) => {
 const normalizePaymentMode = (mode = '') => {
   const m = String(mode).trim().toLowerCase();
 
-  if (m === 'cash' || m.includes('cash')) return 'cash';
+  if (m === 'cash') return 'cash';
 
   // Treat ALL of these as ONLINE
   if (
@@ -137,10 +138,13 @@ const normalizePaymentMode = (mode = '') => {
 // Separate van fee for "Tuition Fee": tuition fee stays in feeCategories, van fee goes to vanFeeTotal.
 const pivotReportData = (data) => {
   const grouped = data.reduce((acc, curr) => {
-    const slipId = curr.Slip_ID;
+    const slipId = receiptKey(curr);
     if (!acc[slipId]) {
       acc[slipId] = {
         Slip_ID: curr.Slip_ID,
+        receiptKey: slipId,
+        session_id: curr.session_id,
+        Session: curr.Session,
         Transaction_ID: curr.Transaction_ID, // ✅ keep Txn ID
         createdAt: curr.createdAt,
         Student: curr.Student,
@@ -150,7 +154,7 @@ const pivotReportData = (data) => {
         fineAmount: 0,
       };
     }
-    const category = curr.feeCategoryName;
+    const category = curr.feeCategoryName || "Unknown";
     if (!acc[slipId].feeCategories[category]) {
       acc[slipId].feeCategories[category] = { totalReceived: 0 };
     }
@@ -185,12 +189,13 @@ const CollectionTableHeader = ({ feeCategories }) => (
   <View style={styles.tableHeaderRow}>
     <Text style={[styles.tableHeaderCell, { flex: 0.8 }]}>Sr. No</Text>
     <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Slip ID</Text>
+    <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Session</Text>
     <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Txn ID</Text>
     <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Admission No.</Text>
     <Text style={[styles.tableHeaderCell, { flex: 2 }]}>Student Name</Text>
     <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Class</Text>
     <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Payment Mode</Text>
-    <Text style={[styles.tableHeaderCell, { flex: 2 }]}>Created At</Text>
+    <Text style={[styles.tableHeaderCell, { flex: 2 }]}>Transaction date</Text>
     {feeCategories.map((cat, idx) => (
       <Text key={idx} style={[styles.tableHeaderCell, { flex: 1 }]}>
         {cat}
@@ -207,24 +212,24 @@ const SummaryTableHeader = () => (
   <View style={styles.tableHeaderRow}>
     <Text style={[styles.tableHeaderCell, { flex: 2 }]}>Category</Text>
     <Text style={[styles.tableHeaderCell, { flex: 2 }]}>Fee Received (Cash)</Text>
-    <Text style={[styles.tableHeaderCell, { flex: 2 }]}>Fee Received (Online)</Text>
+    <Text style={[styles.tableHeaderCell, { flex: 2 }]}>Fee Received (Non-cash)</Text>
     <Text style={[styles.tableHeaderCell, { flex: 2 }]}>Fee Received (Overall)</Text>
     <Text style={[styles.tableHeaderCell, { flex: 2 }]}>Concession (Cash)</Text>
-    <Text style={[styles.tableHeaderCell, { flex: 2 }]}>Concession (Online)</Text>
+    <Text style={[styles.tableHeaderCell, { flex: 2 }]}>Concession (Non-cash)</Text>
     <Text style={[styles.tableHeaderCell, { flex: 2 }]}>Concession (Overall)</Text>
     <Text style={[styles.tableHeaderCell, { flex: 2 }]}>Van Fee (Cash)</Text>
-    <Text style={[styles.tableHeaderCell, { flex: 2 }]}>Van Fee (Online)</Text>
+    <Text style={[styles.tableHeaderCell, { flex: 2 }]}>Van Fee (Non-cash)</Text>
     <Text style={[styles.tableHeaderCell, { flex: 2 }]}>Van Fee (Overall)</Text>
     <Text style={[styles.tableHeaderCell, { flex: 2 }]}>Fee Concession (Cash)</Text>
-    <Text style={[styles.tableHeaderCell, { flex: 2 }]}>Fee Concession (Online)</Text>
+    <Text style={[styles.tableHeaderCell, { flex: 2 }]}>Fee Concession (Non-cash)</Text>
     <Text style={[styles.tableHeaderCell, { flex: 2 }]}>Fee Concession (Overall)</Text>
     <Text style={[styles.tableHeaderCell, { flex: 2 }]}>Received (Cash)</Text>
-    <Text style={[styles.tableHeaderCell, { flex: 2 }]}>Received (Online)</Text>
+    <Text style={[styles.tableHeaderCell, { flex: 2 }]}>Received (Non-cash)</Text>
     <Text style={[styles.tableHeaderCell, { flex: 2 }]}>Received (Overall)</Text>
   </View>
 );
 
-const PdfCategoryReport = ({ school, startDate, endDate, aggregatedData = [] }) => {
+const PdfCategoryReport = ({ school, startDate, endDate, sessionLabel = "All sessions", aggregatedData = [] }) => {
   // Pivot the data by Slip_ID.
   const pivotedData = pivotReportData(aggregatedData);
   // Get unique fee categories.
@@ -246,7 +251,7 @@ const PdfCategoryReport = ({ school, startDate, endDate, aggregatedData = [] }) 
 
   // For the summary report, group aggregatedData by category.
   const categoryGroups = aggregatedData.reduce((acc, curr) => {
-    const cat = curr.feeCategoryName;
+    const cat = curr.feeCategoryName || "Unknown";
     if (!acc[cat]) {
       acc[cat] = {
         cash: {
@@ -320,11 +325,11 @@ const PdfCategoryReport = ({ school, startDate, endDate, aggregatedData = [] }) 
       {paginatedCollection.map((chunk, chunkIndex) => (
         <Page
           key={`collection-page-${chunkIndex}`}
-          size="A4"
+          size={feeCategories.length > 5 ? "A3" : "A4"}
           orientation="landscape"
           style={styles.page}
         >
-          {chunkIndex === 0 && (
+          {(
             <>
               <View style={styles.headerContainer}>
                 <Text style={styles.schoolName}>
@@ -333,7 +338,7 @@ const PdfCategoryReport = ({ school, startDate, endDate, aggregatedData = [] }) 
                 <Text style={styles.schoolDesc}>{school?.description || school?.address || ''}</Text>
               </View>
               <Text style={styles.dateRange}>
-                Date Range: {formatDisplayDate(startDate)} to {formatDisplayDate(endDate)}
+                Session: {sessionLabel} | {formatDisplayDate(startDate)} to {formatDisplayDate(endDate)}
               </Text>
               <Text style={styles.sectionTitle}>Collection Report</Text>
             </>
@@ -352,11 +357,12 @@ const PdfCategoryReport = ({ school, startDate, endDate, aggregatedData = [] }) 
                 categoryTotal + (row.vanFeeTotal || 0) + (row.fineAmount || 0);
 
               return (
-                <View style={styles.tableRow} key={row.Slip_ID}>
+                <View style={styles.tableRow} key={row.receiptKey} wrap={false}>
                   <Text style={[styles.tableCell, { flex: 0.8 }]}>
                     {chunkIndex * recordsPerPage + idx + 1}
                   </Text>
                   <Text style={[styles.tableCell, { flex: 1 }]}>{row.Slip_ID}</Text>
+                  <Text style={[styles.tableCell, { flex: 1 }]}>{sessionOf(row)}</Text>
                   <Text style={[styles.tableCell, { flex: 1 }]}>{row.Transaction_ID || '-'}</Text>
                   <Text style={[styles.tableCell, { flex: 1 }]}>{row.Student?.admission_number}</Text>
                   <Text style={[styles.tableCell, { flex: 2 }]}>{row.Student?.name}</Text>
@@ -389,7 +395,7 @@ const PdfCategoryReport = ({ school, startDate, endDate, aggregatedData = [] }) 
             {/* Only on the last collection page, render overall totals */}
             {chunkIndex === paginatedCollection.length - 1 && (
               <View style={styles.tableRow}>
-                <Text style={[styles.tableCell, { flex: 10, fontWeight: 'bold' }]}>Overall Totals</Text>
+                <Text style={[styles.tableCell, { flex: 11.8, fontWeight: 'bold' }]}>Overall Totals</Text>
                 {feeCategories.map((cat, i) => (
                   <Text key={i} style={[styles.tableCell, { flex: 1, fontWeight: 'bold' }]}>
                     {formatValue(overallTotals[cat])}
@@ -418,8 +424,9 @@ const PdfCategoryReport = ({ school, startDate, endDate, aggregatedData = [] }) 
 
       {/* Category Summary Report Pages */}
       {paginatedSummary.map((chunk, chunkIndex) => (
-        <Page key={`summary-page-${chunkIndex}`} size="A4" orientation="landscape" style={styles.page}>
-          {chunkIndex === 0 && <Text style={styles.sectionTitle}>Category Summary Report</Text>}
+        <Page key={`summary-page-${chunkIndex}`} size={feeCategories.length > 5 ? "A3" : "A4"} orientation="landscape" style={styles.page}>
+          <Text style={styles.sectionTitle}>Category Summary · {sessionLabel}</Text>
+          <Text style={styles.dateRange}>{formatDisplayDate(startDate)} to {formatDisplayDate(endDate)}</Text>
 
           <View style={styles.table}>
             <SummaryTableHeader />

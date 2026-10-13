@@ -12,10 +12,10 @@
   position: sticky;
   top: 0; /* change to your fixed header height if needed */
   z-index: 11;
-  background: #fff;
+  background: var(--edb-surface);
   padding: .25rem 0;
   margin-bottom: .5rem;
-  box-shadow: 0 1px 0 rgba(0,0,0,.06);
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--edb-primary-dark) 6%, transparent);
 }
 
 /* Scrollable tab row */
@@ -29,7 +29,7 @@
 }
 .cta-tabrow::-webkit-scrollbar { height: 6px; }
 .cta-tabrow::-webkit-scrollbar-thumb {
-  background: rgba(0,0,0,.18);
+  background: color-mix(in srgb, var(--edb-primary-dark) 18%, transparent);
   border-radius: 4px;
 }
 
@@ -37,26 +37,26 @@
 .cta-tab {
   flex: 0 0 auto;
   padding: .6rem .95rem;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--edb-border);
   border-bottom-width: 2px;
   border-radius: .5rem;
-  background: #fff;
-  color: #374151;
+  background: var(--edb-surface);
+  color: var(--edb-text);
   font-weight: 500;
   line-height: 1;
   cursor: pointer;
   transition: background .15s ease, border-color .15s ease, color .15s ease;
   min-width: max-content; /* keep label intact; enables horizontal scroll */
 }
-.cta-tab:hover { background: #f9fafb; }
+.cta-tab:hover { background: var(--edb-surface); }
 .cta-tab:focus-visible {
-  outline: 3px solid rgba(59,130,246,.35);
+  outline: 3px solid color-mix(in srgb, var(--edb-primary) 35%, transparent);
   outline-offset: 2px;
 }
 .cta-tab.is-active {
-  border-color: #60a5fa;
-  color: #111827;
-  background: #eff6ff;
+  border-color: var(--edb-primary);
+  color: var(--edb-text);
+  background: var(--edb-surface);
 }
 
 /* Mobile select */
@@ -85,11 +85,11 @@
 
   .tt-responsive tbody tr {
     margin-bottom: 1rem;
-    border: 1px solid #e5e7eb;
+    border: 1px solid var(--edb-border);
     border-radius: .5rem;
     padding: .75rem .85rem;
-    background: #fff;
-    box-shadow: 0 2px 6px rgba(0,0,0,.05);
+    background: var(--edb-surface);
+    box-shadow: 0 2px 6px color-mix(in srgb, var(--edb-primary-dark) 5%, transparent);
   }
 
   /* Each cell shows "Label  Value" on one line */
@@ -100,7 +100,7 @@
     gap: .75rem;
     padding: .45rem 0;
     border: none !important;
-    border-bottom: 1px solid #f0f0f0 !important;
+    border-bottom: 1px solid var(--edb-border) !important;
     white-space: normal !important;
   }
   .tt-responsive td:last-child {
@@ -111,7 +111,7 @@
   .tt-responsive td::before {
     content: attr(data-label);
     font-weight: 600;
-    color: #555;
+    color: var(--edb-text);
     flex: 0 0 45%;
     text-align: left;
   }

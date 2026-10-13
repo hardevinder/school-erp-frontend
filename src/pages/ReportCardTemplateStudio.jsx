@@ -166,11 +166,28 @@ const ReportCardTemplateStudio = () => {
       setSelectedFieldId("");
       return;
     }
-    const layout = Array.isArray(template.layout_json)
-      ? template.layout_json
-      : Array.isArray(template.layout_json?.elements)
-      ? template.layout_json.elements
+
+    // REPORT_CARD_PRINT_SETTINGS_V1
+    // Inline HTML templates (such as SMCIS) must keep their original layout object.
+    // Template Studio edits visual overlay fields as an array, so preserve the raw
+    // inline layout separately and send it back unchanged when saving settings.
+    const rawLayout = template.layout_json;
+    const isInlineHtmlLayout = Boolean(
+      rawLayout &&
+        !Array.isArray(rawLayout) &&
+        rawLayout.renderer === "inline-html-v1" &&
+        typeof rawLayout.html === "string"
+    );
+    const layout = Array.isArray(rawLayout)
+      ? rawLayout
+      : Array.isArray(rawLayout?.elements)
+      ? rawLayout.elements
       : [];
+    const layoutContainer =
+      !isInlineHtmlLayout && rawLayout && !Array.isArray(rawLayout) && typeof rawLayout === "object"
+        ? rawLayout
+        : null;
+
     setDraft({
       ...template,
       class_ids: Array.isArray(template.class_ids)
@@ -178,6 +195,9 @@ const ReportCardTemplateStudio = () => {
         : Array.isArray(template.classes)
         ? template.classes.map((item) => Number(item.id))
         : [],
+      __preserve_inline_layout: isInlineHtmlLayout,
+      __raw_layout_json: isInlineHtmlLayout ? rawLayout : null,
+      __layout_container: layoutContainer,
       layout_json: layout.map((item, index) => ({
         ...newElement(),
         ...item,
@@ -312,6 +332,13 @@ const ReportCardTemplateStudio = () => {
     if (!draft?.id) return;
     try {
       setSaving(true);
+
+      const persistedLayout = draft.__preserve_inline_layout
+        ? draft.__raw_layout_json
+        : draft.__layout_container
+        ? { ...draft.__layout_container, elements: draft.layout_json || [] }
+        : draft.layout_json || [];
+
       const res = await api.put(`/report-card/templates/${draft.id}`, {
         name: draft.name,
         category: draft.category,
@@ -321,7 +348,7 @@ const ReportCardTemplateStudio = () => {
         is_default: Boolean(draft.is_default),
         is_active: Boolean(draft.is_active),
         notes: draft.notes || null,
-        layout_json: draft.layout_json || [],
+        layout_json: persistedLayout,
       });
       const item = res.data?.template;
       if (item) {
@@ -770,6 +797,7 @@ const ReportCardTemplateStudio = () => {
                     </div>
                   </div>
                 </div>
+
               </div>
 
               <div className="rc-editor-grid">

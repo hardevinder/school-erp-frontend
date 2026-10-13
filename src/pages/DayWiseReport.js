@@ -14,8 +14,7 @@ import {
   Spinner,
   Modal,
 } from "react-bootstrap";
-import DatePicker from "react-datepicker";
-import "react-datepicker/dist/react-datepicker.css";
+import FeeReportFilters, { useFeeReportFilters, sessionOf, downloadReport } from "../components/reports/FeeReportFilters";
 import api from "../api";
 import Swal from "sweetalert2";
 
@@ -28,13 +27,6 @@ import ReceiptModal from "./Transactions/ReceiptModal";
    Helpers
 ====================================================== */
 
-// Backend/API: yyyy-MM-dd
-const formatDate = (date) => {
-  const d = new Date(date);
-  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
-  return d.toISOString().slice(0, 10);
-};
-
 // UI: dd/MM/yyyy hh:mm AM/PM
 const formatToDisplayDateTime = (date) => {
   if (!date) return "—";
@@ -42,18 +34,10 @@ const formatToDisplayDateTime = (date) => {
   const d = new Date(date);
   if (Number.isNaN(d.getTime())) return "—";
 
-  const day = String(d.getDate()).padStart(2, "0");
-  const month = String(d.getMonth() + 1).padStart(2, "0");
-  const year = d.getFullYear();
-
-  let hours = d.getHours();
-  const minutes = String(d.getMinutes()).padStart(2, "0");
-  const ampm = hours >= 12 ? "PM" : "AM";
-
-  hours = hours % 12;
-  hours = hours || 12;
-
-  return `${day}/${month}/${year} ${String(hours).padStart(2, "0")}:${minutes} ${ampm}`;
+  return d.toLocaleString("en-GB", {
+    timeZone: "Asia/Kolkata", day: "2-digit", month: "2-digit", year: "numeric",
+    hour: "2-digit", minute: "2-digit", hour12: true,
+  }) + " IST";
 };
 
 const toDateTimeLocalInput = (value) => {
@@ -312,7 +296,7 @@ const groupByFeeHeading = (data) => {
 
 // Calculate fee heading summary with payment mode breakdown
 const calculateFeeHeadingSummary = (data) => {
-  const groups = groupByFeeHeading(data);
+  const groups = groupByFeeHeading(data.filter((item) => !isCancelled(item)));
 
   return Object.keys(groups).map((feeHeading) => {
     const items = groups[feeHeading];
@@ -342,7 +326,7 @@ const calculateFeeHeadingSummary = (data) => {
 
     const onlineTotals = items.reduce(
       (acc, item) => {
-        if (isOnline(item.PaymentMode)) {
+        if (!isCash(item.PaymentMode)) {
           acc.totalFeeReceived += Number(item.totalFeeReceived) || 0;
           acc.totalConcession += Number(item.totalConcession) || 0;
           acc.totalVanFee += Number(item.totalVanFee) || 0;
@@ -382,8 +366,9 @@ const calculateFeeHeadingSummary = (data) => {
 ====================================================== */
 
 const DayWiseReport = () => {
-  const [startDate, setStartDate] = useState(null);
-  const [endDate, setEndDate] = useState(null);
+  const filters = useFeeReportFilters();
+  const { startDate, endDate } = filters;
+  const [pdfLoading, setPdfLoading] = useState(false);
 
   const [reportData, setReportData] = useState([]);
   const [filteredData, setFilteredData] = useState([]);
@@ -559,7 +544,7 @@ const DayWiseReport = () => {
         status.includes(q) ||
         reference.includes(q) ||
         bank.includes(q) ||
-        cheque.includes(q)
+        cheque.includes(q) || sessionOf(item).toLowerCase().includes(q)
       );
     });
 
@@ -568,21 +553,21 @@ const DayWiseReport = () => {
   }, [searchQuery, reportData]);
 
   const handleGenerateReport = async () => {
-    if (!startDate || !endDate) {
-      Swal.fire("Missing dates", "Please select both start and end dates.", "warning");
+    if (!filters.valid) {
+      Swal.fire("Check dates", "Choose a valid start and end date.", "warning");
       return;
     }
 
     setLoading(true);
     setError("");
+    const requestedFilters = filters.snapshot();
 
     try {
-      const start = formatDate(startDate);
-      const end = formatDate(endDate);
-      const response = await api.get(`/reports/day-wise?startDate=${start}&endDate=${end}&includeCancelled=true`);
+      const response = await api.get("/reports/day-wise", { params: { ...filters.params, includeCancelled: true } });
 
       const rows = response.data || [];
       setReportData(rows);
+      filters.setApplied(requestedFilters);
       setCurrentPage(1);
     } catch (err) {
       console.error(err);
@@ -602,20 +587,17 @@ const DayWiseReport = () => {
   };
 
   const handleDownloadExcel = async () => {
-    if (!startDate || !endDate) {
-      Swal.fire("Missing dates", "Please select both start and end dates.", "warning");
-      return;
-    }
+    if (filters.dirty || loading || !filteredData.length) return;
 
     setDownloadingExcel(true);
 
     try {
-      const start = formatDate(startDate);
-      const end = formatDate(endDate);
+      const { startDate: start, endDate: end } = filters.applied;
 
       const response = await api.get(
-        `/reports/day-wise?startDate=${start}&endDate=${end}&format=excel&includeCancelled=true`,
+        "/reports/day-wise",
         {
+          params: { startDate: start, endDate: end, session_id: filters.applied.session_id, search: searchQuery, format: "excel", includeCancelled: true },
           responseType: "blob",
         }
       );
@@ -627,7 +609,7 @@ const DayWiseReport = () => {
       const disposition = response.headers?.["content-disposition"];
       const fileName =
         getFileNameFromDisposition(disposition) ||
-        `DayWiseReport_${start}_to_${end}.xlsx`;
+        `DayWiseReport_${filters.fileTag}_${start}_to_${end}.xlsx`;
 
       const blob = new Blob([response.data], { type: contentType });
       const url = window.URL.createObjectURL(blob);
@@ -998,9 +980,21 @@ const DayWiseReport = () => {
     return items;
   }, [currentPage, totalPages]);
 
+  // Financial summaries must never include cancelled transactions.
+  // Keep cancelled rows visible in the management table so they can still be reviewed/deleted.
+  const activeFilteredData = useMemo(
+    () => filteredData.filter((item) => !isCancelled(item)),
+    [filteredData]
+  );
+
+  const cancelledFilteredCount = useMemo(
+    () => filteredData.filter((item) => isCancelled(item)).length,
+    [filteredData]
+  );
+
   // Totals
   const totalSummary = useMemo(() => {
-    return filteredData.reduce(
+    return activeFilteredData.reduce(
       (acc, item) => {
         const fee = Number(item.totalFeeReceived) || 0;
         const con = Number(item.totalConcession) || 0;
@@ -1025,10 +1019,10 @@ const DayWiseReport = () => {
         totalReceived: 0,
       }
     );
-  }, [filteredData]);
+  }, [activeFilteredData]);
 
   const paymentModeSummary = useMemo(() => {
-    return filteredData.reduce((acc, item) => {
+    return activeFilteredData.reduce((acc, item) => {
       const key = isOnline(item.PaymentMode)
         ? "Online"
         : isCash(item.PaymentMode)
@@ -1063,11 +1057,11 @@ const DayWiseReport = () => {
 
       return acc;
     }, {});
-  }, [filteredData]);
+  }, [activeFilteredData]);
 
   const feeHeadingSummary = useMemo(() => {
-    return filteredData.length ? calculateFeeHeadingSummary(filteredData) : [];
-  }, [filteredData]);
+    return activeFilteredData.length ? calculateFeeHeadingSummary(activeFilteredData) : [];
+  }, [activeFilteredData]);
 
   const totalFeeHeadingSummary = useMemo(() => {
     return feeHeadingSummary.reduce(
@@ -1109,25 +1103,21 @@ const DayWiseReport = () => {
   };
 
   const openPdfInNewTab = async () => {
-    if (!school) {
-      Swal.fire("School missing", "School details not available.", "warning");
-      return;
-    }
-    if (!startDate || !endDate) {
-      Swal.fire("Missing dates", "Please select both start and end dates.", "warning");
-      return;
-    }
-
+    if (filters.dirty || loading || !filteredData.length || pdfLoading) return;
+    setPdfLoading(true);
+    try {
     const pdfRows = filteredData.map((item) => ({
       ...item,
-      createdAt: item.DateOfTransaction || item.createdAt || null,
+      createdAt: item.createdAt || null,
     }));
 
     const doc = (
       <PdfReports
         school={school}
-        startDate={formatDate(startDate)}
-        endDate={formatDate(endDate)}
+        startDate={filters.applied.startDate}
+        endDate={filters.applied.endDate}
+        sessionLabel={filters.applied.sessionLabel}
+        searchLabel={searchQuery}
         aggregatedData={pdfRows}
         feeCategories={[]}
         categorySummary={calculateFeeHeadingSummary(filteredData)}
@@ -1144,20 +1134,21 @@ const DayWiseReport = () => {
 
     const asPdf = pdf(doc);
     const blob = await asPdf.toBlob();
-    const url = URL.createObjectURL(blob);
-    window.open(url, "_blank");
-    setTimeout(() => URL.revokeObjectURL(url), 60 * 1000);
+    downloadReport(blob, `DayWiseReport_${filters.fileTag}_${filters.applied.startDate}_to_${filters.applied.endDate}.pdf`);
+    } catch (error) {
+      setError("Could not generate the PDF. Please try again.");
+    } finally { setPdfLoading(false); }
   };
 
   const hasData = reportData.length > 0;
 
   return (
-    <Container className="mt-4">
-      <Row className="align-items-center mb-3">
+    <Container fluid className="fee-report-page">
+      <Row className="align-items-center mb-3 fee-report-header">
         <Col>
-          <h2 className="mb-0">Day Wise Report</h2>
+          <span className="fee-report-eyebrow">Fee collection · Reports</span><h2 className="mb-0">Day-wise collection</h2>
           <div className="text-muted" style={{ fontSize: 13 }}>
-            Select date range → generate report → search, view receipts, print PDFs, download Excel
+            Review payments by session and date, open receipts, and download the same report in Excel or PDF.
           </div>
         </Col>
         <Col className="d-flex justify-content-end gap-2">
@@ -1165,7 +1156,7 @@ const DayWiseReport = () => {
             <Button
               variant="outline-success"
               onClick={handleDownloadExcel}
-              disabled={downloadingExcel}
+              disabled={downloadingExcel || pdfLoading || loading || filters.dirty || !filteredData.length}
             >
               {downloadingExcel ? "Downloading Excel..." : "Download Excel"}
             </Button>
@@ -1175,100 +1166,25 @@ const DayWiseReport = () => {
             </Button>
           )}
 
-          {hasData && school ? (
-            <Button variant="outline-secondary" onClick={openPdfInNewTab}>
-              Print Report PDF
+          {hasData ? (
+            <Button variant="outline-secondary" onClick={openPdfInNewTab} disabled={pdfLoading || loading || filters.dirty || !filteredData.length}>
+              {pdfLoading ? "Preparing PDF…" : "Download PDF"}
             </Button>
           ) : (
             <Button variant="outline-secondary" disabled>
-              Print Report PDF
+              Download PDF
             </Button>
           )}
         </Col>
       </Row>
 
-      <Card className="shadow-sm border-0 mb-3">
-        <Card.Body>
-          <Row className="g-3">
-            <Col md={3}>
-              <Form.Group controlId="startDate">
-                <Form.Label className="fw-semibold">Start Date</Form.Label>
-                <DatePicker
-                  selected={startDate}
-                  onChange={(date) => setStartDate(date)}
-                  dateFormat="dd/MM/yyyy"
-                  className="form-control"
-                  placeholderText="Select Start Date"
-                  showMonthDropdown
-                  showYearDropdown
-                  scrollableYearDropdown
-                  yearDropdownItemNumber={15}
-                  required
-                />
-              </Form.Group>
-            </Col>
-
-            <Col md={3}>
-              <Form.Group controlId="endDate">
-                <Form.Label className="fw-semibold">End Date</Form.Label>
-                <DatePicker
-                  selected={endDate}
-                  onChange={(date) => setEndDate(date)}
-                  dateFormat="dd/MM/yyyy"
-                  className="form-control"
-                  placeholderText="Select End Date"
-                  minDate={startDate}
-                  showMonthDropdown
-                  showYearDropdown
-                  scrollableYearDropdown
-                  yearDropdownItemNumber={15}
-                  required
-                />
-              </Form.Group>
-            </Col>
-
-            <Col md={3} className="d-flex align-items-end">
-              <Button
-                variant="primary"
-                onClick={handleGenerateReport}
-                disabled={loading}
-                className="w-100"
-              >
-                {loading ? (
-                  <>
-                    <Spinner size="sm" className="me-2" />
-                    Generating…
-                  </>
-                ) : (
-                  "Generate Report"
-                )}
-              </Button>
-            </Col>
-
-            <Col md={3} className="d-flex align-items-end">
-              <InputGroup>
-                <Form.Control
-                  type="text"
-                  placeholder="Search: name / adm / slip / heading / mode"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  disabled={!hasData}
-                />
-                {searchQuery ? (
-                  <Button variant="outline-secondary" onClick={() => setSearchQuery("")}>
-                    Clear
-                  </Button>
-                ) : (
-                  <Button variant="outline-secondary" disabled>
-                    Clear
-                  </Button>
-                )}
-              </InputGroup>
-            </Col>
-          </Row>
-        </Card.Body>
-      </Card>
-
+      <FeeReportFilters filters={filters} loading={loading || pdfLoading || downloadingExcel} onGenerate={handleGenerateReport} />
+      <InputGroup className="mb-3">
+        <InputGroup.Text><i className="bi bi-search" aria-hidden="true" /></InputGroup.Text>
+        <Form.Control aria-label="Search collection report" placeholder="Search student, admission number, receipt, fee heading, payment mode or session" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} disabled={!hasData || loading} />
+        {searchQuery && <Button variant="outline-secondary" onClick={() => setSearchQuery("")}>Clear</Button>}
+      </InputGroup>
+      {hasData && <p className="text-muted small">Excel and PDF include all matching records, across every page. Cancelled transactions are shown with their status.</p>}
       {error && (
         <Alert variant="danger" className="text-center">
           {error}
@@ -1280,12 +1196,17 @@ const DayWiseReport = () => {
           <Col md={3}>
             <Card className="shadow-sm border-0">
               <Card.Body>
-                <div className="text-muted">Records</div>
+                <div className="text-muted small text-uppercase fw-semibold">Active Records</div>
                 <div className="d-flex align-items-baseline gap-2">
-                  <h4 className="mb-0">{filteredData.length}</h4>
+                  <h4 className="mb-0">{activeFilteredData.length}</h4>
                   <Badge bg="secondary">
                     Page {currentPage}/{totalPages}
                   </Badge>
+                  {cancelledFilteredCount > 0 && (
+                    <Badge bg="danger" className="ms-1">
+                      {cancelledFilteredCount} cancelled excluded
+                    </Badge>
+                  )}
                 </div>
               </Card.Body>
             </Card>
@@ -1294,7 +1215,8 @@ const DayWiseReport = () => {
           <Col md={3}>
             <Card className="shadow-sm border-0">
               <Card.Body>
-                <div className="text-muted">Total Received (incl. Fine)</div>
+                <div className="text-muted small text-uppercase fw-semibold">Total Received</div>
+                <div className="text-muted" style={{ fontSize: 11 }}>Including fine</div>
                 <h4 className="mb-0">{formatTotalValue(totalSummary.totalReceived)}</h4>
               </Card.Body>
             </Card>
@@ -1303,7 +1225,7 @@ const DayWiseReport = () => {
           <Col md={3}>
             <Card className="shadow-sm border-0">
               <Card.Body>
-                <div className="text-muted">Fee + Van</div>
+                <div className="text-muted small text-uppercase fw-semibold">Fee + Van</div>
                 <h4 className="mb-0">
                   {formatTotalValue(
                     (totalSummary.totalFeeReceived || 0) + (totalSummary.totalVanFee || 0)
@@ -1319,7 +1241,7 @@ const DayWiseReport = () => {
           <Col md={3}>
             <Card className="shadow-sm border-0">
               <Card.Body>
-                <div className="text-muted">Concession</div>
+                <div className="text-muted small text-uppercase fw-semibold">Concession</div>
                 <h4 className="mb-0">{formatTotalValue(totalSummary.totalConcession)}</h4>
               </Card.Body>
             </Card>
@@ -1385,13 +1307,14 @@ const DayWiseReport = () => {
                       {[
                         "Sr.",
                         "Slip ID",
+                        "Session",
                         "Admission No",
                         "Student Name",
                         "Class",
                         "Payment Mode",
                         "Reference / Bank",
                         "Fee Heading",
-                        "Transaction Date & Time",
+                        "Recorded Date & Time (IST)",
                         "Fee Received",
                         "Concession",
                         "Van Fee",
@@ -1432,6 +1355,7 @@ const DayWiseReport = () => {
                           <td style={{ whiteSpace: "nowrap" }}>
                             <span className="fw-semibold">{item.Slip_ID}</span>
                           </td>
+                          <td style={{ whiteSpace: "nowrap" }}>{sessionOf(item)}</td>
                           <td style={{ whiteSpace: "nowrap" }}>{item.Student?.admission_number || "—"}</td>
                           <td style={{ minWidth: 180 }}>{item.Student?.name || "—"}</td>
                           <td style={{ whiteSpace: "nowrap" }}>{item.Student?.Class?.class_name || "—"}</td>
@@ -1451,7 +1375,7 @@ const DayWiseReport = () => {
                           </td>
                           <td style={{ minWidth: 180 }}>{item.feeHeadingName || "—"}</td>
                           <td style={{ whiteSpace: "nowrap" }}>
-                            {formatToDisplayDateTime(item.DateOfTransaction)}
+                            {formatToDisplayDateTime(item.createdAt)}
                           </td>
                           <td style={{ whiteSpace: "nowrap" }}>{formatTotalValue(fee)}</td>
                           <td style={{ whiteSpace: "nowrap" }}>{formatTotalValue(item.totalConcession)}</td>
@@ -1592,7 +1516,7 @@ const DayWiseReport = () => {
                 <div className="d-flex align-items-center justify-content-between mb-2">
                   <h5 className="mb-0">Fee Heading Summary</h5>
                   <div className="text-muted" style={{ fontSize: 12 }}>
-                    Cash vs Online vs Overall (includes Fine)
+                    Cash vs Non-cash vs Overall (includes Fine)
                   </div>
                 </div>
 
@@ -1625,32 +1549,32 @@ const DayWiseReport = () => {
                       </tr>
 
                       <tr>
-                        {["Cash", "Online", "Overall"].map((h) => (
+                        {["Cash", "Non-cash", "Overall"].map((h) => (
                           <th key={`fee-${h}`} className="sticky-top bg-white" style={{ top: 42, zIndex: 2 }}>
                             {h}
                           </th>
                         ))}
-                        {["Cash", "Online", "Overall"].map((h) => (
+                        {["Cash", "Non-cash", "Overall"].map((h) => (
                           <th key={`con-${h}`} className="sticky-top bg-white" style={{ top: 42, zIndex: 2 }}>
                             {h}
                           </th>
                         ))}
-                        {["Cash", "Online", "Overall"].map((h) => (
+                        {["Cash", "Non-cash", "Overall"].map((h) => (
                           <th key={`van-${h}`} className="sticky-top bg-white" style={{ top: 42, zIndex: 2 }}>
                             {h}
                           </th>
                         ))}
-                        {["Cash", "Online", "Overall"].map((h) => (
+                        {["Cash", "Non-cash", "Overall"].map((h) => (
                           <th key={`vcon-${h}`} className="sticky-top bg-white" style={{ top: 42, zIndex: 2 }}>
                             {h}
                           </th>
                         ))}
-                        {["Cash", "Online", "Overall"].map((h) => (
+                        {["Cash", "Non-cash", "Overall"].map((h) => (
                           <th key={`fine-${h}`} className="sticky-top bg-white" style={{ top: 42, zIndex: 2 }}>
                             {h}
                           </th>
                         ))}
-                        {["Cash", "Online", "Overall"].map((h) => (
+                        {["Cash", "Non-cash", "Overall"].map((h) => (
                           <th key={`tot-${h}`} className="sticky-top bg-white" style={{ top: 42, zIndex: 2 }}>
                             {h}
                           </th>
@@ -1822,7 +1746,7 @@ const DayWiseReport = () => {
         <Modal.Body>
           <Card
             className="border-0 mb-3"
-            style={{ background: "linear-gradient(135deg, #f8fbff 0%, #eef5ff 100%)" }}
+            style={{ background: "linear-gradient(135deg, var(--edb-surface) 0%, var(--edb-surface) 100%)" }}
           >
             <Card.Body className="py-3">
               <Row className="g-3 align-items-end">

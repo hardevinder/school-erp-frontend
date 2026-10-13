@@ -1620,55 +1620,55 @@ const StudentFeePublicPage = () => {
       {/* Local styles */}
       <style>{`
         :root{
-          --hero-bg: linear-gradient(135deg,#4f46e5 0%, #06b6d4 45%, #10b981 100%);
-          --glass-bg: rgba(255,255,255,0.6);
-          --glass-brd: rgba(148,163,184,0.25);
+          --hero-bg: linear-gradient(135deg,var(--edb-primary) 0%, #06b6d4 45%, #10b981 100%);
+          --glass-bg: color-mix(in srgb, var(--edb-surface) 60%, transparent);
+          --glass-brd: color-mix(in srgb, var(--edb-border) 25%, transparent);
         }
-        .hero{ background: var(--hero-bg); color:#e2e8f0; border:1px solid rgba(255,255,255,.25); }
-        .badge-soft{ border:1px solid rgba(255,255,255,.45); color:#fff; backdrop-filter: blur(4px); }
-        .badge-soft-primary{ background: rgba(59,130,246,.25); }
+        .hero{ background: var(--hero-bg); color:var(--edb-on-primary); border:1px solid color-mix(in srgb, var(--edb-border) 25%, transparent); }
+        .badge-soft{ border:1px solid color-mix(in srgb, var(--edb-border) 45%, transparent); color:var(--edb-on-primary); backdrop-filter: blur(4px); }
+        .badge-soft-primary{ background: color-mix(in srgb, var(--edb-primary) 25%, transparent); }
         .badge-soft-info{ background: rgba(6,182,212,.25); }
-        .badge-soft-secondary{ background: rgba(148,163,184,.25); }
+        .badge-soft-secondary{ background: color-mix(in srgb, var(--edb-border) 25%, transparent); }
         .action-chip{ backdrop-filter: blur(6px); }
         .glass{ background: var(--glass-bg); border:1px solid var(--glass-brd); }
-        .gradient-soft{ background: linear-gradient(90deg, rgba(99,102,241,.15), rgba(6,182,212,.15)); }
+        .gradient-soft{ background: linear-gradient(90deg, color-mix(in srgb, var(--edb-primary) 15%, transparent), rgba(6,182,212,.15)); }
         .fancy-card{ border-radius: 1rem; overflow: hidden; }
-        .soft-shadow{ box-shadow: 0 8px 20px rgba(2,8,23,.12); }
+        .soft-shadow{ box-shadow: 0 8px 20px color-mix(in srgb, var(--edb-primary-dark) 12%, transparent); }
 
         .fancy-chip-row { scrollbar-width: thin; }
         .fancy-chip-row::-webkit-scrollbar { height: 8px; }
-        .fancy-chip-row::-webkit-scrollbar-thumb { background: rgba(0,0,0,.15); border-radius: 8px; }
+        .fancy-chip-row::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--edb-primary-dark) 15%, transparent); border-radius: 8px; }
 
-        .chip { border-radius: 999px; padding: 8px 12px; font-size: .9rem; white-space: nowrap; color:#0b1220; border:1px solid rgba(0,0,0,.06); }
-        .chip-amber{ background: linear-gradient(135deg,#fef3c7,#fde68a); }
-        .chip-blue{ background: linear-gradient(135deg,#dbeafe,#bfdbfe); }
-        .chip-green{ background: linear-gradient(135deg,#dcfce7,#bbf7d0); }
-        .chip-red{ background: linear-gradient(135deg,#fee2e2,#fecaca); }
-        .chip-orange{ background: linear-gradient(135deg,#ffedd5,#fed7aa); }
+        .chip { border-radius: 999px; padding: 8px 12px; font-size: .9rem; white-space: nowrap; color:var(--edb-text); border:1px solid color-mix(in srgb, var(--edb-border) 6%, transparent); }
+        .chip-amber{ background: linear-gradient(135deg,var(--edb-primary-soft),var(--edb-accent-soft)); }
+        .chip-blue{ background: linear-gradient(135deg,var(--edb-primary-soft),var(--edb-primary-soft)); }
+        .chip-green{ background: linear-gradient(135deg,var(--edb-primary-soft),#bbf7d0); }
+        .chip-red{ background: linear-gradient(135deg,var(--edb-primary-soft),#fecaca); }
+        .chip-orange{ background: linear-gradient(135deg,var(--edb-primary-soft),var(--edb-accent-soft)); }
         .shrink-0 { flex-shrink: 0; }
 
-        .kpi{ border-radius: 1rem; padding: .85rem 1rem; color:#0b1220; background: #fff; border:1px solid #e5e7eb; }
+        .kpi{ border-radius: 1rem; padding: .85rem 1rem; color:var(--edb-text); background: var(--edb-surface); border:1px solid var(--edb-border); }
         .kpi .kpi-label{ font-size: .8rem; opacity:.8; }
         .kpi .kpi-value{ font-size: 1.05rem; font-weight: 700; }
-        .kpi-blue{ background: linear-gradient(135deg,#dbeafe,#bfdbfe); }
-        .kpi-amber{ background: linear-gradient(135deg,#fef3c7,#fde68a); }
-        .kpi-green{ background: linear-gradient(135deg,#dcfce7,#bbf7d0); }
-        .kpi-red{ background: linear-gradient(135deg,#fee2e2,#fecaca); }
+        .kpi-blue{ background: linear-gradient(135deg,var(--edb-primary-soft),var(--edb-primary-soft)); }
+        .kpi-amber{ background: linear-gradient(135deg,var(--edb-primary-soft),var(--edb-accent-soft)); }
+        .kpi-green{ background: linear-gradient(135deg,var(--edb-primary-soft),#bbf7d0); }
+        .kpi-red{ background: linear-gradient(135deg,var(--edb-primary-soft),#fecaca); }
 
         .progress-thin{ height: .45rem; border-radius: 999px; }
         .transport-panel{
-          background: linear-gradient(135deg, rgba(59,130,246,.10), rgba(16,185,129,.10));
+          background: linear-gradient(135deg, color-mix(in srgb, var(--edb-primary) 10%, transparent), rgba(16,185,129,.10));
           border-radius: 12px;
           padding: .6rem .7rem;
         }
         .transport-badge{
-          background: rgba(99,102,241,.15);
-          color: #111827;
+          background: color-mix(in srgb, var(--edb-primary) 15%, transparent);
+          color: var(--edb-text);
         }
         .tiny-row .label{ font-size: .86rem; opacity: .85; }
         .tiny-row .value{ font-size: .95rem; }
 
-        .colorful-tabs .nav-link.active{ background: linear-gradient(90deg,#3b82f6,#10b981); color:#fff; border:0; }
+        .colorful-tabs .nav-link.active{ background: linear-gradient(90deg,var(--edb-primary),#10b981); color:var(--edb-on-primary); border:0; }
         .colorful-tabs .nav-link{ border-radius: 999px !important; }
 
       `}</style>

@@ -176,7 +176,7 @@ const KpiCard = ({ title, value, className = "bg-light", sub }) => (
     style={{
       borderRadius: 14,
       minWidth: 150,
-      boxShadow: "0 6px 18px rgba(0,0,0,0.06)",
+      boxShadow: "0 6px 18px color-mix(in srgb, var(--edb-primary-dark) 6%, transparent)",
     }}
   >
     <div className="card-body py-2">
@@ -969,7 +969,7 @@ const Enquiries = () => {
 
       {/* View Modal */}
       {selected && !editOpen && !followOpen && (
-        <div className="modal show d-block" style={{ backgroundColor: "rgba(0,0,0,0.5)" }}>
+        <div className="modal show d-block" style={{ backgroundColor: "color-mix(in srgb, var(--edb-primary-dark) 50%, transparent)" }}>
           <div className="modal-dialog modal-xl">
             <div className="modal-content">
               <div className="modal-header">
@@ -1092,7 +1092,7 @@ const Enquiries = () => {
                             <div
                               key={fu.id}
                               className="border rounded p-2 mb-2"
-                              style={{ background: "#fafafa" }}
+                              style={{ background: "var(--edb-surface)" }}
                             >
                               <div className="d-flex align-items-center justify-content-between">
                                 <div className="fw-semibold">
@@ -1145,7 +1145,7 @@ const Enquiries = () => {
 
       {/* Edit Modal */}
       {editOpen && editForm && (
-        <div className="modal show d-block" style={{ backgroundColor: "rgba(0,0,0,0.5)" }}>
+        <div className="modal show d-block" style={{ backgroundColor: "color-mix(in srgb, var(--edb-primary-dark) 50%, transparent)" }}>
           <div className="modal-dialog modal-lg">
             <div className="modal-content">
               <div className="modal-header">
@@ -1284,7 +1284,7 @@ const Enquiries = () => {
 
       {/* Follow-up Modal */}
       {followOpen && selected && (
-        <div className="modal show d-block" style={{ backgroundColor: "rgba(0,0,0,0.5)" }}>
+        <div className="modal show d-block" style={{ backgroundColor: "color-mix(in srgb, var(--edb-primary-dark) 50%, transparent)" }}>
           <div className="modal-dialog modal-lg">
             <div className="modal-content">
               <div className="modal-header">

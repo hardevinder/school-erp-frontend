@@ -1,0 +1,15 @@
+.fee-report-page { padding: 24px; color: var(--edb-text, #17213a); background: var(--edb-dashboard-bg, #f5f7fb); min-height: 80vh; }
+.fee-report-header { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:18px; margin-bottom:24px; }
+.fee-report-header h1,.fee-report-header h2 { font-size:1.7rem; font-weight:750; margin:0 0 6px; }
+.fee-report-header p { color:var(--edb-muted,#667085); margin:0; line-height:1.6; }
+.fee-report-eyebrow { display:block; text-transform:uppercase; letter-spacing:.08em; font-size:.72rem; font-weight:750; color:var(--edb-primary,#3157d5); margin-bottom:7px; }
+.fee-report-filters { background:var(--edb-surface,#fff); border:1px solid var(--edb-border,#e2e7ef); border-radius:16px; padding:20px; margin-bottom:20px; box-shadow:0 4px 18px #17213a05; }
+.fee-report-filter-grid { display:grid; grid-template-columns:1.4fr 1fr 1fr auto; align-items:end; gap:16px; }
+.fee-report-filter-grid label { display:block; min-width:0; }.fee-report-filter-grid label>span { display:block; font-size:.83rem; font-weight:650; margin-bottom:7px; }.fee-report-filter-grid .btn { min-height:39px; }
+.fee-report-shortcuts { display:flex; align-items:center; flex-wrap:wrap; gap:10px; margin-top:16px; font-size:.8rem; color:var(--edb-muted,#667085); }
+.fee-report-shortcuts button { border:1px solid var(--edb-border,#dfe5ef); background:transparent; color:var(--edb-primary,#3157d5); border-radius:20px; padding:5px 12px; }.fee-report-shortcuts small { margin-left:auto; }
+.fee-report-scope { display:flex; flex-wrap:wrap; gap:12px; border-top:1px solid var(--edb-border,#e2e7ef); margin-top:16px; padding-top:14px; font-size:.83rem; color:var(--edb-muted,#667085); }.fee-report-scope b { color:#9a5800; font-weight:600; }
+.fee-report-page .table { font-size:.85rem; background:var(--edb-surface,#fff); }.fee-report-page .table td,.fee-report-page .table th { padding:12px 14px; vertical-align:middle; }.fee-report-page .table th { white-space:nowrap; font-size:.78rem; }.fee-report-page .table tfoot { font-weight:700; background:#eef3ff; }.fee-report-page .card { border-radius:14px; }.fee-report-page h2 { font-size:1.45rem; }.fee-report-page .fee-report-header h2 { font-size:1.7rem; }
+.fee-report-stats { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:14px; margin-bottom:24px; }.fee-report-stats>div { background:var(--edb-surface,#fff); border:1px solid var(--edb-border,#e2e7ef); padding:18px; border-radius:14px; }.fee-report-stats span { display:block; font-size:.8rem; color:var(--edb-muted,#667085); }.fee-report-stats strong { display:block; font-size:1.4rem; margin-top:8px; font-variant-numeric:tabular-nums; }
+@media(max-width:800px){.fee-report-filter-grid{grid-template-columns:1fr 1fr}.fee-report-stats{grid-template-columns:1fr 1fr}.fee-report-shortcuts small{width:100%;margin:0}.fee-report-page{padding:16px}}
+@media(max-width:480px){.fee-report-filter-grid{grid-template-columns:1fr}.fee-report-stats strong{font-size:1.1rem}}

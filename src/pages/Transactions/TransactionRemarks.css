@@ -1,0 +1,5 @@
+.transaction-remarks summary { cursor: pointer; }
+.transaction-remarks .transaction-remarks-less { display: none; }
+.transaction-remarks[open] .transaction-remarks-preview,
+.transaction-remarks[open] .transaction-remarks-more { display: none; }
+.transaction-remarks[open] .transaction-remarks-less { display: inline; }

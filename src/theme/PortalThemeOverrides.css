@@ -4,36 +4,15 @@
 */
 
 :root {
-  /* Saved fallback values. Runtime overwrites these from Schools.theme_config. */
-  --edb-saved-primary: #66131b;
-  --edb-saved-primary-dark: #470a11;
-  --edb-saved-accent: #c49a45;
-  --edb-saved-sidebar-bg: #fcf8f2;
-  --edb-saved-navbar-bg: #fffdf9;
-  --edb-saved-navbar-title: #66131b;
-  --edb-saved-navbar-subtitle: #c49a45;
-  --edb-saved-dashboard-bg: #f6f3ee;
-  --edb-saved-surface: #fffdfa;
-  --edb-saved-text: #261f1d;
-
-  /* Live-preview aliases first; saved institution values are the fallback. */
-  --edb-primary: var(--portal-primary, var(--theme-primary, var(--app-primary, var(--brand-primary, var(--edb-saved-primary)))));
-  --edb-primary-dark: var(--portal-primary-dark, var(--theme-primary-dark, var(--app-primary-dark, var(--brand-primary-dark, var(--edb-saved-primary-dark)))));
-  --edb-accent: var(--portal-accent, var(--theme-accent, var(--app-accent, var(--brand-accent, var(--edb-saved-accent)))));
-  --edb-sidebar-bg: var(--portal-sidebar-bg, var(--theme-sidebar-bg, var(--app-sidebar-bg, var(--edb-saved-sidebar-bg))));
-  --edb-navbar-bg: var(--portal-navbar-bg, var(--theme-navbar-bg, var(--app-navbar-bg, var(--edb-saved-navbar-bg))));
-  --edb-navbar-title: var(--portal-navbar-title, var(--theme-navbar-title, var(--app-navbar-title, var(--edb-saved-navbar-title))));
-  --edb-navbar-subtitle: var(--portal-navbar-subtitle, var(--theme-navbar-subtitle, var(--app-navbar-subtitle, var(--edb-saved-navbar-subtitle))));
-  --edb-dashboard-bg: var(--portal-dashboard-bg, var(--theme-dashboard-bg, var(--app-dashboard-bg, var(--edb-saved-dashboard-bg))));
-  --edb-surface: var(--portal-surface, var(--theme-surface, var(--app-surface, var(--edb-saved-surface))));
-  --edb-text: var(--portal-text, var(--portal-text-color, var(--theme-text, var(--app-text, var(--edb-saved-text)))));
-
-  --edb-primary-soft: color-mix(in srgb, var(--edb-primary) 10%, white);
-  --edb-primary-soft-2: color-mix(in srgb, var(--edb-primary) 5%, white);
-  --edb-accent-soft: color-mix(in srgb, var(--edb-accent) 16%, white);
+  /* Base tokens and compatibility aliases are applied by portalThemeRuntime. */
+  --edb-primary-soft: color-mix(in srgb, var(--edb-primary) 10%, var(--edb-surface));
+  --edb-primary-soft-2: color-mix(in srgb, var(--edb-primary) 5%, var(--edb-surface));
+  --edb-accent-soft: color-mix(in srgb, var(--edb-accent) 16%, var(--edb-surface));
   --edb-border: color-mix(in srgb, var(--edb-text) 14%, transparent);
   --edb-muted: color-mix(in srgb, var(--edb-text) 62%, white);
   --edb-faint: color-mix(in srgb, var(--edb-text) 42%, white);
+  --edb-sidebar-muted: color-mix(in srgb, var(--edb-sidebar-text) 72%, var(--edb-sidebar-bg));
+  --edb-input-muted: color-mix(in srgb, var(--edb-input-text) 48%, white);
   --edb-shell-shadow: color-mix(in srgb, var(--edb-primary-dark) 11%, transparent);
 
   /* Existing premium CSS already uses these names. Redirect them to the dynamic palette. */
@@ -81,13 +60,13 @@ html body .app-sidebar .sidebar-top {
 }
 
 html body .app-sidebar .toggle-btn {
-  color: var(--edb-primary) !important;
+  color: var(--edb-primary-text) !important;
   background: var(--edb-surface) !important;
   border-color: var(--edb-border) !important;
   box-shadow: 0 4px 12px var(--edb-shell-shadow) !important;
 }
 html body .app-sidebar .toggle-btn:hover {
-  color: var(--edb-primary-dark) !important;
+  color: var(--edb-primary-dark-text) !important;
   background: var(--edb-primary-soft-2) !important;
   border-color: color-mix(in srgb, var(--edb-primary) 35%, var(--edb-border)) !important;
 }
@@ -114,7 +93,7 @@ html body .app-sidebar .sidebar-category-arrow {
 }
 html body .app-sidebar .sidebar-search-clear:hover {
   background: var(--edb-primary-soft) !important;
-  color: var(--edb-primary-dark) !important;
+  color: var(--edb-primary-dark-text) !important;
 }
 
 html body .app-sidebar .sidebar-category {
@@ -123,10 +102,10 @@ html body .app-sidebar .sidebar-category {
 }
 html body .app-sidebar .sidebar-category:hover {
   background: var(--edb-primary-soft-2) !important;
-  color: var(--edb-primary-dark) !important;
+  color: var(--edb-primary-dark-text) !important;
 }
 html body .app-sidebar .sidebar-category.selected {
-  color: var(--edb-primary-dark) !important;
+  color: var(--edb-primary-dark-text) !important;
   background: linear-gradient(135deg, var(--edb-primary-soft) 0%, var(--edb-surface) 100%) !important;
   border-color: color-mix(in srgb, var(--edb-primary) 25%, var(--edb-border)) !important;
   box-shadow: 0 5px 14px var(--edb-shell-shadow) !important;
@@ -139,7 +118,7 @@ html body .app-sidebar .sidebar-category[style] .sidebar-category-icon,
 html body .app-sidebar .sidebar-category.selected .sidebar-category-icon {
   background-color: var(--edb-primary) !important;
   background-image: linear-gradient(145deg, var(--edb-primary) 0%, var(--edb-primary-dark) 100%) !important;
-  color: white !important;
+  color: var(--edb-on-primary) !important;
   border-color: color-mix(in srgb, var(--edb-accent) 55%, transparent) !important;
   box-shadow: 0 5px 12px var(--edb-shell-shadow) !important;
 }
@@ -150,12 +129,12 @@ html body.sb-collapsed .app-sidebar .sidebar-category-label {
 }
 html body .app-sidebar .sidebar-category.selected .sidebar-category-label,
 html body.sb-collapsed .app-sidebar .sidebar-category.selected .sidebar-category-label {
-  color: var(--edb-primary-dark) !important;
+  color: var(--edb-primary-dark-text) !important;
   opacity: 1 !important;
 }
 html body .app-sidebar .sidebar-category-count {
   background: var(--edb-primary-soft) !important;
-  color: var(--edb-primary-dark) !important;
+  color: var(--edb-primary-dark-text) !important;
 }
 html body .app-sidebar .sidebar-category.selected .sidebar-category-count {
   background: var(--edb-accent-soft) !important;
@@ -182,7 +161,7 @@ html body .app-sidebar::-webkit-scrollbar-thumb:hover {
 
 /* LMS-first direct navigation */
 html body .app-sidebar .sidebar-lms-direct-head {
-  color: var(--edb-primary-dark) !important;
+  color: var(--edb-primary-dark-text) !important;
 }
 html body .app-sidebar .sidebar-lms-direct-head > span i,
 html body .app-sidebar .sidebar-lms-direct-group-title span:last-child {
@@ -206,12 +185,12 @@ html body .app-sidebar .sidebar-lms-direct-item {
 html body .app-sidebar .sidebar-lms-direct-item:hover {
   background: var(--edb-primary-soft-2) !important;
   border-color: var(--edb-border) !important;
-  color: var(--edb-primary-dark) !important;
+  color: var(--edb-primary-dark-text) !important;
 }
 html body .app-sidebar .sidebar-lms-direct-item.active {
   background: linear-gradient(90deg, var(--edb-primary-soft) 0%, var(--edb-surface) 100%) !important;
   border-color: color-mix(in srgb, var(--edb-primary) 25%, var(--edb-border)) !important;
-  color: var(--edb-primary-dark) !important;
+  color: var(--edb-primary-dark-text) !important;
   box-shadow: 0 4px 12px var(--edb-shell-shadow) !important;
 }
 html body .app-sidebar .sidebar-lms-direct-item.active::before {
@@ -221,12 +200,12 @@ html body .app-sidebar .sidebar-lms-direct-icon,
 html body .app-sidebar .sidebar-lms-direct-item.active .sidebar-lms-direct-icon {
   border-color: var(--edb-border) !important;
   background: var(--edb-surface) !important;
-  color: var(--edb-primary) !important;
+  color: var(--edb-primary-text) !important;
 }
 html body .app-sidebar .sidebar-lms-direct-item.active .sidebar-lms-direct-icon {
   background: linear-gradient(145deg, var(--edb-primary), var(--edb-primary-dark)) !important;
   border-color: color-mix(in srgb, var(--edb-accent) 55%, transparent) !important;
-  color: white !important;
+  color: var(--edb-on-primary) !important;
 }
 html body .app-sidebar .sidebar-lms-direct-arrow {
   color: var(--edb-muted) !important;
@@ -286,7 +265,7 @@ html body .sidebar-submenu-item.active .sidebar-submenu-icon {
   background: var(--edb-primary-soft-2) !important;
 }
 html body .sidebar-submenu-item:hover .sidebar-submenu-arrow {
-  color: var(--edb-primary) !important;
+  color: var(--edb-primary-text) !important;
 }
 
 /* ===== Mobile navigation ===== */
@@ -303,7 +282,7 @@ html body .sidebar-submenu-item:hover .sidebar-submenu-arrow {
   }
   html body .bottom-nav .bn-item.active,
   html body .bn-list-item.active {
-    color: var(--edb-primary-dark) !important;
+    color: var(--edb-primary-dark-text) !important;
     background: var(--edb-primary-soft) !important;
   }
 }
@@ -345,7 +324,7 @@ html body .college-navbar .college-quick-link.active,
 html body .college-navbar .college-quick-link.active small,
 html body .college-navbar .college-navbar__bell,
 html body .college-navbar .branch-switcher .input-group-text {
-  color: var(--edb-primary) !important;
+  color: var(--edb-primary-text) !important;
 }
 html body .college-navbar .college-quick-link:hover > span,
 html body .college-navbar .college-profile-button:hover,
@@ -353,11 +332,11 @@ html body .college-navbar .college-navbar__bell:hover,
 html body .college-navbar .college-profile-menu .dropdown-item:hover {
   background: var(--edb-primary-soft-2) !important;
   border-color: color-mix(in srgb, var(--edb-primary) 24%, var(--edb-border)) !important;
-  color: var(--edb-primary-dark) !important;
+  color: var(--edb-primary-dark-text) !important;
 }
 html body .college-navbar .college-quick-link.active > span {
   background: linear-gradient(135deg, var(--edb-primary-dark), var(--edb-primary)) !important;
-  color: white !important;
+  color: var(--edb-on-primary) !important;
   border-color: var(--edb-primary) !important;
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--edb-primary) 10%, transparent) !important;
 }
@@ -381,11 +360,11 @@ html body .dashboard-workspaces button {
   color: var(--edb-muted) !important;
 }
 html body .dashboard-workspaces button:hover {
-  color: var(--edb-primary-dark) !important;
+  color: var(--edb-primary-dark-text) !important;
   background: var(--edb-primary-soft-2) !important;
 }
 html body .dashboard-workspaces button.selected {
-  color: var(--edb-primary-dark) !important;
+  color: var(--edb-primary-dark-text) !important;
   background: var(--edb-surface) !important;
   box-shadow: 0 2px 7px var(--edb-shell-shadow), inset 0 -2px 0 var(--edb-accent) !important;
 }
@@ -421,7 +400,7 @@ html body .classic-dashboard-theme .quick-section-icon,
 html body .classic-dashboard-theme .link-card-ex .icon-wrap {
   background: var(--edb-primary-soft) !important;
   border-color: color-mix(in srgb, var(--edb-primary) 18%, var(--edb-border)) !important;
-  color: var(--edb-primary) !important;
+  color: var(--edb-primary-text) !important;
 }
 html body .classic-dashboard-theme .quick-section-title,
 html body .classic-dashboard-theme .section-title,
@@ -483,7 +462,7 @@ html body .lms-workspace .lms-live-stat strong,
 html body .lms-workspace .lms-detail-copy strong,
 html body .lms-workspace .lms-status-row b,
 html body .lms-workspace .lms-action-content strong {
-  color: var(--edb-primary-dark) !important;
+  color: var(--edb-primary-dark-text) !important;
 }
 html body .lms-workspace .lms-hero p,
 html body .lms-workspace .lms-live-head p,
@@ -498,39 +477,39 @@ html body .lms-workspace .lms-detail-icon,
 html body .lms-workspace .lms-action-icon {
   background: linear-gradient(145deg, var(--edb-primary), var(--edb-primary-dark)) !important;
   border-color: color-mix(in srgb, var(--edb-accent) 58%, transparent) !important;
-  color: white !important;
+  color: var(--edb-on-primary) !important;
   box-shadow: 0 8px 20px var(--edb-shell-shadow) !important;
 }
 html body .lms-workspace .lms-live-stat-icon {
   background: var(--edb-primary-soft) !important;
   border-color: color-mix(in srgb, var(--edb-primary) 18%, var(--edb-border)) !important;
-  color: var(--edb-primary) !important;
+  color: var(--edb-primary-text) !important;
 }
 html body .lms-workspace .lms-refresh-btn,
 html body .lms-workspace .lms-tools-count,
 html body .lms-workspace .lms-meta-row span:not(.is-live) {
   background: var(--edb-primary-soft-2) !important;
   border-color: var(--edb-border) !important;
-  color: var(--edb-primary-dark) !important;
+  color: var(--edb-primary-dark-text) !important;
 }
 
 /* ===== Compact support control ===== */
 html body .dashboard-support-compact__button {
   border-color: color-mix(in srgb, var(--edb-accent) 38%, var(--edb-border)) !important;
   background: var(--edb-surface) !important;
-  color: var(--edb-primary-dark) !important;
+  color: var(--edb-primary-dark-text) !important;
   box-shadow: 0 4px 12px var(--edb-shell-shadow) !important;
 }
 html body .dashboard-support-compact__icon {
   background: linear-gradient(145deg, var(--edb-primary), var(--edb-primary-dark)) !important;
-  color: white !important;
+  color: var(--edb-on-primary) !important;
 }
 html body .dashboard-support-compact__arrow {
   color: var(--edb-accent) !important;
 }
 html body .dashboard-support-compact__button:hover,
 html body .dashboard-support-compact__button:focus-visible {
-  color: var(--edb-primary-dark) !important;
+  color: var(--edb-primary-dark-text) !important;
   background: var(--edb-primary-soft-2) !important;
   border-color: var(--edb-accent) !important;
   box-shadow: 0 6px 16px var(--edb-shell-shadow) !important;
@@ -547,18 +526,18 @@ html body .app-sidebar button.sidebar-category:hover,
 html body .app-sidebar button.sidebar-category:hover .sidebar-category-label,
 html body .app-sidebar button.sidebar-category.selected:hover,
 html body .app-sidebar button.sidebar-category.selected:hover .sidebar-category-label {
-  color: var(--edb-primary-dark, #1D4ED8) !important;
+  color: var(--edb-primary-dark-text) !important;
   opacity: 1 !important;
 }
 
 html body .app-sidebar button.sidebar-category:hover .sidebar-category-arrow,
 html body .app-sidebar button.sidebar-category.selected:hover .sidebar-category-arrow {
-  color: var(--edb-primary, #2563EB) !important;
+  color: var(--edb-primary-text) !important;
 }
 
 html body .app-sidebar button.sidebar-category:hover .sidebar-category-count,
 html body .app-sidebar button.sidebar-category.selected:hover .sidebar-category-count {
-  color: var(--edb-primary-dark, #1D4ED8) !important;
+  color: var(--edb-primary-dark-text) !important;
 }
 
 /* Category icon has a dark/primary tile, so its glyph should stay white. */
@@ -566,7 +545,7 @@ html body .app-sidebar button.sidebar-category:hover .sidebar-category-icon,
 html body .app-sidebar button.sidebar-category:hover .sidebar-category-icon i,
 html body .app-sidebar button.sidebar-category.selected:hover .sidebar-category-icon,
 html body .app-sidebar button.sidebar-category.selected:hover .sidebar-category-icon i {
-  color: #FFFFFF !important;
+  color: var(--edb-on-primary) !important;
 }
 
 /* LMS direct rows */
@@ -574,23 +553,23 @@ html body .app-sidebar button.sidebar-lms-direct-item:hover,
 html body .app-sidebar button.sidebar-lms-direct-item:hover .sidebar-lms-direct-label,
 html body .app-sidebar button.sidebar-lms-direct-item.active:hover,
 html body .app-sidebar button.sidebar-lms-direct-item.active:hover .sidebar-lms-direct-label {
-  color: var(--edb-primary-dark, #1D4ED8) !important;
+  color: var(--edb-primary-dark-text) !important;
   opacity: 1 !important;
 }
 
 html body .app-sidebar button.sidebar-lms-direct-item:hover .sidebar-lms-direct-arrow {
-  color: var(--edb-primary, #2563EB) !important;
+  color: var(--edb-primary-text) !important;
 }
 
 html body .app-sidebar button.sidebar-lms-direct-item:hover .sidebar-lms-direct-current,
 html body .app-sidebar button.sidebar-lms-direct-item.active:hover .sidebar-lms-direct-current {
-  color: var(--edb-primary-dark, #1D4ED8) !important;
+  color: var(--edb-primary-dark-text) !important;
 }
 
 /* Active LMS icon uses primary background. */
 html body .app-sidebar button.sidebar-lms-direct-item.active:hover .sidebar-lms-direct-icon,
 html body .app-sidebar button.sidebar-lms-direct-item.active:hover .sidebar-lms-direct-icon i {
-  color: #FFFFFF !important;
+  color: var(--edb-on-primary) !important;
 }
 
 /* Flyout / submenu */
@@ -609,7 +588,7 @@ html body button.sidebar-submenu-item.active:hover .sidebar-submenu-path {
 
 html body button.sidebar-submenu-item:hover .sidebar-submenu-arrow,
 html body button.sidebar-submenu-item.active:hover .sidebar-submenu-arrow {
-  color: var(--edb-primary, #2563EB) !important;
+  color: var(--edb-primary-text) !important;
 }
 
 /* Legacy one-level sidebar items, if a role still uses them */
@@ -628,7 +607,7 @@ html body .app-sidebar .sidebar-item.active:hover .item-label {
   html body .bn-list-item:hover,
   html body .bn-list-item:hover .bn-li-text,
   html body .bn-list-item:hover .bn-li-text * {
-    color: var(--edb-primary-dark, #1D4ED8) !important;
+    color: var(--edb-primary-dark-text) !important;
   }
 }
 
@@ -652,7 +631,7 @@ html body select.college-role-select {
 html body .college-navbar .college-role-select:hover,
 html body select.college-role-select:hover {
   background-color: var(--edb-primary-soft-2) !important;
-  color: var(--edb-primary-dark) !important;
+  color: var(--edb-primary-dark-text) !important;
   border-color: color-mix(in srgb, var(--edb-primary) 30%, var(--edb-border)) !important;
 }
 
@@ -674,7 +653,7 @@ html body .college-role-select option {
 html body .college-navbar .branch-switcher .input-group-text {
   background: var(--edb-primary-soft-2) !important;
   border-color: var(--edb-border) !important;
-  color: var(--edb-primary-dark) !important;
+  color: var(--edb-primary-dark-text) !important;
 }
 
 html body .college-navbar .branch-switcher .form-select {
@@ -686,7 +665,7 @@ html body .college-navbar .branch-switcher .form-select {
 html body .college-navbar .branch-switcher .form-select:hover {
   background-color: var(--edb-primary-soft-2) !important;
   border-color: color-mix(in srgb, var(--edb-primary) 30%, var(--edb-border)) !important;
-  color: var(--edb-primary-dark) !important;
+  color: var(--edb-primary-dark-text) !important;
 }
 
 html body .college-navbar .branch-switcher .form-select:focus {
@@ -718,13 +697,13 @@ html body .college-profile-menu .dropdown-item {
 html body .college-profile-menu .dropdown-item:hover,
 html body .college-profile-menu .dropdown-item:focus {
   background: var(--edb-primary-soft) !important;
-  color: var(--edb-primary-dark) !important;
+  color: var(--edb-primary-dark-text) !important;
 }
 
 html body .college-profile-menu .dropdown-item.active,
 html body .college-profile-menu .dropdown-item:active {
   background: var(--edb-primary) !important;
-  color: #fff !important;
+  color: var(--edb-on-primary) !important;
 }
 
 html body .college-profile-menu .dropdown-divider {
@@ -744,7 +723,7 @@ html body .college-navbar .college-quick-link small {
 
 html body .college-navbar .college-quick-link:hover small,
 html body .college-navbar .college-quick-link.active small {
-  color: var(--edb-primary-dark) !important;
+  color: var(--edb-primary-dark-text) !important;
 }
 /* END NAVBAR_ROLE_DROPDOWN_THEME_FIX_V1 */
 
@@ -759,7 +738,7 @@ html body .college-navbar .college-quick-link.active small {
 /* Desktop flyout / global-search submenu icon tile */
 html body .sidebar-submenu-icon,
 html body .sidebar-submenu-item .sidebar-submenu-icon {
-  color: var(--edb-primary, #2563EB) !important;
+  color: var(--edb-primary-text) !important;
   background: var(--edb-primary-soft-2, #F8FAFC) !important;
   border: 1px solid color-mix(in srgb, var(--edb-primary, #2563EB) 16%, transparent) !important;
   box-shadow: none !important;
@@ -775,7 +754,7 @@ html body .sidebar-submenu-item .sidebar-submenu-icon > i {
 
 /* Hover: stronger theme tint */
 html body .sidebar-submenu-item:hover .sidebar-submenu-icon {
-  color: var(--edb-primary-dark, #1D4ED8) !important;
+  color: var(--edb-primary-dark-text) !important;
   background: var(--edb-primary-soft, #EFF6FF) !important;
   border-color: color-mix(in srgb, var(--edb-primary, #2563EB) 30%, transparent) !important;
   transform: translateY(-1px) !important;
@@ -784,7 +763,7 @@ html body .sidebar-submenu-item:hover .sidebar-submenu-icon {
 /* Active submenu: solid themed icon tile with white glyph */
 html body .sidebar-submenu-item.active .sidebar-submenu-icon,
 html body .sidebar-submenu-item.active:hover .sidebar-submenu-icon {
-  color: #FFFFFF !important;
+  color: var(--edb-on-primary) !important;
   background: linear-gradient(
     145deg,
     var(--edb-primary, #2563EB) 0%,
@@ -796,24 +775,24 @@ html body .sidebar-submenu-item.active:hover .sidebar-submenu-icon {
 
 html body .sidebar-submenu-item.active .sidebar-submenu-icon > i,
 html body .sidebar-submenu-item.active:hover .sidebar-submenu-icon > i {
-  color: #FFFFFF !important;
+  color: var(--edb-on-primary) !important;
 }
 
 /* Arrow also follows selected theme */
 html body .sidebar-submenu-item:hover .sidebar-submenu-arrow,
 html body .sidebar-submenu-item.active .sidebar-submenu-arrow {
-  color: var(--edb-primary, #2563EB) !important;
+  color: var(--edb-primary-text) !important;
 }
 
 /* Mobile bottom-nav submenu/search list also had inline palette colors */
 @media (max-width: 991.98px) {
   html body .bn-list-item > i {
-    color: var(--edb-primary, #2563EB) !important;
+    color: var(--edb-primary-text) !important;
   }
 
   html body .bn-list-item:hover > i,
   html body .bn-list-item.active > i {
-    color: var(--edb-primary-dark, #1D4ED8) !important;
+    color: var(--edb-primary-dark-text) !important;
   }
 }
 
@@ -847,21 +826,21 @@ html body .premium-workspace-card.is-active {
 html body .premium-workspace-card__icon {
   background: var(--edb-primary-soft) !important;
   border-color: color-mix(in srgb, var(--edb-primary) 22%, var(--edb-border)) !important;
-  color: var(--edb-primary) !important;
+  color: var(--edb-primary-text) !important;
 }
 
 html body .premium-workspace-card.is-active .premium-workspace-card__icon {
   background: linear-gradient(145deg, var(--edb-primary), var(--edb-primary-dark)) !important;
   border-color: color-mix(in srgb, var(--edb-accent) 55%, transparent) !important;
-  color: #fff !important;
+  color: var(--edb-on-primary) !important;
 }
 
 html body .premium-workspace-card__kicker {
-  color: var(--edb-primary) !important;
+  color: var(--edb-primary-text) !important;
 }
 
 html body .premium-workspace-card__copy strong {
-  color: var(--edb-primary-dark) !important;
+  color: var(--edb-primary-dark-text) !important;
 }
 
 html body .premium-workspace-card__copy small {
@@ -869,19 +848,19 @@ html body .premium-workspace-card__copy small {
 }
 
 html body .premium-workspace-card__action {
-  color: var(--edb-primary) !important;
+  color: var(--edb-primary-text) !important;
 }
 
 html body .premium-workspace-card__action i {
   background: var(--edb-primary-soft-2) !important;
   border-color: color-mix(in srgb, var(--edb-primary) 24%, var(--edb-border)) !important;
-  color: var(--edb-primary-dark) !important;
+  color: var(--edb-primary-dark-text) !important;
 }
 
 html body .premium-workspace-card.is-active .premium-workspace-card__action i {
   background: var(--edb-accent-soft) !important;
   border-color: color-mix(in srgb, var(--edb-accent) 45%, var(--edb-border)) !important;
-  color: var(--edb-primary-dark) !important;
+  color: var(--edb-primary-dark-text) !important;
 }
 
 /* Hero header details should also follow the configured palette. */
@@ -900,5 +879,90 @@ html body .premium-portal__crest {
 }
 
 html body .premium-portal__fallback {
-  color: var(--edb-primary) !important;
+  color: var(--edb-primary-text) !important;
 }
+
+
+/* SIDEBAR_TEXT_INPUT_SPLIT_V1
+   Sidebar navigation text and search/input text can now be themed independently.
+   Normal sidebar labels use --edb-sidebar-text. Hover/selected rows keep their
+   existing high-contrast primary colors. Search boxes use --edb-input-text.
+*/
+html body .app-sidebar {
+  --sidebar-text: var(--edb-sidebar-text) !important;
+  --sidebar-muted: var(--edb-sidebar-muted) !important;
+  color: var(--edb-sidebar-text) !important;
+}
+
+html body .app-sidebar .sidebar-category,
+html body .app-sidebar .sidebar-category-label,
+html body.sb-collapsed .app-sidebar .sidebar-category-label,
+html body .app-sidebar .sidebar-lms-direct-head,
+html body .app-sidebar .sidebar-lms-direct-item,
+html body .app-sidebar .sidebar-item,
+html body .app-sidebar .sidebar-item .item-label {
+  color: var(--edb-sidebar-text) !important;
+}
+
+html body .app-sidebar .sidebar-category-arrow,
+html body .app-sidebar .sidebar-lms-direct-arrow,
+html body .app-sidebar .sidebar-lms-direct-group-title {
+  color: var(--edb-sidebar-muted) !important;
+}
+
+html body .app-sidebar .sidebar-search,
+html body .sidebar-submenu-search {
+  color: var(--edb-input-muted) !important;
+}
+
+html body .app-sidebar .sidebar-search input,
+html body .sidebar-submenu-search input {
+  color: var(--edb-input-text) !important;
+  caret-color: var(--edb-input-text) !important;
+}
+
+html body .app-sidebar .sidebar-search input::placeholder,
+html body .sidebar-submenu-search input::placeholder {
+  color: var(--edb-input-muted) !important;
+  opacity: 1 !important;
+}
+/* END SIDEBAR_TEXT_INPUT_SPLIT_V1 */
+
+
+/* SIDEBAR_DASHBOARD_DIRECT_CONTRAST_FIX_V1
+   Dashboard is a permanently light/surface shortcut card, even when another
+   route is open. Keep its text dark while normal sidebar navigation can stay white.
+*/
+html body .app-sidebar .sidebar-dashboard-link,
+html body .app-sidebar .sidebar-dashboard-link .sidebar-category-label,
+html body.sb-collapsed .app-sidebar .sidebar-dashboard-link .sidebar-category-label {
+  color: var(--edb-primary-dark-text) !important;
+  opacity: 1 !important;
+}
+
+html body .app-sidebar .sidebar-dashboard-link .sidebar-category-arrow {
+  color: var(--edb-primary-text) !important;
+}
+
+/* The icon tile is dark, so its glyph must remain white. */
+html body .app-sidebar .sidebar-dashboard-link .sidebar-category-icon,
+html body .app-sidebar .sidebar-dashboard-link .sidebar-category-icon i {
+  color: var(--edb-on-primary) !important;
+}
+/* END SIDEBAR_DASHBOARD_DIRECT_CONTRAST_FIX_V1 */
+
+/* NAVBAR_SHORTCUTS_USE_SIDEBAR_TEXT_V1
+   The top navbar quick-link labels (Students, Collect, Fee Due, Timetable,
+   Exams, Staff, etc.) follow the Portal Theme's Sidebar Text Color.
+   Icon tiles keep their existing surface/active contrast rules.
+*/
+html body .college-navbar .college-quick-link,
+html body .college-navbar .college-quick-link small,
+html body .college-navbar .college-quick-link:hover,
+html body .college-navbar .college-quick-link:hover small,
+html body .college-navbar .college-quick-link.active,
+html body .college-navbar .college-quick-link.active small {
+  color: var(--edb-sidebar-text, var(--theme-sidebar-text, #FFFFFF)) !important;
+  opacity: 1 !important;
+}
+/* END NAVBAR_SHORTCUTS_USE_SIDEBAR_TEXT_V1 */

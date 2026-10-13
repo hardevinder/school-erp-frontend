@@ -36,6 +36,52 @@ const getClassName = (record, classes) => {
 };
 
 const HolidayMarking = () => {
+  // EDUBRIDGE_PO_SETTINGS_V1 — school-wide Preparatory Off attendance policy.
+  const [poTreatment, setPoTreatment] = useState("excluded");
+  const [poOriginal, setPoOriginal] = useState("excluded");
+  const [poLoading, setPoLoading] = useState(true);
+  const [poSaving, setPoSaving] = useState(false);
+  const [poError, setPoError] = useState("");
+
+  useEffect(() => {
+    let alive = true;
+    api.get("/attendance/settings")
+      .then(({ data }) => {
+        if (!alive) return;
+        const value = ["present", "holiday", "excluded"].includes(data?.preparatory_off_treatment)
+          ? data.preparatory_off_treatment : "excluded";
+        setPoTreatment(value);
+        setPoOriginal(value);
+      })
+      .catch((error) => {
+        if (alive) setPoError(error.response?.data?.message || "Unable to load attendance settings. Please check your access.");
+      })
+      .finally(() => { if (alive) setPoLoading(false); });
+    return () => { alive = false; };
+  }, []);
+
+  const savePoSettings = async () => {
+    try {
+      setPoSaving(true);
+      setPoError("");
+      const { data } = await api.put("/attendance/settings", {
+        preparatory_off_treatment: poTreatment,
+      });
+      const saved = data?.preparatory_off_treatment || poTreatment;
+      setPoTreatment(saved);
+      setPoOriginal(saved);
+      Swal.fire("Saved", "Preparatory Off attendance treatment updated.", "success");
+    } catch (error) {
+      const message = error.response?.status === 403
+        ? "Only Admin or Academic Coordinator can change this setting."
+        : error.response?.data?.message || "Failed to save attendance settings.";
+      setPoError(message);
+      Swal.fire("Error", message, "error");
+    } finally {
+      setPoSaving(false);
+    }
+  };
+
   const [classes, setClasses] = useState([]);
   const [selectedClasses, setSelectedClasses] = useState([]);
 
@@ -64,6 +110,34 @@ const HolidayMarking = () => {
 
     return end.diff(start, "days") + 1;
   }, [startDate, endDate]);
+
+  const fetchAttendanceSettings = async () => {
+    try {
+      const { data } = await api.get("/attendance/settings");
+      setPoTreatment(data?.preparatory_off_treatment || "excluded");
+    } catch (error) {
+      console.error("Error fetching attendance settings:", error);
+    }
+  };
+
+  const savePoTreatment = async () => {
+    try {
+      setPoSaving(true);
+      const { data } = await api.put("/attendance/settings", {
+        preparatory_off_treatment: poTreatment,
+      });
+      setPoTreatment(data?.preparatory_off_treatment || poTreatment);
+      Swal.fire("Saved", "Preparatory Off attendance rule updated.", "success");
+    } catch (error) {
+      Swal.fire(
+        "Error",
+        error.response?.data?.message || "Failed to save Preparatory Off setting.",
+        "error"
+      );
+    } finally {
+      setPoSaving(false);
+    }
+  };
 
   const fetchClasses = async () => {
     try {
@@ -107,6 +181,7 @@ const HolidayMarking = () => {
 
   useEffect(() => {
     fetchClasses();
+    fetchAttendanceSettings();
   }, []);
 
   useEffect(() => {
@@ -484,6 +559,91 @@ const HolidayMarking = () => {
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+
+        <div className="card border-0 shadow-sm mb-4">
+          <div className="card-body p-4">
+            <div className="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-3">
+              <div>
+                <div className="text-uppercase text-secondary fw-bold small mb-1">Preparatory Off</div>
+                <h5 className="fw-bold mb-1">How should PO count in student attendance?</h5>
+                <p className="text-muted mb-0 small">
+                  Teachers will always mark it as <strong>PO</strong>. This setting controls totals, working days and attendance percentage.
+                </p>
+              </div>
+              <button className="btn btn-primary" onClick={savePoTreatment} disabled={poSaving}>
+                {poSaving ? "Saving..." : "Save PO Setting"}
+              </button>
+            </div>
+
+            <div className="row g-3">
+              {[
+                { value: "present", title: "Count as Present", text: "PO remains visible as PO, but adds 1 to Present and counts as a working day." },
+                { value: "excluded", title: "Exclude from Attendance", text: "PO is neither Present nor Absent and is excluded from the attendance percentage denominator." },
+                { value: "holiday", title: "Treat as Holiday", text: "PO is shown separately, but for calculations the day behaves as a non-working holiday." },
+              ].map((option) => (
+                <div className="col-lg-4" key={option.value}>
+                  <label className={`border rounded-3 p-3 d-block h-100 ${poTreatment === option.value ? "border-primary bg-primary-subtle" : "bg-white"}`} style={{ cursor: "pointer" }}>
+                    <div className="d-flex align-items-start gap-2">
+                      <input
+                        type="radio"
+                        className="form-check-input mt-1"
+                        name="poTreatment"
+                        value={option.value}
+                        checked={poTreatment === option.value}
+                        onChange={(e) => setPoTreatment(e.target.value)}
+                      />
+                      <div>
+                        <div className="fw-bold">{option.title}</div>
+                        <div className="small text-muted">{option.text}</div>
+                      </div>
+                    </div>
+                  </label>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Preparatory Off attendance treatment: applies to attendance summaries/registers. */}
+        <div className="card border-0 shadow-sm mb-4">
+          <div className="card-body p-4">
+            <h5 className="fw-bold mb-2">Preparatory Off (PO) Treatment</h5>
+            <p className="text-muted small mb-3">
+              Choose how Preparatory Off days are counted in attendance reports.
+              This setting applies across the school, not just the selected holiday dates.
+            </p>
+            <div className="row g-3 align-items-end">
+              <div className="col-md-8 col-lg-6">
+                <label htmlFor="poAttendanceTreatment" className="form-label fw-semibold">
+                  Count Preparatory Off as
+                </label>
+                <select
+                  id="poAttendanceTreatment"
+                  className="form-select"
+                  value={poTreatment}
+                  disabled={poLoading || poSaving || !!poError}
+                  onChange={(event) => setPoTreatment(event.target.value)}
+                >
+                  <option value="present">Present — count as attendance</option>
+                  <option value="holiday">Holiday — treat as non-working holiday</option>
+                  <option value="excluded">Excluded — omit from working-day calculation</option>
+                </select>
+              </div>
+              <div className="col-md-auto">
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={savePoSettings}
+                  disabled={poLoading || poSaving || !!poError || poTreatment === poOriginal}
+                >
+                  {poSaving ? "Saving..." : "Save PO Setting"}
+                </button>
+              </div>
+            </div>
+            {poLoading && <div className="text-muted small mt-2">Loading attendance settings...</div>}
+            {poError && <div className="alert alert-warning mt-3 mb-0" role="alert">{poError}</div>}
           </div>
         </div>
 

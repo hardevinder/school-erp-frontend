@@ -311,35 +311,35 @@ export default function FrontOfficeDashboard() {
         description: "Issue and track passes",
         icon: "bi-door-open",
         href: "/gate-pass",
-        gradient: "linear-gradient(135deg, #2563eb, #1d4ed8)",
+        gradient: "linear-gradient(135deg, var(--edb-primary), var(--edb-primary-dark))",
       },
       {
         label: "Visitors",
         description: "Manage visitor log",
         icon: "bi-person-vcard",
         href: "/visitors",
-        gradient: "linear-gradient(135deg, #f97316, #ea580c)",
+        gradient: "linear-gradient(135deg, var(--edb-primary), var(--edb-primary-dark))",
       },
       {
         label: "Enquiries",
         description: "Handle admissions enquiries",
         icon: "bi-chat-dots",
         href: "/enquiries",
-        gradient: "linear-gradient(135deg, #0ea5e9, #0369a1)",
+        gradient: "linear-gradient(135deg, var(--edb-primary), var(--edb-primary-dark))",
       },
       {
         label: "Academic Calendar",
         description: "Open published calendar",
         icon: "bi-calendar3",
         href: "/academic-calendar-view",
-        gradient: "linear-gradient(135deg, #6366f1, #4338ca)",
+        gradient: "linear-gradient(135deg, var(--edb-primary), var(--edb-primary-dark))",
       },
       {
         label: "Students",
         description: "View student records",
         icon: "bi-people",
         href: "/students",
-        gradient: "linear-gradient(135deg, #a855f7, #7c3aed)",
+        gradient: "linear-gradient(135deg, var(--edb-primary), var(--edb-primary-dark))",
       },
     ],
     []
@@ -429,7 +429,7 @@ export default function FrontOfficeDashboard() {
       className="fo-bg dashboard-surface"
       style={{
         backgroundImage:
-          "radial-gradient(circle at top left, rgba(37, 99, 235, 0.15), transparent 30%), radial-gradient(circle at top right, rgba(168, 85, 247, 0.12), transparent 24%), linear-gradient(180deg, #f8fbff 0%, #f8fafc 100%)",
+          "radial-gradient(circle at top left, color-mix(in srgb, var(--edb-primary) 15%, transparent), transparent 30%), radial-gradient(circle at top right, color-mix(in srgb, var(--edb-primary) 12%, transparent), transparent 24%), linear-gradient(180deg, var(--edb-surface) 0%, var(--edb-surface) 100%)",
         minHeight: "100vh",
       }}
     >
@@ -558,8 +558,8 @@ export default function FrontOfficeDashboard() {
                   style={{
                     width: 48,
                     height: 48,
-                    background: "rgba(255,255,255,0.20)",
-                    border: "1px solid rgba(255,255,255,0.25)",
+                    background: "color-mix(in srgb, var(--edb-surface) 20%, transparent)",
+                    border: "1px solid color-mix(in srgb, var(--edb-border) 25%, transparent)",
                     flexShrink: 0,
                   }}
                 >
@@ -834,8 +834,8 @@ export default function FrontOfficeDashboard() {
                           style={{
                             width: 42,
                             height: 42,
-                            background: "#eef2ff",
-                            color: "#3730a3",
+                            background: "var(--edb-surface)",
+                            color: "var(--edb-primary-text)",
                             fontWeight: 700,
                           }}
                         >
@@ -884,12 +884,12 @@ export default function FrontOfficeDashboard() {
 
         {/* Styles */}
         <style>{`
-          .fo-activity-card{border:1px solid rgba(226,232,240,.85)!important;}
+          .fo-activity-card{border:1px solid color-mix(in srgb, var(--edb-border) 85%, transparent)!important;}
           .fo-activity-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;}
-          .fo-activity-item{border:1px solid #edf1f6;background:#fbfdff;border-radius:14px;padding:12px;display:grid;grid-template-columns:38px 1fr 16px;align-items:center;gap:10px;text-align:left;color:#1f2937;transition:.18s ease;}
-          .fo-activity-item:hover{background:#fff;transform:translateY(-1px);box-shadow:0 8px 18px rgba(15,23,42,.06);}
-          .fo-activity-icon{width:38px;height:38px;border-radius:12px;background:#f1f5f9;display:grid;place-items:center;font-size:1rem;}
-          .fo-activity-copy{display:flex;flex-direction:column;min-width:0}.fo-activity-copy strong{font-size:.84rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.fo-activity-copy small{font-size:.74rem;color:#64748b}.fo-activity-copy em{font-size:.66rem;color:#94a3b8;font-style:normal;margin-top:3px;}
+          .fo-activity-item{border:1px solid var(--edb-border);background:var(--edb-surface);border-radius:14px;padding:12px;display:grid;grid-template-columns:38px 1fr 16px;align-items:center;gap:10px;text-align:left;color:var(--edb-text);transition:.18s ease;}
+          .fo-activity-item:hover{background:var(--edb-surface);transform:translateY(-1px);box-shadow:0 8px 18px color-mix(in srgb, var(--edb-primary-dark) 6%, transparent);}
+          .fo-activity-icon{width:38px;height:38px;border-radius:12px;background:var(--edb-surface);display:grid;place-items:center;font-size:1rem;}
+          .fo-activity-copy{display:flex;flex-direction:column;min-width:0}.fo-activity-copy strong{font-size:.84rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.fo-activity-copy small{font-size:.74rem;color:var(--edb-muted-text)}.fo-activity-copy em{font-size:.66rem;color:var(--edb-muted-text);font-style:normal;margin-top:3px;}
           @media(max-width:767px){.fo-activity-grid{grid-template-columns:1fr}}
 
           .fo-link {
@@ -897,16 +897,16 @@ export default function FrontOfficeDashboard() {
           }
           .fo-link:hover {
             transform: translateY(-2px);
-            box-shadow: 0 12px 24px rgba(15, 23, 42, 0.14);
+            box-shadow: 0 12px 24px color-mix(in srgb, var(--edb-primary-dark) 14.000000000000002%, transparent);
             filter: saturate(1.05);
           }
 
           .fo-hero-main {
-            background: linear-gradient(135deg, rgba(255,255,255,0.98) 0%, rgba(239,246,255,0.96) 100%);
+            background: linear-gradient(135deg, color-mix(in srgb, var(--edb-surface) 98%, transparent) 0%, color-mix(in srgb, var(--edb-surface) 96%, transparent) 100%);
           }
           .fo-hero-side {
-            background: linear-gradient(135deg, rgba(248,250,252,0.98) 0%, rgba(241,245,249,0.98) 100%);
-            border-left: 1px solid rgba(148,163,184,0.18);
+            background: linear-gradient(135deg, color-mix(in srgb, var(--edb-surface) 98%, transparent) 0%, color-mix(in srgb, var(--edb-surface) 98%, transparent) 100%);
+            border-left: 1px solid color-mix(in srgb, var(--edb-border) 18%, transparent);
           }
           .fo-hero-text {
             max-width: 760px;
@@ -917,7 +917,7 @@ export default function FrontOfficeDashboard() {
             width: 8px;
             height: 8px;
             border-radius: 999px;
-            background: #9ca3af;
+            background: var(--edb-border);
             margin-right: 8px;
           }
           .fo-live-dot.active {
@@ -929,7 +929,7 @@ export default function FrontOfficeDashboard() {
             font-size: 11px;
             letter-spacing: .08em;
             font-weight: 700;
-            color: #64748b;
+            color: var(--edb-muted-text);
           }
 
           .fo-mini-stat {
@@ -938,8 +938,8 @@ export default function FrontOfficeDashboard() {
             gap: 12px;
             padding: 12px 14px;
             border-radius: 16px;
-            background: rgba(255,255,255,0.72);
-            border: 1px solid rgba(148,163,184,0.16);
+            background: color-mix(in srgb, var(--edb-surface) 72%, transparent);
+            border: 1px solid color-mix(in srgb, var(--edb-border) 16%, transparent);
           }
           .fo-mini-stat-icon {
             width: 42px;
@@ -948,9 +948,9 @@ export default function FrontOfficeDashboard() {
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            background: rgba(255,255,255,0.9);
+            background: color-mix(in srgb, var(--edb-surface) 90%, transparent);
             font-size: 1.1rem;
-            box-shadow: inset 0 0 0 1px rgba(148,163,184,0.14);
+            box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--edb-primary-dark) 14.000000000000002%, transparent);
             flex-shrink: 0;
           }
 
@@ -961,8 +961,8 @@ export default function FrontOfficeDashboard() {
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            background: #e8f0ff;
-            color: #1d4ed8;
+            background: var(--edb-primary-soft);
+            color: var(--edb-primary-text);
           }
 
           .fo-summary-card {
@@ -970,13 +970,13 @@ export default function FrontOfficeDashboard() {
           }
           .fo-summary-card:hover {
             transform: translateY(-2px);
-            box-shadow: 0 12px 24px rgba(15, 23, 42, 0.10) !important;
+            box-shadow: 0 12px 24px color-mix(in srgb, var(--edb-primary-dark) 10%, transparent) !important;
           }
           .fo-summary-value {
             font-size: 1.9rem;
             line-height: 1;
             font-weight: 800;
-            color: #0f172a;
+            color: var(--edb-text);
           }
           .fo-summary-icon {
             width: 52px;
@@ -1011,14 +1011,14 @@ export default function FrontOfficeDashboard() {
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            background: #f8fafc;
-            color: #64748b;
+            background: var(--edb-surface);
+            color: var(--edb-muted-text);
             font-size: 1.35rem;
-            border: 1px solid #e2e8f0;
+            border: 1px solid var(--edb-border);
           }
 
           .fo-calendar-card {
-            background: linear-gradient(135deg, rgba(239,246,255,0.85), rgba(250,245,255,0.85));
+            background: linear-gradient(135deg, color-mix(in srgb, var(--edb-surface) 85%, transparent), color-mix(in srgb, var(--edb-surface) 85%, transparent));
           }
 
           .card {
@@ -1039,7 +1039,7 @@ export default function FrontOfficeDashboard() {
           @media (max-width: 1199px) {
             .fo-hero-side {
               border-left: 0;
-              border-top: 1px solid rgba(148,163,184,0.18);
+              border-top: 1px solid color-mix(in srgb, var(--edb-border) 18%, transparent);
             }
           }
 

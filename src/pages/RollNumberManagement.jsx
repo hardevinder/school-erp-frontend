@@ -77,7 +77,7 @@ const SortableStudentRow = ({
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.75 : 1,
-    background: isDragging ? "#f8fafc" : undefined,
+    background: isDragging ? "var(--edb-surface)" : undefined,
   };
 
   const rollValue =
@@ -106,8 +106,8 @@ const SortableStudentRow = ({
             width: 30,
             height: 30,
             borderRadius: 8,
-            border: "1px solid #e5e7eb",
-            background: "#fff",
+            border: "1px solid var(--edb-border)",
+            background: "var(--edb-surface)",
           }}
         >
           ☰
@@ -424,7 +424,7 @@ const RollNumberManagement = () => {
                   strategy={verticalListSortingStrategy}
                 >
                   <table className="table table-hover align-middle" style={{ marginBottom: 0 }}>
-                    <thead style={{ position: "sticky", top: 0, zIndex: 5, background: "#fff" }}>
+                    <thead style={{ position: "sticky", top: 0, zIndex: 5, background: "var(--edb-surface)" }}>
                       <tr className="text-muted" style={{ fontSize: 13 }}>
                         <th style={{ width: 55 }}>#</th>
                         <th style={{ width: 46 }}></th>

@@ -163,7 +163,7 @@ const Houses = () => {
                     width: "40px",
                     height: "20px",
                     borderRadius: "4px",
-                    border: "1px solid #ddd",
+                    border: "1px solid var(--edb-border)",
                     display: "inline-block",
                   }}
                   title={house.color}
@@ -214,7 +214,7 @@ const Houses = () => {
       {showModal && (
         <div
           className="modal show d-block"
-          style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
+          style={{ backgroundColor: "color-mix(in srgb, var(--edb-primary-dark) 50%, transparent)" }}
         >
           <div className="modal-dialog modal-dialog-centered">
             <div className="modal-content">

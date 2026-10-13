@@ -289,7 +289,7 @@ function TeachingResultAnalytics({ analytics }) {
             <YAxis domain={[0, 100]} unit="%" />
             <Tooltip formatter={(v, n)=>[`${Number(v).toFixed(1)}%`, n === 'average' ? 'Class Average' : 'Pass Rate']} labelFormatter={(label, payload)=>`${label}${payload?.[0]?.payload?.date ? ` • ${payload[0].payload.date}` : ''}`} />
             <Legend />
-            <Line type="monotone" dataKey="average" name="Class Average" stroke="#0d6efd" strokeWidth={3} dot={{r: 5}} activeDot={{r: 7}} />
+            <Line type="monotone" dataKey="average" name="Class Average" stroke="var(--edb-primary-text)" strokeWidth={3} dot={{r: 5}} activeDot={{r: 7}} />
             <Line type="monotone" dataKey="pass_percent" name="Pass Rate" stroke="#198754" strokeWidth={2} strokeDasharray="5 4" dot={{r: 4}} />
           </LineChart>
         </ResponsiveContainer>
@@ -298,7 +298,7 @@ function TeachingResultAnalytics({ analytics }) {
     </div></div>
 
     <div className="row g-3 mb-3">
-      <div className="col-xl-7"><div className="card border-0 shadow-sm h-100"><div className="card-body"><h5>Class / Subject Comparison</h5><div className="small text-muted mb-2">Growth points and teaching-result score across assigned groups.</div><div style={{height: 280}}><ResponsiveContainer width="100%" height="100%"><BarChart data={groupChart} margin={{top: 10,right: 20,left: 0,bottom: 60}}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="name" angle={-20} textAnchor="end" height={80} interval={0} tick={{fontSize: 10}} /><YAxis /><Tooltip /><Legend /><Bar dataKey="growth" name="Growth points" fill="#20c997" radius={[5,5,0,0]} /><Bar dataKey="score" name="Teaching score" fill="#6f42c1" radius={[5,5,0,0]} /></BarChart></ResponsiveContainer></div></div></div></div>
+      <div className="col-xl-7"><div className="card border-0 shadow-sm h-100"><div className="card-body"><h5>Class / Subject Comparison</h5><div className="small text-muted mb-2">Growth points and teaching-result score across assigned groups.</div><div style={{height: 280}}><ResponsiveContainer width="100%" height="100%"><BarChart data={groupChart} margin={{top: 10,right: 20,left: 0,bottom: 60}}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="name" angle={-20} textAnchor="end" height={80} interval={0} tick={{fontSize: 10}} /><YAxis /><Tooltip /><Legend /><Bar dataKey="growth" name="Growth points" fill="#20c997" radius={[5,5,0,0]} /><Bar dataKey="score" name="Teaching score" fill="var(--edb-primary-text)" radius={[5,5,0,0]} /></BarChart></ResponsiveContainer></div></div></div></div>
       <div className="col-xl-5"><div className="card border-0 shadow-sm h-100"><div className="card-body"><h5>Student Progress Mix</h5><div className="small text-muted mb-2">{selected?.class_name}{selected?.section_name ? `-${selected.section_name}` : ''} • {selected?.subject_name}</div><div style={{height: 240}}><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={distribution} dataKey="value" nameKey="name" innerRadius={55} outerRadius={90} paddingAngle={3} label={({name,value})=>`${name}: ${value}`}>{distribution.map((entry)=><Cell key={entry.name} fill={entry.fill} />)}</Pie><Tooltip /></PieChart></ResponsiveContainer></div><div className="small text-muted text-center">Evidence coverage {Number(selected?.evidence_coverage || 0).toFixed(1)}% • {Number(selected?.matched_students || 0)} matched students</div></div></div></div>
     </div>
 

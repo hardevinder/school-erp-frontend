@@ -23,26 +23,26 @@
   min-width: 0;
   max-width: 300px;
   padding: 8px 12px;
-  border: 2px dashed #adb5bd;
+  border: 2px dashed var(--edb-border);
   border-radius: 6px;
-  background: #f8f9fa;
+  background: var(--edb-surface);
   cursor: pointer;
 }
 
 .employee-import-dropzone:hover,
 .employee-import-dropzone:focus-within,
 .employee-import-dropzone.is-dragging {
-  border-color: #0d6efd;
-  background: #eaf2ff;
+  border-color: var(--edb-primary);
+  background: var(--edb-primary-soft);
 }
 
 .employee-import-dropzone:focus-within {
-  outline: 2px solid #0d6efd;
+  outline: 2px solid var(--edb-primary);
   outline-offset: 2px;
 }
 
 .employee-import-dropzone small {
-  color: #495057;
+  color: var(--edb-text);
 }
 
 .employee-import-filename {

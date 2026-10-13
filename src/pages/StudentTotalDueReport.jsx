@@ -255,36 +255,41 @@ const readBooleanLike = (value) => {
 // Transport due date is SAME as the academic fee head due date.
 // Do NOT trust backend pendingTillDate/isDueTillDate when they conflict with dueDate,
 // because old backend may send pendingTillDate = 0 even when dueDate <= tillDate.
-const isHeadDueTillDate = (head, tillDateISO) => {
+const isHeadDueTillDate = (head, tillDateISO, fromDateISO = "") => {
   const remaining = Number(head?.remaining || 0) || 0;
   const fine = Number(head?.fine || 0) || 0;
   if (remaining <= 0 && fine <= 0) return false;
 
-  // Opening Balance -> always due if pending
-  if (head?.isOpeningBalance) return true;
+  // Opening Balance has no due date. Keep old behaviour only when From Date is blank.
+  if (head?.isOpeningBalance) return !fromDateISO;
 
-  // Transport without dueDate must NOT be counted in Till Date.
   if (head?.isTransport && !head?.dueDate) return false;
 
-  const dueStr = head?.dueDate; // installment / fee head due date only
+  const dueStr = head?.dueDate;
   if (!dueStr) return false;
 
-  const due = parseDateOnly(dueStr);
+  const due = toStartOfDay(parseDateOnly(dueStr));
   if (!due) return false;
 
-  const ref =
+  const till =
     toStartOfDay(parseDateOnly(tillDateISO)) || toStartOfDay(new Date());
+  if (due.getTime() > till.getTime()) return false;
 
-  return due.getTime() <= ref.getTime();
+  if (fromDateISO) {
+    const from = toStartOfDay(parseDateOnly(fromDateISO));
+    if (from && due.getTime() < from.getTime()) return false;
+  }
+
+  return true;
 };
 
-const getHeadFineTillDateAmount = (head, tillDateISO) => {
-  if (!isHeadDueTillDate(head, tillDateISO)) return 0;
+const getHeadFineTillDateAmount = (head, tillDateISO, fromDateISO = "") => {
+  if (!isHeadDueTillDate(head, tillDateISO, fromDateISO)) return 0;
   return Math.max(Number(head?.fine || 0) || 0, 0);
 };
 
-const getHeadDueTillDateAmount = (head, tillDateISO) => {
-  if (!isHeadDueTillDate(head, tillDateISO)) return 0;
+const getHeadDueTillDateAmount = (head, tillDateISO, fromDateISO = "") => {
+  if (!isHeadDueTillDate(head, tillDateISO, fromDateISO)) return 0;
 
   const remaining = Math.max(Number(head?.remaining || 0) || 0, 0);
   const fine = Math.max(Number(head?.fine || 0) || 0, 0);
@@ -403,7 +408,8 @@ const StudentTotalDueReport = () => {
   const [classFilter, setClassFilter] = useState("all");
   const [pendingFilter, setPendingFilter] = useState("all");
 
-  // ✅ Till Date selector (can be future)
+  // ✅ Optional From Date + Till Date range. Blank From Date preserves legacy "due till" behaviour.
+  const [fromDate, setFromDate] = useState("");
   const [tillDate, setTillDate] = useState(() => toISODate(new Date()));
 
   const [excelDownloading, setExcelDownloading] = useState(false);
@@ -634,7 +640,7 @@ const StudentTotalDueReport = () => {
     }, 0);
 
     const fallbackTillDate = heads.reduce(
-      (sum, h) => sum + getHeadDueTillDateAmount(h, tillDate),
+      (sum, h) => sum + getHeadDueTillDateAmount(h, tillDate, fromDate),
       0
     );
 
@@ -703,6 +709,7 @@ const StudentTotalDueReport = () => {
       const res = await api.get("/reports/student-total-due", {
         params: {
           session_id: sessionId,
+          fromDate: fromDate || undefined,
           tillDate,
         },
       });
@@ -751,6 +758,7 @@ const StudentTotalDueReport = () => {
 
   const buildExportParams = () => ({
     session_id: activeSessionId,
+    fromDate: fromDate || undefined,
     tillDate,
     search: search.trim() || undefined,
     classFilter: classFilter !== "all" ? classFilter : undefined,
@@ -770,7 +778,7 @@ const StudentTotalDueReport = () => {
         responseType: "blob",
       });
 
-      const fallbackName = `Student_Total_Due_${activeSession?.name || activeSessionId}_Till_${tillDate}.xlsx`;
+      const fallbackName = `Student_Total_Due_${fromDate ? `From_${fromDate}_` : ""}Till_${tillDate}_${activeSession?.name || activeSessionId}.xlsx`;
       const filename = getFilenameFromDisposition(
         response.headers?.["content-disposition"],
         fallbackName
@@ -804,7 +812,7 @@ const StudentTotalDueReport = () => {
         responseType: "blob",
       });
 
-      const fallbackName = `Student_Total_Due_${activeSession?.name || activeSessionId}_Till_${tillDate}.pdf`;
+      const fallbackName = `Student_Total_Due_${fromDate ? `From_${fromDate}_` : ""}Till_${tillDate}_${activeSession?.name || activeSessionId}.pdf`;
       const filename = getFilenameFromDisposition(
         response.headers?.["content-disposition"],
         fallbackName
@@ -829,7 +837,7 @@ const StudentTotalDueReport = () => {
 
   const computeFineTotalTillDate = (heads) =>
     (heads || []).reduce(
-      (sum, h) => sum + getHeadFineTillDateAmount(h, tillDate),
+      (sum, h) => sum + getHeadFineTillDateAmount(h, tillDate, fromDate),
       0
     );
 
@@ -1199,13 +1207,13 @@ const StudentTotalDueReport = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSessionId]);
 
-  // Re-load backend report when tillDate changes.
+  // Re-load backend report when date range changes.
   useEffect(() => {
     if (!activeSessionId) return;
 
     loadSessionDataAndBuild(activeSessionId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tillDate]);
+  }, [fromDate, tillDate]);
 
   // Dropdown options
   const classOptions = useMemo(() => {
@@ -1420,7 +1428,7 @@ const StudentTotalDueReport = () => {
 
       <div className="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
         <div>
-          <h2 className="m-0 text-primary">Student Wise Total Due (Till Date)</h2>
+          <h2 className="m-0 fw-bold text-primary">Student Wise Fee Due Report</h2>
           <div className="d-flex flex-wrap gap-2 align-items-center mt-1">
             {school?.name && (
               <small className="text-muted">School: {school.name}</small>
@@ -1431,7 +1439,7 @@ const StudentTotalDueReport = () => {
               </Badge>
             )}
             <Badge bg="secondary" pill>
-              Till Date: {tillDate}
+              {fromDate ? `Range: ${fromDate} → ${tillDate}` : `Due Till: ${tillDate}`}
             </Badge>
           </div>
         </div>
@@ -1456,10 +1464,32 @@ const StudentTotalDueReport = () => {
           </Form.Select>
 
           <InputGroup size="sm" style={{ minWidth: 220 }}>
+            <InputGroup.Text>From Date</InputGroup.Text>
+            <Form.Control
+              type="date"
+              value={fromDate}
+              max={tillDate}
+              onChange={(e) => setFromDate(e.target.value ? toISODate(e.target.value) : "")}
+              disabled={isAnyBulkSending}
+            />
+            {fromDate && (
+              <Button
+                variant="outline-secondary"
+                onClick={() => setFromDate("")}
+                disabled={isAnyBulkSending}
+                title="Clear From Date"
+              >
+                ×
+              </Button>
+            )}
+          </InputGroup>
+
+          <InputGroup size="sm" style={{ minWidth: 220 }}>
             <InputGroup.Text>Till Date</InputGroup.Text>
             <Form.Control
               type="date"
               value={tillDate}
+              min={fromDate || undefined}
               onChange={(e) => setTillDate(toISODate(e.target.value))}
               disabled={isAnyBulkSending}
             />
@@ -1491,10 +1521,10 @@ const StudentTotalDueReport = () => {
                 Total Students: {stats.total}
               </Badge>
               <Badge bg="danger" pill>
-                Pending Till Date: {stats.pending}
+                {fromDate ? "Pending in Range" : "Pending Till Date"}: {stats.pending}
               </Badge>
               <Badge bg="success" pill>
-                Zero Till Date: {stats.clear}
+                {fromDate ? "Zero in Range" : "Zero Till Date"}: {stats.clear}
               </Badge>
             </div>
 
@@ -1552,8 +1582,8 @@ const StudentTotalDueReport = () => {
               disabled={isAnyBulkSending}
             >
               <option value="all">All (Pending + Clear)</option>
-              <option value="pending">Only Pending Till Date</option>
-              <option value="clear">Only Zero Till Date</option>
+              <option value="pending">{fromDate ? "Only Pending in Range" : "Only Pending Till Date"}</option>
+              <option value="clear">{fromDate ? "Only Zero in Range" : "Only Zero Till Date"}</option>
             </Form.Select>
 
             <Button
@@ -1651,7 +1681,7 @@ const StudentTotalDueReport = () => {
 
         <div className="d-flex flex-wrap gap-2 mt-3 small text-muted">
           <span>
-            • “Due Till Date” means installment due date ≤ selected Till Date.
+            • {fromDate ? "Range Due means From Date ≤ fee-head due date ≤ Till Date." : "Due Till Date means fee-head due date ≤ selected Till Date."}
           </span>
           <span>
             • Transport without a due date is not counted in Till Date.
@@ -1681,7 +1711,7 @@ const StudentTotalDueReport = () => {
                 <th>Admission No</th>
                 <th>Class / Section</th>
                 <th>Phone</th>
-                <th className="text-end">Total Due Till Date</th>
+                <th className="text-end">{fromDate ? "Total Due in Range" : "Total Due Till Date"}</th>
                 <th className="text-end">Total Due (All Heads)</th>
                 <th style={{ width: "95px" }}>Details</th>
                 <th style={{ width: "250px" }}>Actions</th>
@@ -1942,22 +1972,25 @@ const StudentTotalDueReport = () => {
                                   <th className="text-end">Remaining</th>
                                   <th className="text-end">Fine</th>
                                   <th className="text-end">
-                                    Due Till Date (Head)
+                                    {fromDate ? "Due in Range (Head)" : "Due Till Date (Head)"}
                                   </th>
                                   <th style={{ width: "130px" }}>Status</th>
                                 </tr>
                               </thead>
 
                               <tbody>
-                                {stu.heads.map((h, idx) => {
+                                {stu.heads
+                                  .filter((h) => !fromDate || isHeadDueTillDate(h, tillDate, fromDate))
+                                  .map((h, idx) => {
                                   const isDueTill = isHeadDueTillDate(
                                     h,
-                                    tillDate
+                                    tillDate,
+                                    fromDate
                                   );
                                   const remaining = Number(h.remaining || 0);
                                   const fine = Number(h.fine || 0);
                                   const headDueTillDate =
-                                    getHeadDueTillDateAmount(h, tillDate);
+                                    getHeadDueTillDateAmount(h, tillDate, fromDate);
                                   const missingTransportDueDate =
                                     h.isTransport && !h.dueDate && remaining > 0;
 

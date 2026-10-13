@@ -1,12 +1,12 @@
 .ptm-page { max-width: 1700px; }
 .ptm-class-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
-.ptm-class-card { border: 1px solid #e3e7ee; border-radius: 12px; padding: 12px; background: #fbfcff; }
-.ptm-section-pill { display: inline-flex; align-items: center; gap: 6px; border: 1px solid #d8dee9; border-radius: 10px; padding: 7px 9px; background: #fff; cursor: pointer; }
-.ptm-section-pill.selected { border-color: #0d6efd; background: #edf5ff; }
-.ptm-section-pill small { display: block; color: #6c757d; font-size: 10px; }
+.ptm-class-card { border: 1px solid var(--edb-border); border-radius: 12px; padding: 12px; background: var(--edb-surface); }
+.ptm-section-pill { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--edb-border); border-radius: 10px; padding: 7px 9px; background: var(--edb-surface); cursor: pointer; }
+.ptm-section-pill.selected { border-color: var(--edb-primary); background: var(--edb-surface); }
+.ptm-section-pill small { display: block; color: var(--edb-muted-text); font-size: 10px; }
 .ptm-meeting-select { max-width: 560px; }
-.ptm-stat { min-height: 82px; display: flex; align-items: center; gap: 12px; border: 1px solid #e8ebf1; border-radius: 12px; padding: 14px; background: linear-gradient(135deg, #fff, #f7f9ff); }
-.ptm-stat i { font-size: 25px; color: #0d6efd; }
+.ptm-stat { min-height: 82px; display: flex; align-items: center; gap: 12px; border: 1px solid var(--edb-border); border-radius: 12px; padding: 14px; background: linear-gradient(135deg, var(--edb-surface), var(--edb-surface)); }
+.ptm-stat i { font-size: 25px; color: var(--edb-primary-text); }
 .ptm-stat small, .ptm-stat strong { display: block; }
 .ptm-stat strong { font-size: 24px; line-height: 1.1; }
 .ptm-page textarea { resize: vertical; }
@@ -46,7 +46,7 @@
   align-items: center;
   justify-content: center;
   padding: 20px;
-  background: rgba(18, 24, 38, 0.58);
+  background: color-mix(in srgb, var(--edb-primary-dark) 58%, transparent);
   backdrop-filter: blur(2px);
 }
 
@@ -71,7 +71,7 @@
   position: sticky !important;
   top: 0 !important;
   z-index: 2 !important;
-  background: #fff !important;
+  background: var(--edb-surface) !important;
 }
 
 .ptm-meeting-manager-modal {
@@ -91,7 +91,7 @@
   align-items: center;
   gap: 12px;
   padding: 13px 16px;
-  border-bottom: 1px solid #edf0f5;
+  border-bottom: 1px solid var(--edb-border);
 }
 
 .ptm-manager-row:last-child {
@@ -102,7 +102,7 @@
   position: sticky;
   top: 0;
   z-index: 2;
-  background: #f7f9fc;
+  background: var(--edb-surface);
 }
 
 @media (max-width: 767px) {

@@ -331,7 +331,7 @@ const Assessments = () => {
         <div
           className="modal show fade d-block"
           tabIndex="-1"
-          style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
+          style={{ backgroundColor: "color-mix(in srgb, var(--edb-primary-dark) 50%, transparent)" }}
         >
           <div className="modal-dialog modal-lg">
             <div className="modal-content border-0 shadow-lg">
@@ -625,7 +625,7 @@ const GiveAssessmentToStudents = () => {
       </div>
 
       {showModal && (
-        <div className="modal show fade d-block" tabIndex="-1" style={{ backgroundColor: "rgba(0,0,0,0.5)" }}>
+        <div className="modal show fade d-block" tabIndex="-1" style={{ backgroundColor: "color-mix(in srgb, var(--edb-primary-dark) 50%, transparent)" }}>
           <div className="modal-dialog modal-xl">
             <div className="modal-content border-0 shadow-lg">
               <div className="modal-header bg-success text-white sticky-top">
@@ -940,7 +940,7 @@ const AssignedAssessmentsList = () => {
         <div
           className="modal show fade d-block"
           tabIndex="-1"
-          style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
+          style={{ backgroundColor: "color-mix(in srgb, var(--edb-primary-dark) 50%, transparent)" }}
         >
           <div className="modal-dialog modal-lg">
             <div className="modal-content border-0 shadow-lg">

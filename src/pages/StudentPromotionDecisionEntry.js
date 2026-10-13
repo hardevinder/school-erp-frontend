@@ -522,7 +522,7 @@ const StudentPromotionDecisionEntry = () => {
   const stickyColStyle = (leftPx) => ({
     position: "sticky",
     left: leftPx,
-    background: "#fff",
+    background: "var(--edb-surface)",
     zIndex: 2,
   });
 
@@ -552,7 +552,7 @@ const StudentPromotionDecisionEntry = () => {
           position: "sticky",
           top: 0,
           zIndex: HEADER_Z,
-          boxShadow: "0 1px 6px rgba(0,0,0,0.06)",
+          boxShadow: "0 1px 6px color-mix(in srgb, var(--edb-primary-dark) 6%, transparent)",
         }}
       >
         <div className="card-body py-3">

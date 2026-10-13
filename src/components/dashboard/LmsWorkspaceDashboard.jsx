@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import api from "../../api";
+import StudentLatestLearningFeed from "./StudentLatestLearningFeed";
 import { useInstitution } from "../../institution/InstitutionContext";
 import "./LmsWorkspaceDashboard.css";
 
@@ -410,6 +411,8 @@ export default function LmsWorkspaceDashboard({ role = "" }) {
             </div>
           </section>
         )}
+
+        {normalizedRole === "student" && <StudentLatestLearningFeed refreshKey={refreshKey} />}
 
         <section className="lms-live-panel mb-3" aria-label="Live LMS overview">
           <div className="lms-live-head">

@@ -336,7 +336,7 @@ const CancelledTransactions = () => {
       {showDetail && activeTxn && (
         <div
           className="offcanvas offcanvas-end show"
-          style={{ visibility: "visible", width: 420, background: "#fff" }}
+          style={{ visibility: "visible", width: 420, background: "var(--edb-surface)" }}
         >
           <div className="offcanvas-header">
             <h5 className="offcanvas-title">

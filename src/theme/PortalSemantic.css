@@ -1,0 +1,136 @@
+/* Shared controls consume the Portal Theme. Status variants retain Bootstrap's
+   success/danger/warning/info palettes. No spacing or layout belongs here. */
+:root {
+  --edb-muted-text: var(--edb-muted);
+  --edb-on-primary: #fff;
+  --edb-on-primary-dark: #fff;
+  --edb-on-accent: #000;
+  --edb-on-dashboard: var(--edb-text);
+  --edb-primary-text: var(--edb-primary);
+  --edb-primary-dark-text: var(--edb-primary-dark);
+  --edb-accent-text: var(--edb-accent);
+  --edb-on-primary-soft: var(--edb-text);
+  --edb-on-accent-soft: var(--edb-text);
+  --bs-primary: var(--edb-primary);
+  --bs-primary-rgb: var(--edb-primary-rgb);
+  --bs-body-bg: var(--edb-dashboard-bg);
+  --bs-body-color: var(--edb-text);
+  --bs-secondary-color: var(--edb-muted-text);
+  --bs-tertiary-bg: var(--edb-primary-soft-2);
+  --bs-border-color: var(--edb-border);
+  --bs-link-color: var(--edb-primary-text);
+  --bs-link-hover-color: var(--edb-primary-dark-text);
+}
+body, .app-content { background-color: var(--edb-dashboard-bg); color: var(--edb-on-dashboard); }
+html body :is(.card, .modal-content, .dropdown-menu, .popover, .offcanvas, .list-group-item, .swal2-popup) {
+  --bs-card-bg: var(--edb-surface);
+  --bs-card-color: var(--edb-text);
+  --bs-modal-bg: var(--edb-surface);
+  --bs-modal-color: var(--edb-text);
+  --bs-dropdown-bg: var(--edb-surface);
+  --bs-dropdown-color: var(--edb-text);
+  --bs-dropdown-link-color: var(--edb-text);
+  --bs-dropdown-link-hover-bg: var(--edb-primary-soft);
+  --bs-dropdown-link-hover-color: var(--edb-on-primary-soft);
+  --bs-dropdown-link-active-bg: var(--edb-primary);
+  --bs-dropdown-link-active-color: var(--edb-on-primary);
+  --bs-list-group-bg: var(--edb-surface);
+  --bs-list-group-color: var(--edb-text);
+  --bs-list-group-border-color: var(--edb-border);
+  --bs-list-group-active-bg: var(--edb-primary);
+  --bs-list-group-active-color: var(--edb-on-primary);
+  --bs-popover-bg: var(--edb-surface);
+  --bs-popover-body-color: var(--edb-text);
+  --bs-offcanvas-bg: var(--edb-surface);
+  --bs-offcanvas-color: var(--edb-text);
+}
+html body .btn-primary, html body .btn-outline-primary {
+  --bs-btn-color: var(--edb-on-primary);
+  --bs-btn-bg: var(--edb-primary);
+  --bs-btn-border-color: var(--edb-primary);
+  --bs-btn-hover-bg: var(--edb-primary-dark);
+  --bs-btn-hover-color: var(--edb-on-primary-dark);
+  --bs-btn-hover-border-color: var(--edb-primary-dark);
+  --bs-btn-active-bg: var(--edb-primary-dark);
+  --bs-btn-active-color: var(--edb-on-primary-dark);
+  --bs-btn-active-border-color: var(--edb-primary-dark);
+  --bs-btn-disabled-bg: var(--edb-primary);
+  --bs-btn-disabled-color: var(--edb-on-primary);
+  --bs-btn-disabled-border-color: var(--edb-primary);
+  --bs-btn-focus-shadow-rgb: var(--edb-primary-rgb);
+}
+html body .btn-outline-primary {
+  --bs-btn-bg: transparent;
+  --bs-btn-color: var(--edb-primary-text);
+  --bs-btn-disabled-bg: transparent;
+  --bs-btn-disabled-color: var(--edb-muted-text);
+}
+html body :is(.form-control, .form-select, .input-group-text),
+html body input:not([type='color']):not([type='checkbox']):not([type='radio']):not([type='range']):not([type='submit']):not([type='button']),
+html body textarea, html body select {
+  background-color: var(--edb-surface);
+  color: var(--edb-input-text) !important;
+  caret-color: var(--edb-input-text);
+  border-color: var(--edb-border);
+}
+html body :is(input, textarea)::placeholder { color: var(--edb-input-muted); opacity: 1; }
+html body :is(.form-control, .form-select):focus {
+  background-color: var(--edb-surface);
+  border-color: var(--edb-primary);
+  box-shadow: 0 0 0 .2rem color-mix(in srgb, var(--edb-primary) 22%, transparent);
+}
+html body :is(.form-control, .form-select):disabled { background-color: var(--edb-primary-soft-2); color: var(--edb-muted-text); }
+html body :is(input[type='checkbox'], input[type='radio']) { accent-color: var(--edb-primary); }
+html body .form-check-input:checked { background-color: var(--edb-primary); border-color: var(--edb-primary); }
+html body .text-primary { color: var(--edb-primary-text) !important; }
+html body :is(.text-muted, .text-secondary, .form-text) { color: var(--edb-muted-text) !important; }
+html body .bg-primary, html body .text-bg-primary { background-color: var(--edb-primary) !important; color: var(--edb-on-primary) !important; }
+html body :is(.bg-white, .bg-light) { background-color: var(--edb-surface) !important; color: var(--edb-text); }
+html body .table:not(.table-dark):not(.table-success):not(.table-danger):not(.table-warning):not(.table-info) {
+  --bs-table-bg: var(--edb-surface);
+  --bs-table-color: var(--edb-text);
+  --bs-table-border-color: var(--edb-border);
+  --bs-table-striped-bg: var(--edb-primary-soft-2);
+  --bs-table-striped-color: var(--edb-text);
+  --bs-table-hover-bg: var(--edb-primary-soft);
+  --bs-table-hover-color: var(--edb-on-primary-soft);
+  --bs-table-active-bg: var(--edb-primary-soft);
+  --bs-table-active-color: var(--edb-on-primary-soft);
+}
+html body .pagination {
+  --bs-pagination-bg: var(--edb-surface);
+  --bs-pagination-color: var(--edb-primary-text);
+  --bs-pagination-border-color: var(--edb-border);
+  --bs-pagination-hover-bg: var(--edb-primary-soft);
+  --bs-pagination-hover-color: var(--edb-on-primary-soft);
+  --bs-pagination-focus-bg: var(--edb-primary-soft);
+  --bs-pagination-focus-color: var(--edb-on-primary-soft);
+  --bs-pagination-active-bg: var(--edb-primary);
+  --bs-pagination-active-color: var(--edb-on-primary);
+  --bs-pagination-active-border-color: var(--edb-primary);
+  --bs-pagination-disabled-bg: var(--edb-surface);
+  --bs-pagination-disabled-color: var(--edb-muted-text);
+}
+html body .nav-tabs { --bs-nav-tabs-link-active-bg: var(--edb-surface); --bs-nav-tabs-link-active-color: var(--edb-primary-text); --bs-nav-tabs-border-color: var(--edb-border); }
+html body .nav-pills { --bs-nav-pills-link-active-bg: var(--edb-primary); --bs-nav-pills-link-active-color: var(--edb-on-primary); }
+html body .swal2-popup { background: var(--edb-surface); color: var(--edb-text); }
+html body .swal2-styled.swal2-confirm { background-color: var(--edb-primary); color: var(--edb-on-primary); }
+
+/* Foregrounds on primary hero areas; nested cards retain their surface role. */
+html body :is(.premium-portal, .cc-hero, .users-hero-card) {
+  color: var(--edb-on-primary);
+}
+html body :is(.premium-portal__eyebrow, .premium-portal__hint span, .premium-portal__title,
+  .cc-kicker, .cc-hero > div > p, .users-eyebrow, .users-hero-card > div > p) {
+  color: var(--edb-on-primary) !important;
+}
+html body .bg-primary .text-white { color: var(--edb-on-primary) !important; }
+html body .app-sidebar :is(.sidebar-category.selected, .sidebar-item.active) {
+  --edb-sidebar-text: var(--edb-on-primary-soft);
+}
+html body .app-sidebar .sidebar-category:hover .sidebar-category-label,
+html body .app-sidebar .sidebar-item:hover .item-label {
+  color: var(--edb-on-primary-soft) !important;
+}
+html body .app-sidebar .sidebar-search input,
+html body .sidebar-submenu-search input { background-color: var(--edb-surface); }

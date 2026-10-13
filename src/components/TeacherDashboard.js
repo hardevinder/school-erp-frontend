@@ -1001,24 +1001,24 @@ export default function TeacherDashboard() {
       {/* Styles */}
       <style>{`
         .teacher-dash{
-          --shadow-soft: 0 12px 30px rgba(0,0,0,.08);
+          --shadow-soft: 0 12px 30px color-mix(in srgb, var(--edb-primary-dark) 8%, transparent);
         }
 
         .dash-hero{
-          background: radial-gradient(1000px 400px at 10% 10%, rgba(255,255,255,.25), transparent 60%),
-                      linear-gradient(135deg, #2b6cb0, #6b46c1);
-          border: 1px solid rgba(255,255,255,.16);
+          background: radial-gradient(1000px 400px at 10% 10%, color-mix(in srgb, var(--edb-surface) 25%, transparent), transparent 60%),
+                      linear-gradient(135deg, var(--edb-primary), var(--edb-primary));
+          border: 1px solid color-mix(in srgb, var(--edb-border) 16%, transparent);
         }
         .dash-hero-inner{
           backdrop-filter: blur(8px);
         }
         .avatar-soft{
           width:52px;height:52px;border-radius:16px;
-          background: rgba(255,255,255,.18);
-          border: 1px solid rgba(255,255,255,.24);
+          background: color-mix(in srgb, var(--edb-surface) 18%, transparent);
+          border: 1px solid color-mix(in srgb, var(--edb-border) 24%, transparent);
           display:flex;align-items:center;justify-content:center;
-          color:#fff;font-weight:800;
-          box-shadow: 0 10px 26px rgba(0,0,0,.18);
+          color:var(--edb-on-primary);font-weight:800;
+          box-shadow: 0 10px 26px color-mix(in srgb, var(--edb-primary-dark) 18%, transparent);
           flex: 0 0 auto;
         }
         .dash-strip{
@@ -1031,21 +1031,21 @@ export default function TeacherDashboard() {
         .kpi-card{ border-radius:14px; }
         .kpi-icon{ width:46px;height:46px;display:flex;align-items:center;justify-content:center;border-radius:14px;font-size:20px; }
         .kpi-value{ font-size:24px;line-height:1; }
-        .kpi-label{ font-size:12px;color:#6c757d; }
+        .kpi-label{ font-size:12px;color:var(--edb-muted-text); }
 
         :root{
-          --qa-blue: linear-gradient(135deg,#6ea8fe,#1f6feb);
-          --qa-purple: linear-gradient(135deg,#c0b6f2,#845ef7);
+          --qa-blue: linear-gradient(135deg,var(--edb-primary-soft),var(--edb-primary));
+          --qa-purple: linear-gradient(135deg,var(--edb-primary-soft),var(--edb-primary));
           --qa-teal: linear-gradient(135deg,#63e6be,#12b886);
           --qa-green: linear-gradient(135deg,#8ce99a,#2f9e44);
-          --qa-amber: linear-gradient(135deg,#ffe066,#fab005);
+          --qa-amber: linear-gradient(135deg,var(--edb-accent),var(--edb-accent));
           --qa-pink: linear-gradient(135deg,#ffa8c7,#e64980);
-          --qa-indigo: linear-gradient(135deg,#91a7ff,#5c7cfa);
-          --qa-orange: linear-gradient(135deg,#ffc078,#f08c00);
+          --qa-indigo: linear-gradient(135deg,var(--edb-primary-soft),var(--edb-primary));
+          --qa-orange: linear-gradient(135deg,#ffc078,var(--edb-accent));
           --qa-cyan: linear-gradient(135deg,#99e9f2,#0c8599);
           --qa-lime: linear-gradient(135deg,#a9e34b,#74b816);
           --qa-rose: linear-gradient(135deg,#ffc9c9,#e03131);
-          --qa-slate: linear-gradient(135deg,#ced4da,#495057);
+          --qa-slate: linear-gradient(135deg,var(--edb-border),var(--edb-muted-text));
         }
 
         .qa-search{
@@ -1057,7 +1057,7 @@ export default function TeacherDashboard() {
           left:10px;
           top:50%;
           transform: translateY(-50%);
-          color:#6c757d;
+          color:var(--edb-input-text);
           font-size: 14px;
           pointer-events:none;
         }
@@ -1078,7 +1078,7 @@ export default function TeacherDashboard() {
           position:relative;
           border:0;
           border-radius:16px;
-          color:#fff;
+          color:var(--edb-on-primary);
           padding:16px 12px;
           text-align:left;
           min-height:94px;
@@ -1096,16 +1096,16 @@ export default function TeacherDashboard() {
           position:absolute;
           inset:-40px -40px auto auto;
           width:120px;height:120px;
-          background: rgba(255,255,255,.18);
+          background: color-mix(in srgb, var(--edb-surface) 18%, transparent);
           border-radius: 40px;
           transform: rotate(25deg);
         }
         .qa-tile:active{ transform:scale(.98); filter:brightness(.95); }
-        .qa-tile:hover{ box-shadow: 0 16px 40px rgba(0,0,0,.18); }
+        .qa-tile:hover{ box-shadow: 0 16px 40px color-mix(in srgb, var(--edb-primary-dark) 18%, transparent); }
 
         .qa-icon{
           position:absolute; top:10px; right:10px;
-          background: rgba(255,255,255,.18);
+          background: color-mix(in srgb, var(--edb-surface) 18%, transparent);
           width:38px; height:38px; border-radius:12px;
           display:flex; align-items:center; justify-content:center;
           font-size:18px;
@@ -1115,38 +1115,38 @@ export default function TeacherDashboard() {
         .qa-badge{
           position:absolute;
           top:10px; left:10px;
-          background: rgba(0,0,0,.28);
-          border: 1px solid rgba(255,255,255,.22);
-          color:#fff;
+          background: color-mix(in srgb, var(--edb-primary-dark) 28%, transparent);
+          border: 1px solid color-mix(in srgb, var(--edb-border) 22%, transparent);
+          color:var(--edb-on-primary);
           font-size: 11px;
           padding: 3px 8px;
           border-radius: 999px;
           z-index: 2;
         }
 
-        .today-card .card-header{ background:#fff; }
+        .today-card .card-header{ background:var(--edb-surface); }
 
-        .notifications-overlay{ position:fixed; inset:0; background:rgba(0,0,0,.5); display:flex; align-items:center; justify-content:center; z-index:1055; }
+        .notifications-overlay{ position:fixed; inset:0; background:color-mix(in srgb, var(--edb-primary-dark) 50%, transparent); display:flex; align-items:center; justify-content:center; z-index:1055; }
         .notifications-modal{
-          background:#fff;
+          background:var(--edb-surface);
           padding:16px;
           border-radius:16px;
           width:min(560px,92vw);
-          box-shadow:0 18px 50px rgba(0,0,0,.28);
-          border: 1px solid #eef1f4;
+          box-shadow:0 18px 50px color-mix(in srgb, var(--edb-primary-dark) 28.000000000000004%, transparent);
+          border: 1px solid var(--edb-border);
         }
         .notif-item{
           padding: 10px 10px;
           border-radius: 12px;
-          background: #f8f9fa;
-          border: 1px solid #eef1f4;
+          background: var(--edb-surface);
+          border: 1px solid var(--edb-border);
         }
         .notif-icon{
           width: 32px; height: 32px;
           border-radius: 10px;
-          background: #fff;
+          background: var(--edb-surface);
           display:flex;align-items:center;justify-content:center;
-          border: 1px solid #eef1f4;
+          border: 1px solid var(--edb-border);
         }
 
         .chat-fab{
@@ -1154,12 +1154,12 @@ export default function TeacherDashboard() {
           right:16px;
           bottom:16px;
           z-index:1050;
-          background:#0d6efd;
-          color:#fff;
+          background:var(--edb-primary);
+          color:var(--edb-on-primary);
           border:0;
           border-radius:999px;
           padding:10px 16px;
-          box-shadow:0 10px 26px rgba(13,110,253,.35);
+          box-shadow:0 10px 26px color-mix(in srgb, var(--edb-primary-dark) 35%, transparent);
           width:56px;height:56px;
           display:flex;
           align-items:center;
@@ -2204,13 +2204,13 @@ export default function TeacherDashboard() {
           position:absolute;
           inset:0;
           border-radius:50%;
-          box-shadow:0 0 0 0 rgba(37,117,252,.6);
+          box-shadow:0 0 0 0 color-mix(in srgb, var(--edb-primary-dark) 60%, transparent);
           animation:chatPulse 1.6s infinite;
           z-index:-1;
           pointer-events:none;
         }
-        @keyframes chatPulse{ 0%{ box-shadow:0 0 0 0 rgba(37,117,252,.6);} 70%{ box-shadow:0 0 0 18px rgba(37,117,252,0);} 100%{ box-shadow:0 0 0 0 rgba(37,117,252,0);} }
-        .chat-fab .badge{ position:absolute; top:-2px; right:-2px; box-shadow:0 0 0 2px #fff; }
+        @keyframes chatPulse{ 0%{ box-shadow:0 0 0 0 color-mix(in srgb, var(--edb-primary-dark) 60%, transparent);} 70%{ box-shadow:0 0 0 18px color-mix(in srgb, var(--edb-primary-dark) 0%, transparent);} 100%{ box-shadow:0 0 0 0 color-mix(in srgb, var(--edb-primary-dark) 0%, transparent);} }
+        .chat-fab .badge{ position:absolute; top:-2px; right:-2px; box-shadow:0 0 0 2px color-mix(in srgb, var(--edb-primary-dark) 100%, transparent); }
 
         @media (min-width:768px){ .kpi-value{ font-size:28px; } }
 
@@ -2224,7 +2224,7 @@ export default function TeacherDashboard() {
           border: 0;
           background: transparent;
           padding: 10px 12px;
-          border-bottom: 1px solid #f1f3f5;
+          border-bottom: 1px solid var(--edb-border);
         }
         .dd-mini-item:last-child{ border-bottom: 0; }
         .text-truncate-2{
@@ -2278,7 +2278,7 @@ function SkeletonRows({ rows = 5 }) {
           style={{
             height: 14,
             borderRadius: 10,
-            background: "linear-gradient(90deg, #f1f3f5 0%, #e9ecef 40%, #f1f3f5 80%)",
+            background: "linear-gradient(90deg, var(--edb-dashboard-bg) 0%, var(--edb-dashboard-bg) 40%, var(--edb-dashboard-bg) 80%)",
             backgroundSize: "200% 100%",
             animation: "sk 1.1s ease-in-out infinite",
           }}

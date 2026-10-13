@@ -10,19 +10,21 @@ const FIELDS = [
   ["primaryDark", "Primary Dark", "Gradients and stronger active states"],
   ["accent", "Accent Color", "Borders, indicators and premium highlights"],
   ["sidebarBg", "Sidebar Background", "Left navigation background"],
+  ["sidebarText", "Sidebar Text Color", "Normal text shown on the left navigation"],
   ["navbarBg", "Navbar Background", "Top navigation background"],
   ["navbarTitle", "School / College Name Color", "Name shown beside the institution logo in the navbar"],
   ["navbarSubtitle", "Navbar Subtitle Color", "Small text below the institution name, e.g. COLLEGE MANAGEMENT"],
   ["dashboardBg", "Dashboard Background", "Main workspace background"],
   ["surface", "Card / Surface", "Cards, menus and panels"],
   ["text", "Text Color", "Primary readable text"],
+  ["inputText", "Search / Input Text Color", "Text typed in sidebar and submenu search boxes"],
 ];
 
 const PRESETS = [
   { name: "Burgundy & Gold", theme: DEFAULT_PORTAL_THEME },
-  { name: "Royal Blue", theme: { primary: "#164e8a", primaryDark: "#0b315c", accent: "#d6a84b", sidebarBg: "#f5f8fc", navbarBg: "#ffffff", navbarTitle: "#164e8a", navbarSubtitle: "#d6a84b", dashboardBg: "#f2f6fb", surface: "#ffffff", text: "#1e293b" } },
-  { name: "Emerald", theme: { primary: "#12634a", primaryDark: "#0a3f30", accent: "#d3a93f", sidebarBg: "#f4f9f6", navbarBg: "#ffffff", navbarTitle: "#12634a", navbarSubtitle: "#d3a93f", dashboardBg: "#f1f6f3", surface: "#ffffff", text: "#1f2d28" } },
-  { name: "Indigo", theme: { primary: "#4338ca", primaryDark: "#29227e", accent: "#d4a72c", sidebarBg: "#f7f7fc", navbarBg: "#ffffff", navbarTitle: "#4338ca", navbarSubtitle: "#d4a72c", dashboardBg: "#f4f4f8", surface: "#ffffff", text: "#26243a" } },
+  { name: "Royal Blue", theme: { primary: "#164e8a", primaryDark: "#0b315c", accent: "#d6a84b", sidebarBg: "#f5f8fc", sidebarText: "#1e293b", navbarBg: "#ffffff", navbarTitle: "#164e8a", navbarSubtitle: "#d6a84b", dashboardBg: "#f2f6fb", surface: "#ffffff", text: "#1e293b", inputText: "#1e293b" } },
+  { name: "Emerald", theme: { primary: "#12634a", primaryDark: "#0a3f30", accent: "#d3a93f", sidebarBg: "#f4f9f6", sidebarText: "#1f2d28", navbarBg: "#ffffff", navbarTitle: "#12634a", navbarSubtitle: "#d3a93f", dashboardBg: "#f1f6f3", surface: "#ffffff", text: "#1f2d28", inputText: "#1f2d28" } },
+  { name: "Indigo", theme: { primary: "#4338ca", primaryDark: "#29227e", accent: "#d4a72c", sidebarBg: "#f7f7fc", sidebarText: "#26243a", navbarBg: "#ffffff", navbarTitle: "#4338ca", navbarSubtitle: "#d4a72c", dashboardBg: "#f4f4f8", surface: "#ffffff", text: "#26243a", inputText: "#26243a" } },
 ];
 
 export default function PortalThemeSettings() {
@@ -151,7 +153,7 @@ export default function PortalThemeSettings() {
             <div className="portal-preview-body">
               <aside style={{ background: theme.sidebarBg }}>
                 {["Dashboard", "Students", "Academics", "Reports"].map((label, index) => (
-                  <div key={label} className={`portal-preview-navitem ${index === 0 ? "active" : ""}`} style={index === 0 ? { color: theme.primary, borderColor: theme.accent } : { color: theme.text }}>
+                  <div key={label} className={`portal-preview-navitem ${index === 0 ? "active" : ""}`} style={index === 0 ? { color: theme.primary, borderColor: theme.accent } : { color: theme.sidebarText }}>
                     <span style={{ background: index === 0 ? theme.primary : theme.surface, color: index === 0 ? theme.accent : theme.primary }}><i className={`bi ${["bi-grid", "bi-people", "bi-journal-text", "bi-bar-chart"][index]}`} /></span>{label}
                   </div>
                 ))}

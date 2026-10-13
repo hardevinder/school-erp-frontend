@@ -110,7 +110,7 @@ const StatPill = ({ label, value, tone = "secondary", to }) => {
         alignItems: "center",
         gap: 8,
         padding: "10px 12px",
-        border: "1px solid rgba(0,0,0,.06)",
+        border: "1px solid color-mix(in srgb, var(--edb-border) 6%, transparent)",
       }}
       title={label}
     >
@@ -181,6 +181,36 @@ const Tile = ({ title, value, variant = "secondary", hint, to, onClick }) => {
 export default function TransportDashboard() {
   const navigate = useNavigate();
   const { roles, isAdmin, isSuperadmin, isAccounts, isTransport, isDriver, isConductor } = useMemo(getRoleFlags, []);
+
+  const storedPermissions = useMemo(() => {
+    try {
+      const raw = JSON.parse(localStorage.getItem("permissions") || "[]");
+      return new Set(
+        (Array.isArray(raw) ? raw : [])
+          .map((p) =>
+            String(typeof p === "string" ? p : p?.slug || "")
+              .trim()
+              .toLowerCase()
+          )
+          .filter(Boolean)
+      );
+    } catch {
+      return new Set();
+    }
+  }, []);
+
+  const canViewTransportFees =
+    isAdmin ||
+    isSuperadmin ||
+    isAccounts ||
+    storedPermissions.has("transport_fee_view");
+
+  const canCollectTransportFees =
+    isAdmin ||
+    isSuperadmin ||
+    isAccounts ||
+    storedPermissions.has("transport_fee_collect");
+
   const canViewLiveTracking = roles.includes("transport") || isAdmin || isSuperadmin;
 
   // who can use transport dashboard page
@@ -318,6 +348,13 @@ export default function TransportDashboard() {
 
   // KPI: Students with transport (fallback)
   const [studentsWithTransportCount, setStudentsWithTransportCount] = useState(0);
+  const [transportFinance, setTransportFinance] = useState({
+    expected: 0,
+    received: 0,
+    pending: 0,
+    studentsPending: 0,
+    heads: [],
+  });
 
   const fetchStudentsWithTransport = useCallback(async () => {
     if (!canUse) return;
@@ -354,6 +391,73 @@ export default function TransportDashboard() {
       setLoading((s) => ({ ...s, students: false }));
     }
   }, [canUse, sessionCfg]);
+
+  const fetchTransportFinance = useCallback(async () => {
+    if (!canViewTransportFees) {
+      setTransportFinance({
+        expected: 0,
+        received: 0,
+        pending: 0,
+        studentsPending: 0,
+        heads: [],
+      });
+      return;
+    }
+
+    try {
+      const res = await api.get("/transport/pending-per-head", {
+        params: { includeZeroPending: true },
+      });
+      const list = asArray(res.data);
+      const byHead = new Map();
+      let expected = 0;
+      let received = 0;
+      let pending = 0;
+      let studentsPending = 0;
+
+      (Array.isArray(list) ? list : []).forEach((student) => {
+        let hasPending = false;
+
+        (student.heads || []).forEach((head) => {
+          const due = Number(head.due || 0);
+          const paid = Number(head.paid ?? head.received ?? 0);
+          const left = Number(head.pending || 0);
+
+          expected += due;
+          received += paid;
+          pending += left;
+          if (left > 0) hasPending = true;
+
+          const id = String(
+            head.fee_heading_id || head.fee_heading_name || "Transport"
+          );
+          const prev = byHead.get(id) || {
+            name: head.fee_heading_name || "Transport Fee",
+            expected: 0,
+            received: 0,
+            pending: 0,
+          };
+
+          prev.expected += due;
+          prev.received += paid;
+          prev.pending += left;
+          byHead.set(id, prev);
+        });
+
+        if (hasPending) studentsPending += 1;
+      });
+
+      setTransportFinance({
+        expected,
+        received,
+        pending,
+        studentsPending,
+        heads: [...byHead.values()].sort((a, b) => b.expected - a.expected),
+      });
+    } catch (e) {
+      console.error("fetchTransportFinance error:", e);
+    }
+  }, [canViewTransportFees]);
 
   // Staff counts
   const fetchStaffCounts = useCallback(async () => {
@@ -446,7 +550,8 @@ export default function TransportDashboard() {
     fetchStudentsWithTransport();
     fetchStaffCounts();
     fetchLiveTrackingCounts();
-  }, [fetchRoutes, fetchBuses, fetchRecentAssignments, fetchStudentsWithTransport, fetchStaffCounts, fetchLiveTrackingCounts]);
+    fetchTransportFinance();
+  }, [fetchRoutes, fetchBuses, fetchRecentAssignments, fetchStudentsWithTransport, fetchStaffCounts, fetchLiveTrackingCounts, fetchTransportFinance]);
 
   useEffect(() => {
     if (!canUse) return;
@@ -498,7 +603,7 @@ export default function TransportDashboard() {
         label: "Transport Routes",
         icon: "bi-signpost-split",
         href: "/transportations",
-        gradient: "linear-gradient(135deg, #0ea5e9, #0369a1)",
+        gradient: "linear-gradient(135deg, var(--edb-primary), var(--edb-primary-dark))",
         desc: `Routes: ${routeKpis.total} · Fine: ${routeKpis.withFine}`,
         show: isTransport || isAdmin || isSuperadmin || isAccounts,
       },
@@ -506,7 +611,7 @@ export default function TransportDashboard() {
         label: "Buses",
         icon: "bi-bus-front",
         href: "/buses",
-        gradient: "linear-gradient(135deg, #22c55e, #16a34a)",
+        gradient: "linear-gradient(135deg, var(--edb-primary), var(--edb-primary-dark))",
         desc: `Total: ${busKpis.total} · Active: ${busKpis.active}`,
         show: isTransport || isAdmin || isSuperadmin || isAccounts,
       },
@@ -514,7 +619,7 @@ export default function TransportDashboard() {
         label: "Live Operations",
         icon: "bi-arrow-left-right",
         href: "/transport-live-operations",
-        gradient: "linear-gradient(135deg, #0f766e, #0f4c81)",
+        gradient: "linear-gradient(135deg, var(--edb-primary), var(--edb-primary-dark))",
         desc: "Temporary bus/driver override & delay alerts",
         show: isTransport || isAdmin || isSuperadmin,
       }, // EDUBRIDGE_TRANSPORT_LIVE_OPS_DASHBOARD_TILE_V1
@@ -522,7 +627,7 @@ export default function TransportDashboard() {
         label: "Assign Students",
         icon: "bi-person-check",
         href: "/student-transport-assignments",
-        gradient: "linear-gradient(135deg, #6366f1, #4338ca)",
+        gradient: "linear-gradient(135deg, var(--edb-primary), var(--edb-primary-dark))",
         desc: `Live: ${studentsWithTransportCount} students`,
         show: isTransport || isAdmin || isSuperadmin || isAccounts,
       },
@@ -530,23 +635,47 @@ export default function TransportDashboard() {
         label: "Transport Fee Overrides",
         icon: "bi-cash-coin",
         href: "/student-transport-fee-head-amounts",
-        gradient: "linear-gradient(135deg, #8b5cf6, #6d28d9)",
+        gradient: "linear-gradient(135deg, var(--edb-primary), var(--edb-primary-dark))",
         desc: "Student-wise fee head transport override",
+        show: isTransport || isAdmin || isSuperadmin || isAccounts,
+      },
+      {
+        label: "Fuel Control",
+        icon: "bi-fuel-pump",
+        href: "/transport-expenses",
+        gradient: "linear-gradient(135deg, #0f766e, #115e59)",
+        desc: "Driver refills, odometer/slip scans, mismatch and approvals",
         show: isTransport || isAdmin || isSuperadmin || isAccounts,
       },
       {
         label: "Transport Expenses",
         icon: "bi-receipt-cutoff",
         href: "/transport-expenses",
-        gradient: "linear-gradient(135deg, #f97316, #c2410c)",
+        gradient: "linear-gradient(135deg, var(--edb-primary), var(--edb-primary-dark))",
         desc: "Vehicle and route-wise expense management",
         show: isTransport || isAdmin || isSuperadmin || isAccounts,
+      },
+      {
+        label: "Transport Pending",
+        icon: "bi-cash-stack",
+        href: "/reports/transport-summary",
+        gradient: "linear-gradient(135deg, #dc2626, #991b1b)",
+        desc: `Pending: ₹${Math.round(transportFinance.pending).toLocaleString("en-IN")}`,
+        show: canViewTransportFees,
+      },
+      {
+        label: "Collect Transport Fee",
+        icon: "bi-wallet2",
+        href: "/transport-fee-collection",
+        gradient: "linear-gradient(135deg, #16a34a, #166534)",
+        desc: "Transport-only fee collection",
+        show: canCollectTransportFees,
       },
       {
         label: "Drivers / Conductors",
         icon: "bi-person-badge",
         href: "/transport-staff",
-        gradient: "linear-gradient(135deg, #ef4444, #b91c1c)",
+        gradient: "linear-gradient(135deg, var(--edb-primary), var(--edb-primary-dark))",
         desc: `Drivers: ${staffCounts.drivers} · Conductors: ${staffCounts.conductors}`,
         show: isTransport || isAdmin || isSuperadmin || isAccounts,
       },
@@ -556,7 +685,7 @@ export default function TransportDashboard() {
         label: "Live Bus Tracking",
         icon: "bi-geo-alt-fill",
         href: "/live-bus-tracking",
-        gradient: "linear-gradient(135deg, #10b981, #047857)",
+        gradient: "linear-gradient(135deg, var(--edb-primary), var(--edb-primary-dark))",
         desc: `Live: ${liveTrackingCounts.live} · Stale: ${liveTrackingCounts.stale}`,
         show: canViewLiveTracking,
       },
@@ -566,7 +695,7 @@ export default function TransportDashboard() {
         label: "Mark Attendance (Mobile)",
         icon: "bi-check2-square",
         href: "/transport-attendance",
-        gradient: "linear-gradient(135deg, #f59e0b, #b45309)",
+        gradient: "linear-gradient(135deg, var(--edb-primary), var(--edb-primary-dark))",
         desc: "Pickup/Drop marking (Driver/Conductor)",
         show: canMarkMobile,
       },
@@ -576,7 +705,7 @@ export default function TransportDashboard() {
         label: "Attendance Report",
         icon: "bi-clipboard-data",
         href: "/transport-attendance-report",
-        gradient: "linear-gradient(135deg, #14b8a6, #0f766e)",
+        gradient: "linear-gradient(135deg, var(--edb-primary), var(--edb-primary-dark))",
         desc: `Bus-wise present/absent · ${todayYYYYMMDD()}`,
         show: canSeeReport,
       },
@@ -598,6 +727,9 @@ export default function TransportDashboard() {
     canSeeReport,
     canViewLiveTracking,
     liveTrackingCounts,
+    canViewTransportFees,
+    canCollectTransportFees,
+    transportFinance.pending,
   ]);
 
   /* ---------------- Tiles (UPDATED) ---------------- */
@@ -693,7 +825,7 @@ export default function TransportDashboard() {
       className="dashboard-surface"
       style={{
         backgroundImage:
-          "linear-gradient(135deg, rgba(14,165,233,0.10), rgba(34,197,94,0.10), rgba(99,102,241,0.10))",
+          "linear-gradient(135deg, rgba(14,165,233,0.10), rgba(34,197,94,0.10), color-mix(in srgb, var(--edb-primary) 10%, transparent))",
         minHeight: "100vh",
       }}
     >
@@ -817,8 +949,8 @@ export default function TransportDashboard() {
                   style={{
                     width: 44,
                     height: 44,
-                    background: "rgba(255,255,255,0.22)",
-                    border: "1px solid rgba(255,255,255,0.25)",
+                    background: "color-mix(in srgb, var(--edb-surface) 22%, transparent)",
+                    border: "1px solid color-mix(in srgb, var(--edb-border) 25%, transparent)",
                   }}
                 >
                   <i className={`bi ${q.icon} fs-4`} />
@@ -834,6 +966,142 @@ export default function TransportDashboard() {
             </div>
           ))}
         </div>
+
+        {canViewTransportFees ? (
+          <div className="card border-0 shadow-sm rounded-4 mb-4">
+            <div className="card-body">
+              <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+                <div>
+                  <div className="h5 mb-1">Transport Fee Overview</div>
+                  <div className="text-muted small">
+                    Financial data shown only when fee-view rights are granted
+                  </div>
+                </div>
+
+                <div className="d-flex gap-2">
+                  <Link className="btn btn-sm btn-outline-danger" to="/reports/transport-summary">
+                    Transport Pending
+                  </Link>
+                  {canCollectTransportFees ? (
+                    <Link className="btn btn-sm btn-success" to="/transport-fee-collection">
+                      Collect Fee
+                    </Link>
+                  ) : null}
+                </div>
+              </div>
+
+              <div className="row g-3 mb-4">
+                <div className="col-12 col-sm-6 col-xl-3">
+                  <div className="border rounded-4 p-3 bg-primary bg-opacity-10 h-100">
+                    <div className="small text-muted text-uppercase">Expected</div>
+                    <div className="h3 mb-0 fw-bold">
+                      ₹{Math.round(transportFinance.expected).toLocaleString("en-IN")}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="col-12 col-sm-6 col-xl-3">
+                  <div className="border rounded-4 p-3 bg-success bg-opacity-10 h-100">
+                    <div className="small text-muted text-uppercase">Received</div>
+                    <div className="h3 mb-0 fw-bold">
+                      ₹{Math.round(transportFinance.received).toLocaleString("en-IN")}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="col-12 col-sm-6 col-xl-3">
+                  <div className="border rounded-4 p-3 bg-danger bg-opacity-10 h-100">
+                    <div className="small text-muted text-uppercase">Pending</div>
+                    <div className="h3 mb-0 fw-bold">
+                      ₹{Math.round(transportFinance.pending).toLocaleString("en-IN")}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="col-12 col-sm-6 col-xl-3">
+                  <div className="border rounded-4 p-3 bg-warning bg-opacity-10 h-100">
+                    <div className="small text-muted text-uppercase">Students Pending</div>
+                    <div className="h3 mb-0 fw-bold">
+                      {Number(transportFinance.studentsPending || 0).toLocaleString("en-IN")}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="row g-4">
+                <div className="col-12 col-lg-5">
+                  <div className="fw-semibold mb-2">Collection Progress</div>
+                  {(() => {
+                    const expected = Number(transportFinance.expected || 0);
+                    const received = Number(transportFinance.received || 0);
+                    const pct =
+                      expected > 0
+                        ? Math.min(100, (received / expected) * 100)
+                        : 0;
+
+                    return (
+                      <>
+                        <div className="progress" style={{ height: 24 }}>
+                          <div
+                            className="progress-bar bg-success"
+                            role="progressbar"
+                            style={{ width: `${pct}%` }}
+                          >
+                            {pct.toFixed(1)}%
+                          </div>
+                        </div>
+                        <div className="small text-muted mt-2">
+                          Received ₹{Math.round(received).toLocaleString("en-IN")} of ₹
+                          {Math.round(expected).toLocaleString("en-IN")}
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
+
+                <div className="col-12 col-lg-7">
+                  <div className="fw-semibold mb-2">
+                    Fee Head Expected vs Received
+                  </div>
+
+                  <div className="d-flex flex-column gap-3">
+                    {transportFinance.heads.slice(0, 6).map((head) => {
+                      const expected = Math.max(1, Number(head.expected || 0));
+                      const pct = Math.min(
+                        100,
+                        (Number(head.received || 0) / expected) * 100
+                      );
+
+                      return (
+                        <div key={head.name}>
+                          <div className="d-flex justify-content-between gap-2 small mb-1">
+                            <span className="text-truncate">{head.name}</span>
+                            <span>
+                              ₹{Math.round(head.received).toLocaleString("en-IN")} / ₹
+                              {Math.round(head.expected).toLocaleString("en-IN")}
+                            </span>
+                          </div>
+                          <div className="progress" style={{ height: 10 }}>
+                            <div
+                              className="progress-bar bg-success"
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                    {!transportFinance.heads.length ? (
+                      <div className="text-muted small">
+                        No transport fee data available.
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : null}
 
         {/* KPI tiles */}
         <div className="row g-3 mb-4">
@@ -963,9 +1231,9 @@ export default function TransportDashboard() {
             from { opacity: 0; transform: translateY(10px); }
             to { opacity: 1; transform: translateY(0); }
           }
-          code { background: rgba(0,0,0,.04); padding: 2px 6px; border-radius: 8px; }
+          code { background: color-mix(in srgb, var(--edb-primary-dark) 4%, transparent); padding: 2px 6px; border-radius: 8px; }
           .place-items-center { display: grid; place-items: center; }
-          a:hover .card { transform: translateY(-2px); box-shadow: 0 12px 28px rgba(0,0,0,.10); }
+          a:hover .card { transform: translateY(-2px); box-shadow: 0 12px 28px color-mix(in srgb, var(--edb-primary-dark) 10%, transparent); }
         `}</style>
 
         {/* Bootstrap Icons */}

@@ -1,6 +1,6 @@
 .online-classes-page { max-width: 1500px; }
-.zoom-card { border-left: 4px solid #2d8cff !important; }
-.zoom-mark { width: 52px; height: 52px; border-radius: 14px; display: grid; place-items: center; color: #fff; background: #2d8cff; font-size: 1.35rem; }
+.zoom-card { border-left: 4px solid var(--edb-primary) !important; }
+.zoom-mark { width: 52px; height: 52px; border-radius: 14px; display: grid; place-items: center; color: var(--edb-on-primary); background: var(--edb-primary); font-size: 1.35rem; }
 .online-classes-page thead th { background: #f8fafc; color: #64748b; font-size: .78rem; letter-spacing: .04em; text-transform: uppercase; padding: 1rem; }
 .online-classes-page tbody td { padding: 1rem; }
 .online-classes-page .badge { text-transform: capitalize; }
@@ -13,8 +13,8 @@
 @media (max-width: 576px) { .online-classes-page tbody td { min-width: 130px; } }
 .attendance-modal { width: min(1180px, 100%); }
 .attendance-backdrop { z-index: 1070; }
-.attendance-summary { background: #fff; }
+.attendance-summary { background: var(--edb-surface); }
 .attendance-table-wrap { max-height: 430px; overflow: auto; }
 .attendance-table-wrap thead th { position: sticky; top: 0; z-index: 1; }
 @media (max-width: 768px) { .attendance-modal { width: 100%; } }
-.assessment-link-check{padding:14px 14px 14px 40px;border:1px dashed #8ea3e6;border-radius:12px;background:#f7f9ff}.assessment-link-check .form-check-input{margin-left:-24px}
+.assessment-link-check{padding:14px 14px 14px 40px;border:1px dashed var(--edb-border);border-radius:12px;background:var(--edb-surface)}.assessment-link-check .form-check-input{margin-left:-24px}

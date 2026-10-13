@@ -955,7 +955,7 @@ const Registrations = () => {
 
       {/* MAIN MODAL (Create / Edit) */}
       {showModal && (
-        <div className="modal show d-block" style={{ backgroundColor: "rgba(0,0,0,0.5)" }}>
+        <div className="modal show d-block" style={{ backgroundColor: "color-mix(in srgb, var(--edb-primary-dark) 50%, transparent)" }}>
           <div className="modal-dialog modal-lg">
             <div className="modal-content">
               <div className="modal-header">
@@ -1194,7 +1194,7 @@ const Registrations = () => {
 
       {/* FEE MODAL */}
       {feeModalOpen && (
-        <div className="modal show d-block" style={{ backgroundColor: "rgba(0,0,0,0.5)" }}>
+        <div className="modal show d-block" style={{ backgroundColor: "color-mix(in srgb, var(--edb-primary-dark) 50%, transparent)" }}>
           <div className="modal-dialog">
             <div className="modal-content">
               <div className="modal-header">
@@ -1253,7 +1253,7 @@ const Registrations = () => {
 
       {/* STATUS MODAL */}
       {statusModalOpen && (
-        <div className="modal show d-block" style={{ backgroundColor: "rgba(0,0,0,0.5)" }}>
+        <div className="modal show d-block" style={{ backgroundColor: "color-mix(in srgb, var(--edb-primary-dark) 50%, transparent)" }}>
           <div className="modal-dialog">
             <div className="modal-content">
               <div className="modal-header">

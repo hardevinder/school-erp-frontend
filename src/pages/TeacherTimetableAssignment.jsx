@@ -584,31 +584,31 @@ const TeacherTimetableAssignment = () => {
           position: sticky;
           top: 0;
           z-index: 3;
-          background: #f8fafc;
+          background: var(--edb-surface);
         }
 
         .teacher-timetable-page .day-sticky {
           position: sticky;
           left: 0;
           z-index: 2;
-          background: #fff;
+          background: var(--edb-surface);
         }
 
         .teacher-timetable-page .day-sticky.header-sticky {
           z-index: 4;
-          background: #f8fafc;
+          background: var(--edb-surface);
         }
 
         .teacher-timetable-page .workload-sticky {
           position: sticky;
           right: 0;
           z-index: 2;
-          background: #fff;
+          background: var(--edb-surface);
         }
 
         .teacher-timetable-page .workload-sticky.header-sticky {
           z-index: 4;
-          background: #f8fafc;
+          background: var(--edb-surface);
         }
 
         .teacher-timetable-page .period-header {
@@ -697,7 +697,7 @@ const TeacherTimetableAssignment = () => {
       <div className="card border-0 shadow-sm mb-3 top-card">
         <div
           className="card-body py-3"
-          style={{ background: 'linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%)' }}
+          style={{ background: "linear-gradient(135deg, var(--edb-surface) 0%, var(--edb-surface) 100%)" }}
         >
           <div className="d-flex flex-column flex-xl-row justify-content-between align-items-xl-center gap-3">
             <div>
@@ -781,7 +781,7 @@ const TeacherTimetableAssignment = () => {
                         width: 12,
                         height: 12,
                         borderRadius: 99,
-                        background: '#ecfdf3',
+                        background: "var(--edb-primary-soft)",
                         border: '1px solid #86efac',
                         display: 'inline-block',
                       }}
@@ -795,8 +795,8 @@ const TeacherTimetableAssignment = () => {
                         width: 12,
                         height: 12,
                         borderRadius: 99,
-                        background: '#fffbeb',
-                        border: '1px solid #fcd34d',
+                        background: "var(--edb-surface)",
+                        border: "1px solid var(--edb-primary)",
                         display: 'inline-block',
                       }}
                     />
@@ -809,8 +809,8 @@ const TeacherTimetableAssignment = () => {
                         width: 12,
                         height: 12,
                         borderRadius: 99,
-                        background: '#ffffff',
-                        border: '1px solid #e2e8f0',
+                        background: "var(--edb-surface)",
+                        border: "1px solid var(--edb-border)",
                         display: 'inline-block',
                       }}
                     />
@@ -1028,7 +1028,7 @@ const TeacherTimetableAssignment = () => {
                   <td
                     colSpan={periods.length + 2}
                     className="text-center fw-bold py-2"
-                    style={{ background: '#f8fafc', fontSize: '0.95rem' }}
+                    style={{ background: "var(--edb-surface)", fontSize: '0.95rem' }}
                   >
                     Weekly Workload: {weeklyWorkload}
                   </td>

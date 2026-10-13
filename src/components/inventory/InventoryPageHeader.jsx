@@ -45,8 +45,8 @@ export default function InventoryPageHeader({
       className="d-flex flex-wrap align-items-center justify-content-between mb-3 rounded-4 p-3 shadow-sm"
       style={{
         background: gradient,
-        color: "white",
-        border: "1px solid rgba(255,255,255,0.15)",
+        color: "var(--edb-on-primary)",
+        border: "1px solid color-mix(in srgb, var(--edb-border) 15%, transparent)",
       }}
     >
       <div>

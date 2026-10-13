@@ -519,10 +519,10 @@ const StudentCirculars = () => {
       <style>{`
         /* --------- Hero --------- */
         .page-hero {
-          --bg1: #1f7ae0;
-          --bg2: #6aa7ff;
+          --bg1: var(--edb-primary);
+          --bg2: var(--edb-primary-soft);
           background: linear-gradient(135deg, var(--bg1), var(--bg2));
-          color: #fff;
+          color: var(--edb-on-primary);
           padding: 24px 0 28px;
           border-bottom-left-radius: 24px;
           border-bottom-right-radius: 24px;
@@ -532,14 +532,14 @@ const StudentCirculars = () => {
 
         /* --------- Buttons (view mode) --------- */
         .btn-view {
-          background: rgba(255,255,255,0.15);
-          color: #fff;
+          background: color-mix(in srgb, var(--edb-surface) 15%, transparent);
+          color: var(--edb-on-primary);
           border: 0;
           padding: 8px 14px;
           backdrop-filter: blur(6px);
         }
-        .btn-view:hover { background: rgba(255,255,255,0.28); }
-        .btn-view.active { background: #fff; color: #1f7ae0; font-weight: 600; }
+        .btn-view:hover { background: color-mix(in srgb, var(--edb-surface) 28%, transparent); }
+        .btn-view.active { background: var(--edb-surface); color: var(--edb-primary-text); font-weight: 600; }
 
         /* --------- Filters --------- */
         .filters {
@@ -555,28 +555,28 @@ const StudentCirculars = () => {
         .circular-card {
           border: 0;
           border-radius: 16px;
-          background: #fff;
+          background: var(--edb-surface);
         }
         .circular-card .card-body { padding: 16px 18px; }
         .index-badge {
           display: inline-flex; align-items: center; justify-content: center;
           width: 28px; height: 28px;
           border-radius: 999px;
-          background: #e8f1ff; color: #1f7ae0;
+          background: var(--edb-primary-soft); color: var(--edb-primary-text);
           font-weight: 700; font-size: 0.9rem;
         }
         .badge.audience {
-          background: #ecf5ff; color: #1b6ed6;
+          background: var(--edb-surface); color: var(--edb-primary-text);
           border-radius: 999px; font-weight: 600;
         }
         .btn-primary-soft {
-          background: #e7f0ff; color: #1f7ae0; border: 0; font-weight: 600;
+          background: var(--edb-primary-soft); color: var(--edb-primary-text); border: 0; font-weight: 600;
         }
-        .btn-primary-soft:hover { background: #d8e8ff; }
+        .btn-primary-soft:hover { background: var(--edb-primary-soft); }
 
         .dot {
           width: 6px; height: 6px; border-radius: 50%;
-          background: #c9d6ea; display: inline-block;
+          background: var(--edb-border); display: inline-block;
         }
 
         /* Clamp description lines for cards */
@@ -592,7 +592,7 @@ const StudentCirculars = () => {
           font-weight: 700; text-transform: uppercase; font-size: 0.75rem;
           letter-spacing: 0.6px;
         }
-        .table tbody tr:hover { background: #fbfdff; }
+        .table tbody tr:hover { background: var(--edb-surface); }
         .table-responsive { border-radius: 14px; }
         .cursor-pointer { cursor: pointer; }
 
@@ -600,7 +600,7 @@ const StudentCirculars = () => {
         .skeleton-list { display: grid; gap: 12px; }
         .skeleton-card {
           height: 84px; border-radius: 14px;
-          background: linear-gradient(90deg, #f2f6ff 25%, #e9f1ff 37%, #f2f6ff 63%);
+          background: linear-gradient(90deg, var(--edb-surface) 25%, var(--edb-primary-soft) 37%, var(--edb-surface) 63%);
           background-size: 400% 100%;
           animation: shimmer 1.2s infinite;
         }
@@ -622,7 +622,7 @@ const StudentCirculars = () => {
         /* --------- Modal --------- */
         .modal-backdrop-custom {
           position: fixed; inset: 0; z-index: 1050;
-          background: rgba(16, 24, 40, 0.5);
+          background: color-mix(in srgb, var(--edb-primary-dark) 50%, transparent);
           display: flex; align-items: center; justify-content: center;
           padding: 16px;
           opacity: 0; pointer-events: none;
@@ -632,12 +632,12 @@ const StudentCirculars = () => {
           opacity: 1; pointer-events: auto;
         }
         .modal-panel {
-          background: #fff;
+          background: var(--edb-surface);
           width: 100%;
           max-width: 900px;
           max-height: 90vh;
           border-radius: 16px;
-          box-shadow: 0 10px 30px rgba(16,24,40,.2);
+          box-shadow: 0 10px 30px color-mix(in srgb, var(--edb-primary-dark) 20%, transparent);
           display: flex; flex-direction: column;
           outline: none;
           animation: modalIn 180ms ease both;
@@ -648,9 +648,9 @@ const StudentCirculars = () => {
         }
         .modal-header, .modal-footer {
           padding: 14px 18px;
-          border-bottom: 1px solid #eef2f7;
+          border-bottom: 1px solid var(--edb-border);
         }
-        .modal-footer { border-top: 1px solid #eef2f7; border-bottom: 0; }
+        .modal-footer { border-top: 1px solid var(--edb-border); border-bottom: 0; }
         .modal-title { margin: 0; font-weight: 700; }
         .btn-close-x {
           border-radius: 10px; line-height: 1; padding: 6px 10px;

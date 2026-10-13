@@ -98,7 +98,7 @@ const SafeLogo = ({ src, alt, style }) => {
   );
 };
 
-const ReceiptContent = ({ school = {}, receipt = [], slipId = "—", student = {} }) => {
+const ReceiptContent = ({ school = {}, receipt = [], slipId = "—", student = {}, recordedAt }) => {
   const numberToWords = (num) => {
     const ones = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine"];
     const teens = ["Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"];
@@ -196,6 +196,9 @@ const ReceiptContent = ({ school = {}, receipt = [], slipId = "—", student = {
               <p><strong>Class:</strong> {items[0]?.Class?.class_name || "-"}</p>
               <p><strong>Address:</strong> {student?.address || "-"}</p>
               <p><strong>Date:</strong> {formatDateDDMMYYYY(items[0]?.DateOfTransaction || Date.now())}</p>
+              <p><strong>Time (IST):</strong> {recordedAt && !Number.isNaN(new Date(recordedAt).getTime())
+                ? new Date(recordedAt).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", hour12: true })
+                : "—"}</p>
             </td>
           </tr>
         </tbody>
@@ -244,7 +247,7 @@ const ReceiptContent = ({ school = {}, receipt = [], slipId = "—", student = {
         <h5>
           Overall Total Received: <strong>₹{grandTotal.toFixed(2)}</strong>
         </h5>
-        <p style={{ fontSize: "0.9rem", color: "#555" }}>
+        <p style={{ fontSize: "0.9rem", color: "var(--edb-text)" }}>
           (Fee Received ₹{totalReceived.toFixed(2)}
           {showFineColumn ? ` + Fine ₹${totalFine.toFixed(2)}` : ""}
           {totalVan > 0 ? ` + Van Fee ₹${totalVan.toFixed(2)}` : ""}
@@ -273,7 +276,7 @@ const ReceiptContent = ({ school = {}, receipt = [], slipId = "—", student = {
         <Col className="text-end">
           <p
             style={{
-              borderTop: "1px solid #000",
+              borderTop: "1px solid var(--edb-border)",
               display: "inline-block",
               paddingTop: "5px",
               marginRight: "20px",

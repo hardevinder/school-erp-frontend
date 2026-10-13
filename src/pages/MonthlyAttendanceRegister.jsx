@@ -6,7 +6,7 @@ import "./MonthlyAttendanceColors.css";
 const list = (value) => (Array.isArray(value) ? value : value?.data || value?.classes || value?.sections || value?.sessions || []);
 const current = new Date();
 const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-const codeClass = (code) => ({ P: "is-present", A: "is-absent", L: "is-leave", LT: "is-late", HD: "is-halfday", H: "is-holiday", WO: "is-off", "—": "is-unmarked" }[code] || "");
+const codeClass = (code) => ({ P: "is-present", A: "is-absent", L: "is-leave", LT: "is-late", HD: "is-halfday", PO: "is-holiday", LA: "is-off", H: "is-holiday", WO: "is-off", "—": "is-unmarked" }[code] || "");
 const sectionClassId = (section) => section?.class_id ?? section?.classId ?? section?.ClassId ?? section?.class?.id ?? section?.Class?.id;
 const rowId = (item, alternate) => item?.id ?? item?.[alternate];
 const hasSelection = (value) => value !== "" && value !== null && value !== undefined;
@@ -132,7 +132,7 @@ export default function MonthlyAttendanceRegister() {
   const exportCsv = () => {
     if (!report) return;
     const headers = ["Roll Number", "Admission Number", "Student Name", "Father Name", ...report.days.map((day) => `${day.day} ${day.weekday}`), "Working Days", "Marked", "Present", "Absent", "Leave", "Late", "Half Day", "Unmarked", "Month Attendance %", "Previous Marked", "Previous Present", "Previous Attendance %", "Till Month Marked", "Till Month Present", "Till Month Attendance %"];
-    const csvRows = visibleStudents.map((student) => [student.roll_number, student.admission_number, student.name, student.father_name, ...report.days.map((day) => student.attendance?.[day.date] || "—"), report.working_days, student.totals.marked, student.totals.present, student.totals.absent, student.totals.leave, student.totals.late, student.totals.halfday, student.totals.unmarked, student.attendance_percentage, student.previous_totals?.marked || 0, student.previous_totals?.present || 0, student.previous_totals?.attendance_percentage || 0, student.cumulative_totals?.marked || 0, student.cumulative_totals?.present || 0, student.cumulative_totals?.attendance_percentage || 0]);
+    const csvRows = visibleStudents.map((student) => [student.roll_number, student.admission_number, student.name, student.father_name, ...report.days.map((day) => { const code = student.attendance?.[day.date] || "—"; const reason = day.code === "H" ? day.description : student.attendance_remarks?.[day.date]; return code === "H" && reason ? `H - ${reason}` : code; }), student.working_days ?? report.working_days, student.totals.marked, student.totals.present, student.totals.absent, student.totals.leave, student.totals.late, student.totals.halfday, student.totals.unmarked, student.attendance_percentage, student.previous_totals?.marked || 0, student.previous_totals?.present || 0, student.previous_totals?.attendance_percentage || 0, student.cumulative_totals?.marked || 0, student.cumulative_totals?.present || 0, student.cumulative_totals?.attendance_percentage || 0]);
     const escape = (value) => `"${String(value ?? "").replace(/"/g, '""')}"`;
     const blob = new Blob([[headers, ...csvRows].map((row) => row.map(escape).join(",")).join("\n")], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
@@ -184,10 +184,19 @@ export default function MonthlyAttendanceRegister() {
                 <th className="cumulative-column" title="Through selected month: Present / Marked">Till Month P/MK</th><th className="cumulative-column" title="Through selected month, marked days only">Till Month %</th>
               </tr></thead>
               <tbody>
-                {visibleStudents.map((student) => <tr key={student.id}>
+                {visibleStudents.map((student, studentIndex) => <tr key={student.id}>
                   <td className="sticky-col col-roll">{student.roll_number || "—"}</td><td className="sticky-col col-admission">{student.admission_number || "—"}</td><td className="sticky-col col-student student-name">{student.name || "—"}</td><td className="sticky-col col-father">{student.father_name || "—"}</td>
-                  {report.days.map((day) => { const code = student.attendance?.[day.date] || "—"; return <td key={day.date} className={`attendance-code ${codeClass(code)}`}>{code}</td>; })}
-                  <td className="total-cell">{report.working_days}</td><td className="total-cell">{student.totals.marked}</td><td className="total-cell text-success">{student.totals.present}</td><td className="total-cell text-danger">{student.totals.absent}</td><td className="total-cell text-warning">{student.totals.leave}</td><td>{student.totals.late}</td><td>{student.totals.halfday}</td><td>{student.totals.unmarked}</td>
+                  {report.days.map((day) => {
+                    const code = student.attendance?.[day.date] || "—";
+                    if (day.code === "H") {
+                      if (studentIndex > 0) return null;
+                      return <td key={day.date} rowSpan={visibleStudents.length} className="attendance-code is-holiday merged-holiday" title={day.description || "Holiday"}>
+                        <span>{day.description && day.description !== "Holiday" ? `Holiday — ${day.description}` : "Holiday"}</span>
+                      </td>;
+                    }
+                    return <td key={day.date} title={student.attendance_remarks?.[day.date] || undefined} className={`attendance-code ${codeClass(code)}`}>{code}</td>;
+                  })}
+                  <td className="total-cell">{student.working_days ?? report.working_days}</td><td className="total-cell">{student.totals.marked}</td><td className="total-cell text-success">{student.totals.present}</td><td className="total-cell text-danger">{student.totals.absent}</td><td className="total-cell text-warning">{student.totals.leave}</td><td>{student.totals.late}</td><td>{student.totals.halfday}</td><td>{student.totals.unmarked}</td>
                   <td><Percent value={student.attendance_percentage} /></td>
                   <td className="carry-column total-cell">{student.previous_totals?.present || 0}/{student.previous_totals?.marked || 0}</td><td className="carry-column"><Percent value={student.previous_totals?.attendance_percentage || 0} /></td>
                   <td className="cumulative-column total-cell">{student.cumulative_totals?.present || 0}/{student.cumulative_totals?.marked || 0}</td><td className="cumulative-column"><Percent value={student.cumulative_totals?.attendance_percentage || 0} /></td>

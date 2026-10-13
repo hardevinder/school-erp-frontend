@@ -30,3 +30,12 @@
   .lr-modal-backdrop .modal-dialog { margin: .5rem; }
   .lr-modal-backdrop .modal-body { padding: 1rem !important; }
 }
+
+/* Study material three-step upload wizard */
+.lr-wizard-steps { display:flex; gap:.6rem; flex-wrap:wrap; }
+.lr-wizard-step { flex:1 1 170px; display:flex; align-items:center; gap:.6rem; border:1px solid #dee2e6; background:#f8f9fa; border-radius:12px; padding:.75rem; color:#6c757d; font-weight:600; font-size:.88rem; }
+.lr-wizard-step.active { border-color:#0d6efd; background:#eef5ff; color:#084298; }
+.lr-wizard-step.completed { border-color:#198754; color:#146c43; }
+.lr-wizard-number { width:27px; height:27px; flex:none; display:inline-grid; place-items:center; border-radius:50%; background:#dee2e6; color:#343a40; }
+.lr-wizard-step.active .lr-wizard-number { background:#0d6efd; color:white; }
+.lr-wizard-step.completed .lr-wizard-number { background:#198754; color:white; }

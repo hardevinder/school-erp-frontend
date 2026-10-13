@@ -22,15 +22,15 @@
 }
 
 .monthly-register-page .is-late {
-  color: #124f98 !important;
-  background: #bedcff !important;
-  box-shadow: inset 0 0 0 1px #86b9f3;
+  color: var(--edb-primary-text) !important;
+  background: var(--edb-primary-soft) !important;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--edb-primary-dark) 100%, transparent);
 }
 
 .monthly-register-page .is-halfday {
-  color: #6124a8 !important;
-  background: #ddc8ff !important;
-  box-shadow: inset 0 0 0 1px #ba96ef;
+  color: var(--edb-primary-text) !important;
+  background: var(--edb-primary-soft) !important;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--edb-primary-dark) 100%, transparent);
 }
 
 .monthly-register-page .is-holiday {
@@ -40,15 +40,15 @@
 }
 
 .monthly-register-page .is-off {
-  color: #46515e !important;
-  background: #d9dee5 !important;
-  box-shadow: inset 0 0 0 1px #b8c0ca;
+  color: var(--edb-text) !important;
+  background: var(--edb-border) !important;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--edb-primary-dark) 100%, transparent);
 }
 
 .monthly-register-page .is-unmarked {
-  color: #8b95a2 !important;
-  background: #f7f8fa !important;
-  box-shadow: inset 0 0 0 1px #e1e5ea;
+  color: var(--edb-muted-text) !important;
+  background: var(--edb-surface) !important;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--edb-primary-dark) 100%, transparent);
 }
 
 .monthly-register-page .monthly-register-table tbody tr:hover .attendance-code {

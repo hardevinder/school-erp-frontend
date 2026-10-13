@@ -458,9 +458,9 @@ export default function AnswerScriptManagement() {
         .answer-script-page .summary-card { min-height: 92px; }
         .answer-script-page .summary-value { font-size: 1.55rem; font-weight: 800; }
         .answer-script-page .table > :not(caption) > * > * { vertical-align: middle; }
-        .answer-script-page .sticky-toolbar { position: sticky; top: 0; z-index: 10; background: #f8f9fa; padding: .5rem 0; }
+        .answer-script-page .sticky-toolbar { position: sticky; top: 0; z-index: 10; background: var(--edb-surface); padding: .5rem 0; }
         .answer-script-page .small-actions .btn { margin: 2px; }
-        .answer-script-modal-backdrop { position: fixed; inset: 0; z-index: 1060; background: rgba(15,23,42,.55); display: flex; align-items: center; justify-content: center; padding: 1rem; }
+        .answer-script-modal-backdrop { position: fixed; inset: 0; z-index: 1060; background: color-mix(in srgb, var(--edb-primary-dark) 55%, transparent); display: flex; align-items: center; justify-content: center; padding: 1rem; }
         .answer-script-modal { width: min(980px, 100%); max-height: 92vh; overflow: hidden; }
         .answer-script-modal .card-body { overflow-y: auto; }
         .answer-script-page .source-room-list { max-height: 90px; overflow-y: auto; }

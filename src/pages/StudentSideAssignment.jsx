@@ -240,7 +240,7 @@ const StudentAssignments = () => {
         className="rounded-3 p-4 mb-4 text-white"
         style={{
           background:
-            "linear-gradient(135deg, rgba(22,82,240,1) 0%, rgba(12,119,214,1) 50%, rgba(6,95,212,1) 100%)",
+            "linear-gradient(135deg, var(--edb-primary) 0%, var(--edb-primary) 50%, var(--edb-primary) 100%)",
         }}
       >
         <div className="d-flex flex-column flex-md-row align-items-start align-items-md-center justify-content-between gap-3">

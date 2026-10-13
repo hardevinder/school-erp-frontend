@@ -44,6 +44,9 @@ const emptyForm = () => ({
   reference_no: "",
   odometer_reading: "",
   fuel_quantity: "",
+  fuel_rate: "",
+  tank_status: "full",
+  odometer_scan: null,
   description: "",
   bill: null,
 });
@@ -130,6 +133,9 @@ export default function TransportExpenses() {
       reference_no: expense.reference_no || "",
       odometer_reading: expense.odometer_reading || "",
       fuel_quantity: expense.fuel_quantity || "",
+      fuel_rate: expense.fuel_rate || "",
+      tank_status: expense.tank_status || "full",
+      odometer_scan: null,
       description: expense.description || "",
       bill: null,
     });
@@ -150,13 +156,16 @@ export default function TransportExpenses() {
         session_id: form.session_id || null,
         odometer_reading: form.odometer_reading || null,
         fuel_quantity: form.fuel_quantity || null,
+        fuel_rate: form.fuel_rate || null,
+        tank_status: form.category === "fuel" ? form.tank_status : null,
       };
       const data = new FormData();
       Object.entries(payload).forEach(([key, value]) => {
-        if (key === "bill") return;
+        if (key === "bill" || key === "odometer_scan") return;
         data.append(key, value === null || value === undefined ? "" : value);
       });
       if (form.bill) data.append("bill", form.bill);
+      if (form.odometer_scan) data.append("odometer_scan", form.odometer_scan);
       const config = { headers: { "Content-Type": "multipart/form-data" } };
       if (editingId) await api.put(`/transport-expenses/${editingId}`, data, config);
       else await api.post("/transport-expenses", data, config);
@@ -184,6 +193,30 @@ export default function TransportExpenses() {
       await loadExpenses();
     } catch (error) {
       Swal.fire("Error", error.response?.data?.message || "Failed to cancel expense", "error");
+    }
+  };
+
+  const reviewFuel = async (expense, action) => {
+    let reason = "";
+    if (action === "reject") {
+      const result = await Swal.fire({
+        title: "Reject fuel entry?",
+        input: "text",
+        inputLabel: "Reason",
+        inputValidator: (value) => (!String(value || "").trim() ? "Reason is required" : undefined),
+        showCancelButton: true,
+        confirmButtonText: "Reject",
+        confirmButtonColor: "#dc3545",
+      });
+      if (!result.isConfirmed) return;
+      reason = result.value;
+    }
+    try {
+      await api.post(`/transport-expenses/${expense.id}/fuel-review`, { action, reason });
+      await loadExpenses();
+      Swal.fire("Updated", `Fuel entry ${action === "approve" ? "approved" : "rejected"}.`, "success");
+    } catch (error) {
+      Swal.fire("Error", error.response?.data?.message || "Failed to review fuel entry", "error");
     }
   };
 
@@ -225,15 +258,28 @@ export default function TransportExpenses() {
         <div className="col-md-2"><label className="form-label">Payment Mode</label><input className="form-control" value={form.payment_mode} onChange={(e) => field("payment_mode", e.target.value)} /></div>
         <div className="col-md-2"><label className="form-label">Reference No.</label><input className="form-control" value={form.reference_no} onChange={(e) => field("reference_no", e.target.value)} /></div>
         <div className="col-md-2"><label className="form-label">Odometer</label><input min="0" step="0.01" type="number" className="form-control" value={form.odometer_reading} onChange={(e) => field("odometer_reading", e.target.value)} /></div>
-        <div className="col-md-2"><label className="form-label">Fuel Qty (L)</label><input min="0" step="0.01" type="number" className="form-control" value={form.fuel_quantity} onChange={(e) => field("fuel_quantity", e.target.value)} /></div>
+                <div className="col-md-2"><label className="form-label">Fuel Qty (L)</label><input min="0" step="0.01" type="number" className="form-control" value={form.fuel_quantity} onChange={(e) => field("fuel_quantity", e.target.value)} /></div>
+        {form.category === "fuel" && <><div className="col-md-2"><label className="form-label">Rate / Litre</label><input min="0" step="0.01" type="number" className="form-control" value={form.fuel_rate} onChange={(e) => field("fuel_rate", e.target.value)} /></div><div className="col-md-2"><label className="form-label">Tank Status</label><select className="form-select" value={form.tank_status} onChange={(e) => field("tank_status", e.target.value)}><option value="full">Full Tank</option><option value="partial">Partial Refill</option></select></div><div className="col-md-4"><label className="form-label">Odometer Scan</label><input type="file" accept="application/pdf,image/jpeg,image/png,image/webp" className="form-control" onChange={(e) => field("odometer_scan", e.target.files?.[0] || null)} /></div></>}
         <div className="col-md-4"><label className="form-label">Bill / Receipt</label><input type="file" accept="application/pdf,image/jpeg,image/png,image/webp" className="form-control" onChange={(e) => field("bill", e.target.files?.[0] || null)} /><small className="text-muted">PDF/JPG/PNG/WebP, maximum 10 MB{editingId ? ". Leave blank to keep the existing bill." : "."}</small></div>
         <div className="col-12"><label className="form-label">Description</label><textarea className="form-control" rows="2" value={form.description} onChange={(e) => field("description", e.target.value)} /></div>
       </div><div className="card-footer d-flex justify-content-end gap-2"><button type="button" className="btn btn-outline-secondary" onClick={() => setShowForm(false)}>Close</button><button className="btn btn-primary">Save Expense</button></div></form></div>}
 
-      <div className="card shadow-sm"><div className="table-responsive"><table className="table table-hover align-middle mb-0"><thead><tr><th>Date</th><th>Category</th><th>Vehicle</th><th>Route</th><th>Vendor / Details</th><th>Reference</th><th className="text-end">Amount</th><th>Status</th><th>Actions</th></tr></thead><tbody>
-        {loading ? <tr><td colSpan="9" className="text-center py-4">Loading…</td></tr> : expenses.length === 0 ? <tr><td colSpan="9" className="text-center text-muted py-4">No expenses found.</td></tr> : expenses.map((expense) => <tr key={expense.id} className={expense.status === "cancelled" ? "table-secondary" : ""}>
-          <td>{expense.expense_date}</td><td>{categoryName(expense.category)}</td><td>{expense.bus?.bus_no || "-"}</td><td>{expense.route?.RouteName || "-"}</td><td><div>{expense.vendor || "-"}</div><small className="text-muted">{expense.description || ""}</small>{expense.bill_url && <div><a href={billUrl(expense.bill_url)} target="_blank" rel="noreferrer">View bill</a></div>}</td><td>{expense.reference_no || "-"}</td><td className="text-end fw-semibold">{money(expense.amount)}</td><td><span className={`badge ${expense.status === "active" ? "bg-success" : "bg-secondary"}`}>{expense.status}</span></td><td>{expense.status === "active" && <div className="d-flex gap-1"><button className="btn btn-sm btn-outline-primary" onClick={() => openEdit(expense)}>Edit</button><button className="btn btn-sm btn-outline-danger" onClick={() => cancelExpense(expense)}>Cancel</button></div>}</td>
-        </tr>)}
+      <div className="card shadow-sm"><div className="table-responsive"><table className="table table-hover align-middle mb-0"><thead><tr><th>Date</th><th>Category</th><th>Vehicle</th><th>Vendor / Details</th><th>Fuel Check</th><th>Scans</th><th className="text-end">Amount</th><th>Approval</th><th>Actions</th></tr></thead><tbody>
+        {loading ? <tr><td colSpan="9" className="text-center py-4">Loading…</td></tr> : expenses.length === 0 ? <tr><td colSpan="9" className="text-center text-muted py-4">No expenses found.</td></tr> : expenses.map((expense) => {
+          const variance = Number(expense.amount_variance || 0);
+          const mismatch = expense.category === "fuel" && Math.abs(variance) > 1;
+          return <tr key={expense.id} className={expense.status === "cancelled" ? "table-secondary" : ""}>
+            <td>{expense.expense_date}<div><small className="text-muted">{expense.recorded_at ? new Date(expense.recorded_at).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }) : ""}</small></div></td>
+            <td>{categoryName(expense.category)}{expense.tank_status && <div><small className="text-muted">{expense.tank_status === "full" ? "Full tank" : "Partial refill"}</small></div>}</td>
+            <td>{expense.bus?.bus_no || "-"}<div><small className="text-muted">{expense.bus?.reg_no || ""}</small></div></td>
+            <td><div>{expense.vendor || "-"}</div><small className="text-muted">{expense.description || ""}</small><div><small>{expense.reference_no || ""}</small></div></td>
+            <td>{expense.category === "fuel" ? <><div>{expense.fuel_quantity || "-"} L × {expense.fuel_rate ? money(expense.fuel_rate).replace("₹", "₹") : "-"}</div><small className={mismatch ? "text-danger fw-semibold" : "text-success"}>{mismatch ? `Mismatch ${money(Math.abs(variance))}` : "Amount matched"}</small><div><small className="text-muted">Odo: {expense.odometer_reading || "-"} km</small></div></> : "-"}</td>
+            <td><div className="d-flex flex-column gap-1">{expense.odometer_scan_url && <a href={billUrl(expense.odometer_scan_url)} target="_blank" rel="noreferrer">Odometer</a>}{expense.bill_url && <a href={billUrl(expense.bill_url)} target="_blank" rel="noreferrer">Fuel slip / bill</a>}{!expense.odometer_scan_url && !expense.bill_url && "-"}</div></td>
+            <td className="text-end fw-semibold">{money(expense.amount)}{expense.calculated_amount && <div><small className="text-muted">Expected {money(expense.calculated_amount)}</small></div>}</td>
+            <td>{expense.category === "fuel" ? <span className={`badge ${expense.approval_status === "approved" ? "bg-success" : expense.approval_status === "rejected" ? "bg-danger" : "bg-warning text-dark"}`}>{expense.approval_status || "pending"}</span> : <span className={`badge ${expense.status === "active" ? "bg-success" : "bg-secondary"}`}>{expense.status}</span>}</td>
+            <td>{expense.status === "active" && <div className="d-flex flex-wrap gap-1">{expense.category === "fuel" && expense.approval_status === "pending" && <><button className="btn btn-sm btn-success" onClick={() => reviewFuel(expense, "approve")}>Approve</button><button className="btn btn-sm btn-outline-danger" onClick={() => reviewFuel(expense, "reject")}>Reject</button></>}<button className="btn btn-sm btn-outline-primary" onClick={() => openEdit(expense)}>Edit</button><button className="btn btn-sm btn-outline-danger" onClick={() => cancelExpense(expense)}>Cancel</button></div>}</td>
+          </tr>;
+        })}
       </tbody></table></div></div>
     </div>
   );

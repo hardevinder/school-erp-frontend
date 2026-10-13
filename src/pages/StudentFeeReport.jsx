@@ -20,6 +20,7 @@ import * as XLSX from "xlsx";
 import { saveAs } from "file-saver";
 import PdfReceiptDocument from "./Transactions/PdfReceiptDocument";
 import ReceiptModal from "./Transactions/ReceiptModal";
+import "./StudentFeeReportUI.css"; // student-fee-report-ui-v2
 
 // Helper formatters
 const formatTotalValue = (value) =>
@@ -314,7 +315,7 @@ const StudentFeeReport = () => {
     else if (modeUpper === "ONLINE" || modeUpper === "UPI") bg = "info";
     else if (modeUpper === "CHEQUE") bg = "warning";
     return (
-      <Badge bg={bg} pill>
+      <Badge bg={bg} pill className="sfr-payment-badge">
         {mode}
       </Badge>
     );
@@ -340,23 +341,16 @@ const StudentFeeReport = () => {
   }
 
   return (
-    <div
-      style={{
-        background:
-          "linear-gradient(140deg, #f5f0ff 0%, #edf7ff 40%, #fff8ed 80%)",
-        minHeight: "100vh",
-        paddingBottom: "32px",
-      }}
-    >
+    <div className="student-fee-report-ui" style={{ minHeight: "100vh", paddingBottom: 32 }}>
       <Container className="pt-4">
         {/* Header / Hero */}
         <Card
-          className="mb-4 border-0 shadow-sm"
+          className="sfr-hero mb-4 border-0 shadow-sm"
           style={{
             borderRadius: "20px",
             background:
-              "linear-gradient(135deg, #5b21b6 0%, #6366f1 50%, #ec4899 100%)",
-            color: "#fff",
+              "linear-gradient(135deg, var(--edb-primary) 0%, var(--edb-primary) 50%, #ec4899 100%)",
+            color: "var(--edb-on-primary)",
           }}
         >
           <Card.Body>
@@ -369,7 +363,7 @@ const StudentFeeReport = () => {
                       width: 34,
                       height: 34,
                       borderRadius: "999px",
-                      background: "rgba(255,255,255,0.18)",
+                      background: "color-mix(in srgb, var(--edb-surface) 18%, transparent)",
                       alignItems: "center",
                       justifyContent: "center",
                       fontSize: 18,
@@ -380,7 +374,7 @@ const StudentFeeReport = () => {
                   Student Fee Report
                   <span
                     className="ms-2 px-2 py-1 rounded-pill"
-                    style={{ background: "rgba(255,255,255,0.2)", fontSize: 12 }}
+                    style={{ background: "color-mix(in srgb, var(--edb-surface) 20%, transparent)", fontSize: 12 }}
                   >
                     #{admissionNumber}
                   </span>
@@ -421,7 +415,7 @@ const StudentFeeReport = () => {
                     variant="light"
                     onClick={exportToExcel}
                     className="fw-semibold"
-                    style={{ color: "#4f46e5" }}
+                    style={{ color: "var(--edb-primary-text)" }}
                   >
                     📊 Export to Excel
                   </Button>
@@ -432,13 +426,13 @@ const StudentFeeReport = () => {
         </Card>
 
         {/* Stats Row */}
-        <Row className="g-3 mb-3">
+        <Row className="sfr-stats g-3 mb-4">
           <Col md={4}>
             <Card
               className="h-100 border-0 shadow-sm"
               style={{
                 borderRadius: "16px",
-                background: "linear-gradient(160deg,#fff,#e0f2fe)",
+                background: "linear-gradient(160deg,var(--edb-surface),var(--edb-primary-soft))",
               }}
             >
               <Card.Body>
@@ -452,7 +446,7 @@ const StudentFeeReport = () => {
               className="h-100 border-0 shadow-sm"
               style={{
                 borderRadius: "16px",
-                background: "linear-gradient(160deg,#fff,#fef3c7)",
+                background: "linear-gradient(160deg,var(--edb-surface),#fef3c7)",
               }}
             >
               <Card.Body>
@@ -472,7 +466,7 @@ const StudentFeeReport = () => {
               className="h-100 border-0 shadow-sm"
               style={{
                 borderRadius: "16px",
-                background: "linear-gradient(160deg,#fff,#fee2e2)",
+                background: "linear-gradient(160deg,var(--edb-surface),var(--edb-primary-soft))",
               }}
             >
               <Card.Body>
@@ -486,7 +480,10 @@ const StudentFeeReport = () => {
           </Col>
         </Row>
 
-        <h5 className="mb-2">Fee Collection Details</h5>
+        <div className="sfr-section-header">
+          <div><h5 className="mb-1">Fee Collection Details</h5><p className="mb-0">Transaction history for the selected academic session</p></div>
+          <span className="sfr-count">{reportData.length} transactions</span>
+        </div>
 
         {reportData.length === 0 ? (
           <Alert variant="info" className="text-center">
@@ -494,32 +491,12 @@ const StudentFeeReport = () => {
           </Alert>
         ) : (
           <>
-            <div
-              style={{
-                maxHeight: "430px",
-                overflowY: "auto",
-                borderRadius: "14px",
-                boxShadow: "0 4px 18px rgba(15, 23, 42, 0.08)",
-                border: "1px solid rgba(79,70,229,0.08)",
-                background: "#fff",
-              }}
-            >
+            <div className="sfr-table-scroll">
               <Table
-                striped
                 hover
-                responsive
-                className="mb-0 align-middle"
-                style={{ minWidth: "1000px" }}
+                className="sfr-table mb-0 align-middle"
               >
-                <thead
-                  style={{
-                    position: "sticky",
-                    top: 0,
-                    zIndex: 1,
-                    background:
-                      "linear-gradient(180deg, #eff6ff 0%, #ffffff 100%)",
-                  }}
-                >
+                <thead>
                   <tr>
                     <th style={{ width: "60px" }}>Sr.</th>
                     <th>Slip ID</th>
@@ -545,12 +522,12 @@ const StudentFeeReport = () => {
                       <tr key={idx}>
                         <td>{indexOfFirst + idx + 1}</td>
                         <td>
-                          <Badge bg="purple" text="light">
-                            {item.Slip_ID}
-                          </Badge>
+                          <button type="button" className="sfr-slip-link" title={`View receipt #${item.Slip_ID}`} onClick={() => viewReceipt(item.Slip_ID)}>
+                            #{item.Slip_ID}
+                          </button>
                         </td>
                         <td>{formatToDDMMYYYY(item.transactionDate)}</td>
-                        <td>{item.feeHeadingName}</td>
+                        <td className="sfr-heading-cell">{item.feeHeadingName}</td>
                         <td>
                           <Badge bg="light" text="dark">
                             {item.feeCategoryName}
@@ -566,10 +543,10 @@ const StudentFeeReport = () => {
                         <td className="text-end">
                           {formatTotalValue(item.totalFine)}
                         </td>
-                        <td className="text-end">{formatTotalValue(total)}</td>
-                        <td>{item.Remarks || "—"}</td>
+                        <td className="text-end sfr-total-cell">{formatTotalValue(total)}</td>
+                        <td><span className="sfr-remarks" title={item.Remarks || ""}>{item.Remarks || "—"}</span></td>
                         <td>
-                          <div className="d-flex gap-1 flex-wrap">
+                          <div className="sfr-receipt-actions d-flex gap-1 flex-wrap">
                             <Button
                               size="sm"
                               variant="primary"

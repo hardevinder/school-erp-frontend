@@ -3,7 +3,7 @@ import React, { useEffect, useState } from "react";
 const backdropStyle = {
   position: "fixed",
   inset: 0,
-  background: "rgba(15, 23, 42, 0.45)",
+  background: "color-mix(in srgb, var(--edb-primary-dark) 45%, transparent)",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",

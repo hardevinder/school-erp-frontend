@@ -2175,25 +2175,25 @@ const StudentFeePage = () => {
       {/* Local styles */}
       <style>{`
         :root{
-          --hero-bg: linear-gradient(135deg,#4f46e5 0%, #06b6d4 45%, #10b981 100%);
-          --glass-bg: rgba(255,255,255,0.6);
-          --glass-brd: rgba(148,163,184,0.25);
+          --hero-bg: linear-gradient(135deg,var(--edb-primary) 0%, #06b6d4 45%, #10b981 100%);
+          --glass-bg: color-mix(in srgb, var(--edb-surface) 60%, transparent);
+          --glass-brd: color-mix(in srgb, var(--edb-border) 25%, transparent);
         }
 
         .hero{
           background: var(--hero-bg);
-          color:#e2e8f0;
-          border:1px solid rgba(255,255,255,.25);
+          color:var(--edb-on-primary);
+          border:1px solid color-mix(in srgb, var(--edb-border) 25%, transparent);
         }
 
         .badge-soft{
-          border:1px solid rgba(255,255,255,.45);
-          color:#fff;
+          border:1px solid color-mix(in srgb, var(--edb-border) 45%, transparent);
+          color:var(--edb-on-primary);
           backdrop-filter: blur(4px);
         }
 
         .badge-soft-primary{
-          background: rgba(59,130,246,.25);
+          background: color-mix(in srgb, var(--edb-primary) 25%, transparent);
         }
 
         .badge-soft-info{
@@ -2201,7 +2201,7 @@ const StudentFeePage = () => {
         }
 
         .badge-soft-secondary{
-          background: rgba(148,163,184,.25);
+          background: color-mix(in srgb, var(--edb-border) 25%, transparent);
         }
 
         .action-chip{
@@ -2214,7 +2214,7 @@ const StudentFeePage = () => {
         }
 
         .gradient-soft{
-          background: linear-gradient(90deg, rgba(99,102,241,.15), rgba(6,182,212,.15));
+          background: linear-gradient(90deg, color-mix(in srgb, var(--edb-primary) 15%, transparent), rgba(6,182,212,.15));
         }
 
         .fancy-card{
@@ -2223,7 +2223,7 @@ const StudentFeePage = () => {
         }
 
         .soft-shadow{
-          box-shadow: 0 8px 20px rgba(2,8,23,.12);
+          box-shadow: 0 8px 20px color-mix(in srgb, var(--edb-primary-dark) 12%, transparent);
         }
 
         .fancy-chip-row{
@@ -2235,7 +2235,7 @@ const StudentFeePage = () => {
         }
 
         .fancy-chip-row::-webkit-scrollbar-thumb{
-          background: rgba(0,0,0,.15);
+          background: color-mix(in srgb, var(--edb-primary-dark) 15%, transparent);
           border-radius: 8px;
         }
 
@@ -2244,28 +2244,28 @@ const StudentFeePage = () => {
           padding: 8px 12px;
           font-size: .9rem;
           white-space: nowrap;
-          color:#0b1220;
-          border:1px solid rgba(0,0,0,.06);
+          color:var(--edb-text);
+          border:1px solid color-mix(in srgb, var(--edb-border) 6%, transparent);
         }
 
         .chip-amber{
-          background: linear-gradient(135deg,#fef3c7,#fde68a);
+          background: linear-gradient(135deg,var(--edb-primary-soft),var(--edb-accent-soft));
         }
 
         .chip-blue{
-          background: linear-gradient(135deg,#dbeafe,#bfdbfe);
+          background: linear-gradient(135deg,var(--edb-primary-soft),var(--edb-primary-soft));
         }
 
         .chip-green{
-          background: linear-gradient(135deg,#dcfce7,#bbf7d0);
+          background: linear-gradient(135deg,var(--edb-primary-soft),#bbf7d0);
         }
 
         .chip-red{
-          background: linear-gradient(135deg,#fee2e2,#fecaca);
+          background: linear-gradient(135deg,var(--edb-primary-soft),#fecaca);
         }
 
         .chip-orange{
-          background: linear-gradient(135deg,#ffedd5,#fed7aa);
+          background: linear-gradient(135deg,var(--edb-primary-soft),var(--edb-accent-soft));
         }
 
         .shrink-0{
@@ -2275,9 +2275,9 @@ const StudentFeePage = () => {
         .kpi{
           border-radius: 1rem;
           padding: .85rem 1rem;
-          color:#0b1220;
-          background: #fff;
-          border:1px solid #e5e7eb;
+          color:var(--edb-text);
+          background: var(--edb-surface);
+          border:1px solid var(--edb-border);
         }
 
         .kpi .kpi-label{
@@ -2291,19 +2291,19 @@ const StudentFeePage = () => {
         }
 
         .kpi-blue{
-          background: linear-gradient(135deg,#dbeafe,#bfdbfe);
+          background: linear-gradient(135deg,var(--edb-primary-soft),var(--edb-primary-soft));
         }
 
         .kpi-amber{
-          background: linear-gradient(135deg,#fef3c7,#fde68a);
+          background: linear-gradient(135deg,var(--edb-primary-soft),var(--edb-accent-soft));
         }
 
         .kpi-green{
-          background: linear-gradient(135deg,#dcfce7,#bbf7d0);
+          background: linear-gradient(135deg,var(--edb-primary-soft),#bbf7d0);
         }
 
         .kpi-red{
-          background: linear-gradient(135deg,#fee2e2,#fecaca);
+          background: linear-gradient(135deg,var(--edb-primary-soft),#fecaca);
         }
 
         .progress-thin{
@@ -2312,15 +2312,15 @@ const StudentFeePage = () => {
         }
 
         .transport-panel{
-          background: linear-gradient(135deg, rgba(59,130,246,.10), rgba(16,185,129,.10));
-          border: 1px dashed rgba(15,23,42,.15);
+          background: linear-gradient(135deg, color-mix(in srgb, var(--edb-primary) 10%, transparent), rgba(16,185,129,.10));
+          border: 1px dashed color-mix(in srgb, var(--edb-border) 15%, transparent);
           border-radius: 12px;
           padding: .6rem .7rem;
         }
 
         .transport-badge{
-          background: rgba(99,102,241,.15);
-          color: #111827;
+          background: color-mix(in srgb, var(--edb-primary) 15%, transparent);
+          color: var(--edb-text);
         }
 
         .tiny-row .label{
@@ -2333,8 +2333,8 @@ const StudentFeePage = () => {
         }
 
         .colorful-tabs .nav-link.active{
-          background: linear-gradient(90deg,#3b82f6,#10b981);
-          color:#fff;
+          background: linear-gradient(90deg,var(--edb-primary),#10b981);
+          color:var(--edb-on-primary);
           border:0;
         }
 
@@ -2344,7 +2344,7 @@ const StudentFeePage = () => {
 
         .shimmer .line{
           height: 14px;
-          background: linear-gradient(90deg,#e5e7eb 25%,#f3f4f6 37%,#e5e7eb 63%);
+          background: linear-gradient(90deg,var(--edb-dashboard-bg) 25%,var(--edb-dashboard-bg) 37%,var(--edb-dashboard-bg) 63%);
           background-size: 400% 100%;
           animation: shimmer 1.4s infinite;
           border-radius: 8px;
