@@ -168,6 +168,7 @@ import RollNumberManagement from "./pages/RollNumberManagement";
 import MarksEntry from "./pages/MarksEntry";
 import MarksAccessManagement from "./pages/MarksAccessManagement";
 import MonthlyAttendanceRegister from "./pages/MonthlyAttendanceRegister";
+import HpeActivityRegister from "./pages/HpeActivityRegister";
 import ReportCardHealthEntry from "./pages/ReportCardHealthEntry";
 import ReportBuilder from "./pages/ReportBuilder";
 import ClasswiseResultSummary from "./pages/ClasswiseResultSummary";
@@ -532,6 +533,7 @@ function App() {
         {/* Protected App w/ Layout (TopBar + Sidebar) */}
         <Route element={<AppLayout key={activeAdmission} />}>
           <Route path="/dashboard" element={<RoleAwareDashboard />} />
+          <Route path="/hpe" element={<HpeActivityRegister />} />
           <Route
             path="/command-center"
             element={

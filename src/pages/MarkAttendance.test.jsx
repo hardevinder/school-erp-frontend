@@ -95,3 +95,24 @@ test("All Present remains an explicit choice on a new date", async () => {
   expect(status(1, "present").checked).toBe(true);
   expect(status(2, "present").checked).toBe(true);
 });
+
+test("bulk Late Admission submits selected student and range while preserving other edits", async () => {
+  window.scrollTo = jest.fn();
+  await select(2, "absent");
+  await click(container.querySelector('[aria-label="Bulk Late Admission for Alice"]'));
+  await act(async () => Simulate.change(container.querySelector('#late-admission-from'), { target: { value: "2026-10-01" } }));
+  api.post.mockResolvedValueOnce({ data: { saved: 10, skipped: 2, dates: ["2026-10-12"] } });
+  await click([...container.querySelectorAll('button')].find(button => button.textContent === 'Mark Late Admission'));
+  expect(api.post).toHaveBeenCalledWith('/attendance/late-admission-range', { studentId: 1, dateFrom: '2026-10-01', dateTo: '2026-10-12' });
+  expect(status(1, 'late_admission').checked).toBe(true);
+  expect(status(2, 'absent').checked).toBe(true);
+});
+
+test("cancel bulk confirmation leaves attendance unchanged", async () => {
+  window.scrollTo = jest.fn();
+  await click(container.querySelector('[aria-label="Bulk Late Admission for Alice"]'));
+  Swal.fire.mockResolvedValueOnce({ isConfirmed: false });
+  await click([...container.querySelectorAll('button')].find(button => button.textContent === 'Mark Late Admission'));
+  expect(api.post).not.toHaveBeenCalled();
+  expect(status(1, 'present').checked).toBe(true);
+});

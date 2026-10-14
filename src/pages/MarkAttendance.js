@@ -21,6 +21,9 @@ const buildPhotoURL = (photo) => {
 };
 
 const MarkAttendance = () => {
+  const [lateAdmissionStudent, setLateAdmissionStudent] = useState(null);
+  const [lateFrom, setLateFrom] = useState("");
+  const [lateTo, setLateTo] = useState("");
   const [students, setStudents] = useState([]);
   const [attendance, setAttendance] = useState({});
   const [remarks, setRemarks] = useState({});
@@ -327,6 +330,42 @@ const MarkAttendance = () => {
     }
   };
 
+  const handleLateAdmissionRange = async () => {
+    if (loading || !lateAdmissionStudent) return;
+    if (!moment(lateFrom, "YYYY-MM-DD", true).isValid() || !moment(lateTo, "YYYY-MM-DD", true).isValid() || lateFrom > lateTo || lateTo > moment().format("YYYY-MM-DD")) {
+      await Swal.fire("Invalid dates", "Select a valid date range ending on or before today.", "error");
+      return;
+    }
+    if (moment(lateTo).diff(moment(lateFrom), "days") >= 366) {
+      await Swal.fire("Invalid dates", "Select a range of no more than 366 days.", "error");
+      return;
+    }
+    setLoading(true);
+    try {
+      const confirmation = await Swal.fire({
+        title: "Mark bulk Late Admission?",
+        text: `Mark ${lateAdmissionStudent.name} as Late Admission from ${lateFrom} to ${lateTo}, inclusive? Existing attendance on these days will be replaced. Sundays and holidays are skipped.`,
+        icon: "warning", showCancelButton: true, confirmButtonText: "Mark Late Admission",
+      });
+      if (!confirmation.isConfirmed) return;
+      const { data } = await api.post("/attendance/late-admission-range", {
+        studentId: lateAdmissionStudent.id, dateFrom: lateFrom, dateTo: lateTo,
+      });
+      if (data.dates.includes(selectedDate)) {
+        const id = lateAdmissionStudent.id;
+        setAttendance(previous => ({ ...previous, [id]: "late_admission" }));
+        setSavedAttendance(previous => ({ ...previous, [id]: "late_admission" }));
+        setMode("edit");
+      }
+      setLateAdmissionStudent(null);
+      await Swal.fire("Saved", `${data.saved} days marked as Late Admission; ${data.skipped} Sundays/holidays skipped.`, "success");
+    } catch (error) {
+      await Swal.fire("Error", error?.response?.data?.message || "Failed to save Late Admission.", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // ---- Early returns for invalid dates/holidays ----
   if (selectedMoment.isAfter(today)) {
     return (
@@ -427,6 +466,19 @@ const MarkAttendance = () => {
           />
         </div>
       </header>
+
+      {lateAdmissionStudent && <section className="card card-body mb-3" aria-label="Bulk Late Admission">
+        <h2 className="h5">Bulk Late Admission — {lateAdmissionStudent.name}</h2>
+        <p className="text-muted small">Select the days before this student joined (up to 366 days). Both dates are included. Sundays and holidays are skipped. Existing attendance will be replaced after confirmation.</p>
+        <div className="d-flex flex-wrap align-items-end gap-2">
+          <div><label htmlFor="late-admission-from" className="form-label">From date</label>
+            <input id="late-admission-from" type="date" className="form-control" value={lateFrom} max={lateTo || moment().format("YYYY-MM-DD")} disabled={loading} onChange={event => setLateFrom(event.target.value)} /></div>
+          <div><label htmlFor="late-admission-to" className="form-label">To date</label>
+            <input id="late-admission-to" type="date" className="form-control" value={lateTo} min={lateFrom} max={moment().format("YYYY-MM-DD")} disabled={loading} onChange={event => setLateTo(event.target.value)} /></div>
+          <button className="btn btn-primary" disabled={loading || !lateFrom || !lateTo} onClick={handleLateAdmissionRange}>Mark Late Admission</button>
+          <button className="btn btn-outline-secondary" disabled={loading} onClick={() => setLateAdmissionStudent(null)}>Cancel</button>
+        </div>
+      </section>}
 
       {/* Summary Cards */}
       <div className="row g-3 mb-2">
@@ -603,6 +655,9 @@ const MarkAttendance = () => {
                       ))}
                     </div>
                     <div className="d-flex align-items-center gap-2 mt-2">
+                      <button type="button" className="btn btn-outline-secondary btn-sm" disabled={loading}
+                        aria-label={`Bulk Late Admission for ${s.name}`}
+                        onClick={() => { setLateAdmissionStudent(s); setLateFrom(selectedDate); setLateTo(selectedDate); window.scrollTo({ top: 0, behavior: "smooth" }); }}>Bulk Late Admission</button>
                       {!attendance[s.id] && <span className="badge text-bg-light border">Unmarked</span>}
                       {savedAttendance[s.id] && <button type="button"
                         className="btn btn-outline-danger btn-sm" disabled={loading}

@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import api from "../api";
+import ExcelJS from "exceljs";
 import "./MonthlyAttendanceRegister.css";
 import "./MonthlyAttendanceColors.css";
 
@@ -20,6 +21,17 @@ export default function MonthlyAttendanceRegister() {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  // Custom Date Range Export - EduBridge
+  const [customExportOpen, setCustomExportOpen] = useState(false);
+  const [customExportBusy, setCustomExportBusy] = useState(false);
+  const [customExportError, setCustomExportError] = useState("");
+  const [customExport, setCustomExport] = useState({
+    from: `${current.getFullYear()}-04-01`,
+    to: current.toISOString().slice(0, 10),
+    section: "selected",
+    type: "all",
+    format: "both",
+  });
 
   useEffect(() => {
     Promise.all([
@@ -129,6 +141,222 @@ export default function MonthlyAttendanceRegister() {
     }
   };
 
+  // Custom Date Range Export - EduBridge
+  const downloadDateRange = async () => {
+    setCustomExportError("");
+    if (!filters.session_id || !filters.class_id) {
+      setCustomExportError("Select a session and class first."); return;
+    }
+    if (customExport.section === "selected" && !filters.section_id) {
+      setCustomExportError("Select a section, or choose All Sections."); return;
+    }
+    const from = customExport.from;
+    const to = customExport.to;
+    const parseDay = (value) => /^\d{4}-\d{2}-\d{2}$/.test(value) ? new Date(`${value}T00:00:00Z`) : new Date(NaN);
+    const start = parseDay(from);
+    const end = parseDay(to);
+    const dayCount = Math.round((end - start) / 86400000) + 1;
+    if (!Number.isFinite(dayCount) || dayCount < 1 || dayCount > 370 || start.toISOString().slice(0, 10) !== from || end.toISOString().slice(0, 10) !== to) {
+      setCustomExportError("Choose a valid From/To date range (maximum 370 days)."); return;
+    }
+    const selection = customExport.section === "all" ? availableSections : availableSections.filter((row) => String(rowId(row, "section_id")) === String(filters.section_id));
+    if (!selection.length) { setCustomExportError("No sections available for the selected class."); return; }
+    const requested = [];
+    for (let d = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 1)); d <= end; d.setUTCMonth(d.getUTCMonth() + 1)) {
+      requested.push({ month: d.getUTCMonth() + 1, year: d.getUTCFullYear() });
+    }
+    setCustomExportBusy(true);
+    try {
+      const responses = [];
+      // Sequential requests avoid excessive simultaneous attendance queries.
+      for (const section of selection) {
+        const sectionId = rowId(section, "section_id");
+        for (const item of requested) {
+          const response = await api.get("/attendance/monthly-register", { params: {
+            session_id: filters.session_id, class_id: filters.class_id,
+            section_id: sectionId, month: item.month, year: item.year,
+          } });
+          responses.push({ section, payload: response.data });
+        }
+      }
+      const byStudent = new Map();
+      const daySummary = new Map();
+      const monthSummary = new Map();
+      const treatPoAsPresent = responses[0]?.payload?.preparatory_off_treatment === "present";
+      for (const { section, payload } of responses) {
+        const sectionName = section.section_name || section.name || String(rowId(section, "section_id"));
+        const sid = String(rowId(section, "section_id"));
+        const days = (payload.days || []).filter((day) => day.date >= from && day.date <= to);
+        for (const day of days) {
+          const monthKey = day.date.slice(0, 7);
+          const key = `${sid}|${monthKey}`;
+          if (!monthSummary.has(key)) monthSummary.set(key, { Section: sectionName, Month: monthKey, "Working Days": 0, Holidays: 0, "Weekly Off": 0, "Preparatory Off (non-working)": 0 });
+          const rec = monthSummary.get(key);
+          if (day.is_working_day) rec["Working Days"] += 1;
+          if (day.code === "H") rec.Holidays += 1;
+          if (day.code === "WO") rec["Weekly Off"] += 1;
+          if (day.code === "PO") rec["Preparatory Off (non-working)"] += 1;
+          daySummary.set(`${sid}|${day.date}`, { date: day.date, section: sectionName, ...day });
+        }
+        for (const student of (payload.students || [])) {
+          const studentId = String(student.id ?? student.admission_number);
+          const key = `${sid}|${studentId}`;
+          if (!byStudent.has(key)) byStudent.set(key, {
+            Section: sectionName, "Roll No": student.roll_number ?? "", "Admission No": student.admission_number ?? "",
+            "Student Name": student.name || "", "Father Name": student.father_name || "", values: {}, monthStats: {},
+          });
+          const data = byStudent.get(key);
+          for (const day of days) {
+            const code = student.attendance?.[day.date] || "—";
+            data.values[day.date] = code;
+            const m = day.date.slice(0, 7);
+            if (!data.monthStats[m]) data.monthStats[m] = { P: 0, A: 0, L: 0, LT: 0, HD: 0, PO: 0, LA: 0, UM: 0, WD: 0 };
+            const stat = data.monthStats[m];
+            if (day.is_working_day) stat.WD++;
+            if (code === "P" || code === "A" || code === "L" || code === "LT" || code === "HD" || code === "PO" || code === "LA") stat[code]++;
+            else if (day.is_working_day && code === "—") stat.UM++;
+          }
+        }
+      }
+      const dates = [];
+      for (let t = start.getTime(); t <= end.getTime(); t += 86400000) dates.push(new Date(t).toISOString().slice(0, 10));
+      const allowed = {
+        all: null, present: new Set(["P"]), absent: new Set(["A"]),
+        present_absent: new Set(["P", "A"]), present_absent_leave: new Set(["P", "A", "L"]),
+      }[customExport.type];
+      const shown = (code) => (!allowed || allowed.has(code)) ? code : "";
+      const months = [...new Set(dates.map((d) => d.slice(0, 7)))];
+      const stats = (entries) => entries.reduce((acc, item) => {
+        for (const field of ["P", "A", "L", "LT", "HD", "PO", "LA", "UM", "WD"]) acc[field] = (acc[field] || 0) + (item[field] || 0);
+        return acc;
+      }, {});
+      const effectiveP = (stat) => (stat.P || 0) + (stat.LT || 0) + (stat.HD || 0) * 0.5 + (treatPoAsPresent ? (stat.PO || 0) : 0);
+      const summary = [];
+      const details = [];
+      for (const student of byStudent.values()) {
+        const all = stats(Object.values(student.monthStats));
+        const base = { Section: student.Section, "Roll No": student["Roll No"], "Admission No": student["Admission No"], "Student Name": student["Student Name"], "Father Name": student["Father Name"] };
+        const row = { ...base };
+        for (const month of months) {
+          const m = student.monthStats[month] || {};
+          row[`${month} P`] = m.P || 0;
+          row[`${month} A`] = m.A || 0;
+        }
+        Object.assign(row, { "Actual P": all.P || 0, "Absent": all.A || 0, "Leave": all.L || 0, "Late": all.LT || 0, "Half Day": all.HD || 0, "PO": all.PO || 0,
+          "Late Admission": all.LA || 0, "Unmarked": all.UM || 0, "Working Days": Math.max(0, (all.WD || 0) - (all.LA || 0)),
+          "Effective Present": effectiveP(all),
+          "Marked": (all.P || 0) + (all.A || 0) + (all.L || 0) + (all.LT || 0) + (all.HD || 0) + (treatPoAsPresent ? (all.PO || 0) : 0),
+        });
+        row["Attendance %"] = row.Marked ? Math.round(row["Effective Present"] * 10000 / row.Marked) / 100 : 0;
+        summary.push(row);
+        const detail = { ...base };
+        dates.forEach((date) => { detail[date] = shown(student.values[date] || "—"); });
+        Object.assign(detail, { "Actual P": all.P || 0, "Absent": all.A || 0, "Effective Present": effectiveP(all) });
+        details.push(detail);
+      }
+      // EduBridge Professional Attendance Excel Export (ExcelJS)
+      const schoolName = (document.title || "").split("|")[0].trim() || "School Attendance Register";
+      const className = classes.find((c) => String(rowId(c, "class_id")) === String(filters.class_id))?.class_name || String(filters.class_id);
+      const selectedSectionName = customExport.section === "all" ? "All Sections" : (selection[0]?.section_name || selection[0]?.name || "Selected Section");
+      const prettyDate = (iso) => new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-GB", { day: "2-digit", month: "long", year: "numeric", timeZone: "UTC" });
+      const prettyMonth = (iso) => new Date(`${iso}-01T00:00:00Z`).toLocaleDateString("en-GB", { month: "long", year: "numeric", timeZone: "UTC" });
+      const excel = new ExcelJS.Workbook();
+      excel.creator = "EduBridge ERP";
+      excel.subject = "Student Attendance Register";
+      const navy = "11355B", dark = "082B4D", blue = "14588A", teal = "087E8B", pale = "EAF4FA", white = "FFFFFF";
+      const idKeys = ["Section", "Roll No", "Admission No", "Student Name", "Father Name"];
+      const summaryKeys = Object.keys(summary[0] || {});
+      const detailKeys = Object.keys(details[0] || {});
+      const workingRows = [...monthSummary.values()].map((row) => ({ ...row, Month: prettyMonth(row.Month) }));
+      const settingsRows = [
+        { Setting: "School", Value: schoolName }, { Setting: "Session", Value: sessions.find((s) => String(rowId(s,"session_id")) === String(filters.session_id))?.session_name || filters.session_id },
+        { Setting: "Class", Value: className }, { Setting: "Section", Value: selectedSectionName },
+        { Setting: "From Date", Value: prettyDate(from) }, { Setting: "To Date", Value: prettyDate(to) },
+        { Setting: "Attendance Filter", Value: {all:"All Attendance",present:"Present Only",absent:"Absent Only",present_absent:"Present & Absent",present_absent_leave:"Present, Absent & Leave"}[customExport.type] },
+        { Setting: "PO Treatment", Value: responses[0]?.payload?.preparatory_off_treatment || "excluded" },
+        { Setting: "Note", Value: "Daily cells follow the selected filter; totals use actual saved attendance codes. PO is never re-labelled P." },
+      ];
+      const mergeBand = (sheet, row, first, last, title, color, size = 12) => {
+        sheet.mergeCells(row, first, row, last);
+        const c = sheet.getCell(row, first); c.value = title;
+        c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: `FF${color}` } };
+        c.font = { name: "Aptos Display", size, bold: true, color: { argb: `FF${white}` } };
+        c.alignment = { vertical: "middle", horizontal: "center" };
+      };
+      const newSheet = (name, keys, rows, opts = {}) => {
+        const sheet = excel.addWorksheet(name, { views: [{ state: "frozen", xSplit: opts.frozenCols ?? Math.min(5, keys.length), ySplit: 7, topLeftCell: "A8" }], pageSetup: { paperSize: 9, orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0 } });
+        const last = keys.length;
+        sheet.properties.defaultRowHeight = 21;
+        sheet.getRow(1).height = 33; mergeBand(sheet, 1, 1, last, schoolName.toUpperCase(), navy, 18);
+        sheet.getRow(2).height = 26; mergeBand(sheet, 2, 1, last, `STUDENT ATTENDANCE • ${name.toUpperCase()}`, blue, 12);
+        sheet.getRow(3).height = 25; mergeBand(sheet, 3, 1, last, `Class: ${className}  |  Section: ${selectedSectionName}  |  ${prettyDate(from)} – ${prettyDate(to)}`, teal, 11);
+        sheet.getRow(4).height = 24; mergeBand(sheet, 4, 1, last, `Session: ${settingsRows[1].Value}     •     Students: ${byStudent.size}     •     Filter: ${settingsRows[6].Value}`, navy, 10);
+        sheet.getRow(5).height = 10;
+        sheet.getRow(6).height = 24;
+        sheet.getRow(7).height = 31;
+        for (let j = 0; j < last; j++) {
+          const key = keys[j], letter = j + 1;
+          const width = key === "Student Name" || key === "Father Name" ? 25 : key === "Setting" ? 30 : key === "Value" ? 75 : key === "Section" ? 13 : key === "Admission No" ? 17 : key === "Roll No" ? 12 : key.length > 18 ? 19 : key.length > 10 ? 16 : 12;
+          sheet.getColumn(letter).width = opts.detail && j >= 5 && /^\d{4}-/.test(key) ? 9 : Math.min(width, 75);
+          const h = sheet.getCell(7, letter); h.value = opts.detail && /^\d{4}-\d{2}-\d{2}$/.test(key) ? key.slice(8,10) : (/^\d{4}-\d{2} P$/.test(key) ? "Present (P)" : /^\d{4}-\d{2} A$/.test(key) ? "Absent (A)" : key);
+          h.fill = {type:"pattern",pattern:"solid",fgColor:{argb:`FF${navy}`}};
+          h.font = {name:"Aptos",bold:true,color:{argb:"FFFFFFFF"},size:10};
+          h.alignment = {horizontal:"center",vertical:"middle",wrapText:true};
+          h.border = {bottom:{style:"medium",color:{argb:"FF46AFC0"}}};
+        }
+        if (opts.monthGroups) {
+          keys.forEach((key, idx) => {
+            const m = key.match(/^(\d{4}-\d{2}) P$/);
+            if (m) { const first = idx + 1; mergeBand(sheet, 6, first, first + 1, prettyMonth(m[1]), teal, 10); }
+          });
+          if (keys.length >= 5) mergeBand(sheet, 6, 1, 5, "STUDENT INFORMATION", blue, 10);
+          const lastMonthCol = 5 + months.length * 2;
+          if (lastMonthCol < last) mergeBand(sheet, 6, lastMonthCol + 1, last, "OVERALL TOTALS", blue, 10);
+        } else if (opts.detail) {
+          mergeBand(sheet, 6, 1, 5, "STUDENT INFORMATION", blue, 10);
+          const dateList = keys.filter(k => /^\d{4}-\d{2}-\d{2}$/.test(k));
+          const groups = new Map();
+          keys.forEach((key, idx) => {if (/^\d{4}-\d{2}-\d{2}$/.test(key)) { const m = key.slice(0,7); if(!groups.has(m)) groups.set(m, [idx+1,idx+1]); else groups.get(m)[1] = idx+1; }});
+          groups.forEach(([f,l],m)=>mergeBand(sheet,6,f,l,prettyMonth(m),teal,10));
+          if(dateList.length + 5 < last) mergeBand(sheet, 6, dateList.length+6, last, "TOTALS", blue, 10);
+        } else mergeBand(sheet,6,1,last,"REPORT DETAILS",blue,10);
+        if (rows.length === 0) rows = [{ [keys[0]]: "No records for the selected filters" }];
+        for (const [ri, record] of rows.entries()) {
+          const r = sheet.getRow(ri + 8); r.height = 23;
+          keys.forEach((key, j) => {
+            const c = r.getCell(j+1);
+            c.value = record[key] ?? "";
+            c.font = {name:"Aptos",size:10,color:{argb:"FF18324A"},bold:key === "Student Name"};
+            c.fill = {type:"pattern",pattern:"solid",fgColor:{argb:ri % 2 ? "FFF0F6FA":"FFFFFFFF"}};
+            c.alignment = {vertical:"middle",horizontal: j < 5 ? "left" : "center",wrapText:j<5};
+            c.border = {bottom:{style:"hair",color:{argb:"FFDCE7EF"}}};
+            if (typeof c.value === "string" && ({P:"D8F4E4",A:"FFE0E0",PO:"EADFFF",H:"E8E1FA",WO:"E2E8F0",L:"FFF1CE",LT:"DEEDFA",HD:"DEEDFA"}[c.value])) {
+              c.fill = {type:"pattern",pattern:"solid",fgColor:{argb:`FF${({P:"D8F4E4",A:"FFE0E0",PO:"EADFFF",H:"E8E1FA",WO:"E2E8F0",L:"FFF1CE",LT:"DEEDFA",HD:"DEEDFA"})[c.value]}`}};
+              c.font = {bold:true,color:{argb: c.value === "A" ? "FF9F1239" : "FF155E4B"}};
+            }
+            if (key === "Attendance %" && typeof c.value === "number") c.numFmt = '0.00"%"';
+          });
+        }
+        sheet.autoFilter = {from:{row:7,column:1},to:{row:7,column:last}};
+        sheet.headerFooter.oddFooter = 'EduBridge ERP • Confidential School Report &P / &N';
+        return sheet;
+      };
+      if (customExport.format !== "detailed") newSheet("Attendance Summary", summaryKeys.length ? summaryKeys : idKeys, summary, {monthGroups:true});
+      if (customExport.format !== "summary") newSheet("Daily Attendance", detailKeys.length ? detailKeys : idKeys, details, {detail:true});
+      newSheet("Working Days", ["Section","Month","Working Days","Holidays","Weekly Off","Preparatory Off (non-working)"], workingRows, {frozenCols:2});
+      newSheet("Export Settings", ["Setting","Value"], settingsRows, {frozenCols:1});
+      const bytes = await excel.xlsx.writeBuffer();
+      const blob = new Blob([bytes], {type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a"); link.href = url; link.download = `attendance-${from}-to-${to}.xlsx`;
+      document.body.appendChild(link); link.click(); link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+      setCustomExportOpen(false);
+    } catch (err) {
+      setCustomExportError(err.response?.data?.message || err.message || "Could not export attendance.");
+    } finally { setCustomExportBusy(false); }
+  };
+
   const exportCsv = () => {
     if (!report) return;
     const headers = ["Roll Number", "Admission Number", "Student Name", "Father Name", ...report.days.map((day) => `${day.day} ${day.weekday}`), "Working Days", "Marked", "Present", "Absent", "Leave", "Late", "Half Day", "Unmarked", "Month Attendance %", "Previous Marked", "Previous Present", "Previous Attendance %", "Till Month Marked", "Till Month Present", "Till Month Attendance %"];
@@ -160,6 +388,27 @@ export default function MonthlyAttendanceRegister() {
           <div className="col-sm-6 col-xl-2"><button className="btn btn-primary w-100" onClick={loadReport} disabled={loading}>{loading ? <><span className="spinner-border spinner-border-sm me-2" />Loading</> : <><i className="bi bi-search me-2" />View Register</>}</button></div>
         </div></div>
       </section>
+
+      <div className="d-flex justify-content-end mt-3 mb-2">
+        <button className="btn btn-outline-primary" onClick={() => { setCustomExportError(""); setCustomExportOpen(true); }}>
+          <i className="bi bi-calendar-range me-2" />Custom Date Range Export
+        </button>
+      </div>
+      {customExportOpen && <div className="modal d-block" tabIndex="-1" role="dialog" aria-modal="true" style={{ background: "rgba(0,0,0,.55)" }}>
+        <div className="modal-dialog modal-lg modal-dialog-centered"><div className="modal-content">
+          <div className="modal-header"><h5 className="modal-title">Export Attendance by Date Range</h5><button type="button" className="btn-close" disabled={customExportBusy} onClick={() => setCustomExportOpen(false)} aria-label="Close" /></div>
+          <div className="modal-body"><div className="row g-3">
+            <div className="col-md-6"><label className="form-label">From Date</label><input className="form-control" type="date" value={customExport.from} onChange={(e) => setCustomExport({ ...customExport, from: e.target.value })} /></div>
+            <div className="col-md-6"><label className="form-label">To Date</label><input className="form-control" type="date" value={customExport.to} onChange={(e) => setCustomExport({ ...customExport, to: e.target.value })} /></div>
+            <div className="col-md-6"><label className="form-label">Sections</label><select className="form-select" value={customExport.section} onChange={(e) => setCustomExport({ ...customExport, section: e.target.value })}><option value="selected">Selected Section</option><option value="all">All Sections</option></select></div>
+            <div className="col-md-6"><label className="form-label">Attendance Type</label><select className="form-select" value={customExport.type} onChange={(e) => setCustomExport({ ...customExport, type: e.target.value })}><option value="all">All Attendance</option><option value="present">Present Only (P)</option><option value="absent">Absent Only (A)</option><option value="present_absent">Present &amp; Absent</option><option value="present_absent_leave">Present, Absent &amp; Leave</option></select></div>
+            <div className="col-md-6"><label className="form-label">Report Format</label><select className="form-select" value={customExport.format} onChange={(e) => setCustomExport({ ...customExport, format: e.target.value })}><option value="both">Summary + Detailed Register</option><option value="summary">Summary Only</option><option value="detailed">Detailed Register Only</option></select></div>
+            <div className="col-12"><small className="text-muted">Exports exact selected dates. Non-selected statuses show blank in daily columns; totals are calculated using original records. PO is counted according to school settings and never silently changed into P.</small></div>
+            {customExportError && <div className="col-12"><div className="alert alert-danger mb-0">{customExportError}</div></div>}
+          </div></div>
+          <div className="modal-footer"><button className="btn btn-outline-secondary" disabled={customExportBusy} onClick={() => setCustomExportOpen(false)}>Cancel</button><button className="btn btn-success" disabled={customExportBusy} onClick={downloadDateRange}>{customExportBusy ? "Preparing Excel…" : "Download Excel (.xlsx)"}</button></div>
+        </div></div>
+      </div>}
 
       {error && <div className="alert alert-danger mt-3 mb-0"><i className="bi bi-exclamation-circle me-2" />{error}</div>}
 
