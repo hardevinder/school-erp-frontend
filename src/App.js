@@ -8,6 +8,8 @@ import "react-toastify/dist/ReactToastify.css";
 import socket from "./socket";
 
 import AppLayout from "./layouts/AppLayout";
+import WebsiteManager from './pages/website-manager/WebsiteManager'; // EDUBRIDGE_SMART_CAMPUS_PATCH1_PAGE
+
 
 // Auth / common
 import Login from "./components/Login";
@@ -533,6 +535,7 @@ function App() {
         {/* Protected App w/ Layout (TopBar + Sidebar) */}
         <Route element={<AppLayout key={activeAdmission} />}>
           <Route path="/dashboard" element={<RoleAwareDashboard />} />
+          <Route path="/website-manager" element={<WebsiteManager />} />
           <Route path="/hpe" element={<HpeActivityRegister />} />
           <Route
             path="/command-center"

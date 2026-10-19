@@ -1,0 +1,34 @@
+import React,{useEffect,useState} from 'react';
+import axios from 'axios';
+import './SmartCampusMediaPicker.css';
+const BASE=(process.env.REACT_APP_API_URL||axios.defaults.baseURL||'').replace(/\/$/,'');
+const ROOT=`${BASE}/api/smart-campus/media`;
+const token=()=>localStorage.getItem('token')||sessionStorage.getItem('token');
+function headers(){const b=localStorage.getItem('selectedBranchId')||localStorage.getItem('branchId')||sessionStorage.getItem('selectedBranchId');return {Authorization:`Bearer ${token()}`,...(b&&Number(b)>0?{'X-Branch-Id':b}:{})};}
+const call=(method,url,data,more={})=>axios({method,url:ROOT+url,data,headers:headers(),...more});
+function Thumb({item}){
+ const [url,setUrl]=useState('');const [mime,setMime]=useState(item.mime||'');
+ useEffect(()=>{let active=true;let object='';call('get','/'+item.id+'/file',null,{responseType:'blob'}).then(r=>{object=URL.createObjectURL(r.data);if(active){setUrl(object);setMime(r.data.type||item.mime||'')} else URL.revokeObjectURL(object)}).catch(()=>{});return()=>{active=false;if(object)URL.revokeObjectURL(object)}},[item.id]);
+ if(!url)return <span className="sc-media-loading">Loading preview…</span>;
+ return mime.startsWith('video/')?<video src={url} controls preload="metadata" playsInline/>:<img src={url} alt={item.name||'School media'}/>;
+}
+export default function SmartCampusMediaPicker({items=[],onChange,kind='hero'}){
+ const [library,setLibrary]=useState([]),[busy,setBusy]=useState(false),[note,setNote]=useState('');
+ const reload=()=>call('get','').then(r=>setLibrary(r.data.items||[])).catch(e=>setNote(e.response?.data?.message||'Could not load media library'));
+ useEffect(()=>{reload()},[]);
+ const chosen=items.map(id=>library.find(x=>x.id===id)).filter(Boolean);
+ async function onFiles(e){const files=Array.from(e.target.files||[]);e.target.value='';if(!files.length)return;setNote('');if(files.length>12){setNote('Select up to 12 at once. Repeat upload for more.');return}
+  const bad=files.find(f=>!['image/jpeg','image/png','image/webp','video/mp4','video/webm'].includes(f.type)||f.size>(f.type.startsWith('video/')?60:12)*1024*1024);
+  if(bad){setNote('Allowed: JPG/PNG/WebP (12 MB each), MP4/WebM (60 MB each).');return}
+  setBusy(true);try{const data=new FormData();files.forEach(f=>data.append('files',f));const r=await call('post','',data);const uploaded=r.data.items||[];setLibrary(v=>[...v,...uploaded]);onChange([...items,...uploaded.map(x=>x.id)]);setNote(`${uploaded.length} file(s) uploaded privately. Save review draft to preserve selection.`)}catch(x){setNote(x.response?.data?.message||'Upload failed')}finally{setBusy(false)}
+ }
+ function move(i,d){const j=i+d;if(j<0||j>=items.length)return;const a=items.slice();[a[i],a[j]]=[a[j],a[i]];onChange(a)}
+ const available=library.filter(x=>!items.includes(x.id));
+ return <div className="sc-media-box"><h4>{kind==='hero'?'Hero banner media':'Photo & video gallery'}</h4><p>Upload multiple photos/videos together. Choose existing media below. Private preview only.</p>
+ <label className="sc-media-upload">＋ Select multiple photos or videos<input disabled={busy} type="file" multiple accept="image/jpeg,image/png,image/webp,video/mp4,video/webm" onChange={onFiles}/></label>
+ {busy&&<p role="status">Uploading files…</p>}{note&&<p role="status">{note}</p>}
+ <div className="sc-media-list">{chosen.map((x,i)=><div className="sc-media-item" key={x.id}><Thumb item={x}/><span title={x.name}>{x.name}</span><div><button type="button" onClick={()=>move(i,-1)} disabled={i===0}>↑</button><button type="button" onClick={()=>move(i,1)} disabled={i===items.length-1}>↓</button><button type="button" onClick={()=>onChange(items.filter(id=>id!==x.id))}>Remove</button></div></div>)}</div>
+ {!!available.length&&<details><summary>Choose from media library ({available.length})</summary><div className="sc-media-list">{available.map(x=><button key={x.id} className="sc-media-library" type="button" onClick={()=>onChange([...items,x.id])}><Thumb item={x}/><span>＋ {x.name}</span></button>)}</div></details>}
+ <p className="sc-media-help">Use arrows to set the slideshow order. Removing from this section does not delete uploaded files.</p></div>;
+}
+export {Thumb as SmartCampusMediaThumb};

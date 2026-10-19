@@ -1,0 +1,87 @@
+import React, { useEffect, useMemo, useState } from 'react';
+import axios from 'axios';
+import './WebsiteManager.css';
+
+const BASE = (process.env.REACT_APP_API_URL || axios.defaults.baseURL || '').replace(/\/$/, '');
+const MODULES = [
+  ['school','School profile','🏫'],['curriculum','Curriculum','📚'],['faculty','Faculty','👩‍🏫'],
+  ['calendar','Academic calendar','📅'],['events','Events & activities','🎉'],
+  ['achievements','Achievements','🏆'],['transport','Transport','🚌'],
+  ['admissions','Admissions','🎯'],['general','Custom content','📝']
+];
+const LABEL = Object.fromEntries(MODULES.map(([key,label])=>[key,label]));
+const formatDate = date => date ? new Date(date).toLocaleString() : '—';
+const errorMessage = e => {
+  const http=e.response?.status;
+  const message=e.response?.data?.message;
+  if (!e.response) return 'Unable to reach Smart Campus API. Check backend server and API URL.';
+  if (http===401) return 'Your login expired. Please sign in again.';
+  if (http===403) return 'Access denied. Ask the administrator for website_view / website_edit / website_publish permissions.';
+  if (http===404) return 'Smart Campus route not found (404). Verify backend Patch 1 route and server restart.';
+  if (http===503) return message || 'Smart Campus database is not ready. Complete the pending migration on a safe staging database.';
+  return message || `Request failed (HTTP ${http}). Check backend server logs.`;
+};
+export default function WebsiteManager(){
+  const [rows,setRows]=useState([]),[loading,setLoading]=useState(true),[error,setError]=useState(''),[notice,setNotice]=useState('');
+  const [module,setModule]=useState('all'),[statusFilter,setStatusFilter]=useState('all'),[query,setQuery]=useState('');
+  const [editing,setEditing]=useState(null),[preview,setPreview]=useState(null),[versions,setVersions]=useState([]),[busy,setBusy]=useState(false);
+  const [form,setForm]=useState({title:'',source_module:'general',content:''});
+  const [tab,setTab]=useState('overview');
+  const request=(method,path,data)=>{
+    const token=localStorage.getItem('token')||sessionStorage.getItem('token');
+    return axios({method,url:`${BASE}/api/smart-campus${path}`,data,headers:token?{Authorization:`Bearer ${token}`}:{}});
+  };
+  const load=async()=>{
+    setLoading(true);setError('');
+    try {const {data}=await request('get','/publications');setRows(Array.isArray(data.items)?data.items:[])}
+    catch(e){setError(errorMessage(e));setRows([])}finally{setLoading(false)}
+  };
+  useEffect(()=>{load();},[]);
+  const filtered=useMemo(()=>rows.filter(r=>(module==='all'||r.source_module===module)&&(statusFilter==='all'||r.status===statusFilter)&&(`${r.title} ${r.source_module}`.toLowerCase().includes(query.toLowerCase()))),[rows,module,statusFilter,query]);
+  const counts=useMemo(()=>({all:rows.length,draft:rows.filter(x=>x.status==='draft').length,review:rows.filter(x=>x.status==='review').length,published:rows.filter(x=>x.status==='published').length}),[rows]);
+  const beginDraft=()=>{setForm({title:'',source_module:module==='all'?'general':module,content:''});setEditing({id:null});setTab('editor');setNotice('')};
+  const editDraft=async(row)=>{
+    setBusy(true);setError('');try{const {data}=await request('get',`/publications/${row.id}`);setForm({title:data.title||'',source_module:data.source_module||'general',content:data.content||''});setEditing({id:data.id});setTab('editor')}catch(e){setError(errorMessage(e))}finally{setBusy(false)}
+  };
+  const save=async(e)=>{
+    e.preventDefault();setBusy(true);setError('');setNotice('');
+    try{
+      if(editing?.id) await request('put',`/publications/${editing.id}`,{title:form.title.trim(),content:form.content});
+      else await request('post','/publications',{title:form.title.trim(),content:form.content,source_module:form.source_module,source_record_id:'manual'});
+      setNotice('Draft saved successfully.');setEditing(null);setTab('overview');await load();
+    }catch(e){setError(errorMessage(e))}finally{setBusy(false)}
+  };
+  const openPreview=async(row)=>{
+    setBusy(true);setError('');try{
+      const [a,b]=await Promise.all([request('get',`/publications/${row.id}`),request('get',`/publications/${row.id}/versions`)]);
+      setPreview(a.data);setVersions(b.data.items||[]);
+    }catch(e){setError(errorMessage(e))}finally{setBusy(false)}
+  };
+  const changeStatus=async(row,next)=>{
+    if (next==='published'&&!window.confirm(`Publish “${row.title}” internally? Public website delivery is not enabled in Patch 1.`)) return;
+    setBusy(true);setError('');setNotice('');try{
+      await request('post',`/publications/${row.id}/status`,{status:next});
+      setNotice(`Content moved to ${next}.`);setPreview(null);await load();
+    }catch(e){setError(errorMessage(e))}finally{setBusy(false)}
+  };
+  return <main className="scm">
+    <header className="scm-hero"><div><span className="scm-kicker">EDUBRIDGE · SMART CAMPUS</span><h1>Website Manager</h1><p>Review school content, manage drafts and control what is approved for publishing.</p></div><div className="scm-hero-actions"><span className="scm-internal">● Internal publishing foundation</span><button className="scm-primary" type="button" onClick={beginDraft}>＋ New draft</button></div></header>
+    <div className="scm-info">ℹ️ Patch 1 is an internal content approval system. Content is <strong>not published to the public school website yet.</strong> Existing ERP modules will be connected in later patches.</div>
+    {error&&<div className="scm-alert" role="alert"><strong>Setup / API issue</strong><p>{error}</p><button type="button" onClick={load}>Retry connection</button><small>Check backend logs and migration status before making changes.</small></div>}
+    {notice&&<div className="scm-success" role="status">✓ {notice}</div>}
+    <div className="scm-stats" aria-label="Publication overview">
+      {[['All content',counts.all,'▦','all'],['Pending review',counts.review,'◷','review'],['Published internally',counts.published,'✓','published'],['Drafts',counts.draft,'✎','draft']].map(([label,count,icon,key])=><button type="button" className={`scm-stat ${statusFilter===key&&tab==='overview'?'is-active':''}`} key={key} onClick={()=>{setStatusFilter(key);setTab('overview')}}><span className="scm-stat-icon">{icon}</span><span><small>{label}</small><strong>{loading?'…':error?'—':count}</strong></span></button>)}
+    </div>
+    <div className="scm-layout">
+      <nav className="scm-nav" aria-label="Website manager areas"><div className="scm-nav-title">WORKSPACE</div><button type="button" className={tab==='overview'&&module==='all'?'selected':''} onClick={()=>{setTab('overview');setModule('all')}}>▦ <span>All publications</span><b>{counts.all}</b></button><div className="scm-nav-title">CONTENT SOURCES</div>{MODULES.map(([key,label,icon])=><button type="button" key={key} className={tab==='overview'&&module===key?'selected':''} onClick={()=>{setTab('overview');setModule(key)}}><span>{icon}</span><span>{label}</span></button>)}<div className="scm-nav-note">Source integration is planned. For now, these categories organize manually entered drafts.</div></nav>
+      <section className="scm-main">
+        {tab==='editor'?<div className="scm-panel"><div className="scm-panel-head"><div><span className="scm-kicker">CONTENT EDITOR</span><h2>{editing?.id?'Edit content draft':'Create a new draft'}</h2><p>Prepare content for review. It will not be visible on the public website.</p></div><button className="scm-ghost" type="button" onClick={()=>setTab('overview')}>← Back</button></div><form className="scm-form" onSubmit={save}><label>Source category<select value={form.source_module} disabled={Boolean(editing?.id)} onChange={e=>setForm({...form,source_module:e.target.value})}>{MODULES.map(([key,label])=><option key={key} value={key}>{label}</option>)}</select></label><label>Content title<input maxLength={240} required placeholder="e.g. Primary curriculum highlights" value={form.title} onChange={e=>setForm({...form,title:e.target.value})}/></label><label>Content description<textarea rows={9} maxLength={1000000} placeholder="Write a draft or paste approved public information…" value={form.content} onChange={e=>setForm({...form,content:e.target.value})}/></label><div className="scm-form-actions"><button className="scm-ghost" type="button" onClick={()=>setTab('overview')}>Cancel</button><button className="scm-primary" type="submit" disabled={busy||!!error}>{busy?'Saving…':'Save draft'}</button></div></form></div>:
+        <div className="scm-panel"><div className="scm-panel-head"><div><span className="scm-kicker">PUBLICATION WORKFLOW</span><h2>{module==='all'?'Content publishing queue':LABEL[module]}</h2><p>View records, preview content and move items through the approval workflow.</p></div><button className="scm-ghost" type="button" onClick={load} disabled={loading}>↻ Refresh</button></div>
+          <div className="scm-filters"><label className="scm-search"><span>⌕</span><input aria-label="Search publications" value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search by title or category"/></label><select aria-label="Filter by status" value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}>{['all','draft','review','published','archived'].map(x=><option value={x} key={x}>{x==='all'?'All statuses':x.replace(/^./,c=>c.toUpperCase())}</option>)}</select></div>
+          {loading?<div className="scm-empty">Loading publication records…</div>:error?<div className="scm-empty">Records are unavailable until the API/database issue is resolved.</div>:filtered.length===0?<div className="scm-empty"><span>▤</span><h3>No matching content yet</h3><p>Start with a draft, or change your filters to find existing records.</p><button type="button" className="scm-primary" onClick={beginDraft}>＋ Create draft</button></div>:<div className="scm-table-scroll"><table className="scm-table"><thead><tr><th>Content</th><th>Category</th><th>Status</th><th>Version</th><th>Updated</th><th>Actions</th></tr></thead><tbody>{filtered.map(row=><tr key={row.id}><td><strong>{row.title}</strong><small>Record #{row.id}</small></td><td>{LABEL[row.source_module]||row.source_module}</td><td><span className={`scm-pill scm-${row.status}`}>{row.status}</span></td><td>v{row.version}</td><td>{formatDate(row.updatedAt)}</td><td><div className="scm-row-actions"><button type="button" disabled={busy} onClick={()=>openPreview(row)}>Preview</button>{['draft','review'].includes(row.status)&&<button type="button" disabled={busy} onClick={()=>editDraft(row)}>Edit</button>}{row.status==='draft'&&<button type="button" disabled={busy} onClick={()=>changeStatus(row,'review')}>Send for review</button>}{row.status==='review'&&<><button type="button" disabled={busy} onClick={()=>changeStatus(row,'draft')}>Return</button><button type="button" disabled={busy} className="scm-positive" onClick={()=>changeStatus(row,'published')}>Approve</button></>}{row.status==='published'&&<button type="button" disabled={busy} onClick={()=>changeStatus(row,'archived')}>Archive</button>}{row.status==='archived'&&<button type="button" disabled={busy} onClick={()=>changeStatus(row,'draft')}>Reopen</button>}</div></td></tr>)}</tbody></table></div>}
+        </div>}
+      </section>
+    </div>
+    {preview&&<div className="scm-overlay" role="presentation" onMouseDown={e=>{if(e.target===e.currentTarget)setPreview(null)}}><section className="scm-modal" role="dialog" aria-modal="true" aria-label="Content preview"><div className="scm-panel-head"><div><span className="scm-kicker">INTERNAL CONTENT PREVIEW</span><h2>{preview.title}</h2><p>{LABEL[preview.source_module]} · <span className={`scm-pill scm-${preview.status}`}>{preview.status}</span></p></div><button className="scm-ghost" type="button" onClick={()=>setPreview(null)}>Close ✕</button></div><div className="scm-preview-content">{preview.content||'No content added yet.'}</div><h3>Version history</h3><div className="scm-versions">{versions.length?versions.map(v=><div key={v.id}><strong>v{v.version} · {v.action}</strong><small>{formatDate(v.createdAt)}</small></div>):<p>No versions found.</p>}</div></section></div>}
+  </main>;
+}

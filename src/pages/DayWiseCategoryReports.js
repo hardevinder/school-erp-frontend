@@ -1,3 +1,4 @@
+import { formatTransactionDate, formatRecordedDateTime as formatToDisplayDateTime } from "../utils/feeReport";
 import React, { useState, useEffect } from 'react';
 import { Container, Row, Col, Button, Table, Alert, Pagination, Card, Badge } from 'react-bootstrap';
 import FeeReportFilters, { useFeeReportFilters, sessionOf, receiptKey, downloadReport } from "../components/reports/FeeReportFilters";
@@ -12,27 +13,6 @@ import { saveAs } from 'file-saver';
 /* -------------------------------------------------
    Helpers
 -------------------------------------------------- */
-
-// Keep this as is for API calls (backend expects yyyy-MM-dd)
-// UI formatter → dd/MM/yyyy hh:mm AM/PM
-const formatToDisplayDateTime = (date) => {
-  if (!date) return '';
-  const d = new Date(date);
-  if (Number.isNaN(d.getTime())) return '';
-
-  const day = String(d.getDate()).padStart(2, '0');
-  const month = String(d.getMonth() + 1).padStart(2, '0');
-  const year = d.getFullYear();
-
-  let hours = d.getHours();
-  const minutes = String(d.getMinutes()).padStart(2, '0');
-  const ampm = hours >= 12 ? 'PM' : 'AM';
-
-  hours = hours % 12;
-  hours = hours || 12;
-
-  return `${day}/${month}/${year} ${String(hours).padStart(2, '0')}:${minutes} ${ampm}`;
-};
 
 // Helper function for totals
 const formatTotalValue = (value) => {
@@ -65,7 +45,8 @@ const pivotReportData = (data) => {
         receiptKey: slipId,
         session_id: curr.session_id,
         Session: curr.Session,
-        DateOfTransaction: curr.DateOfTransaction || curr.createdAt || null,
+        DateOfTransaction: curr.DateOfTransaction || null,
+        createdAt: curr.createdAt || null,
         Student_ID: curr.Student_ID,
         Transaction_ID: curr.Transaction_ID,
         PaymentMode: curr.PaymentMode,
@@ -191,7 +172,7 @@ const calculateCategorySummary = (data) => {
 };
 
 const DayWiseReport = () => {
-  const filters = useFeeReportFilters();
+  const filters = useFeeReportFilters({ enableDateType: true });
   const [reportData, setReportData] = useState([]);
   const [school, setSchool] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -325,23 +306,14 @@ const DayWiseReport = () => {
         }
       }
 
-      const reportDataForPdf = activeReportData.map((item) => ({
-        ...item,
-        createdAt: item.DateOfTransaction || item.createdAt || null,
-      }));
-
-      const pivotedDataForPdf = pivotedData.map((row) => ({
-        ...row,
-        createdAt: row.DateOfTransaction || row.createdAt || null,
-      }));
-
       const docProps = {
         school: schoolData,
         startDate: filters.applied.startDate,
         endDate: filters.applied.endDate,
         sessionLabel: filters.applied.sessionLabel,
-        aggregatedData: reportDataForPdf,
-        pivotedData: pivotedDataForPdf,
+        dateType: filters.applied.dateType,
+        aggregatedData: activeReportData,
+        pivotedData,
         feeCategories: uniqueCategories,
         categorySummary,
         totals: {
@@ -377,7 +349,8 @@ const DayWiseReport = () => {
       'Student Name',
       'Class',
       'PaymentMode',
-      'Transaction Date & Time',
+      'Transaction Date',
+      'Recorded Date & Time (IST)',
       ...categories,
       'Van Fee',
       'Fine',
@@ -404,7 +377,8 @@ const DayWiseReport = () => {
         'Student Name': row.Student?.name || '',
         Class: row.Student?.Class?.class_name || '',
         PaymentMode: row.PaymentMode || '',
-        'Transaction Date & Time': formatToDisplayDateTime(row.DateOfTransaction),
+        'Transaction Date': formatTransactionDate(row.DateOfTransaction),
+        'Recorded Date & Time (IST)': formatToDisplayDateTime(row.createdAt),
         ...categories.reduce((acc, cat, i) => {
           acc[cat] = categoryValues[i];
           return acc;
@@ -452,7 +426,8 @@ const DayWiseReport = () => {
       'Fee Heading': item.feeHeadingName || '',
       'Fee Category': item.feeCategoryName || '',
       'Payment Mode': item.PaymentMode || '',
-      'Transaction Date & Time': formatToDisplayDateTime(item.DateOfTransaction || item.createdAt),
+      'Transaction Date': formatTransactionDate(item.DateOfTransaction),
+      'Recorded Date & Time (IST)': formatToDisplayDateTime(item.createdAt),
       'Fee Received': feeReceived,
       'Concession': Number(item.totalConcession ?? item.Concession) || 0,
       'Van Fee': vanFee,
@@ -507,8 +482,8 @@ const DayWiseReport = () => {
       { Filter: 'All Records', Value: reportData.length }
     ];
     const wsFilters = XLSX.utils.json_to_sheet(filterRows);
-    XLSX.utils.book_append_sheet(wb, wsFilters, 'Report Filters');
-    const filterSheet = XLSX.utils.aoa_to_sheet([["Report", "Category-wise fee collection"], ["Session", filters.applied.sessionLabel], ["From", filters.applied.startDate], ["To", filters.applied.endDate], ["Receipts", pivotedData.length], ["Cancelled transactions", "Excluded"]]);
+    XLSX.utils.book_append_sheet(wb, wsFilters, 'Record Counts');
+    const filterSheet = XLSX.utils.aoa_to_sheet([["Report", "Category-wise fee collection"], ["Session", filters.applied.sessionLabel], ["Date filter", filters.applied.dateType === "recorded" ? "Recorded date (IST)" : "Transaction date (IST)"], ["From", filters.applied.startDate], ["To", filters.applied.endDate], ["Receipts", pivotedData.length], ["Cancelled transactions", "Excluded"]]);
     filterSheet['!cols'] = [{ wch: 24 }, { wch: 40 }];
     XLSX.utils.book_append_sheet(wb, filterSheet, 'Report Filters');
 
@@ -553,7 +528,8 @@ const DayWiseReport = () => {
                       <th className="sticky-top bg-white">Student Name</th>
                       <th className="sticky-top bg-white">Class</th>
                       <th className="sticky-top bg-white">Payment Mode</th>
-                      <th className="sticky-top bg-white">Transaction Date & Time</th>
+                      <th className="sticky-top bg-white">Transaction Date</th>
+                      <th className="sticky-top bg-white">Recorded Date & Time (IST)</th>
                       {uniqueCategories.map((cat, idx) => (
                         <th key={idx} className="sticky-top bg-white">{cat}</th>
                       ))}
@@ -580,7 +556,8 @@ const DayWiseReport = () => {
                           <td>{row.Student?.name}</td>
                           <td>{row.Student?.Class?.class_name}</td>
                           <td>{row.PaymentMode}</td>
-                          <td>{formatToDisplayDateTime(row.DateOfTransaction)}</td>
+                          <td>{formatTransactionDate(row.DateOfTransaction)}</td>
+                          <td style={{ whiteSpace: "nowrap" }}>{formatToDisplayDateTime(row.createdAt)}</td>
                           {uniqueCategories.map((cat, i) => {
                             const feeData = row.feeCategories[cat];
                             return (
@@ -601,7 +578,7 @@ const DayWiseReport = () => {
                   {pivotedData.length > 0 && (
                     <tfoot>
                       <tr>
-                        <td colSpan={8}><strong>Overall Totals</strong></td>
+                        <td colSpan={9}><strong>Overall Totals</strong></td>
                         {uniqueCategories.map((cat, i) => (
                           <td key={i}><strong>{formatTotalValue(overallTotals[cat])}</strong></td>
                         ))}

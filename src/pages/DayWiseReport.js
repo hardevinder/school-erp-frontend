@@ -1,3 +1,4 @@
+import { formatTransactionDate } from "../utils/feeReport";
 import React, { useState, useEffect, useMemo } from "react";
 import {
   Container,
@@ -366,7 +367,7 @@ const calculateFeeHeadingSummary = (data) => {
 ====================================================== */
 
 const DayWiseReport = () => {
-  const filters = useFeeReportFilters();
+  const filters = useFeeReportFilters({ enableDateType: true });
   const { startDate, endDate } = filters;
   const [pdfLoading, setPdfLoading] = useState(false);
 
@@ -597,7 +598,7 @@ const DayWiseReport = () => {
       const response = await api.get(
         "/reports/day-wise",
         {
-          params: { startDate: start, endDate: end, session_id: filters.applied.session_id, search: searchQuery, format: "excel", includeCancelled: true },
+          params: { dateType: filters.applied.dateType, startDate: start, endDate: end, session_id: filters.applied.session_id, search: searchQuery, format: "excel", includeCancelled: true },
           responseType: "blob",
         }
       );
@@ -1116,6 +1117,7 @@ const DayWiseReport = () => {
         school={school}
         startDate={filters.applied.startDate}
         endDate={filters.applied.endDate}
+        dateType={filters.applied.dateType}
         sessionLabel={filters.applied.sessionLabel}
         searchLabel={searchQuery}
         aggregatedData={pdfRows}
@@ -1314,6 +1316,7 @@ const DayWiseReport = () => {
                         "Payment Mode",
                         "Reference / Bank",
                         "Fee Heading",
+                        "Transaction Date",
                         "Recorded Date & Time (IST)",
                         "Fee Received",
                         "Concession",
@@ -1374,6 +1377,9 @@ const DayWiseReport = () => {
                             </div>
                           </td>
                           <td style={{ minWidth: 180 }}>{item.feeHeadingName || "—"}</td>
+                          <td style={{ whiteSpace: "nowrap" }}>
+                            {formatTransactionDate(item.DateOfTransaction)}
+                          </td>
                           <td style={{ whiteSpace: "nowrap" }}>
                             {formatToDisplayDateTime(item.createdAt)}
                           </td>

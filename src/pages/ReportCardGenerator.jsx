@@ -6258,8 +6258,49 @@ html,body { width:210mm!important; margin:0!important; padding:0!important; }
 .preprimary-report .dynamic-school-meta .school-meta-item { white-space:normal!important; overflow-wrap:anywhere; }
 .preprimary-report .health-grid { grid-template-columns:repeat(4,minmax(0,1fr)); }
 .preprimary-report .remarks-body { min-height:20mm!important; height:auto!important; font-size:10px!important; line-height:1.4!important; }
-.preprimary-report .remarks-text { padding-right:0; white-space:pre-wrap; overflow-wrap:anywhere; }
+.preprimary-report .remarks-text { padding-right:0; white-space:pre-wrap; overflow-wrap:anywhere; text-align:justify; text-align-last:left; }
 .preprimary-report .remarks-star { display:none; }
+
+/* Stronger section colors and borders for paper copies. */
+.preprimary-report, .preprimary-report * {
+  -webkit-print-color-adjust:exact;
+  print-color-adjust:exact;
+}
+.preprimary-report .tone-1 { --head:#a9d96b; --soft:#e0efc9; --line:#719b42; --line-soft:#a8c789; --overall:#cde5ac; }
+.preprimary-report .tone-2 { --head:#83c7e9; --soft:#d5eaf5; --line:#468eb5; --line-soft:#91bcd3; --overall:#b9ddec; }
+.preprimary-report .tone-3 { --head:#edca59; --soft:#f6e9b9; --line:#b29232; --line-soft:#d5bf77; --overall:#efdc91; }
+.preprimary-report .tone-4 { --head:#b5a3e4; --soft:#e4dcf3; --line:#8671b6; --line-soft:#b4a4d2; --overall:#d1c3eb; }
+.preprimary-report .tone-5 { --head:#82d6a2; --soft:#d4efdf; --line:#4b9c6b; --line-soft:#96c6a8; --overall:#b7e3c7; }
+.preprimary-report .tone-6 { --head:#edb477; --soft:#f7e3cc; --line:#b57d40; --line-soft:#d1ae85; --overall:#f0cda4; }
+.preprimary-report .academic-title,
+.preprimary-report .attendance-title { background:#e68db9!important; color:#182b4d!important; }
+.preprimary-report .academic-card,
+.preprimary-report .attendance-card { border-color:#b86791!important; }
+.preprimary-report .academic-card-v17b .academic-term-band-v17b th { background:#edb1cf!important; }
+.preprimary-report .academic-card-v17b .academic-subhead-band-v17b th,
+.preprimary-report .academic-card-v17b .academic-total-grade-v18,
+.preprimary-report .attendance-percent { background:#f2c9de!important; }
+.preprimary-report .academic-card th,
+.preprimary-report .academic-card td,
+.preprimary-report .attendance-row,
+.preprimary-report .attendance-row b { border-color:#c58ba8!important; }
+.preprimary-report .footer-box { border-color:#7aa6bd!important; }
+.preprimary-report .footer-box:nth-child(1) .footer-box-title { background:#8fc5e5!important; }
+.preprimary-report .footer-box:nth-child(3) .footer-box-title { background:#b5b8e7!important; }
+.preprimary-report .grade-g { background:#a8dbb8!important; }
+.preprimary-report .grade-b { background:#adc9eb!important; }
+.preprimary-report .grade-y { background:#edda92!important; }
+.preprimary-report .grade-r { background:#e9b4d1!important; }
+.preprimary-report .keep-shining {
+  bottom:3mm!important;
+  right:2mm!important;
+  font-size:14px!important;
+  line-height:1.25!important;
+  transform:none!important;
+  color:#173f70!important;
+}
+.preprimary-report .keep-shining b { color:#b72d70!important; }
+
 </style>
     `;
 

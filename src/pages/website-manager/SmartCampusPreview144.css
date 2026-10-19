@@ -1,0 +1,34 @@
+/* Smart Campus 1.4.4 — private media-based live preview */
+.sc144-preview-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;flex-wrap:wrap}
+.sc144-preview-toolbar .sch-preview-label{margin:0}
+.sc144-preview-toolbar button{border:1px solid #7b1224;background:#fff;color:#7b1224;border-radius:8px;padding:10px 14px;font-weight:700;cursor:pointer}
+.sch-preview-section.sc144-no-pad{padding:0;min-height:0;background:#741324}
+.sc144-hero{position:relative;min-height:340px;display:flex;align-items:center;background:#741324;isolation:isolate;overflow:hidden}
+.sc144-hero-image,.sc144-hero-shade{position:absolute;inset:0}
+.sc144-hero-image{opacity:0;transition:opacity .7s ease;z-index:-2;pointer-events:none}
+.sc144-hero-image.is-active{opacity:1}
+.sc144-hero-image img,.sc144-hero-image video{display:block;width:100%;height:100%;object-fit:cover}
+.sc144-hero-shade{z-index:-1;background:linear-gradient(90deg,rgba(30,9,16,.83),rgba(30,9,16,.46) 62%,rgba(30,9,16,.16))}
+.sc144-hero-content{position:relative;padding:46px 34px;color:#fff;max-width:680px;text-shadow:0 1px 4px #0005}
+.sc144-hero-content h3{margin:0 0 12px;font-size:clamp(24px,3vw,39px);line-height:1.1}
+.sc144-hero-content p{font-size:16px;line-height:1.6;white-space:pre-line}
+.sc144-slide-count{position:absolute;bottom:14px;right:20px;color:#fff;font-weight:700;padding:5px 11px;border-radius:20px;background:#0008}
+.sc144-photo-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:20px}
+.sc144-photo{aspect-ratio:4/3;border-radius:10px;overflow:hidden;background:#f3edef}
+.sc144-photo img,.sc144-photo video{width:100%;height:100%;object-fit:cover;display:block}
+.sc144-fullscreen{position:fixed!important;inset:12px!important;z-index:100000!important;overflow:auto!important;max-width:none!important;max-height:calc(100vh - 24px)!important;box-shadow:0 0 0 100vmax #000a!important;background:#fff!important}
+.sc144-fullscreen .sch-preview{max-width:1440px;margin:auto}
+.sc144-fullscreen .sc144-hero{min-height:min(65vh,700px)}
+@media(max-width:850px){.sc144-photo-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.sc144-hero-content{padding:28px 20px}.sc144-hero{min-height:270px}}
+@media(prefers-reduced-motion:reduce){.sc144-hero-image{transition:none}}
+
+/* SMART_CAMPUS_PREVIEW_1_4_5_LAYER_FIX */
+/* Previously image/shade layers used negative z-index and could be hidden
+   behind the opaque hero background. Keep them inside the hero stacking context. */
+.sc144-hero { position: relative; isolation: isolate; }
+.sc144-hero-image { z-index: 0; overflow: hidden; }
+.sc144-hero-shade { z-index: 1; pointer-events: none; }
+.sc144-hero-content { z-index: 2; }
+.sc144-slide-count { z-index: 3; }
+.sc144-hero-image img,
+.sc144-hero-image video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }

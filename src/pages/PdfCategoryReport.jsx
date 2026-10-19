@@ -1,5 +1,5 @@
 import React from 'react';
-import { receiptKey, sessionOf } from '../utils/feeReport';
+import { formatTransactionDate, formatRecordedDateTime, receiptKey, sessionOf } from '../utils/feeReport';
 import { Document, Page, Text, View, StyleSheet } from '@react-pdf/renderer';
 
 // Define styles for the PDF layout
@@ -91,16 +91,6 @@ const formatDisplayDate = (isoYmd) => {
   return `${d}/${m}/${y}`;
 };
 
-// dd/MM/yyyy for Date/ISO timestamps (Created At column)
-const formatToDDMMYYYY = (date) => {
-  if (!date) return '';
-  const d = new Date(date);
-  const day = String(d.getDate()).padStart(2, '0');
-  const month = String(d.getMonth() + 1).padStart(2, '0');
-  const year = d.getFullYear();
-  return `${day}/${month}/${year}`;
-};
-
 // Chunk an array into smaller arrays of a given size.
 const chunkArray = (array, chunkSize) => {
   const results = [];
@@ -147,6 +137,7 @@ const pivotReportData = (data) => {
         Session: curr.Session,
         Transaction_ID: curr.Transaction_ID, // ✅ keep Txn ID
         createdAt: curr.createdAt,
+        DateOfTransaction: curr.DateOfTransaction,
         Student: curr.Student,
         PaymentMode: curr.PaymentMode,
         feeCategories: {},
@@ -195,7 +186,8 @@ const CollectionTableHeader = ({ feeCategories }) => (
     <Text style={[styles.tableHeaderCell, { flex: 2 }]}>Student Name</Text>
     <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Class</Text>
     <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Payment Mode</Text>
-    <Text style={[styles.tableHeaderCell, { flex: 2 }]}>Transaction date</Text>
+    <Text style={[styles.tableHeaderCell, { flex: 2 }]}>Transaction Date</Text>
+    <Text style={[styles.tableHeaderCell, { flex: 2 }]}>Recorded Date & Time (IST)</Text>
     {feeCategories.map((cat, idx) => (
       <Text key={idx} style={[styles.tableHeaderCell, { flex: 1 }]}>
         {cat}
@@ -229,7 +221,7 @@ const SummaryTableHeader = () => (
   </View>
 );
 
-const PdfCategoryReport = ({ school, startDate, endDate, sessionLabel = "All sessions", aggregatedData = [] }) => {
+const PdfCategoryReport = ({ school, startDate, endDate, dateType = "transaction", sessionLabel = "All sessions", aggregatedData = [] }) => {
   // Pivot the data by Slip_ID.
   const pivotedData = pivotReportData(aggregatedData);
   // Get unique fee categories.
@@ -338,7 +330,7 @@ const PdfCategoryReport = ({ school, startDate, endDate, sessionLabel = "All ses
                 <Text style={styles.schoolDesc}>{school?.description || school?.address || ''}</Text>
               </View>
               <Text style={styles.dateRange}>
-                Session: {sessionLabel} | {formatDisplayDate(startDate)} to {formatDisplayDate(endDate)}
+                Session: {sessionLabel} | {dateType === "recorded" ? "Recorded date (IST)" : "Transaction date (IST)"}: {formatDisplayDate(startDate)} to {formatDisplayDate(endDate)}
               </Text>
               <Text style={styles.sectionTitle}>Collection Report</Text>
             </>
@@ -370,7 +362,8 @@ const PdfCategoryReport = ({ school, startDate, endDate, sessionLabel = "All ses
                   <Text style={[styles.tableCell, { flex: 1 }]}>{row.PaymentMode}</Text>
 
                   {/* Created At in dd/MM/yyyy */}
-                  <Text style={[styles.tableCell, { flex: 2 }]}>{formatToDDMMYYYY(row.createdAt)}</Text>
+                  <Text style={[styles.tableCell, { flex: 2 }]}>{formatTransactionDate(row.DateOfTransaction)}</Text>
+                  <Text style={[styles.tableCell, { flex: 2 }]}>{formatRecordedDateTime(row.createdAt)}</Text>
 
                   {feeCategories.map((cat, i) => {
                     const feeData = row.feeCategories[cat];
@@ -395,7 +388,7 @@ const PdfCategoryReport = ({ school, startDate, endDate, sessionLabel = "All ses
             {/* Only on the last collection page, render overall totals */}
             {chunkIndex === paginatedCollection.length - 1 && (
               <View style={styles.tableRow}>
-                <Text style={[styles.tableCell, { flex: 11.8, fontWeight: 'bold' }]}>Overall Totals</Text>
+                <Text style={[styles.tableCell, { flex: 13.8, fontWeight: 'bold' }]}>Overall Totals</Text>
                 {feeCategories.map((cat, i) => (
                   <Text key={i} style={[styles.tableCell, { flex: 1, fontWeight: 'bold' }]}>
                     {formatValue(overallTotals[cat])}

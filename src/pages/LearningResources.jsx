@@ -126,7 +126,17 @@ export default function LearningResources() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const filteredSections = useMemo(() => sections.filter((s) => Number(s.class_id) === Number(targetClass)), [sections, targetClass]);
+  const filteredSections = useMemo(() => {
+    if (!targetClass) return [];
+    const selectedClass = classes.find((c) => Number(c.id) === Number(targetClass));
+    if (Array.isArray(selectedClass?.section_ids)) {
+      // Match /sections?class_id: unmapped classes can use all section masters.
+      if (!selectedClass.section_ids.length) return sections;
+      const mappedIds = new Set(selectedClass.section_ids.map(Number));
+      return sections.filter((s) => mappedIds.has(Number(s.id)));
+    }
+    return sections.filter((s) => Number(s.class_id) === Number(targetClass));
+  }, [classes, sections, targetClass]);
   const className = (id) => classes.find((c) => Number(c.id) === Number(id))?.class_name || `${terms.class} ${id}`;
   const sectionName = (id) => sections.find((s) => Number(s.id) === Number(id))?.section_name || (id ? `${terms.section} ${id}` : "All");
 
@@ -147,9 +157,9 @@ export default function LearningResources() {
       Swal.fire("Unsupported file", `"${invalid.name}" is not supported. Allowed extensions: ${studyMaterialExtensions.join(", ")}.`, "warning");
       return;
     }
-    const oversized = list.find((file) => file.size > 50 * 1024 * 1024);
+    const oversized = list.find((file) => file.size > 100 * 1024 * 1024);
     if (oversized) {
-      Swal.fire("File too large", `"${oversized.name}" exceeds 50 MB.`, "warning");
+      Swal.fire("File too large", `"${oversized.name}" exceeds 100 MB.`, "warning");
       return;
     }
     const additions = list.filter((file, index) =>
@@ -480,7 +490,7 @@ export default function LearningResources() {
                   {wizardStep === 2 && <div className="col-lg-6">
                     <div className="lr-form-section h-100">
                       <h6>Bulk File Upload</h6>
-                      <p className="small text-muted">Select or drop up to 50 documents, Access databases, SQL files, source code, notebooks, diagrams or archives together. Each file can be up to 50 MB.</p>
+                      <p className="small text-muted">Select or drop up to 50 documents, Access databases, SQL files, source code, notebooks, diagrams or archives together. Each file can be up to 100 MB.</p>
                       <div
                         className={`lr-dropzone ${dragging ? "is-dragging" : ""}`}
                         onDragEnter={(e) => { e.preventDefault(); setDragging(true); }}

@@ -1,3 +1,4 @@
+import { formatTransactionDate } from "../utils/feeReport";
 import React from 'react';
 import { Document, Page, Text, View, StyleSheet } from '@react-pdf/renderer';
 
@@ -134,7 +135,8 @@ const TableHeader = () => (
     <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Class</Text>
     <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Payment Mode</Text>
     <Text style={[styles.tableHeaderCell, { flex: 2 }]}>Fee Heading</Text>
-    <Text style={[styles.tableHeaderCell, { flex: 2 }]}>Transaction date</Text>
+    <Text style={[styles.tableHeaderCell, { flex: 2 }]}>Transaction Date</Text>
+    <Text style={[styles.tableHeaderCell, { flex: 2 }]}>Recorded Date & Time (IST)</Text>
     <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Fee Received</Text>
     <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Concession</Text>
     <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Van Fee</Text>
@@ -144,7 +146,7 @@ const TableHeader = () => (
   </View>
 );
 
-const PdfReport = ({ school, startDate, endDate, sessionLabel = "All sessions", searchLabel = "", aggregatedData = [] }) => {
+const PdfReport = ({ school, startDate, endDate, dateType = "transaction", sessionLabel = "All sessions", searchLabel = "", aggregatedData = [] }) => {
   // Paginate aggregated data
   const pagesData = paginateData(aggregatedData);
 
@@ -159,7 +161,7 @@ const PdfReport = ({ school, startDate, endDate, sessionLabel = "All sessions", 
                 {/* <Text style={styles.schoolDesc}>{school?.description}</Text> */}
               </View>
               <Text style={styles.dateRange}>
-                Session: {sessionLabel} | {formatToDDMMYYYY(startDate)} to {formatToDDMMYYYY(endDate)}{searchLabel ? ` | Search: ${searchLabel}` : ""}
+                Session: {sessionLabel} | {dateType === "recorded" ? "Recorded date (IST)" : "Transaction date (IST)"}: {formatToDDMMYYYY(startDate)} to {formatToDDMMYYYY(endDate)}{searchLabel ? ` | Search: ${searchLabel}` : ""}
               </Text>
               <Text style={styles.sectionTitle}>Collection Report</Text>
             </>
@@ -186,7 +188,7 @@ const PdfReport = ({ school, startDate, endDate, sessionLabel = "All sessions", 
                   <Text style={[styles.tableCell, { flex: 1 }]}>{item.Student?.Class?.class_name}</Text>
                   <Text style={[styles.tableCell, { flex: 1 }]}>{item.PaymentMode}</Text>
                   <Text style={[styles.tableCell, { flex: 2 }]}>{item.feeHeadingName}</Text>
-                  {/* Created At → dd/MM/yyyy */}
+                  <Text style={[styles.tableCell, { flex: 2 }]}>{formatTransactionDate(item.DateOfTransaction)}</Text>
                   <Text style={[styles.tableCell, { flex: 2 }]}>{formatRecordedDateTime(item.createdAt)}</Text>
                   <Text style={[styles.tableCell, { flex: 1 }]}>{formatIndianNumber(item.totalFeeReceived)}</Text>
                   <Text style={[styles.tableCell, { flex: 1 }]}>{formatIndianNumber(item.totalConcession)}</Text>

@@ -12,3 +12,17 @@ export const downloadReport = (blob, filename) => {
   setTimeout(() => URL.revokeObjectURL(url), 60000);
 };
 
+
+// Report dates always follow the school's IST calendar.
+export const formatTransactionDate = (value) => {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleDateString("en-GB", { timeZone: "Asia/Kolkata", day: "2-digit", month: "2-digit", year: "numeric" });
+};
+export const formatRecordedDateTime = (value) => {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleString("en-GB", { timeZone: "Asia/Kolkata", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true }) + " IST";
+};
