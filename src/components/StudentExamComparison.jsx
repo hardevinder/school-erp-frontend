@@ -1,0 +1,86 @@
+import React, { useMemo, useState } from "react";
+
+// Read-only analytics: uses actual source marks, never grouped/weighted PT values.
+const EXAMS = ["PT-1", "PT-2", "HY"];
+const PALETTE = { "PT-1": "#438df5", "PT-2": "#49b985", HY: "#ff973f" };
+const normalize = (v) => String(v || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+// SMCIS_SINGLE_PA_V2: support generic PA when only one periodic assessment exists.
+const examKey = (raw) => {
+  const s = normalize(raw);
+  if (!s) return null;
+  if (s === "HY" || /HALFYEARLY|HALFYEAR|MIDTERM/.test(s)) return "HY";
+  if (/^(?:PT|PA|PERIODICTEST|PERIODICASSESSMENT)(?:2|II)(?:MARKS|EXAM)?$/.test(s)) return "PT-2";
+  if (/^(?:PT|PA|PERIODICTEST|PERIODICASSESSMENT)(?:1|I)(?:MARKS|EXAM)?$/.test(s)) return "PT-1";
+  // A standalone PA/Periodic Assessment is the first assessment for analytics.
+  if (/^(?:PT|PA|PERIODICTEST|PERIODICASSESSMENT)(?:MARKS|EXAM)?$/.test(s)) return "PT-1";
+  return null;
+};
+const validNumber = (x) => x !== null && x !== undefined && String(x).trim() !== "" && Number.isFinite(Number(x));
+const acceptable = (x) => ["P", "PRESENT", "LATE"].includes(String(x ?? "P").trim().toUpperCase());
+const fmt = (v) => Number.isInteger(v) ? String(v) : Number(v).toFixed(1);
+
+export function getExternalExamComparisons(student) {
+  const subjects = new Map();
+  for (const row of student?.components || []) {
+    if (String(row.subject_type || "").toLowerCase().includes("co-scholastic")) continue;
+    const components = row.is_result_group ? (row.source_components || []) : [row];
+    for (const item of components) {
+      if (item.is_internal === true || String(item.component_type || row.component_type || "MARKS").toUpperCase() !== "MARKS") continue;
+      // HY may be the parent exam name; PT is often a component inside a group.
+      const key = examKey(item.abbreviation) || examKey(item.component_name) || examKey(item.name) || examKey(row.exam_name);
+      if (!key || !validNumber(item.max_marks) || Number(item.max_marks) <= 0) continue;
+      const subjectId = String(row.subject_id || row.subject_name);
+      if (!subjects.has(subjectId)) subjects.set(subjectId, { id: subjectId, name: row.subject_name, scores: {} });
+      const subject = subjects.get(subjectId);
+      // Avoid duplicates if a source is exposed twice; retain explicit exam rows.
+      if (subject.scores[key]) continue;
+      const marks = acceptable(item.attendance) && validNumber(item.marks) ? Number(item.marks) : null;
+      subject.scores[key] = { marks, max: Number(item.max_marks), percent: marks === null ? null : (marks / Number(item.max_marks)) * 100, attendance: String(item.attendance ?? "P").toUpperCase() };
+    }
+  }
+  return [...subjects.values()].filter(s => EXAMS.some(k => s.scores[k]));
+}
+
+// Different classes/subjects can offer one PT, two PTs, HY, or any subset.
+// Show only assessments that exist for the subject and compare the earliest and latest
+// actually marked assessments. No empty placeholder bars for unconfigured exams.
+const availableExams = (subject) => EXAMS.filter(k => subject.scores[k]);
+const comparison = (subject) => {
+  const measured = availableExams(subject).filter(k => Number.isFinite(subject.scores[k].percent));
+  if (measured.length < 2) return null;
+  const first = measured[0];
+  const last = measured[measured.length - 1];
+  return { from: first, to: last, delta: subject.scores[last].percent - subject.scores[first].percent };
+};
+
+export default function StudentExamComparison({ students = [] }) {
+  const [expanded, setExpanded] = useState(false);
+  const [studentId, setStudentId] = useState("");
+  const selected = students.find(s => String(s.id) === String(studentId)) || students[0];
+  const subjects = useMemo(() => getExternalExamComparisons(selected), [selected]);
+  const visibleExams = EXAMS.filter(k => subjects.some(s => s.scores[k]));
+  const deltas = subjects.map(comparison).filter(Boolean).map(c => c.delta);
+  const improved = deltas.filter(d => d > 0).length;
+  const declined = deltas.filter(d => d < 0).length;
+  const average = deltas.length ? deltas.reduce((a, b) => a + b, 0) / deltas.length : null;
+  if (!students.length) return null;
+  return (
+    <section className="card shadow-sm mb-4" style={{ borderRadius: 16, overflow: "hidden" }}>
+      <header className="card-header d-flex flex-wrap align-items-center justify-content-between gap-2" style={{ background: "#eaf2ff" }}>
+        <strong>📊 Student Performance Comparison · External Marks Only</strong>
+        <button type="button" className="btn btn-primary btn-sm" onClick={() => setExpanded(v => !v)}>{expanded ? "Hide comparison" : "View comparison graphs"}</button>
+      </header>
+      {expanded && <div className="card-body">
+        <div className="row align-items-center g-3 mb-3">
+          <div className="col-md-7"><label className="form-label fw-semibold">Select student</label><select className="form-select" value={selected?.id || ""} onChange={e => setStudentId(e.target.value)}>{students.map(s => <option value={s.id} key={s.id}>{s.roll_number ? `#${s.roll_number} · ` : ""}{s.name}</option>)}</select></div>
+          <div className="col-md-5"><div className="d-flex gap-3 flex-wrap"><span className="text-success fw-bold">↑ Improved: {improved}</span><span className="text-danger fw-bold">↓ Declined: {declined}</span><span className="fw-bold">Average change: {average == null ? "N/A" : `${average > 0 ? "+" : ""}${fmt(average)} pp`}</span></div></div>
+        </div>
+        <p className="text-muted small">Available assessments appear separately for each subject—even when PT results are grouped in the report card. Classes with one PT show only that PT. Percentages use actual maximum marks; change compares the earliest and latest marked assessments (percentage points).</p>
+        {!subjects.length ? <div className="alert alert-info">No external PT/HY scores found for this student and selected exams. Check examination selections and subject components.</div> : <>
+          <div className="row g-3">{subjects.map(sub => { const result = comparison(sub); const delta = result?.delta; const exams = availableExams(sub); return <div className="col-lg-4 col-md-6" key={sub.id}><div className="border rounded-3 p-3 h-100" style={{ background: "#fcfdff" }}><h6 className="text-center fw-bold">{sub.name}</h6><div className="d-flex align-items-end justify-content-around gap-2" style={{ height: 176, borderBottom: "1px solid #dce4f0" }}>{exams.map(k => { const score = sub.scores[k]; const value = score?.percent; return <div key={k} className="d-flex flex-column align-items-center justify-content-end" style={{ width: `${100 / exams.length}%`, height: "100%" }}><small className="text-nowrap" style={{ fontSize: 11 }}>{score && value != null ? `${fmt(score.marks)}/${fmt(score.max)}` : "N/A"}</small><div title={value == null ? `${k}: No data` : `${k}: ${fmt(value)}%`} style={{ width: "66%", maxWidth: 60, minHeight: value === 0 ? 2 : 0, height: value == null ? 0 : `${Math.max(0, Math.min(100, value))}%`, background: PALETTE[k], borderRadius: "5px 5px 0 0" }} /></div>; })}</div><div className="d-flex justify-content-around mt-2">{exams.map(k => <small style={{ width: `${100 / exams.length}%`, textAlign: "center" }} key={k}>{k}<br /><b>{sub.scores[k]?.percent == null ? "—" : `${fmt(sub.scores[k].percent)}%`}</b></small>)}</div><div className="text-center mt-2 fw-semibold" style={{ color: delta == null ? "#64748b" : delta > 0 ? "#07885c" : delta < 0 ? "#ca293b" : "#64748b" }}>{delta == null ? "Not enough assessments to compare" : `${result.from} → ${result.to}: ${delta > 0 ? "↑ +" : delta < 0 ? "↓ " : "="}${fmt(delta)} percentage points`}</div></div></div>; })}</div>
+          <div className="table-responsive mt-4"><table className="table table-bordered table-hover table-sm align-middle"><thead className="table-light"><tr><th>Subject</th>{visibleExams.map(k => <th key={k}>{k} · Marks / %</th>)}<th>Change (first → last)</th></tr></thead><tbody>{subjects.map(s => {const result = comparison(s);const d = result?.delta;return <tr key={s.id}><td>{s.name}</td>{visibleExams.map(k => {const v=s.scores[k];return <td key={k}>{v?.percent == null ? "N/A" : `${fmt(v.marks)}/${fmt(v.max)} · ${fmt(v.percent)}%`}</td>})}<td>{d == null ? "N/A" : `${result.from} → ${result.to}: ${d > 0 ? "+" : ""}${fmt(d)} pp`}</td></tr>})}</tbody></table></div>
+        </>}
+      </div>}
+    </section>
+  );
+}

@@ -185,6 +185,9 @@ import CoScholasticEntry from "./pages/CoScholasticEntry";
 import ReportCardFormats from "./pages/ReportCardFormats";
 import AssignReportCardFormat from "./pages/AssignReportCardFormat";
 import ReportCardGenerator from "./pages/ReportCardGenerator";
+import StudentPerformanceAnalytics from "./pages/StudentPerformanceAnalytics";
+import ClassPerformanceAnalytics from "./pages/ClassPerformanceAnalytics";
+import TeacherPerformanceAnalytics from "./pages/TeacherPerformanceAnalytics";
 import ReportCardSubjectOrder from "./pages/ReportCardSubjectOrder";
 import ReportCardTemplateStudio from "./pages/ReportCardTemplateStudio";
 import ReportCardVisualDesigner from "./pages/ReportCardVisualDesigner";
@@ -1824,6 +1827,9 @@ function App() {
           <Route path="/report-card-designer" element={<ReportCardVisualDesigner />} />
           <Route path="/report-card-subject-order" element={<ReportCardSubjectOrder />} />
           <Route path="/report-card-generator" element={<ReportCardGenerator />} />
+          <Route path="/student-performance-analytics" element={<StudentPerformanceAnalytics />} />
+<Route path="/class-performance-analytics" element={<ClassPerformanceAnalytics />} />
+          <Route path="/teacher-performance-analytics" element={<TeacherPerformanceAnalytics />} />
           <Route path="/academic-years" element={<AcademicYearManagement />} />
 
           {/* Transport (older page) */}

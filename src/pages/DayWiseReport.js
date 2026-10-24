@@ -393,6 +393,7 @@ const DayWiseReport = () => {
   // Edit Modal
   const [showEditModal, setShowEditModal] = useState(false);
   const [savingEdit, setSavingEdit] = useState(false);
+  const [editingStudent, setEditingStudent] = useState(null);
   const [editForm, setEditForm] = useState({
     Serial: null,
     Slip_ID: "",
@@ -762,6 +763,7 @@ const DayWiseReport = () => {
     const chequeDate = normalizeDateInput(item?.cheque_date || item?.ChequeDate);
     const bankName = firstNonEmpty(item?.bank_name, item?.BankName, item?.bankAccount?.bank_name);
 
+    setEditingStudent(item.Student || null);
     setEditForm({
       Serial: serial,
       Slip_ID: item?.Slip_ID || "",
@@ -1750,6 +1752,25 @@ const DayWiseReport = () => {
         </Modal.Header>
 
         <Modal.Body>
+          <Card className="border-0 bg-light mb-3" aria-label="Student information">
+            <Card.Body className="py-3">
+              <div className="fw-bold mb-2">Student Information</div>
+              <Row className="g-2">
+                <Col xs={12} md={6}>
+                  <div className="small text-muted">Student Name</div>
+                  <div className="fw-semibold text-break">{editingStudent?.name || "—"}</div>
+                </Col>
+                <Col xs={6} md={3}>
+                  <div className="small text-muted">Admission Number</div>
+                  <div className="fw-semibold text-break">{editingStudent?.admission_number || "—"}</div>
+                </Col>
+                <Col xs={6} md={3}>
+                  <div className="small text-muted">Class</div>
+                  <div className="fw-semibold text-break">{editingStudent?.Class?.class_name || "—"}</div>
+                </Col>
+              </Row>
+            </Card.Body>
+          </Card>
           <Card
             className="border-0 mb-3"
             style={{ background: "linear-gradient(135deg, var(--edb-surface) 0%, var(--edb-surface) 100%)" }}

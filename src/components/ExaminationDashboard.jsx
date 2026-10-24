@@ -264,6 +264,30 @@ export default function ExaminationDashboard() {
 
   const reportTiles = [
     {
+      title: "Teacher Performance Analytics",
+      sub: "Assigned classes, subject trends and student progress",
+      icon: "bi-person-workspace",
+      badge: "NEW",
+      onClick: () => open("/teacher-performance-analytics"),
+      color: "var(--qa-blue)",
+    },
+    {
+      title: "Class Performance Analytics",
+      sub: "Class averages, subject trends and student progress",
+      icon: "bi-bar-chart-line",
+      badge: "NEW",
+      onClick: () => open("/class-performance-analytics"),
+      color: "var(--qa-teal)",
+    },
+    {
+      title: "Student Performance Analytics",
+      sub: "Student photos, individual PT / PA and HY comparison graphs",
+      icon: "bi-graph-up-arrow",
+      badge: "NEW",
+      onClick: () => open("/student-performance-analytics"),
+      color: "var(--qa-teal)",
+    },
+    {
       title: "Class Result",
       sub: "Class-wise subject and component result with Excel export",
       icon: "bi-bar-chart-fill",

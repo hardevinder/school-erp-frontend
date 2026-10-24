@@ -1,0 +1,125 @@
+/** Print-friendly A4 landscape student report. Uses already loaded comparison data. */
+import { getExternalExamComparisons } from "../components/StudentExamComparison";
+
+const EXAMS = ["PT-1", "PT-2", "HY"];
+const COLORS = {"PT-1":"#3b82f6","PT-2":"#24b583","HY":"#fb923c"};
+const esc = value => String(value ?? "—").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const field = (obj, keys, fallback="—") => keys.map(k => obj?.[k]).find(v => v !== null && v !== undefined && String(v).trim() !== "") ?? fallback;
+const fmt = value => Number.isFinite(Number(value)) ? Number(value).toFixed(1).replace(/\.0$/, "") : "—";
+const pct = score => score && Number.isFinite(Number(score.percent)) ? Number(score.percent) : null;
+const change = subject => {
+  const available = EXAMS.filter(k => pct(subject.scores?.[k]) !== null);
+  if (available.length < 2) return null;
+  return pct(subject.scores[available.at(-1)]) - pct(subject.scores[available[0]]);
+};
+const profileUrl = (student, baseURL) => {
+  const raw = String(field(student,["photo_url","photoUrl","student_photo_url","studentPhotoUrl","photo","Photo","student_photo","profile_photo","image","photo_path"],"")).trim();
+  if (!raw || /^(null|undefined|n\/a)$/i.test(raw)) return "";
+  if (/^(https?:|data:|blob:)/i.test(raw)) return raw;
+  const origin = String(baseURL || window.location.origin).replace(/\/api\/?$/i,"").replace(/\/$/,"");
+  const part = raw.replace(/^\/+/,"");
+  return `${origin}/${part.startsWith("uploads/") ? "" : "uploads/photoes/students/"}${part}`;
+};
+export function buildStudentLandscapeHTML(student, meta={}, baseURL="") {
+  if (!student) return;
+  const subjects = getExternalExamComparisons(student);
+  const columns = EXAMS.filter(k => subjects.some(s => pct(s.scores?.[k]) !== null));
+  const changes = subjects.map(change).filter(v => v !== null);
+  const average = changes.length ? changes.reduce((a,b)=>a+b,0)/changes.length : null;
+  const improved = changes.filter(n=>n>0).length;
+  const declined = changes.filter(n=>n<0).length;
+  const signed = n => n === null ? "N/A" : `${n>0?"+":""}${fmt(n)} pp`;
+  const photo = profileUrl(student,baseURL);
+  const picture = photo ? `<img class="portrait" src="${esc(photo)}" alt="Student photo" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"/><span class="portrait fallback" style="display:none">Student</span>` : `<span class="portrait fallback">Student</span>`;
+  const cards = subjects.map(s => {
+    const bars = EXAMS.filter(k=>pct(s.scores?.[k])!==null).map(k=>{
+      const score=s.scores[k]; const height=Math.min(100,Math.max(0,pct(score)));
+      return `<div class="barcol"><span class="actual">${esc(fmt(score.marks))}/${esc(fmt(score.max))}</span><div class="track"><div class="bar" style="height:${height}%;background:${COLORS[k]}"></div></div><div class="barname">${esc(k)}</div><strong>${fmt(score.percent)}%</strong></div>`;
+    }).join("");
+    const diff=change(s);
+    return `<article class="subject"><h3>${esc(s.name)}</h3><div class="bars">${bars||'<div class="empty">No marks entered</div>'}</div><p class="delta ${diff===null?'':diff>=0?'positive':'negative'}">${diff===null?'Comparison unavailable':signed(diff)}</p></article>`;
+  }).join("");
+  const tableRows=subjects.map(s=> `<tr><th>${esc(s.name)}</th>${columns.map(k=>{
+    const score=s.scores?.[k]; return `<td>${pct(score)===null?'—':`${fmt(score.marks)}/${fmt(score.max)} <span class="muted">(${fmt(score.percent)}%)</span>`}</td>`;
+  }).join('')}<td class="${change(s)===null?'':change(s)>=0?'positive':'negative'}">${signed(change(s))}</td></tr>`).join('');
+  const legend=columns.map(k=>`<span><i style="background:${COLORS[k]}"></i>${esc(k)}</span>`).join('');
+  const html=`<!doctype html><html><head><meta charset="UTF-8"/><title>Student Performance - ${esc(student.name)}</title><style>
+  @page{size:A4 landscape;margin:9mm}
+  *{box-sizing:border-box}body{margin:0;color:#142b4e;font-family:Arial,Helvetica,sans-serif;font-size:9pt;background:white}header{border-bottom:2px solid #144c88;padding-bottom:7px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:flex-end}header h1{font-size:16pt;margin:0 0 4px}header p{margin:0;color:#566b89;font-size:9pt}.tag{font-size:7pt;letter-spacing:1px;color:#286ab8;font-weight:800}.date{color:#62748e;font-size:8pt;text-align:right}
+  .profile{display:flex;align-items:center;gap:12px;padding:9px;border:1px solid #dce6f3;background:#f7faff;border-radius:8px;margin-bottom:10px}.portrait{height:62px;width:58px;border-radius:7px;object-fit:cover}.fallback{align-items:center;justify-content:center;background:#e3ebf5;color:#44658e;font-size:9pt}.student{flex:1}.student h2{font-size:15pt;margin:0 0 5px}.student p{margin:2px 0;font-size:8.5pt}.metrics{display:flex;gap:7px}.metric{width:115px;min-height:57px;padding:8px;text-align:center;border-radius:7px;background:#eaf2fd}.metric:nth-child(2){background:#e6f7ef}.metric:nth-child(3){background:#fff0f0}.metric span{display:block;font-size:8pt}.metric strong{font-size:15pt;display:block;margin-top:6px}
+  .section-title{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:9px 0 7px}.section-title h2{font-size:12pt;margin:0}.legend{display:flex;gap:12px;font-size:8pt}.legend span{display:flex;gap:5px;align-items:center}.legend i{height:9px;width:9px;border-radius:2px}.subjects{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px}.subject{border:1px solid #dce5f2;border-radius:7px;padding:7px 8px;break-inside:avoid;page-break-inside:avoid}.subject h3{text-align:center;margin:0 0 5px;font-size:10pt;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.bars{height:80px;display:flex;gap:9px;align-items:end;justify-content:space-around}.barcol{height:100%;display:flex;min-width:0;flex:1;flex-direction:column;align-items:center;justify-content:end}.actual{font-size:7pt;white-space:nowrap;margin-bottom:2px}.track{height:48px;width:100%;display:flex;justify-content:center;align-items:end;border-bottom:1px solid #cbd7e8}.bar{width:50%;max-width:34px;border-radius:3px 3px 0 0;print-color-adjust:exact;-webkit-print-color-adjust:exact}.barname{font-size:7pt;margin-top:2px}.barcol strong{font-size:7pt}.delta{text-align:center;margin:6px 0 0;font-weight:700;font-size:8pt}.positive{color:#087f57}.negative{color:#c3293b}.empty{font-size:8pt;color:#6f7e93;margin:auto}
+  table{width:100%;border-collapse:collapse;font-size:8.2pt;break-inside:auto}thead{display:table-header-group}tr{break-inside:avoid;page-break-inside:avoid}th,td{border:1px solid #dce5f2;padding:5px 7px;text-align:center}th:first-child{text-align:left}thead th{background:#e9f2ff!important;color:#173e6d;print-color-adjust:exact;-webkit-print-color-adjust:exact}tbody tr:nth-child(even){background:#f8fbff}.muted{color:#6e8198}footer{font-size:7.5pt;color:#73839a;border-top:1px solid #e1e8f1;padding-top:7px;margin-top:10px}table{margin-top:5px} .table-section{break-before:auto;margin-top:12px}
+  @media screen{body{max-width:1123px;margin:18px auto;padding:0 20px}.printbtn{position:fixed;top:12px;right:15px;background:#124b85;color:white;border:0;padding:10px 15px;border-radius:7px;cursor:pointer}}@media print{.printbtn{display:none}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+  </style></head><body><button type="button" class="printbtn" onclick="window.print()">Print / Save PDF</button><header><div><div class="tag">SMCIS · ACADEMIC INTELLIGENCE</div><h1>Student Performance Report</h1><p>${esc(field(meta,['schoolName','school_name'], 'Student Performance Analytics'))} · Academic session: ${esc(field(meta,['sessionName','session_name'],'—'))}</p></div><div class="date">A4 Landscape<br/>Generated: ${esc(new Date().toLocaleDateString('en-IN'))}</div></header>
+  <div class="profile">${picture}<div class="student"><h2>${esc(student.name)}</h2><p>Roll No: <b>${esc(field(student,['roll_number','roll_no']))}</b> &nbsp; Class: <b>${esc(meta.className)}</b> &nbsp; Section: <b>${esc(meta.sectionName)}</b></p><p>Admission No: ${esc(field(student,['admission_number','admission_no','admissionNumber']))} &nbsp; · &nbsp; Father's Name: ${esc(field(student,['father_name','fatherName','fathers_name']))}</p></div><div class="metrics"><div class="metric"><span>Average change</span><strong>${signed(average)}</strong></div><div class="metric"><span>Subjects improved</span><strong>${improved} / ${changes.length}</strong></div><div class="metric"><span>Subjects declined</span><strong>${declined} / ${changes.length}</strong></div></div></div>
+  <div class="section-title"><h2>Subject-wise Comparison <span class="muted">(External Marks Only)</span></h2><div class="legend">${legend}</div></div><div class="subjects">${cards}</div>
+  <div class="table-section"><div class="section-title"><h2>Detailed Marks Comparison</h2></div><table><thead><tr><th>Subject</th>${columns.map(k=>`<th>${esc(k)} · Marks / %</th>`).join('')}<th>Change</th></tr></thead><tbody>${tableRows}</tbody></table></div>
+  <footer>Percentages are normalized to each examination's actual maximum marks. Change is measured in percentage points (pp). Only available external assessments are shown; grouped PT components remain separate.</footer>
+  </body></html>`;
+  return html;
+}
+
+export function printStudentLandscapePDF(student, meta={}, baseURL="") {
+  if (!student) return;
+  const html = buildStudentLandscapeHTML(student, meta, baseURL);
+  const popup = window.open('', '_blank');
+  if (!popup) { window.alert('Please allow pop-ups to print the report.'); return; }
+  popup.document.open(); popup.document.write(html); popup.document.close(); popup.focus();
+}
+
+/** Combine all already loaded class students in roll-number order.
+ * Uses the SAME renderer as the single-student button: no second calculation path.
+ */
+export function printAllStudentsLandscapePDF(students, meta={}, baseURL="") {
+  if (!Array.isArray(students) || !students.length) {
+    window.alert('Please select filters and click View students first.');
+    return;
+  }
+  const pages = students.map(student => {
+    const html = buildStudentLandscapeHTML(student, meta, baseURL);
+    // Use single student PDF's body, omitting its individual print button.
+    const match = html.match(/<body>([\s\S]*?)<\/body>/i);
+    if (!match) return '';
+    const contents = match[1].replace(/<button\b[^>]*class="printbtn"[^>]*>[\s\S]*?<\/button>/i, '');
+    const subjectCount = getExternalExamComparisons(student).length;
+    const density = subjectCount > 12 ? 'ultra' : subjectCount > 8 ? 'dense' : '';
+    return `<section class="bulk-student-page ${density}">${contents}</section>`;
+  }).filter(Boolean);
+  if (!pages.length) { window.alert('No printable student reports found.'); return; }
+  const prototype = buildStudentLandscapeHTML(students[0], meta, baseURL);
+  const bulkCSS = `<style>
+    @page{size:A4 landscape;margin:8mm}
+    .bulk-student-page{break-after:page;page-break-after:always;break-inside:avoid;page-break-inside:avoid;display:flow-root}
+    .bulk-student-page:last-child{break-after:auto;page-break-after:auto}
+    .bulk-student-page .profile{margin-bottom:7px}
+    .bulk-student-page .subject{padding:5px 7px}
+    .bulk-student-page .bars{height:72px}
+    .bulk-student-page .track{height:42px}
+    .bulk-student-page .section-title{margin:6px 0 5px}
+    .bulk-student-page .table-section{margin-top:8px}
+    .bulk-student-page th,.bulk-student-page td{padding:3px 5px}
+    .bulk-student-page footer{margin-top:6px;padding-top:4px}
+    .bulk-student-page.dense .bars{height:61px}
+    .bulk-student-page.dense .track{height:31px}
+    .bulk-student-page.dense .subject{padding:4px}
+    .bulk-student-page.ultra .bars{height:47px}
+    .bulk-student-page.ultra .track{height:25px}
+    .bulk-student-page.ultra .subject h3{font-size:8pt;margin-bottom:1px}
+    .bulk-student-page.ultra .subject{padding:2px}
+    .bulk-student-page.ultra th,.bulk-student-page.ultra td{padding:2px 4px;font-size:7pt}
+    @media screen {
+      body{max-width:1100px!important}
+      .bulk-student-page{padding:12px 0 20px;border-bottom:2px dashed #b8c5d8;margin-bottom:20px}
+      .bulk-toolbar{position:sticky;top:0;z-index:4;background:white;padding:12px;display:flex;align-items:center;justify-content:space-between;gap:10px;box-shadow:0 2px 10px #13233a20}
+    }
+    @media print{.bulk-toolbar{display:none!important}.bulk-student-page{margin:0!important;padding:0!important}}
+  </style>`;
+  const toolbar = `<div class="bulk-toolbar"><strong>${pages.length} student reports · A4 Landscape</strong><button type="button" onclick="window.print()" style="background:#12528c;color:white;border:0;border-radius:8px;padding:10px 15px;cursor:pointer">Print / Save All PDF</button></div>`;
+  const combined = prototype
+    .replace('</head>', `${bulkCSS}</head>`)
+    .replace(/<title>[\s\S]*?<\/title>/i, `<title>Class Student Performance - ${esc(meta.className)} ${esc(meta.sectionName)}</title>`)
+    .replace(/<body>[\s\S]*?<\/body>/i, `<body>${toolbar}${pages.join('')}</body>`);
+  const popup = window.open('', '_blank');
+  if (!popup) { window.alert('Please allow pop-ups for the bulk A4 report.'); return; }
+  popup.document.open(); popup.document.write(combined); popup.document.close(); popup.focus();
+}

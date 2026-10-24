@@ -1,5 +1,6 @@
 // src/pages/FinalResultSummary.jsx
 import React, { useEffect, useRef, useState, useMemo } from "react";
+import StudentExamComparison from "../components/StudentExamComparison";
 import api from "../api";
 import { excludedFromReportTotals, reportLeaveDisplay, reportCountedMaximum } from "../utils/reportCardAttendance";
 import Swal from "sweetalert2";
@@ -7442,6 +7443,7 @@ const renderTeacherRemarksTermWise = (studentId) => {
 
   return (
     <div className="container mt-4">
+      {reportData.length > 0 && <StudentExamComparison students={reportData} />}
       <style>{`
         body {
           background:

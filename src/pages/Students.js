@@ -1943,14 +1943,27 @@ const Students = () => {
 
           if (!clsSel || !secSel || !stuSel) return;
 
-          const populateSectionsForClass = (classId) => {
-            const options = [`<option value="">All Sections</option>`];
-            sectionOptionsAll.forEach((sec) => {
-              if (!classId || String(sec.class_id) === String(classId)) {
-                options.push(`<option value="${sec.id}">${sec.name}</option>`);
+          const populateSectionsForClass = async (classId, selectedSection = "") => {
+            let available = sectionOptionsAll;
+            if (classId) {
+              try {
+                const { data } = await api.get("/sections", { params: { class_id: classId } });
+                const rows = Array.isArray(data) ? data : data?.data;
+                if (Array.isArray(rows)) {
+                  available = rows.map((sec) => ({ id: sec.id, name: sec.section_name }));
+                }
+              } catch (err) {
+                console.error("load sibling sections:", err);
               }
-            });
-            secSel.innerHTML = options.join("");
+            }
+            // Keep an existing section visible even if its mapping was removed.
+            const selected = sectionOptionsAll.find((sec) => String(sec.id) === String(selectedSection));
+            if (selected && !available.some((sec) => String(sec.id) === String(selectedSection))) {
+              available = [...available, selected];
+            }
+            secSel.innerHTML = `<option value="">All Sections</option>` + available
+              .map((sec) => `<option value="${sec.id}">${escapeHtmlAttr(sec.name)}</option>`).join("");
+            secSel.value = String(selectedSection || "");
           };
 
           const fetchAndPopulateStudents = async (classId, sectionId) => {
@@ -1995,9 +2008,9 @@ const Students = () => {
 
           clsSel.onchange = async () => {
             const classId = clsSel.value;
-            populateSectionsForClass(classId);
             hiddenId.value = "";
             hiddenName.value = "";
+            await populateSectionsForClass(classId);
             await fetchAndPopulateStudents(classId, secSel.value || "");
           };
 
@@ -2020,7 +2033,7 @@ const Students = () => {
             }
           };
 
-          const preStudentId = hiddenId.value || "";
+          let preStudentId = hiddenId.value || "";
           const preStudentName = hiddenName.value || "";
           let preClass = clsSel.value || "";
           let preSection = secSel.value || "";
@@ -2031,20 +2044,36 @@ const Students = () => {
             const linkedStudent = findStudentBySiblingToken(students, preStudentId);
 
             if (linkedStudent) {
-              preClass = preClass || String(linkedStudent.class_id || "");
-              preSection = preSection || String(linkedStudent.section_id || "");
+              preClass = preClass || String(linkedStudent.class_id ?? "");
+              preSection = preSection || String(linkedStudent.section_id ?? "");
             }
           }
 
           (async () => {
-            // case 1: we know class -> load properly
-            if (preClass) {
-              clsSel.value = String(preClass);
-              populateSectionsForClass(preClass);
-
-              if (preSection) {
-                secSel.value = String(preSection);
+            if (preStudentId) {
+              try {
+                const { data } = await api.get("/students/sibling-list", {
+                  params: { sibling_token: normalizeSiblingToken(preStudentId) },
+                });
+                const linked = Array.isArray(data) ? data[0] : null;
+                if (linked) {
+                  preClass = String(linked.class_id ?? "");
+                  preSection = String(linked.section_id ?? "");
+                  preStudentId = normalizeSiblingToken(linked.admission_number || preStudentId);
+                  hiddenId.value = preStudentId;
+                  hiddenName.value = linked.name || preStudentName;
+                }
+              } catch (err) {
+                console.error("resolve saved sibling:", err);
               }
+            }
+            // Only load a class roster when the returned ID exists in the class master.
+            const hasSavedClass = Array.from(clsSel.options).some(
+              (option) => option.value !== "" && option.value === preClass
+            );
+            if (hasSavedClass) {
+              clsSel.value = String(preClass);
+              await populateSectionsForClass(preClass, preSection);
 
               await fetchAndPopulateStudents(preClass, preSection || "");
 
@@ -2069,6 +2098,7 @@ const Students = () => {
 
             // case 2: class unknown but sibling already exists -> keep selected option visible
             if (preStudentId) {
+              await populateSectionsForClass("", preSection);
               stuSel.innerHTML = `
                 <option value="">Select Student</option>
                 <option value="${String(preStudentId).replace(/"/g, "&quot;")}" selected>
@@ -2081,7 +2111,7 @@ const Students = () => {
             }
 
             // case 3: no existing sibling
-            populateSectionsForClass("");
+            await populateSectionsForClass("");
             stuSel.innerHTML = `<option value="">Select class first</option>`;
           })();
         });
