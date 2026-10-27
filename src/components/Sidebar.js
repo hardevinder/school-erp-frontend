@@ -1365,6 +1365,7 @@ export default function Sidebar({ headerHeight = 56 }) {
           { key: "house-duty-hr", label: "House Duty & Activities", icon: "bi-flag-fill", path: "/house-duty", roles: ["hr"] }, // HOUSE_DUTY_V15
           { key: "academic-calendar-hr", label: "Academic Calendar / Teaching Days", icon: "bi-calendar-week", path: "/academic-calendar", roles: ["hr"] },
           { key: "employees", label: "Employees", icon: "bi-person-badge", path: "/employees" },
+          { key: "employee-id-cards", label: "Employee ID Cards", icon: "bi-person-vcard", path: "/employee-id-cards", roles: ["hr", "superadmin"] },
           { key: "employee-user-accounts", label: "Employee Login Accounts", icon: "bi-person-plus", path: "/employee-user-accounts" },
           { key: "leave-types", label: "Leave Types", icon: "bi-journals", path: "/leave-types" },
           { key: "employee-leave-balances", label: "Employee Leave Balances", icon: "bi-calendar-check", path: "/employee-leave-balances" },

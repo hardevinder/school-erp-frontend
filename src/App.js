@@ -30,6 +30,7 @@ import Sessions from "./pages/Sessions";
 import Subjects from "./pages/Subjects";
 import Student from "./pages/Students";
 import StudentIdCards from "./pages/StudentIdCards";
+import EmployeeIdCards from "./pages/EmployeeIdCards";
 import BulkPromotion from "./pages/Students/BulkPromotion";
 import BulkConcession from "./pages/Students/BulkConcession";
 import PromotionHistory from "./pages/Students/PromotionHistory";
@@ -1405,6 +1406,7 @@ function App() {
           />
 
           <Route path="/employees" element={<EmployeeManagement />} />
+          <Route path="/employee-id-cards" element={<RequireRole roles={["hr", "superadmin"]}><EmployeeIdCards /></RequireRole>} />
           <Route path="/employee-user-accounts" element={<EmployeeUserAccounts />} />
 
           {/* Leave */}

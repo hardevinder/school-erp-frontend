@@ -348,6 +348,11 @@ const Dashboard = () => {
       storedRoles.includes("superadmin"),
     [storedPermissions, storedRoles]
   );
+  const canManageEmployeeCards = useMemo(
+    () => storedRoles.includes("hr") || storedRoles.includes("superadmin"),
+    [storedRoles]
+  );
+
   const canCustomizeDashboard = useMemo(
     () =>
       storedPermissions.includes("customize_dashboard_layout") ||
@@ -1147,6 +1152,10 @@ const Dashboard = () => {
     },
   ];
 
+  const employeeLinks = canManageEmployeeCards
+    ? [{ label: "Employee ID Cards", sub: "Generate staff identity cards", icon: "bi-person-vcard", href: "/employee-id-cards", gradient: "linear-gradient(135deg, #173b72, #1eafad)", tag: "NEW" }]
+    : [];
+
   const adminLinks = [
     {
       label: "Enquiries",
@@ -1192,6 +1201,7 @@ const Dashboard = () => {
       tone: "students",
       links: studentLinks,
     },
+    ...(employeeLinks.length ? [{ title: "Staff & HR", subtitle: "Employee records and staff identity cards", icon: "bi-person-badge", tone: "students", links: employeeLinks }] : []),
     {
       title: "Reports",
       subtitle: "Demographic reports and analytics",
