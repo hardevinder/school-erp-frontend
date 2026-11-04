@@ -22,9 +22,20 @@ const CARD_THEMES = {
   "Maroon & Gold": ["#6a1826", "#d4a53c"],
 };
 
+const getDepartmentName = (employee) => {
+  const department = employee?.department;
+  const value = department && typeof department === "object"
+    ? department.name || department.department_name || department.title
+    : department || employee?.department_name || employee?.departmentName;
+  return String(value || "").trim();
+};
+
+const NO_DEPARTMENT = "__no_department__";
+
 const EmployeeIdCards = () => {
   const [employees, setEmployees] = useState([]);
   const [employeeId, setEmployeeId] = useState("");
+  const [departmentFilter, setDepartmentFilter] = useState("all");
   const [authorityName, setAuthorityName] = useState("Authorised Signatory");
   const [authorityDesignation, setAuthorityDesignation] = useState("Principal");
   const [includeSignature, setIncludeSignature] = useState(true);
@@ -44,6 +55,23 @@ const EmployeeIdCards = () => {
     () => employees.find((employee) => String(employee.id) === String(employeeId)) || null,
     [employees, employeeId]
   );
+
+  const departments = useMemo(() => {
+    const names = [...new Set(employees.map(getDepartmentName).filter(Boolean))];
+    return names.sort((a, b) => a.localeCompare(b));
+  }, [employees]);
+
+  const filteredEmployees = useMemo(() => {
+    if (departmentFilter === "all") return employees;
+    if (departmentFilter === NO_DEPARTMENT) return employees.filter((employee) => !getDepartmentName(employee));
+    return employees.filter((employee) => getDepartmentName(employee) === departmentFilter);
+  }, [employees, departmentFilter]);
+
+  useEffect(() => {
+    if (!filteredEmployees.some((employee) => String(employee.id) === String(employeeId))) {
+      setEmployeeId(filteredEmployees.length ? String(filteredEmployees[0].id) : "");
+    }
+  }, [filteredEmployees, employeeId]);
 
   useEffect(() => {
     let active = true;
@@ -168,10 +196,16 @@ const EmployeeIdCards = () => {
             <section className="card border-0 shadow-sm rounded-4">
               <div className="card-body p-4">
                 <h5 className="fw-bold mb-3">Card details</h5>
+                <label className="form-label fw-semibold" htmlFor="employee-department-filter">Department</label>
+                <select id="employee-department-filter" className="form-select mb-3" value={departmentFilter} onChange={(event) => setDepartmentFilter(event.target.value)}>
+                  <option value="all">All departments</option>
+                  {departments.map((department) => <option key={department} value={department}>{department}</option>)}
+                  {employees.some((employee) => !getDepartmentName(employee)) && <option value={NO_DEPARTMENT}>No department assigned</option>}
+                </select>
                 <label className="form-label fw-semibold" htmlFor="employee-id-select">Employee</label>
                 <select id="employee-id-select" className="form-select mb-3" value={employeeId} onChange={(event) => setEmployeeId(event.target.value)}>
                   <option value="">Select employee</option>
-                  {employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.name} · {employee.employee_id || employee.id}</option>)}
+                  {filteredEmployees.map((employee) => <option key={employee.id} value={employee.id}>{employee.name} · {employee.employee_id || employee.id}</option>)}
                 </select>
                 {selectedEmployee && (
                   <div className="d-flex align-items-center gap-3 rounded-3 bg-light p-3 mb-4">
@@ -217,6 +251,7 @@ const EmployeeIdCards = () => {
                   {signatureDataUrl && <button type="button" className="btn btn-sm btn-link px-0 mt-2" onClick={() => setSignatureDataUrl("")}>Remove uploaded signature</button>}
                 </>}
                 {!employees.length && <div className="alert alert-warning mt-3 mb-0">No employees are available in this school.</div>}
+                {employees.length > 0 && filteredEmployees.length === 0 && <div className="alert alert-warning mt-3 mb-0">No employees are available in this department.</div>}
               </div>
             </section>
           </div>

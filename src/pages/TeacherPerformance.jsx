@@ -1,5 +1,7 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import teacherPerformanceApi from "../services/teacherPerformanceApi";
+import TeacherPerformanceRecords, { RECORD_VIEWS } from "../components/TeacherPerformanceRecords";
+import "./TeacherPerformance.css";
 import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   BarChart, Bar, PieChart, Pie, Cell,
@@ -182,7 +184,7 @@ function ComponentDetailsModal({ component: c, onClose }) {
   </>;
 }
 
-function ComponentCard({ c, onOpen }) {
+function ComponentCard({ c, onOpen, onRecords }) {
   const score = c?.score == null ? null : Number(c.score);
   const tone = score == null ? "secondary" : score >= 85 ? "success" : score >= 70 ? "primary" : score >= 55 ? "warning" : "danger";
   return (
@@ -190,7 +192,7 @@ function ComponentCard({ c, onOpen }) {
       <div className="card-body d-flex flex-column">
         <div className="d-flex justify-content-between gap-2">
           <div>
-            <div className="fw-semibold">{c.label}</div>
+            {RECORD_VIEWS.some(view => view.kind === c.code) ? <button type="button" className="performance-count-link fw-semibold" onClick={() => onRecords(c.code)}>{c.label}</button> : <div className="fw-semibold">{c.label}</div>}
             <div className="small text-muted">Weight {Number(c.weight || 0).toFixed(0)}%</div>
           </div>
           <span className={`badge text-bg-${tone} align-self-start`}>{score == null ? "N/A" : score.toFixed(1)}</span>
@@ -200,9 +202,10 @@ function ComponentCard({ c, onOpen }) {
         </div>
         {!!c?.reasons?.length && <div className="small text-muted mt-3">{c.reasons[0]}</div>}
         {!!c?.metrics && <div className="small mt-2 text-secondary">{Object.entries(c.metrics).slice(0, 3).map(([k, v]) => <span className="me-3" key={k}><b>{String(k).replaceAll("_", " ")}:</b> {String(v)}</span>)}</div>}
-        <button type="button" className="btn btn-sm btn-link px-0 mt-auto pt-3 text-decoration-none text-start" onClick={() => onOpen?.(c)}>
-          View details / How calculated →
-        </button>
+        <div className="d-flex flex-wrap gap-3 mt-auto pt-3">
+          {RECORD_VIEWS.some(view => view.kind === c.code) && <button type="button" className="btn btn-sm btn-outline-primary" onClick={() => onRecords(c.code)}>View records →</button>}
+          <button type="button" className="btn btn-sm btn-link px-0 text-decoration-none" onClick={() => onOpen?.(c)}>How calculated</button>
+        </div>
       </div>
     </div>
   );
@@ -315,6 +318,8 @@ export default function TeacherPerformance() {
   const [month, setMonth] = useState(currentMonth());
   const [dashboard, setDashboard] = useState(null);
   const [detailComponent, setDetailComponent] = useState(null);
+  const [recordKind, setRecordKind] = useState(null);
+  const dashboardRequest = useRef(0);
   const [trend, setTrend] = useState([]);
   const [team, setTeam] = useState([]);
   const [weights, setWeights] = useState([]);
@@ -337,14 +342,18 @@ export default function TeacherPerformance() {
   const selectedTeacher = useMemo(() => teachers.find((t) => String(t.id) === String(selectedTeacherId)) || dashboard?.teacher || null, [teachers, selectedTeacherId, dashboard]);
   const weightTotal = useMemo(() => weights.reduce((s, w) => s + (w.enabled === false ? 0 : Number(w.weight_percent || 0)), 0), [weights]);
 
+  useEffect(() => { setRecordKind(null); setDetailComponent(null); }, [selectedTeacherId, month]);
+
   const loadDashboard = useCallback(async (tid = selectedTeacherId) => {
     if (!tid) return;
+    const request = ++dashboardRequest.current;
     const params = { month };
     if (isManager) params.teacher_user_id = tid;
     const [d, t] = await Promise.all([
       isManager ? teacherPerformanceApi.dashboard(params) : teacherPerformanceApi.myDashboard(params),
       teacherPerformanceApi.trend({ ...params, period_key: month, limit: 40 }),
     ]);
+    if (request !== dashboardRequest.current) return;
     setDashboard(d.data?.data || null);
     setDetailComponent(null);
     setTrend(t.data?.snapshots || []);
@@ -391,12 +400,15 @@ export default function TeacherPerformance() {
 
   useEffect(() => {
     if (!cap?.user_id || !selectedTeacherId) return;
+    let active = true;
+    setDashboard(null);
     (async () => {
       setBusy(true); setError("");
-      try { await loadDashboard(selectedTeacherId); await loadManagerData(selectedTeacherId); }
-      catch (e) { setError(errMsg(e)); }
-      finally { setBusy(false); }
+      try { await loadDashboard(selectedTeacherId); if (active) await loadManagerData(selectedTeacherId); }
+      catch (e) { if (active) setError(errMsg(e)); }
+      finally { if (active) setBusy(false); }
     })();
+    return () => { active = false; dashboardRequest.current += 1; };
   }, [cap?.user_id, selectedTeacherId, month, loadDashboard, loadManagerData]);
 
   const loadTeam = async () => {
@@ -489,19 +501,19 @@ export default function TeacherPerformance() {
   if (busy && !cap?.user_id) return <div className="container py-5 text-center"><div className="spinner-border" /></div>;
 
   return (
-    <div className="container-fluid py-4">
+    <div className="container-fluid py-4 teacher-performance">
       <div className="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
         <div>
           <h2 className="mb-1">Teacher Performance Intelligence</h2>
           <div className="text-muted">Evidence-based professional growth score • automatic ERP checks • transparent reasons • AI explanation</div>
         </div>
         <div className="d-flex gap-2 flex-wrap">
-          <input type="month" className="form-control" value={month} onChange={(e) => setMonth(e.target.value)} style={{ width: 170 }} />
-          {isManager && <select className="form-select" value={selectedTeacherId} onChange={(e) => setTeacherId(e.target.value)} style={{ minWidth: 260 }}>
+          <input type="month" aria-label="Performance month" max={currentMonth()} className="form-control" value={month} onChange={(e) => setMonth(e.target.value)} style={{ width: 170 }} />
+          {isManager && <select aria-label="Select teacher" className="form-select" value={selectedTeacherId} onChange={(e) => setTeacherId(e.target.value)} style={{ minWidth: 260 }}>
             {teachers.map((t) => <option key={t.id} value={t.id}>{t.name} {t.designation ? `• ${t.designation}` : ""}</option>)}
           </select>}
           <button className="btn btn-outline-dark" onClick={downloadPdf} disabled={!dashboard}>PDF</button>
-          <button className="btn btn-primary" onClick={() => loadDashboard(selectedTeacherId)} disabled={busy}>Refresh Score</button>
+          <button className="btn btn-primary" onClick={async () => { setBusy(true); setError(""); try { await loadDashboard(selectedTeacherId); } catch (e) { setError(errMsg(e)); } finally { setBusy(false); } }} disabled={busy}>Refresh Score</button>
         </div>
       </div>
 
@@ -512,7 +524,8 @@ export default function TeacherPerformance() {
         {[['dashboard','Performance'],['team','Team Overview'],['weights','Weightage'],['overrides','Teacher Day Overrides'],['manual','Duties / Achievements / Manual Score']].map(([k,l]) => <li className="nav-item" key={k}><button className={`nav-link ${tab===k?'active':''}`} onClick={() => { setTab(k); if(k==='team' && !team.length) loadTeam(); }}>{l}</button></li>)}
       </ul>}
 
-      {(!isManager || tab === "dashboard") && dashboard && <>
+      {busy && <div role="status" className="text-muted mb-3"><span className="spinner-border spinner-border-sm me-2" />Updating performance…</div>}
+      {(!isManager || tab === "dashboard") && dashboard && !busy && <>
         <div className="row g-3 mb-4">
           <div className="col-xl-3"><ScoreRing score={dashboard.overall_score} delta={dashboard.delta_from_previous_snapshot} provisional={dashboard.provisional} /></div>
           <div className="col-xl-9">
@@ -521,7 +534,7 @@ export default function TeacherPerformance() {
               <hr />
               <div className="row g-2 small">
                 <div className="col-md-3"><b>Teaching records expected:</b><br />{dashboard.context?.teaching_records_expected ?? 0}</div>
-                <div className="col-md-3"><b>Timetable assignments:</b><br />{dashboard.context?.timetable_assignments ?? 0}</div>
+                <div className="col-md-3"><button type="button" className="performance-count-link" onClick={() => setRecordKind("TIMETABLE")}><b>Timetable assignments ↗</b><br />{dashboard.context?.timetable_assignments ?? 0}</button></div>
                 <div className="col-md-3"><b>Teacher-specific exceptions:</b><br />{dashboard.context?.teacher_day_overrides ?? 0}</div>
                 <div className="col-md-3"><b>Calendar non-teaching days:</b><br />{dashboard.context?.school_or_calendar_non_teaching_days ?? 0}</div>
               </div>
@@ -529,8 +542,13 @@ export default function TeacherPerformance() {
             </div></div>
           </div>
         </div>
+        <section className="performance-explore mb-4" aria-labelledby="explore-records-heading">
+          <h5 id="explore-records-heading" className="mb-1">Explore records</h5>
+          <p className="small text-muted mb-3">Open {selectedTeacher?.name || dashboard.teacher?.name}'s records for {month}. Select a card below to see the entries behind the score.</p>
+          <div className="performance-record-grid">{RECORD_VIEWS.map(view => <button type="button" key={view.kind} className="performance-record-link" onClick={() => setRecordKind(view.kind)}><i className={`bi bi-${view.icon}`} aria-hidden="true" /><span><strong>{view.label}</strong><small className="text-muted">{view.hint}</small></span></button>)}</div>
+        </section>
+        <div className="row g-3 mb-4">{(dashboard.components || []).map((c) => <div className="col-md-6 col-xxl-4" key={c.code}><ComponentCard c={c} onOpen={setDetailComponent} onRecords={setRecordKind} /></div>)}</div>
         <TeachingResultAnalytics analytics={dashboard.teaching_result} />
-        <div className="row g-3 mb-4">{(dashboard.components || []).map((c) => <div className="col-md-6 col-xxl-4" key={c.code}><ComponentCard c={c} onOpen={setDetailComponent} /></div>)}</div>
         <div className="row g-3">
           <div className="col-xl-7"><div className="card border-0 shadow-sm h-100"><div className="card-body"><div className="d-flex justify-content-between align-items-center mb-3"><h5 className="mb-0">Score Movement</h5><span className="small text-muted">Snapshots for {month}</span></div><TrendStrip rows={trend} /></div></div></div>
           <div className="col-xl-5"><div className="card border-0 shadow-sm h-100"><div className="card-body"><div className="d-flex justify-content-between gap-2"><h5>AI Growth Insight</h5><button className="btn btn-sm btn-outline-primary" onClick={generateInsight} disabled={busy}>Generate</button></div>{aiInsight ? <><div style={{ whiteSpace: "pre-wrap" }}>{aiInsight}</div><div className="small text-muted mt-3">{aiSource === "openai" ? "AI explanation from ERP evidence" : "Smart fallback insight"} • score itself is rule-based</div></> : <div className="text-muted">Generate a short evidence-based explanation, strengths and next actions. AI cannot change the score.</div>}</div></div></div>
@@ -619,6 +637,7 @@ export default function TeacherPerformance() {
         </div>
       </>}
       <ComponentDetailsModal component={detailComponent} onClose={() => setDetailComponent(null)} />
+      {recordKind && <TeacherPerformanceRecords kind={recordKind} teacherId={selectedTeacherId} teacherName={selectedTeacher?.name || dashboard?.teacher?.name} month={month} onClose={() => setRecordKind(null)} />}
     </div>
   );
 }
