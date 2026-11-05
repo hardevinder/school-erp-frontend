@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import PerformanceBoard from "../components/PerformanceBoard";
 import teacherPerformanceApi from "../services/teacherPerformanceApi";
 import TeacherPerformanceRecords, { RECORD_VIEWS } from "../components/TeacherPerformanceRecords";
 import "./TeacherPerformance.css";
@@ -24,24 +25,6 @@ const DAY_TYPE_LABELS = {
   EXEMPT: "Exempt",
   OTHER: "Other",
 };
-
-function ScoreRing({ score = 0, delta = 0, provisional = false }) {
-  const s = Number(score || 0);
-  const tone = s >= 85 ? "success" : s >= 70 ? "primary" : s >= 55 ? "warning" : "danger";
-  return (
-    <div className={`card border-${tone} shadow-sm h-100`}>
-      <div className="card-body text-center d-flex flex-column justify-content-center">
-        <div className="text-muted small text-uppercase fw-semibold">Professional Growth Score</div>
-        <div className={`display-3 fw-bold text-${tone}`}>{s.toFixed(1)}</div>
-        <div className="fw-semibold">/ 100</div>
-        <div className={`mt-2 ${Number(delta) > 0 ? "text-success" : Number(delta) < 0 ? "text-danger" : "text-muted"}`}>
-          {Number(delta) > 0 ? "▲" : Number(delta) < 0 ? "▼" : "•"} {Math.abs(Number(delta || 0)).toFixed(1)} from previous snapshot
-        </div>
-        {provisional && <span className="badge text-bg-warning mt-2 align-self-center">Provisional • evidence still building</span>}
-      </div>
-    </div>
-  );
-}
 
 function componentCalculation(c) {
   const m = c?.metrics || {};
@@ -211,25 +194,6 @@ function ComponentCard({ c, onOpen, onRecords }) {
   );
 }
 
-function TrendStrip({ rows = [] }) {
-  if (!rows.length) return <div className="text-muted small">Trend will build as daily snapshots are saved.</div>;
-  const min = Math.min(...rows.map((r) => Number(r.overall_score || 0)), 50);
-  const max = 100;
-  return (
-    <div className="d-flex align-items-end gap-1" style={{ minHeight: 110, overflowX: "auto" }}>
-      {rows.map((r) => {
-        const value = Number(r.overall_score || 0);
-        const h = 18 + ((value - min) / Math.max(1, max - min)) * 75;
-        return <div key={`${r.snapshot_date}-${r.id}`} title={`${r.snapshot_date}: ${value.toFixed(1)}`} className="text-center" style={{ minWidth: 24 }}>
-          <div className="bg-primary rounded-top mx-auto" style={{ width: 14, height: Math.max(8, h) }} />
-          <div className="text-muted" style={{ fontSize: 9, transform: "rotate(-45deg)", marginTop: 10 }}>{String(r.snapshot_date).slice(5)}</div>
-        </div>;
-      })}
-    </div>
-  );
-}
-
-
 function MetricTile({ label, value, note, tone = "primary" }) {
   return <div className="col-6 col-xl-3"><div className="card border-0 shadow-sm h-100"><div className="card-body">
     <div className="small text-muted text-uppercase fw-semibold">{label}</div>
@@ -320,6 +284,9 @@ export default function TeacherPerformance() {
   const [detailComponent, setDetailComponent] = useState(null);
   const [recordKind, setRecordKind] = useState(null);
   const dashboardRequest = useRef(0);
+  const [autoRefresh, setAutoRefresh] = useState(true);
+  const [lastUpdated, setLastUpdated] = useState(null);
+  const [refreshError, setRefreshError] = useState("");
   const [trend, setTrend] = useState([]);
   const [team, setTeam] = useState([]);
   const [weights, setWeights] = useState([]);
@@ -344,21 +311,22 @@ export default function TeacherPerformance() {
 
   useEffect(() => { setRecordKind(null); setDetailComponent(null); }, [selectedTeacherId, month]);
 
-  const loadDashboard = useCallback(async (tid = selectedTeacherId) => {
+  const loadDashboard = useCallback(async (tid = selectedTeacherId, background = false) => {
     if (!tid) return;
     const request = ++dashboardRequest.current;
     const params = { month };
     if (isManager) params.teacher_user_id = tid;
-    const [d, t] = await Promise.all([
-      isManager ? teacherPerformanceApi.dashboard(params) : teacherPerformanceApi.myDashboard(params),
-      teacherPerformanceApi.trend({ ...params, period_key: month, limit: 40 }),
-    ]);
+    const d = await (isManager ? teacherPerformanceApi.dashboard(params) : teacherPerformanceApi.myDashboard(params));
+    if (request !== dashboardRequest.current) return;
+    // The dashboard saves a snapshot; fetch history after that write completes.
+    const t = await teacherPerformanceApi.trend({ ...params, period_key: month, limit: 40 });
     if (request !== dashboardRequest.current) return;
     setDashboard(d.data?.data || null);
-    setDetailComponent(null);
+    if (!background) setDetailComponent(null);
+    setLastUpdated(new Date());
+    setRefreshError("");
     setTrend(t.data?.snapshots || []);
-    setAiInsight("");
-    setAiSource("");
+    if (!background) { setAiInsight(""); setAiSource(""); }
   }, [isManager, month, selectedTeacherId]);
 
   const loadManagerData = useCallback(async (tid = selectedTeacherId) => {
@@ -410,6 +378,20 @@ export default function TeacherPerformance() {
     })();
     return () => { active = false; dashboardRequest.current += 1; };
   }, [cap?.user_id, selectedTeacherId, month, loadDashboard, loadManagerData]);
+
+  useEffect(() => {
+    if (!autoRefresh || !selectedTeacherId || !cap?.user_id || tab !== "dashboard" || busy) return;
+    let active = true;
+    let inFlight = false;
+    const timer = window.setInterval(async () => {
+      if (document.hidden || inFlight) return;
+      inFlight = true;
+      try { await loadDashboard(selectedTeacherId, true); }
+      catch (e) { if (active) setRefreshError("Refresh failed. Showing the last successful update. " + errMsg(e)); }
+      finally { inFlight = false; }
+    }, 60000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [autoRefresh, selectedTeacherId, cap?.user_id, tab, busy, loadDashboard]);
 
   const loadTeam = async () => {
     if (!isManager) return;
@@ -504,7 +486,7 @@ export default function TeacherPerformance() {
     <div className="container-fluid py-4 teacher-performance">
       <div className="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
         <div>
-          <h2 className="mb-1">Teacher Performance Intelligence</h2>
+          <div className="performance-eyebrow">TEACHING · EVIDENCE · GROWTH</div><h2 className="mb-1">Teacher Performance Board</h2>
           <div className="text-muted">Evidence-based professional growth score • automatic ERP checks • transparent reasons • AI explanation</div>
         </div>
         <div className="d-flex gap-2 flex-wrap">
@@ -526,9 +508,9 @@ export default function TeacherPerformance() {
 
       {busy && <div role="status" className="text-muted mb-3"><span className="spinner-border spinner-border-sm me-2" />Updating performance…</div>}
       {(!isManager || tab === "dashboard") && dashboard && !busy && <>
+        <PerformanceBoard dashboard={dashboard} teacher={selectedTeacher} trend={trend} autoRefresh={autoRefresh} onToggleRefresh={() => setAutoRefresh(value => !value)} lastUpdated={lastUpdated} refreshError={refreshError} onComponent={setDetailComponent} />
         <div className="row g-3 mb-4">
-          <div className="col-xl-3"><ScoreRing score={dashboard.overall_score} delta={dashboard.delta_from_previous_snapshot} provisional={dashboard.provisional} /></div>
-          <div className="col-xl-9">
+          <div className="col-12">
             <div className="card border-0 shadow-sm h-100"><div className="card-body">
               <div className="d-flex justify-content-between flex-wrap gap-2"><div><h5 className="mb-1">{selectedTeacher?.name || dashboard.teacher?.name}</h5><div className="text-muted">{selectedTeacher?.designation || dashboard.teacher?.designation} • {dashboard.period?.start} to {dashboard.period?.end}</div></div><div className="text-end"><div className="small text-muted">Evidence coverage</div><div className="h5">{Number(dashboard.coverage_percent || 0).toFixed(1)}%</div></div></div>
               <hr />
@@ -550,8 +532,7 @@ export default function TeacherPerformance() {
         <div className="row g-3 mb-4">{(dashboard.components || []).map((c) => <div className="col-md-6 col-xxl-4" key={c.code}><ComponentCard c={c} onOpen={setDetailComponent} onRecords={setRecordKind} /></div>)}</div>
         <TeachingResultAnalytics analytics={dashboard.teaching_result} />
         <div className="row g-3">
-          <div className="col-xl-7"><div className="card border-0 shadow-sm h-100"><div className="card-body"><div className="d-flex justify-content-between align-items-center mb-3"><h5 className="mb-0">Score Movement</h5><span className="small text-muted">Snapshots for {month}</span></div><TrendStrip rows={trend} /></div></div></div>
-          <div className="col-xl-5"><div className="card border-0 shadow-sm h-100"><div className="card-body"><div className="d-flex justify-content-between gap-2"><h5>AI Growth Insight</h5><button className="btn btn-sm btn-outline-primary" onClick={generateInsight} disabled={busy}>Generate</button></div>{aiInsight ? <><div style={{ whiteSpace: "pre-wrap" }}>{aiInsight}</div><div className="small text-muted mt-3">{aiSource === "openai" ? "AI explanation from ERP evidence" : "Smart fallback insight"} • score itself is rule-based</div></> : <div className="text-muted">Generate a short evidence-based explanation, strengths and next actions. AI cannot change the score.</div>}</div></div></div>
+          <div className="col-12"><div className="card border-0 shadow-sm h-100"><div className="card-body"><div className="d-flex justify-content-between gap-2"><h5>AI Growth Insight</h5><button className="btn btn-sm btn-outline-primary" onClick={generateInsight} disabled={busy}>Generate</button></div>{aiInsight ? <><div style={{ whiteSpace: "pre-wrap" }}>{aiInsight}</div><div className="small text-muted mt-3">{aiSource === "openai" ? "AI explanation from ERP evidence" : "Smart fallback insight"} • score itself is rule-based</div></> : <div className="text-muted">Generate a short evidence-based explanation, strengths and next actions. AI cannot change the score.</div>}</div></div></div>
         </div>
       </>}
 

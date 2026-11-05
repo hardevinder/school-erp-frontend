@@ -203,81 +203,75 @@ export default function BusRouteMapModal({ bus, onClose }) {
         const locations = tripType === "pickup"
           ? [...ordered.map(point), schoolPoint]
           : [schoolPoint, ...ordered.map(point)];
+        // Draw the base map and markers first. A failed road-routing request
+        // must not hide the school and assigned stops.
         const map = new google.maps.Map(mapNode.current, mapOptions(google, schoolPoint));
-        const { Route } = await google.maps.importLibrary("routes");
         const bounds = new google.maps.LatLngBounds();
         locations.forEach((location) => bounds.extend(location));
         map.fitBounds(bounds, 48);
+        addSchoolMarker(google, map, plan.school, overlays.current);
+        addStopMarkers(google, map, ordered, overlays.current);
 
+        const roadLines = [];
         let metres = 0;
-        // Google Directions accepts a limited number of waypoints. Contiguous
-        // chunks keep every assigned stop and produce one continuous road route.
-        for (let start = 0; start < locations.length - 1; start += 24) {
-          const segment = locations.slice(start, Math.min(start + 25, locations.length));
-          if (segment.length < 2) break;
-          const result = await Route.computeRoutes({
-            origin: segment[0],
-            destination: segment[segment.length - 1],
-            intermediates: segment.slice(1, -1).map((location) => ({ location })),
-            travelMode: "DRIVING",
-            fields: ["path", "distanceMeters"],
-          });
-          if (cancelled) return;
-          const route = result.routes?.[0];
-          if (!route) throw new Error("Google Routes returned no road route for these stops.");
-          metres += Number(route.distanceMeters || 0);
-          const polylines = route.createPolylines();
-          polylines.forEach((polyline) => {
-            polyline.setOptions({
+        try {
+          const { Route } = await google.maps.importLibrary("routes");
+          // Keep every assigned stop; process at most 23 intermediate stops
+          // per routing request (25 points total including origin/destination).
+          for (let start = 0; start < locations.length - 1; start += 24) {
+            const segment = locations.slice(start, Math.min(start + 25, locations.length));
+            if (segment.length < 2) break;
+            const result = await Route.computeRoutes({
+              origin: segment[0],
+              destination: segment[segment.length - 1],
+              intermediates: segment.slice(1, -1).map((location) => ({ location })),
+              travelMode: "DRIVING",
+              fields: ["path", "distanceMeters"],
+            });
+            if (cancelled) return;
+            const route = result.routes?.[0];
+            if (!route || !Array.isArray(route.path) || route.path.length < 2) {
+              throw new Error("Google Routes did not return a usable road path.");
+            }
+            // Draw directly from route.path rather than createPolylines(),
+            // which is where the original forEach error may occur.
+            const line = new google.maps.Polyline({
+              map,
+              path: route.path,
               strokeColor: tripType === "pickup" ? "#0d6efd" : "#dc3545",
               strokeOpacity: 0.9,
               strokeWeight: 6,
             });
-            polyline.setMap(map);
-            overlays.current.push(polyline);
+            roadLines.push(line);
+            overlays.current.push(line);
+            metres += Number(route.distanceMeters || 0);
+          }
+          setKilometres(metres / 1000);
+        } catch (routingError) {
+          if (cancelled) return;
+          console.error("Bus road routing failed; showing straight-line estimate:", routingError);
+          // Do not redraw the Google map: it already has the correct markers.
+          roadLines.forEach((line) => line.setMap(null));
+          overlays.current = overlays.current.filter((item) => !roadLines.includes(item));
+          const line = new google.maps.Polyline({
+            map,
+            path: locations,
+            strokeColor: tripType === "pickup" ? "#0d6efd" : "#dc3545",
+            strokeOpacity: 0.65,
+            strokeWeight: 4,
+            icons: [{ icon: { path: "M 0,-1 0,1", strokeOpacity: 1, scale: 3 }, offset: "0", repeat: "14px" }],
           });
+          overlays.current.push(line);
+          setKilometres(locations.slice(1).reduce(
+            (total, location, index) => total + distance(locations[index], location), 0
+          ));
+          setError("Road routing unavailable; showing a straight-line distance estimate. Check browser Console for details.");
         }
-
-        addSchoolMarker(google, map, plan.school, overlays.current);
-        addStopMarkers(google, map, ordered, overlays.current);
-        setKilometres(metres / 1000);
       } catch (drawError) {
         if (!cancelled) {
+          console.error("Bus route map could not be initialized:", drawError);
           const message = String(drawError?.message || drawError || "");
-          const denied = /denied|permission|api key|forbidden|403/i.test(message);
-          setError(denied
-            ? "Road routing is not enabled for this Google key. Enable ‘Routes API’ in the same Google Cloud project and confirm billing plus localhost:3000 referrer access."
-            : message || "Unable to draw route.");
-
-          // The base map remains useful while cloud routing is being enabled:
-          // show every assignment and an explicitly-labelled straight-line estimate.
-          try {
-            const google = window.google;
-            if (google?.maps && plan.school && stops.length && mapNode.current) {
-              const schoolPoint = point(plan.school);
-              const ordered = orderStops(stops, plan.school, tripType);
-              const path = tripType === "pickup"
-                ? [...ordered.map(point), schoolPoint]
-                : [schoolPoint, ...ordered.map(point)];
-              const fallbackMap = new google.maps.Map(mapNode.current, mapOptions(google, schoolPoint));
-              const fallbackBounds = new google.maps.LatLngBounds();
-              path.forEach((location) => fallbackBounds.extend(location));
-              fallbackMap.fitBounds(fallbackBounds, 48);
-              const line = new google.maps.Polyline({
-                map: fallbackMap, path,
-                strokeColor: tripType === "pickup" ? "#0d6efd" : "#dc3545",
-                strokeOpacity: .65, strokeWeight: 4,
-                icons: [{ icon: { path: "M 0,-1 0,1", strokeOpacity: 1, scale: 3 }, offset: "0", repeat: "14px" }],
-              });
-              overlays.current.push(line);
-              const estimate = path.slice(1).reduce((total, location, index) => total + distance(path[index], location), 0);
-              setKilometres(estimate);
-              addSchoolMarker(google, fallbackMap, plan.school, overlays.current);
-              addStopMarkers(google, fallbackMap, ordered, overlays.current);
-            }
-          } catch (_) {
-            // Preserve the original, actionable routing error.
-          }
+          setError(message || "Unable to display the route map. Check Google Maps API settings.");
         }
       } finally {
         if (!cancelled) setMapLoading(false);
