@@ -1,0 +1,27 @@
+/* Principal Academic Intelligence — additive, scoped dashboard redesign */
+.cc-page{background:linear-gradient(180deg,#f7faff 0%,#f2f6fc 100%)}
+.cc-hero{border-radius:20px;background:linear-gradient(112deg,#102c5a 0%,#195192 62%,#3979bc 100%);box-shadow:0 12px 30px rgba(19,55,101,.15)}
+.cc-metric{border-color:#e3ecf8;box-shadow:0 5px 18px rgba(30,65,120,.06)}
+.cc-metric-icon{background:color-mix(in srgb,currentColor 11%,white);color:inherit}
+.cc-academic-section{margin:24px 0 20px}
+.cc-academic-section-head{display:flex;align-items:center;gap:14px;margin-bottom:15px}
+.cc-academic-section-icon{width:50px;height:50px;display:grid;place-items:center;background:#eaf2ff;color:#275ed6;font-size:1.45rem;border-radius:15px}
+.cc-academic-section-head h2{font-size:1.36rem;color:#10284d;font-weight:850;margin:1px 0 2px}
+.cc-academic-section-head p{margin:0;color:#71829a;font-size:.84rem}
+.cc-insight-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.cc-insight{--insight-color:#3b60d4;--insight-bg:#eef3ff;border:1px solid #e3eaf6;display:flex;flex-direction:column;text-align:left;padding:0;background:#fff;color:#24354b;border-radius:18px;overflow:hidden;min-height:226px;box-shadow:0 8px 23px rgba(20,44,90,.07);transition:transform .18s,box-shadow .18s,border-color .18s}
+.cc-insight:hover,.cc-insight.is-active{transform:translateY(-2px);border-color:var(--insight-color);box-shadow:0 12px 28px rgba(20,44,90,.13)}
+.cc-insight-violet{--insight-color:#6444dd;--insight-bg:#f1eeff}.cc-insight-green{--insight-color:#069669;--insight-bg:#e8faf1}.cc-insight-amber{--insight-color:#ba690b;--insight-bg:#fff5e5}.cc-insight-blue{--insight-color:#2563d6;--insight-bg:#eaf2ff}
+.cc-insight-heading{display:flex;align-items:center;gap:10px;padding:17px 16px;background:var(--insight-bg);color:#1c2d47;min-height:68px}
+.cc-insight-heading i{color:var(--insight-color);font-size:1.45rem}.cc-insight-heading strong{font-size:.96rem;line-height:1.3}
+.cc-insight-value{font-size:1.48rem;font-weight:850;padding:14px 16px 0;color:#142b4d}
+.cc-insight-detail{font-size:.78rem;font-weight:650;padding:3px 16px;color:#425875;line-height:1.4}
+.cc-insight-footnote{font-size:.72rem;color:#728299;padding:11px 16px;line-height:1.4;flex:1}
+.cc-insight-link{background:var(--insight-bg);color:var(--insight-color);display:flex;gap:8px;align-items:center;justify-content:center;font-weight:800;font-size:.82rem;padding:12px;margin-top:auto}
+.cc-academic-detail{margin-top:15px;border:1px solid #d9e5f5;border-radius:18px;background:#fff;padding:21px;box-shadow:0 12px 26px rgba(28,66,119,.07)}
+.cc-academic-detail-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:15px}.cc-academic-detail-top h3{font-weight:800;color:#193351;font-size:1.13rem;margin:3px 0}.cc-detail-close{border:0;border-radius:10px;background:#eef3fa;color:#426080;padding:8px 11px}
+.cc-detail-content{display:flex;flex-wrap:wrap;gap:14px;align-items:center}.cc-detail-content>p{flex-basis:100%;color:#546883;margin:3px 0;line-height:1.55;font-size:.88rem}.cc-detail-content>h4{flex-basis:100%;font-weight:800;font-size:.94rem;margin:5px 0 0;color:#213b60}
+.cc-detail-stat{background:#f5f8fd;border:1px solid #e9eef7;border-radius:14px;padding:13px 16px;display:flex;flex-direction:column;min-width:200px;gap:5px}.cc-detail-stat span{font-size:.75rem;color:#637591}.cc-detail-stat strong{font-size:1.45rem;color:#1c468c}
+.cc-detail-action{border:0;border-radius:11px;background:#2458c7;color:white;font-weight:750;padding:11px 17px;font-size:.84rem}.cc-detail-action:hover{background:#1745a4}
+.cc-academic-bars{flex-basis:100%;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 22px;padding:5px 0 10px}.cc-academic-bar-label{display:flex;justify-content:space-between;gap:10px;font-size:.8rem;margin-bottom:6px}.cc-academic-bar-label span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.cc-academic-bar-label b{color:#2455ba}.cc-academic-track{height:9px;background:#e9eff9;border-radius:20px;overflow:hidden}.cc-academic-track span{display:block;height:100%;border-radius:20px;background:linear-gradient(90deg,#4684f1,#3ca6d3)}
+@media(max-width:1250px){.cc-insight-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:600px){.cc-insight-grid{grid-template-columns:1fr}.cc-academic-section-head h2{font-size:1.12rem}.cc-academic-bars{grid-template-columns:1fr}.cc-detail-stat{min-width:0;width:100%}}

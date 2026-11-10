@@ -4,6 +4,8 @@ const teacherPerformanceApi = {
   capabilities: () => api.get("/teacher-performance/capabilities"),
   teachers: (params = {}) => api.get("/teacher-performance/teachers", { params }),
   dashboard: (params = {}) => api.get("/teacher-performance/dashboard", { params }),
+  scheduleAttendance: (params = {}) => api.get("/teacher-performance/schedule-attendance", { params }),
+  termAcademicIntelligence: (params = {}) => api.get("/teacher-performance/term-academic-intelligence", { params }),
   records: (params = {}) => api.get("/teacher-performance/records", { params }),
   myDashboard: (params = {}) => api.get("/teacher-performance/me", { params }),
   trend: (params = {}) => api.get("/teacher-performance/trend", { params }),

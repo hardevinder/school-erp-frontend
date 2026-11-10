@@ -10,3 +10,14 @@
 .cc-ai-command form{display:flex;gap:8px;min-width:0}.cc-ai-command form input{flex:1;min-width:0;border:1px solid var(--edb-border);border-radius:12px;background:var(--edb-surface);padding:10px 12px;outline:none}.cc-ai-command form input:focus{border-color:var(--edb-primary);box-shadow:0 0 0 3px color-mix(in srgb, var(--edb-primary-dark) 9%, transparent)}.cc-ai-command form button{border:0;border-radius:12px;background:var(--edb-primary);color:var(--edb-on-primary);font-weight:700;padding:0 15px;white-space:nowrap}.cc-ai-command form button:disabled{opacity:.45}
 .cc-ai-examples{grid-column:2 / 4;display:flex;gap:7px;flex-wrap:wrap}.cc-ai-examples button{border:1px solid var(--edb-border);background:var(--edb-surface);color:var(--edb-primary-text);border-radius:999px;padding:5px 9px;font-size:11px}
 @media(max-width:900px){.cc-ai-command{grid-template-columns:auto 1fr}.cc-ai-command form{grid-column:1 / 3}.cc-ai-examples{grid-column:1 / 3}}@media(max-width:600px){.cc-ai-command{padding:13px}.cc-ai-command-copy strong{font-size:13px}.cc-ai-command form{flex-direction:column}.cc-ai-command form button{min-height:40px}}
+
+/* Principal Command Center — Dynamic Institute Theme */
+.cc-page .cc-hero {
+  background: linear-gradient(
+    125deg,
+    var(--edb-primary-dark) 0%,
+    var(--edb-primary-dark) 55%,
+    var(--edb-primary) 100%
+  );
+  color: var(--edb-on-primary, #ffffff);
+}

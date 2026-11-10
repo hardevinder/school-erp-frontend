@@ -60,3 +60,21 @@
 .performance-board .pb-empty > i { display: block; font-size: 32px; margin-bottom: 14px; }
 @media (max-width: 1100px) { .performance-board .pb-summary { display: none; } .performance-board .pb-stats { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 700px) { .performance-board .pb-hero { flex-wrap: wrap; padding: 22px; gap: 22px; } .performance-board .pb-profile { flex-basis: 100%; } .performance-board .pb-avatar { width: 80px; height: 94px; } .performance-board .pb-summary { display: block; flex: 1; } .performance-board .pb-score { width: 120px; height: 120px; } .performance-board .pb-status { flex-wrap: wrap; padding: 14px; } .performance-board .pb-stats > div { padding: 14px; gap: 9px; } .performance-board .pb-stats i { display: none; } .performance-board .pb-charts { grid-template-columns: 1fr; } .performance-board .pb-chart { padding: 20px 14px; } .performance-board .pb-chart + .pb-chart { border-left: 0; border-top: 1px solid #e8edf4; } }
+
+/* Teacher growth refresh: accessible, responsive, and theme-friendly. */
+.performance-board .pb-hero { background: #f8fbff; color: #1b2a45; border-bottom: 1px solid #e4ebf5; }
+.performance-board .pb-profile p, .performance-board .pb-summary p { color: #66768d; }
+.performance-board .pb-kicker { color: #5475a0; }
+.performance-board .pb-period { background: #eaf1fc; color: #355176; }
+.performance-board .pb-avatar { background: #e5edfc; border-color: #dde7f5; }
+.performance-board .pb-score > div { background: #fff; }
+.performance-board .pb-score span { color: #687792; }
+.performance-board .pb-score { background: conic-gradient(var(--score-color) var(--score-angle), #e7edf5 0); }
+.performance-board .pb-positive { color: #159956; }
+.performance-board .pb-negative { color: #bd4856; }
+.performance-board .pb-weight { font-size: 10px; color: #8793a8; }
+.performance-board .pb-charts { grid-template-columns: 1fr 1.08fr; }
+.performance-board .pb-bar-row { grid-template-columns: minmax(135px, 1.3fr) minmax(65px, 1fr) 42px; }
+.tp-teaching-scores { margin-top: 12px; display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 8px; }
+.tp-teaching-scores > div { display: flex; justify-content: space-between; gap: 10px; background: #f3f7fd; padding: 9px 12px; border-radius: 9px; font-size: 12px; }
+@media (max-width: 700px) { .performance-board .pb-charts { grid-template-columns: 1fr; } .tp-teaching-scores { grid-template-columns: 1fr; } }

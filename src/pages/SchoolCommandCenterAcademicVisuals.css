@@ -1,0 +1,10 @@
+/* Additive Principal Command Center visual previews. */
+.cc-insight{position:relative}
+.cc-visual-gauge{position:absolute;top:84px;right:17px;width:76px;height:76px;border-radius:50%;display:grid;place-items:center;box-shadow:0 3px 14px rgba(48,44,129,.12)}
+.cc-visual-gauge>span{width:56px;height:56px;display:grid;place-items:center;background:white;border-radius:50%;font-size:.91rem;font-weight:850;color:#5842bf}
+.cc-insight-violet:has(.cc-visual-gauge) .cc-insight-detail,.cc-insight-violet:has(.cc-visual-gauge) .cc-insight-footnote{padding-right:100px}
+.cc-visual-mini-bars{display:flex;align-items:flex-end;gap:5px;height:35px;padding:0 16px 5px;flex-shrink:0}
+.cc-visual-mini-column{height:100%;width:13px;display:flex;align-items:flex-end;border-radius:3px;background:#fff1da;overflow:hidden}
+.cc-visual-mini-column>span{display:block;width:100%;border-radius:3px;background:linear-gradient(180deg,#f8b84e,#ed8c24)}
+.cc-insight-blue .cc-insight-value{color:#2859b7}
+@media(max-width:520px){.cc-visual-gauge{width:64px;height:64px;right:12px}.cc-visual-gauge>span{width:47px;height:47px}.cc-insight-violet:has(.cc-visual-gauge) .cc-insight-detail,.cc-insight-violet:has(.cc-visual-gauge) .cc-insight-footnote{padding-right:82px}}

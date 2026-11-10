@@ -121,9 +121,9 @@ export default function UpcomingCalendarEvents({
     setError("");
     try {
       const today = isoToday();
-      const schoolId = getSchoolId();
+      // School access must be scoped by the authenticated backend context.
+      // Do not pass a potentially stale school ID from browser storage.
       const params = { limit: 30 };
-      if (schoolId) params.school_id = schoolId;
 
       let calendarRows = [];
       try {

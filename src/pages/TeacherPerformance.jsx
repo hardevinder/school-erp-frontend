@@ -1,5 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import PerformanceBoard from "../components/PerformanceBoard";
+import TeacherScheduleAttendance from "./TeacherScheduleAttendance";
+import TeacherTermAcademicIntelligence from "./TeacherTermAcademicIntelligence";
 import teacherPerformanceApi from "../services/teacherPerformanceApi";
 import TeacherPerformanceRecords, { RECORD_VIEWS } from "../components/TeacherPerformanceRecords";
 import "./TeacherPerformance.css";
@@ -265,7 +267,7 @@ function TeachingResultAnalytics({ analytics }) {
     </div></div>
 
     <div className="row g-3 mb-3">
-      <div className="col-xl-7"><div className="card border-0 shadow-sm h-100"><div className="card-body"><h5>Class / Subject Comparison</h5><div className="small text-muted mb-2">Growth points and teaching-result score across assigned groups.</div><div style={{height: 280}}><ResponsiveContainer width="100%" height="100%"><BarChart data={groupChart} margin={{top: 10,right: 20,left: 0,bottom: 60}}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="name" angle={-20} textAnchor="end" height={80} interval={0} tick={{fontSize: 10}} /><YAxis /><Tooltip /><Legend /><Bar dataKey="growth" name="Growth points" fill="#20c997" radius={[5,5,0,0]} /><Bar dataKey="score" name="Teaching score" fill="var(--edb-primary-text)" radius={[5,5,0,0]} /></BarChart></ResponsiveContainer></div></div></div></div>
+      <div className="col-xl-7"><div className="card border-0 shadow-sm h-100"><div className="card-body"><h5>Class / Subject Comparison</h5><div className="small text-muted mb-2">Learning growth in percentage points across assigned groups.</div><div style={{height: 280}}><ResponsiveContainer width="100%" height="100%"><BarChart data={groupChart} margin={{top: 10,right: 20,left: 0,bottom: 60}}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="name" angle={-20} textAnchor="end" height={80} interval={0} tick={{fontSize: 10}} /><YAxis label={{value: "Growth (points)", angle: -90, position: "insideLeft", style: {fontSize: 11}}} /><Tooltip formatter={v => [`${Number(v).toFixed(1)} points`, "Learning growth"]} /><Bar dataKey="growth" name="Learning growth" fill="#20c997" radius={[5,5,0,0]} /></BarChart></ResponsiveContainer></div><div className="small text-muted">Teaching-result scores are shown separately from learning growth (different units).</div><div className="tp-teaching-scores">{groupChart.map(g => <div key={g.name}><span>{g.name}</span><strong>{Number(g.score).toFixed(1)}/100</strong></div>)}</div></div></div></div>
       <div className="col-xl-5"><div className="card border-0 shadow-sm h-100"><div className="card-body"><h5>Student Progress Mix</h5><div className="small text-muted mb-2">{selected?.class_name}{selected?.section_name ? `-${selected.section_name}` : ''} • {selected?.subject_name}</div><div style={{height: 240}}><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={distribution} dataKey="value" nameKey="name" innerRadius={55} outerRadius={90} paddingAngle={3} label={({name,value})=>`${name}: ${value}`}>{distribution.map((entry)=><Cell key={entry.name} fill={entry.fill} />)}</Pie><Tooltip /></PieChart></ResponsiveContainer></div><div className="small text-muted text-center">Evidence coverage {Number(selected?.evidence_coverage || 0).toFixed(1)}% • {Number(selected?.matched_students || 0)} matched students</div></div></div></div>
     </div>
 
@@ -319,7 +321,7 @@ export default function TeacherPerformance() {
     const d = await (isManager ? teacherPerformanceApi.dashboard(params) : teacherPerformanceApi.myDashboard(params));
     if (request !== dashboardRequest.current) return;
     // The dashboard saves a snapshot; fetch history after that write completes.
-    const t = await teacherPerformanceApi.trend({ ...params, period_key: month, limit: 40 });
+    const t = await teacherPerformanceApi.trend({ ...params, monthly: 6 });
     if (request !== dashboardRequest.current) return;
     setDashboard(d.data?.data || null);
     if (!background) setDetailComponent(null);
@@ -530,6 +532,8 @@ export default function TeacherPerformance() {
           <div className="performance-record-grid">{RECORD_VIEWS.map(view => <button type="button" key={view.kind} className="performance-record-link" onClick={() => setRecordKind(view.kind)}><i className={`bi bi-${view.icon}`} aria-hidden="true" /><span><strong>{view.label}</strong><small className="text-muted">{view.hint}</small></span></button>)}</div>
         </section>
         <div className="row g-3 mb-4">{(dashboard.components || []).map((c) => <div className="col-md-6 col-xxl-4" key={c.code}><ComponentCard c={c} onOpen={setDetailComponent} onRecords={setRecordKind} /></div>)}</div>
+        <TeacherScheduleAttendance teacherId={selectedTeacherId} month={month} isManager={isManager} />
+        <TeacherTermAcademicIntelligence teacherId={selectedTeacherId} isManager={isManager} />
         <TeachingResultAnalytics analytics={dashboard.teaching_result} />
         <div className="row g-3">
           <div className="col-12"><div className="card border-0 shadow-sm h-100"><div className="card-body"><div className="d-flex justify-content-between gap-2"><h5>AI Growth Insight</h5><button className="btn btn-sm btn-outline-primary" onClick={generateInsight} disabled={busy}>Generate</button></div>{aiInsight ? <><div style={{ whiteSpace: "pre-wrap" }}>{aiInsight}</div><div className="small text-muted mt-3">{aiSource === "openai" ? "AI explanation from ERP evidence" : "Smart fallback insight"} • score itself is rule-based</div></> : <div className="text-muted">Generate a short evidence-based explanation, strengths and next actions. AI cannot change the score.</div>}</div></div></div>

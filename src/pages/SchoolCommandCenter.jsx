@@ -2,8 +2,11 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useRoles } from "../hooks/useRoles";
 import commandCenterApi from "../services/commandCenterApi";
+import PrincipalClassroomMonitor from "./PrincipalClassroomMonitor";
 import UpcomingCalendarEvents from "../components/dashboard/UpcomingCalendarEvents";
 import "./SchoolCommandCenter.css";
+import "./SchoolCommandCenterAcademicCards.css";
+import "./SchoolCommandCenterAcademicVisuals.css";
 
 const fmt = (value) => new Intl.NumberFormat("en-IN").format(Number(value || 0));
 const pct = (value) => `${Number(value || 0).toFixed(Number(value || 0) % 1 ? 1 : 0)}%`;
@@ -51,6 +54,57 @@ function PulseItem({ label, value, note, route, navigate, available = true }) {
   );
 }
 
+// Leadership overview: metrics below come only from the live Command Center response.
+// Missing examination/class analytics are explicitly labelled unavailable.
+const hasNumber = (value) => value !== null && value !== undefined && Number.isFinite(Number(value));
+
+function AcademicInsightCard({ icon, title, value, detail, footnote, tone, active, onClick, children }) {
+  return (
+    <button type="button" className={`cc-insight cc-insight-${tone}${active ? " is-active" : ""}`} onClick={onClick} aria-expanded={active}>
+      <span className="cc-insight-heading"><i className={`bi ${icon}`} /><strong>{title}</strong></span>
+      <span className="cc-insight-value">{value}</span>
+      <span className="cc-insight-detail">{detail}</span>
+      <span className="cc-insight-footnote">{footnote}</span>
+      {children}
+      <span className="cc-insight-link">{active ? "Hide details" : "View details"} <i className={`bi bi-arrow-${active ? "up" : "right"}`} /></span>
+    </button>
+  );
+}
+
+function AcademicBarList({ items, valueKey, labelKey, suffix = "%" }) {
+  return <div className="cc-academic-bars">
+    {items.map((row, index) => {
+      const value = Math.max(0, Math.min(100, Number(row[valueKey] || 0)));
+      return <div className="cc-academic-bar-row" key={row.student_id || row.teacher_user_id || index}>
+        <div className="cc-academic-bar-label"><span>{row[labelKey] || "Unknown"}</span><b>{value.toFixed(1)}{suffix}</b></div>
+        <div className="cc-academic-track"><span style={{ width: `${value}%` }} /></div>
+      </div>;
+    })}
+  </div>;
+}
+
+// Compact visualizations use only recorded data from the selected examination.
+function ExamGauge({ value }) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  const v = Math.max(0, Math.min(100, n));
+  return <span className="cc-visual-gauge" role="img" aria-label={`Recorded marks average ${v.toFixed(1)} percent`}
+    style={{ background: `conic-gradient(#7057e8 ${v}%, #e9eafa ${v}% 100%)` }}>
+    <span>{v.toFixed(0)}%</span>
+  </span>;
+}
+
+function ClassMiniBars({ items }) {
+  const rows = (items || []).filter((row) => Number.isFinite(Number(row.average_percentage))).slice(0, 6);
+  if (!rows.length) return null;
+  return <span className="cc-visual-mini-bars" aria-label="Top class averages">
+    {rows.map((row) => <span className="cc-visual-mini-column" key={`${row.class_id}-${row.section_id}`}
+      title={`${row.label}: ${Number(row.average_percentage).toFixed(1)}%`}>
+      <span style={{ height: `${Math.max(3, Math.min(100, Number(row.average_percentage)))}%` }} />
+    </span>)}
+  </span>;
+}
+
 export default function SchoolCommandCenter() {
   const navigate = useNavigate();
   const { activeRole } = useRoles();
@@ -60,6 +114,11 @@ export default function SchoolCommandCenter() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [date, setDate] = useState("");
+  const [expandedAcademic, setExpandedAcademic] = useState(null);
+  const [termOne, setTermOne] = useState(null);
+  const [termOneLoading, setTermOneLoading] = useState(true);
+  const [selectedAcademicTerm, setSelectedAcademicTerm] = useState("");
+  const [selectedAcademicExam, setSelectedAcademicExam] = useState("");
 
   const load = useCallback(async (selectedDate = "") => {
     setLoading(true);
@@ -77,8 +136,33 @@ export default function SchoolCommandCenter() {
 
   useEffect(() => { load(); }, [load]);
 
+  useEffect(() => {
+    if (!isPrincipal) { setTermOneLoading(false); return; }
+    let live = true;
+    setTermOneLoading(true);
+    commandCenterApi.termOneSummary({
+      ...(selectedAcademicTerm ? { term_id: selectedAcademicTerm } : {}),
+      ...(selectedAcademicExam ? { exam_id: selectedAcademicExam } : {}),
+    }).then((response) => {
+      if (live) setTermOne(response.data || null);
+    }).catch(() => {
+      if (live) setTermOne((previous) => ({ ...previous, available: false, reason: "Unable to load examination statistics" }));
+    }).finally(() => { if (live) setTermOneLoading(false); });
+    return () => { live = false; };
+  }, [isPrincipal, selectedAcademicTerm, selectedAcademicExam]);
+
   const student = data?.attendance?.students || {};
   const staff = data?.attendance?.staff || {};
+  const studentPerformance = data?.student_performance || {};
+  const teacherPerformance = data?.teacher_performance || {};
+  const teachingResult = teacherPerformance.teaching_result || {};
+  const academicInsightsAvailable = data?.profile !== "hr";
+  const studentEvidence = data?.availability?.student_performance !== false && Number(studentPerformance.evaluated_attempts || 0) > 0;
+  const teacherEvidence = data?.availability?.teacher_performance !== false && Number(teacherPerformance.snapshots || 0) > 0;
+  const studentAverage = studentEvidence && hasNumber(studentPerformance.average_score_percent) ? pct(studentPerformance.average_score_percent) : "—";
+  const teacherSnapshots = Math.max(0, Number(teacherPerformance.snapshots || 0));
+  const toggleAcademic = (key) => setExpandedAcademic((current) => current === key ? null : key);
+
   const profileLabel = useMemo(() => {
     if (data?.profile === "academic") return "Academic Command View";
     if (data?.profile === "hr") return "HR Command View";
@@ -111,8 +195,8 @@ export default function SchoolCommandCenter() {
       <section className="cc-hero">
         <div>
           <div className="cc-kicker"><i className="bi bi-command me-2" />{profileLabel}</div>
-          <h1>School Command Center</h1>
-          <p>One screen for today's attendance, academics, staff, transport, student wellbeing and actions needing attention.</p>
+          <h1>{isPrincipal ? "Principal Command Center" : "School Command Center"}</h1>
+          <p>Live academic intelligence, attendance, operations and actions needing attention.</p>
           <div className="cc-badges">
             <span><i className="bi bi-calendar-event" /> {data?.date}</span>
             <span><i className="bi bi-sun" /> {dayLabel}</span>
@@ -209,6 +293,100 @@ export default function SchoolCommandCenter() {
           tone="rose"
         />
       </section>
+
+      {isPrincipal && <PrincipalClassroomMonitor date={date} navigate={navigate} />}
+
+      {academicInsightsAvailable && (
+        <section className="cc-academic-section" aria-labelledby="cc-academic-title">
+          <header className="cc-academic-section-head">
+            <span className="cc-academic-section-icon"><i className="bi bi-mortarboard-fill" /></span>
+            <div>
+              <span className="cc-eyebrow">ACADEMIC EXCELLENCE</span>
+              <h2 id="cc-academic-title">Academic Performance Intelligence</h2>
+              <p>Live examination statistics from your configured terms, examinations and assessment components.</p>
+            </div>
+          </header>
+          {isPrincipal && <div className="cc-academic-filters" style={{ display: "flex", flexWrap: "wrap", gap: 12, margin: "0 0 14px", alignItems: "center" }}>
+            <label style={{ display: "grid", gap: 4, fontSize: 12, fontWeight: 700 }}>Term
+              <select aria-label="Academic term" className="form-select form-select-sm" value={selectedAcademicTerm || String(termOne?.selected_term_id || "")}
+                onChange={(e) => { setSelectedAcademicTerm(e.target.value); setSelectedAcademicExam(""); }}>
+                {(termOne?.terms || []).length === 0 && <option value="">No configured terms</option>}
+                {(termOne?.terms || []).map((term) => <option key={term.id} value={term.id}>{term.name}</option>)}
+              </select>
+            </label>
+            <label style={{ display: "grid", gap: 4, fontSize: 12, fontWeight: 700 }}>Examination
+              <select aria-label="Examination" className="form-select form-select-sm" value={selectedAcademicExam}
+                onChange={(e) => setSelectedAcademicExam(e.target.value)}>
+                <option value="">All examinations</option>
+                {(termOne?.exams || []).map((exam) => <option key={exam.id} value={exam.id}>{exam.name}</option>)}
+              </select>
+            </label>
+            {termOne?.session && <small style={{ alignSelf: "flex-end", paddingBottom: 8, opacity: 0.7 }}>Session: {termOne.session}</small>}
+          </div>}
+          <div className="cc-insight-grid">
+            <AcademicInsightCard tone="violet" icon="bi-clipboard-data" title="Examination Performance"
+              value={termOneLoading ? "Loading…" : termOne?.available ? pct(termOne.average_percentage) : "—"}
+              detail={termOne?.available ? `${fmt(termOne.students_assessed)} students assessed · ${termOne.exam || termOne.term}` : (termOne?.reason || "Examination results unavailable")}
+              footnote={termOne?.available ? `Recorded marks · ${termOne.session}` : "Result analysis opens in Examination Dashboard"}
+              active={expandedAcademic === "exam"} onClick={() => toggleAcademic("exam")}>
+              {termOne?.available && <ExamGauge value={termOne.average_percentage} />}
+            </AcademicInsightCard>
+            <AcademicInsightCard tone="green" icon="bi-people-fill" title="Student Performance"
+              value={termOneLoading ? "Loading…" : termOne?.available ? fmt(termOne.students_assessed) : "—"}
+              detail={termOne?.available ? "Students with recorded marks" : (termOne?.reason || "Examination data unavailable")}
+              footnote="Recorded scholastic marks"
+              active={expandedAcademic === "student"} onClick={() => toggleAcademic("student")} />
+            <AcademicInsightCard tone="amber" icon="bi-building" title="Class Performance"
+              value={termOneLoading ? "Loading…" : termOne?.available ? `${fmt(termOne.class_count)} classes` : "—"}
+              detail={termOne?.available && termOne.class_performance?.length ? `Top: ${termOne.class_performance[0].label} · ${pct(termOne.class_performance[0].average_percentage)}` : "Class averages unavailable"}
+              footnote="Click to compare class averages"
+              active={expandedAcademic === "class"} onClick={() => toggleAcademic("class")}>
+              {termOne?.available && <ClassMiniBars items={termOne.class_performance} />}
+            </AcademicInsightCard>
+            <AcademicInsightCard tone="blue" icon="bi-person-workspace" title="Teacher Performance"
+              value={teacherEvidence ? `${fmt(teacherSnapshots)} snapshots` : "—"}
+              detail={teacherEvidence ? `${fmt(teacherPerformance.below_threshold)} below watch threshold · Monthly monitoring` : "No monthly performance snapshots"}
+              footnote={Number(teachingResult.teachers) > 0 && hasNumber(teachingResult.average_growth_points) ? `Learning growth: ${Number(teachingResult.average_growth_points).toFixed(1)} points` : "Exam-specific teacher averages: open report"}
+              active={expandedAcademic === "teacher"} onClick={() => toggleAcademic("teacher")} />
+          </div>
+          {expandedAcademic && <div className="cc-academic-detail" id="cc-academic-details">
+            <div className="cc-academic-detail-top">
+              <div><span className="cc-eyebrow">DRILL-DOWN</span><h3>{({ exam: "Examination Performance", student: "Student Performance", class: "Class Performance", teacher: "Teacher Performance" })[expandedAcademic]}</h3></div>
+              <button type="button" className="cc-detail-close" onClick={() => setExpandedAcademic(null)} aria-label="Close academic details"><i className="bi bi-x-lg" /></button>
+            </div>
+            {expandedAcademic === "exam" && <div className="cc-detail-content">
+              {termOne?.available ? <>
+                <div className="cc-detail-stat"><span>Term-1 average (recorded marks)</span><strong>{pct(termOne.average_percentage)}</strong></div>
+                <div className="cc-detail-stat"><span>Students assessed</span><strong>{fmt(termOne.students_assessed)}</strong></div>
+                <p>{termOne.measurement}</p>
+              </> : <p>{termOne?.reason || "Term-1 statistics unavailable"}</p>}
+              <button className="cc-detail-action" onClick={() => navigate("/exam-dashboard")}>Open Examination Dashboard <i className="bi bi-arrow-right" /></button>
+            </div>}
+            {expandedAcademic === "class" && <div className="cc-detail-content">
+              {termOne?.available ? <>
+                <p>{termOne.measurement}</p>
+                <AcademicBarList items={termOne.class_performance || []} valueKey="average_percentage" labelKey="label" />
+              </> : <p>{termOne?.reason || "No class results available"}</p>}
+              <button className="cc-detail-action" onClick={() => navigate("/exam-dashboard")}>Explore Class Results <i className="bi bi-arrow-right" /></button>
+            </div>}
+            {expandedAcademic === "student" && <div className="cc-detail-content">
+              {termOne?.available ? <>
+                <div className="cc-detail-stat"><span>Students with recorded Term-1 marks</span><strong>{fmt(termOne.students_assessed)}</strong></div>
+                <div className="cc-detail-stat"><span>Average recorded-marks percentage</span><strong>{pct(termOne.average_percentage)}</strong></div>
+                <p>{termOne.measurement}</p>
+              </> : <p>{termOne?.reason || "Term-1 student statistics unavailable"}</p>}
+              <button className="cc-detail-action" onClick={() => navigate("/exam-dashboard")}>Open Examination Reports <i className="bi bi-arrow-right" /></button>
+            </div>}
+            {expandedAcademic === "teacher" && <div className="cc-detail-content">
+              <div className="cc-detail-stat"><span>Monthly teacher snapshots</span><strong>{fmt(teacherPerformance.snapshots)}</strong></div>
+              <div className="cc-detail-stat"><span>Below performance threshold</span><strong>{fmt(teacherPerformance.below_threshold)}</strong></div>
+              <p>This monthly monitoring score is separate from examination marks. Open Teacher Performance for class-wise exam charts.</p>
+              {teacherEvidence && (teacherPerformance.lowest || []).length > 0 ? <><h4>Teachers requiring a closer review</h4><AcademicBarList items={teacherPerformance.lowest} valueKey="score" labelKey="teacher_name" suffix="" /></> : <p>No teacher performance snapshots are currently available.</p>}
+              <button className="cc-detail-action" onClick={() => navigate("/teacher-performance")}>Open Teacher Performance <i className="bi bi-arrow-right" /></button>
+            </div>}
+          </div>}
+        </section>
+      )}
 
       <UpcomingCalendarEvents
         openPath="/academic-calendar-view"
